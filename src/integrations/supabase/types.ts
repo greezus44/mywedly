@@ -353,6 +353,7 @@ export type Database = {
         Row: {
           created_at: string
           dietary_restrictions: string | null
+          event_id: string | null
           guest_email: string | null
           guest_id: string | null
           guest_name: string
@@ -368,6 +369,7 @@ export type Database = {
         Insert: {
           created_at?: string
           dietary_restrictions?: string | null
+          event_id?: string | null
           guest_email?: string | null
           guest_id?: string | null
           guest_name: string
@@ -383,6 +385,7 @@ export type Database = {
         Update: {
           created_at?: string
           dietary_restrictions?: string | null
+          event_id?: string | null
           guest_email?: string | null
           guest_id?: string | null
           guest_name?: string
@@ -396,6 +399,13 @@ export type Database = {
           wedding_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "rsvps_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "rsvps_guest_id_fkey"
             columns: ["guest_id"]
@@ -490,6 +500,7 @@ export type Database = {
       }
       weddings: {
         Row: {
+          content: Json
           couple_name_one: string
           couple_name_two: string
           created_at: string
@@ -506,6 +517,7 @@ export type Database = {
           wedding_date: string | null
         }
         Insert: {
+          content?: Json
           couple_name_one: string
           couple_name_two: string
           created_at?: string
@@ -522,6 +534,7 @@ export type Database = {
           wedding_date?: string | null
         }
         Update: {
+          content?: Json
           couple_name_one?: string
           couple_name_two?: string
           created_at?: string
