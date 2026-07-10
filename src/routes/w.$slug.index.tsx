@@ -6,10 +6,10 @@ import couplePortrait from "@/assets/couple-portrait.jpg";
 
 export const Route = createFileRoute("/w/$slug/")({
   head: ({ loaderData }) => {
-    if (!loaderData) {
+    const w = (loaderData as { wedding: Wedding } | undefined)?.wedding;
+    if (!w) {
       return { meta: [{ title: "Wedding not found — Aethel" }, { name: "robots", content: "noindex" }] };
     }
-    const w = loaderData.wedding;
     const title = `${w.couple_name_one} & ${w.couple_name_two}`;
     const desc = w.wedding_date
       ? `Join us on ${new Date(w.wedding_date + "T00:00:00").toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}${w.location ? " in " + w.location : ""}.`
