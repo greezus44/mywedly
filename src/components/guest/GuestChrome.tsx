@@ -164,7 +164,7 @@ function MenuOverlay({ slug, couple, onClose }: { slug: string; couple: { one: s
           <Link
             key={l.to}
             to={l.to}
-            params={{ slug }}
+            params={{ slug } as any}
             onClick={onClose}
             className="text-sepia text-[13px] tracking-[0.25em] font-medium hover:text-sepia/60 transition-colors"
           >

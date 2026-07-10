@@ -25,6 +25,7 @@ export type Wedding = {
   created_by: string;
   created_at: string;
   updated_at: string;
+  content?: Record<string, unknown> | null;
 };
 
 export async function listMyWeddings(): Promise<Wedding[]> {
