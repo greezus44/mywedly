@@ -9,38 +9,127 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as WSlugIndexRouteImport } from './routes/w.$slug.index'
+import { Route as WSlugRsvpRouteImport } from './routes/w.$slug.rsvp'
+import { Route as AuthenticatedManageSlugRouteImport } from './routes/_authenticated/manage.$slug'
 
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const WSlugIndexRoute = WSlugIndexRouteImport.update({
+  id: '/w/$slug/',
+  path: '/w/$slug/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WSlugRsvpRoute = WSlugRsvpRouteImport.update({
+  id: '/w/$slug/rsvp',
+  path: '/w/$slug/rsvp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedManageSlugRoute = AuthenticatedManageSlugRouteImport.update({
+  id: '/manage/$slug',
+  path: '/manage/$slug',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/manage/$slug': typeof AuthenticatedManageSlugRoute
+  '/w/$slug/rsvp': typeof WSlugRsvpRoute
+  '/w/$slug/': typeof WSlugIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/dashboard': typeof AuthenticatedDashboardRoute
+  '/manage/$slug': typeof AuthenticatedManageSlugRoute
+  '/w/$slug/rsvp': typeof WSlugRsvpRoute
+  '/w/$slug': typeof WSlugIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/manage/$slug': typeof AuthenticatedManageSlugRoute
+  '/w/$slug/rsvp': typeof WSlugRsvpRoute
+  '/w/$slug/': typeof WSlugIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/manage/$slug'
+    | '/w/$slug/rsvp'
+    | '/w/$slug/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/manage/$slug'
+    | '/w/$slug/rsvp'
+    | '/w/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/dashboard'
+    | '/_authenticated/manage/$slug'
+    | '/w/$slug/rsvp'
+    | '/w/$slug/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
+  WSlugRsvpRoute: typeof WSlugRsvpRoute
+  WSlugIndexRoute: typeof WSlugIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,22 +137,57 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/w/$slug/': {
+      id: '/w/$slug/'
+      path: '/w/$slug'
+      fullPath: '/w/$slug/'
+      preLoaderRoute: typeof WSlugIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/w/$slug/rsvp': {
+      id: '/w/$slug/rsvp'
+      path: '/w/$slug/rsvp'
+      fullPath: '/w/$slug/rsvp'
+      preLoaderRoute: typeof WSlugRsvpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/manage/$slug': {
+      id: '/_authenticated/manage/$slug'
+      path: '/manage/$slug'
+      fullPath: '/manage/$slug'
+      preLoaderRoute: typeof AuthenticatedManageSlugRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedManageSlugRoute: typeof AuthenticatedManageSlugRoute
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedManageSlugRoute: AuthenticatedManageSlugRoute,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
+  WSlugRsvpRoute: WSlugRsvpRoute,
+  WSlugIndexRoute: WSlugIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
