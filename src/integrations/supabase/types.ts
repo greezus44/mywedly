@@ -544,10 +544,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      is_wedding_member: {
-        Args: { _user_id: string; _wedding_id: string }
-        Returns: boolean
-      }
+      [_ in never]: never
     }
     Enums: {
       event_kind:
