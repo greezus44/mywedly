@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getWeddingBySlug, type Wedding } from "@/lib/wedding-queries";
 import couplePortrait from "@/assets/couple-portrait.jpg";
 
-export const Route = createFileRoute("/w/$slug")({
+export const Route = createFileRoute("/w/$slug/")({
   head: ({ loaderData }) => {
     if (!loaderData) {
       return { meta: [{ title: "Wedding not found — Aethel" }, { name: "robots", content: "noindex" }] };
