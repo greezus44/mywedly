@@ -12,7 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as WSlugRouteImport } from './routes/w.$slug'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as WSlugRsvpRouteImport } from './routes/w.$slug.rsvp'
+import { Route as AuthenticatedManageSlugRouteImport } from './routes/_authenticated/manage.$slug'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -28,9 +31,24 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WSlugRoute = WSlugRouteImport.update({
+  id: '/w/$slug',
+  path: '/w/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const WSlugRsvpRoute = WSlugRsvpRouteImport.update({
+  id: '/rsvp',
+  path: '/rsvp',
+  getParentRoute: () => WSlugRoute,
+} as any)
+const AuthenticatedManageSlugRoute = AuthenticatedManageSlugRouteImport.update({
+  id: '/manage/$slug',
+  path: '/manage/$slug',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 
@@ -38,11 +56,17 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/w/$slug': typeof WSlugRouteWithChildren
+  '/manage/$slug': typeof AuthenticatedManageSlugRoute
+  '/w/$slug/rsvp': typeof WSlugRsvpRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/w/$slug': typeof WSlugRouteWithChildren
+  '/manage/$slug': typeof AuthenticatedManageSlugRoute
+  '/w/$slug/rsvp': typeof WSlugRsvpRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -50,24 +74,43 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/w/$slug': typeof WSlugRouteWithChildren
+  '/_authenticated/manage/$slug': typeof AuthenticatedManageSlugRoute
+  '/w/$slug/rsvp': typeof WSlugRsvpRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/dashboard'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/w/$slug'
+    | '/manage/$slug'
+    | '/w/$slug/rsvp'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/dashboard'
+  to:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/w/$slug'
+    | '/manage/$slug'
+    | '/w/$slug/rsvp'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/dashboard'
+    | '/w/$slug'
+    | '/_authenticated/manage/$slug'
+    | '/w/$slug/rsvp'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  WSlugRoute: typeof WSlugRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -93,6 +136,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/w/$slug': {
+      id: '/w/$slug'
+      path: '/w/$slug'
+      fullPath: '/w/$slug'
+      preLoaderRoute: typeof WSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -100,24 +150,51 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/w/$slug/rsvp': {
+      id: '/w/$slug/rsvp'
+      path: '/rsvp'
+      fullPath: '/w/$slug/rsvp'
+      preLoaderRoute: typeof WSlugRsvpRouteImport
+      parentRoute: typeof WSlugRoute
+    }
+    '/_authenticated/manage/$slug': {
+      id: '/_authenticated/manage/$slug'
+      path: '/manage/$slug'
+      fullPath: '/manage/$slug'
+      preLoaderRoute: typeof AuthenticatedManageSlugRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedManageSlugRoute: typeof AuthenticatedManageSlugRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedManageSlugRoute: AuthenticatedManageSlugRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
   AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
 
+interface WSlugRouteChildren {
+  WSlugRsvpRoute: typeof WSlugRsvpRoute
+}
+
+const WSlugRouteChildren: WSlugRouteChildren = {
+  WSlugRsvpRoute: WSlugRsvpRoute,
+}
+
+const WSlugRouteWithChildren = WSlugRoute._addFileChildren(WSlugRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  WSlugRoute: WSlugRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
