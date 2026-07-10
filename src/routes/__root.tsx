@@ -76,21 +76,25 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Aethel — Editorial wedding planning & websites" },
+      { title: "MyWedly — Editorial wedding planning & websites" },
       {
         name: "description",
         content:
-          "Aethel is a premium wedding planning platform for couples who value editorial clarity. Build a wedding site, manage guests, collect RSVPs, and host the day.",
+          "The modern curator's platform for weddings. Build an editorial wedding website, manage guests and RSVPs, and host every event with quiet precision.",
       },
       { name: "author", content: "Aethel" },
-      { property: "og:title", content: "Aethel — Editorial wedding planning" },
+      { property: "og:title", content: "MyWedly — Editorial wedding planning & websites" },
       {
         property: "og:description",
         content:
-          "The modern curator's platform for weddings. Guests, RSVPs, gallery, registry, and a website worthy of the occasion.",
+          "The modern curator's platform for weddings. Build an editorial wedding website, manage guests and RSVPs, and host every event with quiet precision.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "MyWedly — Editorial wedding planning & websites" },
+      { name: "twitter:description", content: "The modern curator's platform for weddings. Build an editorial wedding website, manage guests and RSVPs, and host every event with quiet precision." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/897c7115-f7c8-4156-8f2f-f64560f35ca3/id-preview-fc586491--73a0769b-88d4-48e0-815d-a3e494a0c61b.lovable.app-1783647429553.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/897c7115-f7c8-4156-8f2f-f64560f35ca3/id-preview-fc586491--73a0769b-88d4-48e0-815d-a3e494a0c61b.lovable.app-1783647429553.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },

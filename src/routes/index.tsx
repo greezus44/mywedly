@@ -7,17 +7,17 @@ import { SiteFooter } from "@/components/site/SiteFooter";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Aethel — Editorial wedding planning & websites" },
+      { title: "MyWedly — Editorial wedding planning & websites" },
       {
         name: "description",
         content:
           "The modern curator's platform for weddings. Build an editorial wedding website, manage guests and RSVPs, and host every event with quiet precision.",
       },
-      { property: "og:title", content: "Aethel — Editorial wedding planning" },
+      { property: "og:title", content: "MyWedly — Editorial wedding planning & websites" },
       {
         property: "og:description",
         content:
-          "Planning as an editorial exercise. Wedding websites, guest management, RSVPs, gallery, and registry — designed for restraint.",
+          "The modern curator's platform for weddings. Build an editorial wedding website, manage guests and RSVPs, and host every event with quiet precision.",
       },
     ],
   }),
