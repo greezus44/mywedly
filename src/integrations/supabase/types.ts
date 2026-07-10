@@ -500,6 +500,7 @@ export type Database = {
       }
       weddings: {
         Row: {
+          content: Json
           couple_name_one: string
           couple_name_two: string
           created_at: string
@@ -516,6 +517,7 @@ export type Database = {
           wedding_date: string | null
         }
         Insert: {
+          content?: Json
           couple_name_one: string
           couple_name_two: string
           created_at?: string
@@ -532,6 +534,7 @@ export type Database = {
           wedding_date?: string | null
         }
         Update: {
+          content?: Json
           couple_name_one?: string
           couple_name_two?: string
           created_at?: string
