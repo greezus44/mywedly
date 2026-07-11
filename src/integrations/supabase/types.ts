@@ -730,7 +730,37 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      guest_events: {
+        Args: { p_guest_id: string; p_password: string }
+        Returns: {
+          dress_code: string
+          id: string
+          name: string
+          notes: string
+          rsvp_status: string
+          starts_at: string
+          venue_address: string
+          venue_name: string
+        }[]
+      }
+      guest_rsvp: {
+        Args: {
+          p_event_id: string
+          p_guest_id: string
+          p_password: string
+          p_status: string
+        }
+        Returns: undefined
+      }
+      guest_signin: {
+        Args: { p_name: string; p_password: string; p_slug: string }
+        Returns: {
+          full_name: string
+          group_id: string
+          guest_id: string
+          wedding_id: string
+        }[]
+      }
     }
     Enums: {
       event_kind:
