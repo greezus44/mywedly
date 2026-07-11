@@ -96,6 +96,56 @@ export type Database = {
           },
         ]
       }
+      custom_pages: {
+        Row: {
+          body: string
+          cover_image_url: string | null
+          created_at: string
+          id: string
+          inline_image_url: string | null
+          is_published: boolean
+          slug: string
+          sort_order: number
+          title: string
+          updated_at: string
+          wedding_id: string
+        }
+        Insert: {
+          body?: string
+          cover_image_url?: string | null
+          created_at?: string
+          id?: string
+          inline_image_url?: string | null
+          is_published?: boolean
+          slug: string
+          sort_order?: number
+          title: string
+          updated_at?: string
+          wedding_id: string
+        }
+        Update: {
+          body?: string
+          cover_image_url?: string | null
+          created_at?: string
+          id?: string
+          inline_image_url?: string | null
+          is_published?: boolean
+          slug?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string
+          wedding_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_pages_wedding_id_fkey"
+            columns: ["wedding_id"]
+            isOneToOne: false
+            referencedRelation: "weddings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           created_at: string
@@ -190,6 +240,107 @@ export type Database = {
           },
         ]
       }
+      group_event_invites: {
+        Row: {
+          created_at: string
+          event_id: string
+          group_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          group_id: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          group_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_event_invites_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_event_invites_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "guest_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guest_event_invites: {
+        Row: {
+          created_at: string
+          event_id: string
+          guest_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          guest_id: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          guest_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guest_event_invites_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guest_event_invites_guest_id_fkey"
+            columns: ["guest_id"]
+            isOneToOne: false
+            referencedRelation: "guests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      guest_groups: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          sort_order: number
+          updated_at: string
+          wedding_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number
+          updated_at?: string
+          wedding_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          sort_order?: number
+          updated_at?: string
+          wedding_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guest_groups_wedding_id_fkey"
+            columns: ["wedding_id"]
+            isOneToOne: false
+            referencedRelation: "weddings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guestbook_entries: {
         Row: {
           author_name: string
@@ -227,10 +378,12 @@ export type Database = {
       }
       guests: {
         Row: {
+          access_code: string | null
           address: string | null
           created_at: string
           email: string | null
           full_name: string
+          group_id: string | null
           group_label: string | null
           id: string
           invite_code: string | null
@@ -241,10 +394,12 @@ export type Database = {
           wedding_id: string
         }
         Insert: {
+          access_code?: string | null
           address?: string | null
           created_at?: string
           email?: string | null
           full_name: string
+          group_id?: string | null
           group_label?: string | null
           id?: string
           invite_code?: string | null
@@ -255,10 +410,12 @@ export type Database = {
           wedding_id: string
         }
         Update: {
+          access_code?: string | null
           address?: string | null
           created_at?: string
           email?: string | null
           full_name?: string
+          group_id?: string | null
           group_label?: string | null
           id?: string
           invite_code?: string | null
@@ -269,6 +426,13 @@ export type Database = {
           wedding_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "guests_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "guest_groups"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "guests_wedding_id_fkey"
             columns: ["wedding_id"]
@@ -505,11 +669,14 @@ export type Database = {
           couple_name_two: string
           created_at: string
           created_by: string
+          guest_password: string | null
           hashtag: string | null
           hero_image_url: string | null
           id: string
           is_published: boolean
           location: string | null
+          password_mode: string
+          signin_helper: string | null
           slug: string
           story: string | null
           theme: string
@@ -522,11 +689,14 @@ export type Database = {
           couple_name_two: string
           created_at?: string
           created_by: string
+          guest_password?: string | null
           hashtag?: string | null
           hero_image_url?: string | null
           id?: string
           is_published?: boolean
           location?: string | null
+          password_mode?: string
+          signin_helper?: string | null
           slug: string
           story?: string | null
           theme?: string
@@ -539,11 +709,14 @@ export type Database = {
           couple_name_two?: string
           created_at?: string
           created_by?: string
+          guest_password?: string | null
           hashtag?: string | null
           hero_image_url?: string | null
           id?: string
           is_published?: boolean
           location?: string | null
+          password_mode?: string
+          signin_helper?: string | null
           slug?: string
           story?: string | null
           theme?: string
