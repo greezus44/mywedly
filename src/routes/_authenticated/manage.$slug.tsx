@@ -697,7 +697,7 @@ function ThemeTab({ wedding }: { wedding: Wedding }) {
   const save = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("weddings").update({
-        theme: { accent: accent || null, bg: bg || null, serif: serif || null, sans: sans || null },
+        theme: JSON.stringify({ accent: accent || null, bg: bg || null, serif: serif || null, sans: sans || null }),
       }).eq("id", wedding.id);
       if (error) throw error;
     },
