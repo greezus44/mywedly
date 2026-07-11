@@ -20,6 +20,7 @@ import { Route as WSlugInvitationRouteImport } from './routes/w.$slug.invitation
 import { Route as WSlugInfoRouteImport } from './routes/w.$slug.info'
 import { Route as WSlugEventsRouteImport } from './routes/w.$slug.events'
 import { Route as AuthenticatedManageSlugRouteImport } from './routes/_authenticated/manage.$slug'
+import { Route as WSlugPPageSlugRouteImport } from './routes/w.$slug.p.$pageSlug'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -75,6 +76,11 @@ const AuthenticatedManageSlugRoute = AuthenticatedManageSlugRouteImport.update({
   path: '/manage/$slug',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const WSlugPPageSlugRoute = WSlugPPageSlugRouteImport.update({
+  id: '/p/$pageSlug',
+  path: '/p/$pageSlug',
+  getParentRoute: () => WSlugRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/w/$slug/invitation': typeof WSlugInvitationRoute
   '/w/$slug/signin': typeof WSlugSigninRoute
   '/w/$slug/': typeof WSlugIndexRoute
+  '/w/$slug/p/$pageSlug': typeof WSlugPPageSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -98,6 +105,7 @@ export interface FileRoutesByTo {
   '/w/$slug/invitation': typeof WSlugInvitationRoute
   '/w/$slug/signin': typeof WSlugSigninRoute
   '/w/$slug': typeof WSlugIndexRoute
+  '/w/$slug/p/$pageSlug': typeof WSlugPPageSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -112,6 +120,7 @@ export interface FileRoutesById {
   '/w/$slug/invitation': typeof WSlugInvitationRoute
   '/w/$slug/signin': typeof WSlugSigninRoute
   '/w/$slug/': typeof WSlugIndexRoute
+  '/w/$slug/p/$pageSlug': typeof WSlugPPageSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -126,6 +135,7 @@ export interface FileRouteTypes {
     | '/w/$slug/invitation'
     | '/w/$slug/signin'
     | '/w/$slug/'
+    | '/w/$slug/p/$pageSlug'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -137,6 +147,7 @@ export interface FileRouteTypes {
     | '/w/$slug/invitation'
     | '/w/$slug/signin'
     | '/w/$slug'
+    | '/w/$slug/p/$pageSlug'
   id:
     | '__root__'
     | '/'
@@ -150,6 +161,7 @@ export interface FileRouteTypes {
     | '/w/$slug/invitation'
     | '/w/$slug/signin'
     | '/w/$slug/'
+    | '/w/$slug/p/$pageSlug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -238,6 +250,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedManageSlugRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/w/$slug/p/$pageSlug': {
+      id: '/w/$slug/p/$pageSlug'
+      path: '/p/$pageSlug'
+      fullPath: '/w/$slug/p/$pageSlug'
+      preLoaderRoute: typeof WSlugPPageSlugRouteImport
+      parentRoute: typeof WSlugRoute
+    }
   }
 }
 
@@ -260,6 +279,7 @@ interface WSlugRouteChildren {
   WSlugInvitationRoute: typeof WSlugInvitationRoute
   WSlugSigninRoute: typeof WSlugSigninRoute
   WSlugIndexRoute: typeof WSlugIndexRoute
+  WSlugPPageSlugRoute: typeof WSlugPPageSlugRoute
 }
 
 const WSlugRouteChildren: WSlugRouteChildren = {
@@ -268,6 +288,7 @@ const WSlugRouteChildren: WSlugRouteChildren = {
   WSlugInvitationRoute: WSlugInvitationRoute,
   WSlugSigninRoute: WSlugSigninRoute,
   WSlugIndexRoute: WSlugIndexRoute,
+  WSlugPPageSlugRoute: WSlugPPageSlugRoute,
 }
 
 const WSlugRouteWithChildren = WSlugRoute._addFileChildren(WSlugRouteChildren)
