@@ -112,7 +112,7 @@ function WeddingCard({ wedding }: { wedding: Wedding }) {
       params={{ slug: wedding.slug }}
       className="block bg-card border border-onyx/10 p-8 hover:shadow-editorial transition-shadow group"
     >
-      <p className="eyebrow mb-4 text-sepia">{wedding.theme}</p>
+      <p className="eyebrow mb-4 text-sepia">The Wedding</p>
       <h3 className="font-serif text-3xl leading-tight mb-2 italic">
         {wedding.couple_name_one} &amp; {wedding.couple_name_two}
       </h3>
