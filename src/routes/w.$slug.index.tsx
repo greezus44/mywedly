@@ -1,8 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { motion } from "motion/react";
+import { GuestLayout } from "@/components/guest/GuestChrome";
 import type { Wedding } from "@/lib/wedding-queries";
 import { getWeddingBySlug } from "@/lib/wedding-queries";
-import { notFound } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/w/$slug/")({
   head: ({ loaderData }) => {
@@ -28,6 +28,15 @@ export const Route = createFileRoute("/w/$slug/")({
 
 function CoverPage() {
   const { wedding } = Route.useLoaderData();
+  return (
+    <GuestLayout slug={wedding.slug} weddingId={wedding.id} theme={wedding.theme}
+      couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}>
+      <Cover wedding={wedding} />
+    </GuestLayout>
+  );
+}
+
+function Cover({ wedding }: { wedding: Wedding }) {
   const date = wedding.wedding_date ? new Date(wedding.wedding_date + "T00:00:00") : null;
   const monthYear = date
     ? date.toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase()
@@ -35,7 +44,7 @@ function CoverPage() {
   const [month, year] = monthYear.split(" ");
 
   return (
-    <div className="min-h-screen bg-parchment text-sepia flex flex-col items-center justify-center px-6 py-16">
+    <div className="min-h-[80vh] flex flex-col items-center justify-center px-6 py-16 text-sepia">
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -70,9 +79,7 @@ function CoverPage() {
         className="text-center mb-16"
       >
         <p className="text-sepia text-sm tracking-[0.35em] leading-loose font-medium">
-          {month}
-          <br />
-          {year}
+          {month}<br />{year}
         </p>
       </motion.div>
 
@@ -85,9 +92,9 @@ function CoverPage() {
           to="/w/$slug/signin"
           params={{ slug: wedding.slug }}
           aria-label="Enter invitation"
-          className="inline-flex items-center justify-center border-2 border-sepia/70 rounded-md w-24 h-14 text-sepia text-2xl hover:bg-sepia hover:text-parchment transition-colors"
+          className="inline-flex items-center justify-center border-2 border-sepia/70 rounded-md px-8 h-14 text-sepia text-sm tracking-[0.25em] font-medium hover:bg-sepia hover:text-parchment transition-colors"
         >
-          &gt;
+          OPEN INVITATION
         </Link>
       </motion.div>
     </div>

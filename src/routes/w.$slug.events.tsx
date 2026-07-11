@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Clock } from "lucide-react";
 import { GuestLayout } from "@/components/guest/GuestChrome";
-import { getGuestName, useLang, formatEventDate, formatEventTime } from "@/lib/wedding-guest";
+import { getGuestSession, useLang, formatEventDate, formatEventTime, type GuestSession } from "@/lib/wedding-guest";
 import { getWeddingBySlug, type Wedding } from "@/lib/wedding-queries";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -21,26 +21,19 @@ export const Route = createFileRoute("/w/$slug/events")({
 
 type EventRow = {
   id: string;
-  wedding_id: string;
   name: string;
   starts_at: string | null;
   venue_name: string | null;
   venue_address: string | null;
   dress_code: string | null;
   notes: string | null;
-};
-
-type RsvpRow = {
-  id: string;
-  event_id: string | null;
-  status: "accepted" | "declined" | "tentative";
-  guest_name: string;
+  rsvp_status: string | null;
 };
 
 function EventsPage() {
   const { wedding } = Route.useLoaderData();
   return (
-    <GuestLayout requireSignIn slug={wedding.slug} couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}>
+    <GuestLayout requireSignIn slug={wedding.slug} weddingId={wedding.id} theme={wedding.theme} couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}>
       <Inner wedding={wedding} />
     </GuestLayout>
   );
@@ -48,34 +41,19 @@ function EventsPage() {
 
 function Inner({ wedding }: { wedding: Wedding }) {
   const { t, lang } = useLang();
-  const [guestName, setGuest] = useState<string | null>(null);
-  useEffect(() => { setGuest(getGuestName(wedding.slug)); }, [wedding.slug]);
+  const [session, setSession] = useState<GuestSession | null>(null);
+  useEffect(() => { setSession(getGuestSession(wedding.slug)); }, [wedding.slug]);
 
   const { data: events } = useQuery({
-    queryKey: ["events-public", wedding.id],
+    queryKey: ["guest-events", session?.guestId],
+    enabled: !!session,
     queryFn: async (): Promise<EventRow[]> => {
-      const { data, error } = await supabase
-        .from("events")
-        .select("*")
-        .eq("wedding_id", wedding.id)
-        .eq("visibility", "public")
-        .order("starts_at");
+      const { data, error } = await supabase.rpc("guest_events", {
+        p_guest_id: session!.guestId,
+        p_password: session!.password,
+      });
       if (error) throw error;
       return (data ?? []) as EventRow[];
-    },
-  });
-
-  const { data: rsvps } = useQuery({
-    queryKey: ["rsvps-mine", wedding.id, guestName],
-    enabled: !!guestName,
-    queryFn: async (): Promise<RsvpRow[]> => {
-      const { data, error } = await supabase
-        .from("rsvps")
-        .select("id, event_id, status, guest_name")
-        .eq("wedding_id", wedding.id)
-        .ilike("guest_name", guestName!);
-      if (error) throw error;
-      return (data ?? []) as RsvpRow[];
     },
   });
 
@@ -92,31 +70,28 @@ function Inner({ wedding }: { wedding: Wedding }) {
         )}
       </div>
 
-      {guestName && (
+      {session?.name && (
         <p className="text-center text-sepia text-lg tracking-[0.35em] font-medium mb-10 mt-8">
-          {guestName.toUpperCase()}
+          {session.name.toUpperCase()}
         </p>
       )}
 
       <div>
-        {(events ?? []).map((ev, idx) => {
-          const rsvp = rsvps?.find((r) => r.event_id === ev.id) ?? null;
-          return (
-            <motion.div
-              key={ev.id}
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-60px" }}
-              transition={{ duration: 0.5, delay: idx * 0.05 }}
-            >
-              <EventCard wedding={wedding} event={ev} rsvp={rsvp} guestName={guestName} />
-              <div className="border-t border-sepia/25 my-6" />
-            </motion.div>
-          );
-        })}
-        {(!events || events.length === 0) && (
+        {(events ?? []).map((ev, idx) => (
+          <motion.div
+            key={ev.id}
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-60px" }}
+            transition={{ duration: 0.5, delay: idx * 0.05 }}
+          >
+            <EventCard event={ev} session={session} />
+            <div className="border-t border-sepia/25 my-6" />
+          </motion.div>
+        ))}
+        {events && events.length === 0 && (
           <p className="text-center text-sepia/60 italic py-16" style={{ fontFamily: "var(--font-serif)" }}>
-            {t("Event details will be shared here soon.", "Butiran majlis akan dikongsi di sini tidak lama lagi.")}
+            {t("You have no events to RSVP to yet.", "Tiada majlis untuk anda pada masa ini.")}
           </p>
         )}
       </div>
@@ -124,45 +99,32 @@ function Inner({ wedding }: { wedding: Wedding }) {
   );
 }
 
-function EventCard({
-  wedding, event, rsvp, guestName,
-}: {
-  wedding: Wedding;
-  event: EventRow;
-  rsvp: RsvpRow | null;
-  guestName: string | null;
-}) {
+function EventCard({ event, session }: { event: EventRow; session: GuestSession | null }) {
   const { t, lang } = useLang();
   const qc = useQueryClient();
   const date = formatEventDate(event.starts_at, lang);
   const time = formatEventTime(event.starts_at);
-  const programme = ((wedding.content as any)?.event_programmes?.[event.id] as string | undefined) ?? null;
 
   const mut = useMutation({
     mutationFn: async (status: "accepted" | "declined") => {
-      if (!guestName) throw new Error("Sign in first");
-      if (rsvp) {
-        const { error } = await supabase.from("rsvps").update({ status }).eq("id", rsvp.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("rsvps").insert({
-          wedding_id: wedding.id,
-          event_id: event.id,
-          guest_name: guestName,
-          status,
-        });
-        if (error) throw error;
-      }
+      if (!session) throw new Error("Sign in first");
+      const { error } = await supabase.rpc("guest_rsvp", {
+        p_guest_id: session.guestId,
+        p_password: session.password,
+        p_event_id: event.id,
+        p_status: status,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["rsvps-mine", wedding.id] });
+      qc.invalidateQueries({ queryKey: ["guest-events", session?.guestId] });
       toast.success(t("Response saved.", "Jawapan disimpan."));
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const accepted = rsvp?.status === "accepted";
-  const declined = rsvp?.status === "declined";
+  const accepted = event.rsvp_status === "accepted";
+  const declined = event.rsvp_status === "declined";
 
   return (
     <article className="grid grid-cols-[80px_minmax(0,1fr)] md:grid-cols-[110px_minmax(0,1fr)] gap-4 md:gap-8">
@@ -189,17 +151,6 @@ function EventCard({
           <div className="text-sepia text-[11px] md:text-xs tracking-[0.18em] leading-[2] font-medium mb-4 whitespace-pre-line">
             {event.venue_name && <div>{event.venue_name.toUpperCase()}</div>}
             {event.venue_address && <div>{event.venue_address.toUpperCase()}</div>}
-          </div>
-        )}
-
-        {programme && (
-          <div className="mb-4">
-            <p className="text-sepia text-sm tracking-[0.22em] font-medium mb-2">
-              {t("PROGRAMME", "ATURCARA")}
-            </p>
-            <div className="text-sepia text-[11px] tracking-[0.15em] leading-[2] font-medium whitespace-pre-line">
-              {programme}
-            </div>
           </div>
         )}
 
