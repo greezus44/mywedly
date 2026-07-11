@@ -10,21 +10,44 @@ export const LangContext = createContext<{
 
 export const useLang = () => useContext(LangContext);
 
+export type GuestSession = {
+  guestId: string;
+  weddingId: string;
+  name: string;
+  password: string;
+};
+
 export function guestKey(slug: string) {
   return `mywedly:guest:${slug}`;
 }
 
-export function getGuestName(slug: string): string | null {
+export function getGuestSession(slug: string): GuestSession | null {
   if (typeof window === "undefined") return null;
-  try { return localStorage.getItem(guestKey(slug)); } catch { return null; }
+  try {
+    const raw = localStorage.getItem(guestKey(slug));
+    if (!raw) return null;
+    // Back-compat: earlier versions stored just the name.
+    if (raw.startsWith("{")) return JSON.parse(raw) as GuestSession;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
-export function setGuestName(slug: string, name: string) {
-  try { localStorage.setItem(guestKey(slug), name); } catch {}
+export function getGuestName(slug: string): string | null {
+  return getGuestSession(slug)?.name ?? null;
+}
+
+export function setGuestSession(slug: string, s: GuestSession) {
+  try {
+    localStorage.setItem(guestKey(slug), JSON.stringify(s));
+  } catch {}
 }
 
 export function clearGuestName(slug: string) {
-  try { localStorage.removeItem(guestKey(slug)); } catch {}
+  try {
+    localStorage.removeItem(guestKey(slug));
+  } catch {}
 }
 
 export function formatMonthYear(dateStr: string | null, lang: Lang): string {
