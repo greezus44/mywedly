@@ -679,7 +679,7 @@ export type Database = {
           signin_helper: string | null
           slug: string
           story: string | null
-          theme: string
+          theme: Json
           updated_at: string
           wedding_date: string | null
         }
@@ -699,7 +699,7 @@ export type Database = {
           signin_helper?: string | null
           slug: string
           story?: string | null
-          theme?: string
+          theme?: Json
           updated_at?: string
           wedding_date?: string | null
         }
@@ -719,7 +719,7 @@ export type Database = {
           signin_helper?: string | null
           slug?: string
           story?: string | null
-          theme?: string
+          theme?: Json
           updated_at?: string
           wedding_date?: string | null
         }
