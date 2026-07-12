@@ -2,6 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { GuestLayout } from "@/components/guest/GuestChrome";
 import { useLang } from "@/lib/wedding-guest";
 import { getWeddingBySlug, type Wedding } from "@/lib/wedding-queries";
+import { styleFor, getStyle } from "@/lib/text-styles";
 
 export const Route = createFileRoute("/w/$slug/invitation")({
   head: () => ({ meta: [{ title: "Invitation" }] }),
@@ -26,8 +27,8 @@ function InvitationPage() {
 function Body({ wedding }: { wedding: Wedding }) {
   const { t } = useLang();
   const content = (wedding.content ?? {}) as Record<string, any>;
-  const invitationTitle = (content.invitation_heading as string | undefined) ?? "YA-QADHI AL-HAJAT";
-  const bismillah = (content.invitation_bismillah as string | undefined) ?? "بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ";
+  const invitationTitle = (content.invitation_heading as string | undefined) ?? "";
+  const bismillah = (content.invitation_bismillah as string | undefined) ?? "";
   const parentsBlock = (content.parents as string | undefined) ?? "";
   const invitationText = (content.invitation_text as string | undefined) ??
     t("With the utmost respect and joy, we cordially invite you to celebrate the wedding of our beloved children.",
@@ -40,23 +41,21 @@ function Body({ wedding }: { wedding: Wedding }) {
   return (
     <div className="max-w-2xl mx-auto px-6 md:px-10 py-10 md:py-16 text-center text-sepia">
       {bismillah && (
-        <div className="text-4xl md:text-5xl mb-4" style={{ fontFamily: "var(--font-serif)", direction: "rtl" }}>
+        <div className="text-4xl md:text-5xl mb-4" style={{ fontFamily: "var(--font-serif)", direction: "rtl", ...styleFor(getStyle(content, "invitation_bismillah")) }}>
           {bismillah}
         </div>
       )}
-      <p className="text-sepia text-sm tracking-[0.22em] font-medium mb-10">{invitationTitle}</p>
-
-      {parentsBlock ? (
-        <div className="whitespace-pre-line text-[11px] md:text-xs tracking-[0.18em] leading-[2.2] font-medium mb-10">
-          {parentsBlock}
-        </div>
-      ) : (
-        <p className="text-[11px] md:text-xs tracking-[0.15em] leading-loose mb-10 text-sepia/70 italic">
-          {t("Parents' names can be added from the dashboard.", "Nama ibu bapa boleh ditambah dari papan pemuka.")}
-        </p>
+      {invitationTitle && (
+        <p className="text-sepia text-sm tracking-[0.22em] font-medium mb-10" style={styleFor(getStyle(content, "invitation_heading"))}>{invitationTitle}</p>
       )}
 
-      <p className="text-sm italic leading-relaxed mb-10 max-w-lg mx-auto" style={{ fontFamily: "var(--font-serif)" }}>
+      {parentsBlock ? (
+        <div className="whitespace-pre-line text-[11px] md:text-xs tracking-[0.18em] leading-[2.2] font-medium mb-10" style={styleFor(getStyle(content, "parents"))}>
+          {parentsBlock}
+        </div>
+      ) : null}
+
+      <p className="text-sm italic leading-relaxed mb-10 max-w-lg mx-auto" style={{ fontFamily: "var(--font-serif)", ...styleFor(getStyle(content, "invitation_text")) }}>
         {invitationText}
       </p>
 
@@ -72,7 +71,7 @@ function Body({ wedding }: { wedding: Wedding }) {
         </p>
       </div>
 
-      <p className="text-sm italic leading-relaxed my-10 max-w-lg mx-auto" style={{ fontFamily: "var(--font-serif)" }}>
+      <p className="text-sm italic leading-relaxed my-10 max-w-lg mx-auto" style={{ fontFamily: "var(--font-serif)", ...styleFor(getStyle(content, "closing_text")) }}>
         {closingText}
       </p>
 
@@ -80,6 +79,7 @@ function Body({ wedding }: { wedding: Wedding }) {
         to="/w/$slug/events"
         params={{ slug: wedding.slug }}
         className="inline-flex items-center justify-center border-2 border-sepia/70 rounded-md px-10 h-12 text-sepia text-sm tracking-[0.25em] font-medium hover:bg-sepia hover:text-parchment transition-colors"
+        style={styleFor(getStyle(content, "invitation_cta"))}
       >
         {ctaLabel}
       </Link>
