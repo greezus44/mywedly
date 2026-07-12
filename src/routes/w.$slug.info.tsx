@@ -2,6 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { GuestLayout } from "@/components/guest/GuestChrome";
 import { useLang } from "@/lib/wedding-guest";
 import { getWeddingBySlug, type Wedding } from "@/lib/wedding-queries";
+import { styleFor, getStyle } from "@/lib/text-styles";
 
 export const Route = createFileRoute("/w/$slug/info")({
   head: () => ({ meta: [{ title: "Information" }] }),
@@ -26,13 +27,13 @@ function InfoPage() {
 function Body({ wedding }: { wedding: Wedding }) {
   const { t } = useLang();
   const content = (wedding.content ?? {}) as Record<string, any>;
-  const doaTitle = (content.info_heading as string | undefined) ?? t("DOA", "DOA");
+  const doaTitle = (content.info_heading as string | undefined) ?? t("INFORMATION", "MAKLUMAT");
   const doaBody = (content.info_body as string | undefined) ?? "";
   const infoImage = (content.info_image_url as string | undefined) ?? "";
 
   return (
     <div className="max-w-2xl mx-auto px-6 md:px-10 py-8 md:py-14 text-center text-sepia">
-      <h1 className="text-sepia text-2xl md:text-3xl tracking-[0.35em] font-medium mb-12">
+      <h1 className="text-sepia text-2xl md:text-3xl tracking-[0.35em] font-medium mb-12" style={styleFor(getStyle(content, "info_heading"))}>
         {doaTitle.toUpperCase()}
       </h1>
 
@@ -41,7 +42,7 @@ function Body({ wedding }: { wedding: Wedding }) {
       )}
 
       {doaBody ? (
-        <div className="text-sepia text-[11px] md:text-xs tracking-[0.18em] leading-[2.4] font-medium whitespace-pre-line mb-16">
+        <div className="text-sepia text-[11px] md:text-xs tracking-[0.18em] leading-[2.4] font-medium whitespace-pre-line mb-16" style={styleFor(getStyle(content, "info_body"))}>
           {doaBody}
         </div>
       ) : (
