@@ -62,7 +62,6 @@ export function autoMap(headers: string[]): Record<string, GuestField> {
     const l = h.toLowerCase();
     if (!map[h]) {
       if (/name|nama|guest/.test(l) && !/group|kumpulan/.test(l)) map[h] = "full_name";
-      else if (/pass|code|kod|access/.test(l)) map[h] = "access_code";
       else if (/group|kumpulan|category|table/.test(l)) map[h] = "group_name";
       else map[h] = null;
     }
