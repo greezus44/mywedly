@@ -1,85 +1,38 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowRight } from "lucide-react";
+import { useParams, useOutletContext, useNavigate } from "react-router-dom";
+import { type UserEvent } from "../../lib/supabase";
 import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { useGuestOutletContext } from "./guest-layout";
+import { useState } from "react";
 
-/**
- * GuestLogin — guest name entry. Stores the guest name + event id in
- * guest-auth and navigates to the home page.
- */
-export default function GuestLogin() {
-  const { event } = useGuestOutletContext();
-  const { signIn } = useGuestAuth();
+type Ctx = { event: UserEvent };
+export default function GuestLoginPage() {
+  const { event } = useOutletContext<Ctx>();
+  const { slug } = useParams();
   const navigate = useNavigate();
+  const { signIn } = useGuestAuth();
   const [name, setName] = useState("");
+  const config = event.login_config || {};
   const [error, setError] = useState<string | null>(null);
-
-  const lc = event.login_config || {};
-  const bgStyle: React.CSSProperties = {};
-  if (lc.bgImage) {
-    bgStyle.backgroundImage = `url(${lc.bgImage})`;
-    bgStyle.backgroundSize = "cover";
-    bgStyle.backgroundPosition = "center";
-  } else if (lc.bgColor) {
-    bgStyle.backgroundColor = lc.bgColor;
-  } else {
-    bgStyle.backgroundColor = "var(--event-surface)";
-  }
-  const overlay = lc.overlayColor
-    ? { backgroundColor: lc.overlayColor, opacity: lc.overlayOpacity ?? 0.3 }
-    : undefined;
-  const textColor = lc.textColor || "var(--event-text)";
-  const buttonColor = lc.buttonColor || "var(--event-primary)";
-  const headingFont: React.CSSProperties = { fontFamily: "var(--event-font-heading)" };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) {
-      setError("Please enter your name to continue.");
-      return;
-    }
-    setError(null);
-    signIn(trimmed, event.id);
-    navigate("home");
+    if (!name.trim()) { setError("Please enter your name"); return; }
+    signIn(name.trim(), event.id);
+    navigate(`/e/${slug}/home`);
   };
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center px-6" style={bgStyle}>
-      {overlay && <div className="absolute inset-0" style={overlay} />}
-      <div className="relative z-10 w-full max-w-md py-16" style={{ color: textColor }}>
-        {lc.logo && (
-          <img
-            src={lc.logo}
-            alt="logo"
-            className="mx-auto mb-8"
-            style={{ width: lc.logoWidth ? `${lc.logoWidth}px` : "64px" }}
-          />
-        )}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl mb-2" style={headingFont}>{lc.heading || "Welcome"}</h1>
-          {lc.subheading && <p className="text-sm opacity-75">{lc.subheading}</p>}
-        </div>
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: config.bgColor || "#1a1a1a" }}>
+      <div className="w-full max-w-sm text-center">
+        {config.bgImage && <img src={config.bgImage} alt="" className="w-full h-48 object-cover rounded-lg mb-8 opacity-80" />}
+        {config.logo && <img src={config.logo} alt="Logo" style={{ width: config.logoWidth ? `${config.logoWidth}px` : "100px" }} className="mx-auto mb-6 object-contain" />}
+        <h1 className="font-heading text-3xl mb-2" style={{ color: config.textColor || "#fff" }}>{config.heading || "Welcome"}</h1>
+        <p className="text-sm mb-8" style={{ color: config.textColor || "#fff", opacity: 0.7 }}>{config.subheading || "Please enter your name to continue"}</p>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={lc.inputPlaceholder || "Your full name"}
-            className="text-center"
-            autoFocus
-          />
-          {error && <p className="text-sm text-red-600 text-center">{error}</p>}
-          <Button
-            type="submit"
-            className="w-full"
-            style={{ backgroundColor: buttonColor, color: "#fff", borderRadius: "var(--event-radius)" }}
-          >
-            {lc.buttonText || "Continue"}
-            <ArrowRight className="w-4 h-4" />
-          </Button>
+          <Input value={name} onChange={(e) => { setName(e.target.value); setError(null); }} placeholder={config.inputPlaceholder || "Your name"} className="text-center" style={{ background: "rgba(255,255,255,0.1)", borderColor: "rgba(255,255,255,0.2)", color: config.textColor || "#fff" }} />
+          {error && <p className="text-sm text-red-400">{error}</p>}
+          <Button type="submit" className="w-full">{config.buttonText || "Continue"}</Button>
         </form>
       </div>
     </div>

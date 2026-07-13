@@ -1,7 +1,6 @@
 import { type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { X } from "lucide-react";
-
 export function Card({ children, className }: { children: ReactNode; className?: string }) { return <div className={cn("bg-white border border-gray-200 rounded-lg", className)}>{children}</div>; }
 export function Badge({ children, variant = "default" }: { children: ReactNode; variant?: "default" | "success" | "warning" | "error" | "info" }) { const variants = { default: "bg-gray-100 text-gray-600", success: "bg-green-50 text-green-700", warning: "bg-amber-50 text-amber-700", error: "bg-red-50 text-red-700", info: "bg-blue-50 text-blue-700" }; return <span className={cn("inline-flex items-center px-2.5 py-0.5 text-xs font-medium uppercase tracking-wider rounded", variants[variant])}>{children}</span>; }
 export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: string; description?: string; action?: ReactNode }) { return <div className="flex flex-col items-center justify-center py-20 text-center">{icon && <div className="mb-4 text-gray-300">{icon}</div>}<h3 className="text-lg font-heading text-gray-900">{title}</h3>{description && <p className="mt-2 text-sm text-gray-500 max-w-sm">{description}</p>}{action && <div className="mt-6">{action}</div>}</div>; }

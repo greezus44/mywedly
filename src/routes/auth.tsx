@@ -9,27 +9,6 @@ export default function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false); const [error, setError] = useState<string | null>(null); const [toast, setToast] = useState<string | null>(null);
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setLoading(true); setError(null);
-    try {
-      if (mode === "signup") { const { data, error } = await supabase.auth.signUp({ email, password }); if (error) throw error; if (data.session) { navigate("/dashboard"); } else { setToast("Account created. Please sign in."); setMode("signin"); } }
-      else { const { data, error } = await supabase.auth.signInWithPassword({ email, password }); if (error) throw error; if (data.session) navigate("/dashboard"); }
-    } catch (err) { setError(err instanceof Error ? err.message : "Authentication failed"); } finally { setLoading(false); }
-  };
-  return (
-    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <Link to="/" className="block text-center mb-12"><span className="font-heading text-3xl text-black">MyWedly</span></Link>
-        <div className="flex border border-gray-200 mb-8 rounded-md">{(["signin", "signup"] as const).map((m) => <button key={m} onClick={() => { setMode(m); setError(null); }} className={`flex-1 py-2.5 text-sm font-medium transition-colors rounded-md ${mode === m ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}>{m === "signin" ? "Sign In" : "Sign Up"}</button>)}</div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div><label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">Email</label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required /></div>
-          <div><label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">Password</label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} /></div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <Button type="submit" loading={loading} className="w-full">{mode === "signin" ? "Sign In" : "Create Account"}</Button>
-        </form>
-        <p className="mt-6 text-center text-xs text-gray-400">{mode === "signin" ? "Don't have an account? " : "Already have an account? "}<button onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); }} className="text-black underline">{mode === "signin" ? "Sign up" : "Sign in"}</button></p>
-      </div>
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
-    </div>
-  );
+  const handleSubmit = async (e: React.FormEvent) => { e.preventDefault(); setLoading(true); setError(null); try { if (mode === "signup") { const { data, error } = await supabase.auth.signUp({ email, password }); if (error) throw error; if (data.session) { navigate("/dashboard"); } else { setToast("Account created. Please sign in."); setMode("signin"); } } else { const { data, error } = await supabase.auth.signInWithPassword({ email, password }); if (error) throw error; if (data.session) navigate("/dashboard"); } } catch (err) { setError(err instanceof Error ? err.message : "Authentication failed"); } finally { setLoading(false); } };
+  return <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6"><div className="w-full max-w-sm"><Link to="/" className="block text-center mb-12"><span className="font-heading text-3xl text-black">MyWedly</span></Link><div className="flex border border-gray-200 mb-8 rounded-md">{(["signin", "signup"] as const).map((m) => <button key={m} onClick={() => { setMode(m); setError(null); }} className={`flex-1 py-2.5 text-sm font-medium transition-colors rounded-md ${mode === m ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}>{m === "signin" ? "Sign In" : "Sign Up"}</button>)}</div><form onSubmit={handleSubmit} className="space-y-4"><div><label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">Email</label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required /></div><div><label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">Password</label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} /></div>{error && <p className="text-sm text-red-600">{error}</p>}<Button type="submit" loading={loading} className="w-full">{mode === "signin" ? "Sign In" : "Create Account"}</Button></form><p className="mt-6 text-center text-xs text-gray-400">{mode === "signin" ? "Don't have an account? " : "Already have an account? "}<button onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); }} className="text-black underline">{mode === "signin" ? "Sign up" : "Sign in"}</button></p></div>{toast && <Toast message={toast} onClose={() => setToast(null)} />}</div>;
 }
