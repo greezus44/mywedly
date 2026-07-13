@@ -4,14 +4,8 @@ interface State { hasError: boolean; error: Error | null; }
 
 export class ErrorBoundary extends React.Component<{ children: React.ReactNode }, State> {
   state: State = { hasError: false, error: null };
-
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error("ErrorBoundary caught:", error, info);
-  }
+  static getDerivedStateFromError(error: Error): State { return { hasError: true, error }; }
+  componentDidCatch(error: Error, info: React.ErrorInfo) { console.error("ErrorBoundary caught:", error, info); }
 
   render() {
     if (this.state.hasError) {
@@ -24,12 +18,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
               <button onClick={() => this.setState({ hasError: false, error: null })} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 text-sm">Try Again</button>
               <button onClick={() => window.location.reload()} className="px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800 text-sm">Reload Page</button>
             </div>
-            {this.state.error && (
-              <details className="mt-4 text-left">
-                <summary className="text-xs text-slate-500 cursor-pointer">Error details</summary>
-                <pre className="mt-2 text-xs text-red-600 overflow-auto">{this.state.error.message}</pre>
-              </details>
-            )}
+            {this.state.error && (<details className="mt-4 text-left"><summary className="text-xs text-slate-500 cursor-pointer">Error details</summary><pre className="mt-2 text-xs text-red-600 overflow-auto">{this.state.error.message}</pre></details>)}
           </div>
         </div>
       );

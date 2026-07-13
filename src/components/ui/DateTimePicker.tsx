@@ -4,24 +4,17 @@ import { cn } from "../../lib/utils";
 import { to12Hour, to24Hour, roundTo5Min, formatDate, formatTime12 } from "../../lib/utils";
 
 interface DateTimePickerProps {
-  date: string | null;
-  time: string | null;
+  date: string | null; time: string | null;
   onChange: (date: string | null, time: string | null) => void;
-  label?: string;
-  showTime?: boolean;
-  minDate?: string;
-  previewPrefix?: string;
+  label?: string; showTime?: boolean; minDate?: string; previewPrefix?: string;
 }
 
 export function DateTimePicker({ date, time, onChange, label, showTime = true, minDate, previewPrefix }: DateTimePickerProps) {
   const [tab, setTab] = useState<"date" | "time">("date");
   const [open, setOpen] = useState(false);
   const [viewDate, setViewDate] = useState(date ? new Date(date + "T00:00:00") : new Date());
-
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const year = viewDate.getFullYear(), month = viewDate.getMonth();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const days: (number | null)[] = [];
@@ -29,20 +22,15 @@ export function DateTimePicker({ date, time, onChange, label, showTime = true, m
   for (let d = 1; d <= daysInMonth; d++) days.push(d);
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-
-  const selectDate = (day: number) => { onChange(`${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`, time); };
+  const selectDate = (day: number) => onChange(`${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`, time);
   const isToday = (day: number) => today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
   const isSelected = (day: number) => { if (!date) return false; const [vy, vm, vd] = date.split("-").map(Number); return vy === year && vm === month + 1 && vd === day; };
-
   const h12 = to12Hour(time);
-  const hour = h12?.hour || 12;
-  const minute = h12 ? roundTo5Min(h12.minute) : 0;
-  const period = h12?.period || "AM";
+  const hour = h12?.hour || 12, minute = h12 ? roundTo5Min(h12.minute) : 0, period = h12?.period || "AM";
   const setHour = (h: number) => { const nh = ((h - 1 + 12) % 12) + 1; onChange(date, to24Hour(nh, minute, period)); };
   const setMinute = (m: number) => { const nm = ((m % 60) + 60) % 60; onChange(date, to24Hour(hour, nm, period)); };
   const setPeriod = (p: "AM" | "PM") => onChange(date, to24Hour(hour, minute, p));
   const minutes = Array.from({ length: 12 }, (_, i) => i * 5);
-
   const preview = date ? `${formatDate(date)}${showTime && time ? " at " + formatTime12(time) : ""}` : "Not set";
 
   return (
@@ -75,7 +63,7 @@ export function DateTimePicker({ date, time, onChange, label, showTime = true, m
               </div>
               <div className="flex justify-between mt-3 pt-2 border-t border-dash-border">
                 <button type="button" onClick={() => { const t = new Date(); onChange(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`, time); }} className="text-sm text-dash-primary hover:underline">Today</button>
-                <button type="button" onClick={() => { onChange(null, time); }} className="text-sm text-dash-muted hover:underline">Clear</button>
+                <button type="button" onClick={() => onChange(null, time)} className="text-sm text-dash-muted hover:underline">Clear</button>
               </div>
             </>
           )}

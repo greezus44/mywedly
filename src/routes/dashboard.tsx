@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, EVENT_TYPES, EVENT_TEMPLATES, type UserEvent } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
 import { Input, Select, Modal, Badge, EmptyState, Card } from "../components/ui";
-import { Plus, Calendar, Users, ExternalLink } from "lucide-react";
+import { Plus, Calendar, ExternalLink } from "lucide-react";
 import { formatDateShort, getEventStatus } from "../lib/utils";
 
 export default function Dashboard() {
@@ -26,18 +26,13 @@ export default function Dashboard() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.from("user_events").insert({
-        name: newName,
-        event_type: newType,
-        template_id: newTemplate,
-      }).select().single();
+      const { data, error } = await supabase.from("user_events").insert({ name: newName, event_type: newType, template_id: newTemplate }).select().single();
       if (error) throw error;
       return data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["events"] });
-      setShowCreate(false);
-      setNewName("");
+      setShowCreate(false); setNewName("");
       navigate(`/event/${data.id}/cover`);
     },
     onError: (err: any) => alert("Failed to create event: " + (err.message || "Unknown error")),
@@ -52,14 +47,12 @@ export default function Dashboard() {
         </div>
       </header>
       <main className="max-w-6xl mx-auto px-4 py-8">
-        {isLoading ? (
-          <div className="text-center py-12 text-dash-muted">Loading...</div>
-        ) : !events || events.length === 0 ? (
+        {isLoading ? <div className="text-center py-12 text-dash-muted">Loading...</div> : !events || events.length === 0 ? (
           <EmptyState icon={<Calendar className="w-12 h-12" />} title="No events yet" description="Create your first event to get started." action={<Button onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" /> New Event</Button>} />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {events.map((event) => (
-              <Card key={event.id} className="p-4 cursor-pointer hover:shadow-md transition-shadow" >
+              <Card key={event.id} className="p-4 cursor-pointer hover:shadow-md transition-shadow">
                 <div onClick={() => navigate(`/event/${event.id}/cover`)}>
                   <div className="flex items-start justify-between mb-2">
                     <h3 className="font-medium text-dash-text">{event.name}</h3>
@@ -80,11 +73,11 @@ export default function Dashboard() {
       </main>
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create New Event">
         <div className="space-y-4">
-          <Input placeholder="Event name" value={newName} onChange={(e) => setNewName(e.target.value)} />
-          <Select value={newType} onChange={(e) => setNewType(e.target.value)}>
+          <Input placeholder="Event name" value={newName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewName(e.target.value)} />
+          <Select value={newType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewType(e.target.value)}>
             {EVENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </Select>
-          <Select value={newTemplate} onChange={(e) => setNewTemplate(e.target.value)}>
+          <Select value={newTemplate} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewTemplate(e.target.value)}>
             {EVENT_TEMPLATES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </Select>
           <Button onClick={() => createMutation.mutate()} loading={createMutation.isPending} disabled={!newName.trim()} className="w-full">Create Event</Button>

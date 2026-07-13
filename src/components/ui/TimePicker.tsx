@@ -3,31 +3,20 @@ import { ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { to12Hour, to24Hour, roundTo5Min } from "../../lib/utils";
 
-interface TimePickerProps {
-  value: string | null;
-  onChange: (time: string) => void;
-  label?: string;
-}
+interface TimePickerProps { value: string | null; onChange: (time: string) => void; label?: string; }
 
 export function TimePicker({ value, onChange, label }: TimePickerProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  useEffect(() => { const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }; document.addEventListener("mousedown", handler); return () => document.removeEventListener("mousedown", handler); }, []);
 
   const h12 = to12Hour(value);
   const hour = h12?.hour || 12;
   const minute = h12 ? roundTo5Min(h12.minute) : 0;
   const period = h12?.period || "AM";
-
   const setHour = (h: number) => { const nh = ((h - 1 + 12) % 12) + 1; onChange(to24Hour(nh, minute, period)); };
   const setMinute = (m: number) => { const nm = ((m % 60) + 60) % 60; onChange(to24Hour(hour, nm, period)); };
   const setPeriod = (p: "AM" | "PM") => onChange(to24Hour(hour, minute, p));
-
   const minutes = Array.from({ length: 12 }, (_, i) => i * 5);
 
   return (

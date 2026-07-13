@@ -9,37 +9,29 @@ import { TimePicker } from "../../components/ui/TimePicker";
 import { Plus, Clock, Trash2, Edit2 } from "lucide-react";
 import { formatDateShort, formatTime12 } from "../../lib/utils";
 
+const EMPTY_FORM = { title: "", description: "", schedule_date: null as string | null, start_time: null as string | null, end_time: null as string | null, venue: "", address: "", dress_code: "" };
+
 export default function TimelineEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({ title: "", description: "", schedule_date: null as string | null, start_time: null as string | null, end_time: null as string | null, venue: "", address: "", dress_code: "" });
+  const [form, setForm] = useState(EMPTY_FORM);
 
   const { data: items, isLoading } = useQuery({
     queryKey: ["timeline", event.id],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("event_schedule").select("*").eq("event_id", event.id).order("order_index", { ascending: true });
-      if (error) throw error;
-      return data as ScheduleItem[];
-    },
+    queryFn: async () => { const { data, error } = await supabase.from("event_schedule").select("*").eq("event_id", event.id).order("order_index", { ascending: true }); if (error) throw error; return data as ScheduleItem[]; },
   });
 
   const createMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("event_schedule").insert({ event_id: event.id, ...form, order_index: items?.length || 0 });
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["timeline", event.id] }); setShowModal(false); setForm({ title: "", description: "", schedule_date: null, start_time: null, end_time: null, venue: "", address: "", dress_code: "" }); setEditingId(null); },
+    mutationFn: async () => { const { error } = await supabase.from("event_schedule").insert({ event_id: event.id, ...form, order_index: items?.length || 0 }); if (error) throw error; },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["timeline", event.id] }); setShowModal(false); setForm(EMPTY_FORM); setEditingId(null); },
     onError: (err: any) => alert("Failed to create: " + (err.message || "Unknown error")),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("event_schedule").update(form).eq("id", editingId!);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["timeline", event.id] }); setShowModal(false); setForm({ title: "", description: "", schedule_date: null, start_time: null, end_time: null, venue: "", address: "", dress_code: "" }); setEditingId(null); },
+    mutationFn: async () => { const { error } = await supabase.from("event_schedule").update(form).eq("id", editingId!); if (error) throw error; },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["timeline", event.id] }); setShowModal(false); setForm(EMPTY_FORM); setEditingId(null); },
     onError: (err: any) => alert("Failed to update: " + (err.message || "Unknown error")),
   });
 
@@ -49,17 +41,13 @@ export default function TimelineEditor() {
     onError: (err: any) => alert("Failed to delete: " + (err.message || "Unknown error")),
   });
 
-  const openEdit = (item: ScheduleItem) => {
-    setForm({ title: item.title, description: item.description, schedule_date: item.schedule_date, start_time: item.start_time, end_time: item.end_time, venue: item.venue, address: item.address, dress_code: item.dress_code });
-    setEditingId(item.id);
-    setShowModal(true);
-  };
+  const openEdit = (item: ScheduleItem) => { setForm({ title: item.title, description: item.description, schedule_date: item.schedule_date, start_time: item.start_time, end_time: item.end_time, venue: item.venue, address: item.address, dress_code: item.dress_code }); setEditingId(item.id); setShowModal(true); };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-dash-text">Timeline</h2>
-        <Button onClick={() => { setForm({ title: "", description: "", schedule_date: null, start_time: null, end_time: null, venue: "", address: "", dress_code: "" }); setEditingId(null); setShowModal(true); }}><Plus className="w-4 h-4" /> Add Item</Button>
+        <Button onClick={() => { setForm(EMPTY_FORM); setEditingId(null); setShowModal(true); }}><Plus className="w-4 h-4" /> Add Item</Button>
       </div>
       {isLoading ? <div className="text-center py-12 text-dash-muted">Loading...</div> : !items || items.length === 0 ? (
         <EmptyState icon={<Clock className="w-12 h-12" />} title="No timeline items" description="Add schedule items for your event." />
@@ -88,14 +76,14 @@ export default function TimelineEditor() {
       )}
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editingId ? "Edit Timeline Item" : "New Timeline Item"}>
         <div className="space-y-4">
-          <FormField label="Title"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></FormField>
-          <FormField label="Description"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} /></FormField>
+          <FormField label="Title"><Input value={form.title} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, title: e.target.value })} /></FormField>
+          <FormField label="Description"><Textarea value={form.description} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setForm({ ...form, description: e.target.value })} rows={2} /></FormField>
           <FormField label="Date"><DatePicker value={form.schedule_date} onChange={(d) => setForm({ ...form, schedule_date: d })} /></FormField>
           <div className="grid grid-cols-2 gap-4">
             <FormField label="Start Time"><TimePicker value={form.start_time} onChange={(t) => setForm({ ...form, start_time: t })} /></FormField>
             <FormField label="End Time"><TimePicker value={form.end_time} onChange={(t) => setForm({ ...form, end_time: t })} /></FormField>
           </div>
-          <FormField label="Venue"><Input value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} /></FormField>
+          <FormField label="Venue"><Input value={form.venue} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, venue: e.target.value })} /></FormField>
           <Button onClick={() => editingId ? updateMutation.mutate() : createMutation.mutate()} loading={createMutation.isPending || updateMutation.isPending} disabled={!form.title.trim()} className="w-full">{editingId ? "Save" : "Create"}</Button>
         </div>
       </Modal>

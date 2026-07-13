@@ -3,10 +3,11 @@ import { useParams, Outlet, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
+import { RUSTY_THEME } from "../../lib/theme";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { LogOut } from "lucide-react";
 
-export default function GuestLayout() {
+export default function RustyLayout() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { guestName, eventId, signOut } = useGuestAuth();
@@ -40,12 +41,12 @@ export default function GuestLayout() {
   const handleSignOut = () => { signOut(); navigate(`/e/${slug}`); };
 
   return (
-    <EventThemeProvider initialTheme={event.theme}>
+    <EventThemeProvider initialTheme={event.theme || RUSTY_THEME}>
       <div className="min-h-screen flex flex-col" style={{ background: "var(--event-bg)", color: "var(--event-text)", fontFamily: "var(--event-font)" }}>
-        <header className="sticky top-0 z-40 border-b" style={{ borderColor: "var(--event-border)", background: "var(--event-surface)" }}>
+        <header className="sticky top-0 z-40" style={{ borderBottom: "2px solid var(--event-border)", background: "var(--event-surface)" }}>
           <div className="max-w-5xl mx-auto px-4">
             <div className="h-16 flex items-center justify-between">
-              <Link to={`/e/${slug}`} className="text-lg font-semibold" style={{ color: "var(--event-primary)" }}>{event.name}</Link>
+              <Link to={`/e/${slug}`} className="text-xl font-serif" style={{ color: "var(--event-primary)" }}>{event.name}</Link>
               {guestName && eventId === event.id ? (
                 <div className="flex items-center gap-3">
                   <span className="text-sm" style={{ color: "var(--event-muted)" }}>Hi, {guestName}</span>
@@ -54,12 +55,12 @@ export default function GuestLayout() {
               ) : null}
             </div>
             <nav className="flex flex-wrap gap-1 pb-2">
-              <Link to={`/e/${slug}`} className="px-3 py-1.5 rounded-full text-sm transition-colors hover:opacity-80" style={{ color: "var(--event-text)" }}>Home</Link>
-              <Link to={`/e/${slug}/rsvp`} className="px-3 py-1.5 rounded-full text-sm transition-colors hover:opacity-80" style={{ color: "var(--event-text)" }}>RSVP</Link>
-              <Link to={`/e/${slug}/wishes`} className="px-3 py-1.5 rounded-full text-sm transition-colors hover:opacity-80" style={{ color: "var(--event-text)" }}>Wishes</Link>
-              <Link to={`/e/${slug}/contact`} className="px-3 py-1.5 rounded-full text-sm transition-colors hover:opacity-80" style={{ color: "var(--event-text)" }}>Contact</Link>
+              <Link to={`/e/${slug}`} className="px-3 py-1.5 rounded-full text-sm" style={{ color: "var(--event-text)" }}>Home</Link>
+              <Link to={`/e/${slug}/rsvp`} className="px-3 py-1.5 rounded-full text-sm" style={{ color: "var(--event-text)" }}>RSVP</Link>
+              <Link to={`/e/${slug}/wishes`} className="px-3 py-1.5 rounded-full text-sm" style={{ color: "var(--event-text)" }}>Wishes</Link>
+              <Link to={`/e/${slug}/contact`} className="px-3 py-1.5 rounded-full text-sm" style={{ color: "var(--event-text)" }}>Contact</Link>
               {navPages.map((page) => (
-                <Link key={page.id} to={`/e/${slug}/p/${page.slug}`} className="px-3 py-1.5 rounded-full text-sm transition-colors hover:opacity-80" style={{ color: "var(--event-text)" }}>{page.nav_label}</Link>
+                <Link key={page.id} to={`/e/${slug}/p/${page.slug}`} className="px-3 py-1.5 rounded-full text-sm" style={{ color: "var(--event-text)" }}>{page.nav_label}</Link>
               ))}
             </nav>
           </div>
@@ -67,20 +68,18 @@ export default function GuestLayout() {
         <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-8">
           <Outlet context={{ event }} />
         </main>
-        {(footerPages.length > 0 || true) && (
-          <footer className="border-t mt-8" style={{ borderColor: "var(--event-border)", background: "var(--event-surface)" }}>
-            <div className="max-w-5xl mx-auto px-4 py-6">
-              {footerPages.length > 0 && (
-                <div className="flex flex-wrap gap-4 mb-4">
-                  {footerPages.map((page) => (
-                    <Link key={page.id} to={`/e/${slug}/p/${page.slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>{page.nav_label}</Link>
-                  ))}
-                </div>
-              )}
-              <p className="text-sm text-center" style={{ color: "var(--event-muted)" }}>&copy; {new Date().getFullYear()} {event.name}</p>
-            </div>
-          </footer>
-        )}
+        <footer className="border-t mt-8" style={{ borderColor: "var(--event-border)", background: "var(--event-surface)" }}>
+          <div className="max-w-5xl mx-auto px-4 py-6">
+            {footerPages.length > 0 && (
+              <div className="flex flex-wrap gap-4 mb-4">
+                {footerPages.map((page) => (
+                  <Link key={page.id} to={`/e/${slug}/p/${page.slug}`} className="text-sm" style={{ color: "var(--event-muted)" }}>{page.nav_label}</Link>
+                ))}
+              </div>
+            )}
+            <p className="text-sm text-center" style={{ color: "var(--event-muted)" }}>&copy; {new Date().getFullYear()} {event.name}</p>
+          </div>
+        </footer>
       </div>
     </EventThemeProvider>
   );

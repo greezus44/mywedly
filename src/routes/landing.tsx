@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { CalendarHeart, Users, Share2, QrCode, Sparkles, Check } from "lucide-react";
+import { CalendarHeart, Users, Share2 } from "lucide-react";
 import { SiteHeader } from "../components/site/SiteHeader";
 import { SiteFooter } from "../components/site/SiteFooter";
 

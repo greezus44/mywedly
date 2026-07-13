@@ -7,7 +7,6 @@ import { Users, Mail, Check, X } from "lucide-react";
 
 export default function AnalyticsEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
-
   const { data: stats } = useQuery({
     queryKey: ["analytics", event.id],
     queryFn: async () => {
@@ -16,17 +15,10 @@ export default function AnalyticsEditor() {
         supabase.from("event_rsvps").select("*").eq("event_id", event.id),
       ]);
       const rsvpList = rsvps || [];
-      return {
-        guests: guestCount || 0,
-        rsvps: rsvpList.length,
-        attending: rsvpList.filter((r: any) => r.attending).length,
-        declined: rsvpList.filter((r: any) => !r.attending).length,
-      };
+      return { guests: guestCount || 0, rsvps: rsvpList.length, attending: rsvpList.filter((r: any) => r.attending).length, declined: rsvpList.filter((r: any) => !r.attending).length };
     },
   });
-
   const responseRate = stats && stats.guests > 0 ? Math.round((stats.rsvps / stats.guests) * 100) : 0;
-
   return (
     <div>
       <h2 className="text-xl font-semibold text-dash-text mb-6">Analytics</h2>
@@ -38,9 +30,7 @@ export default function AnalyticsEditor() {
       </div>
       <Card className="p-4">
         <h3 className="font-medium text-dash-text mb-2">Response Rate</h3>
-        <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden">
-          <div className="h-full bg-dash-primary rounded-full transition-all" style={{ width: `${responseRate}%` }} />
-        </div>
+        <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden"><div className="h-full bg-dash-primary rounded-full transition-all" style={{ width: `${responseRate}%` }} /></div>
         <p className="text-sm text-dash-muted mt-2">{responseRate}% of guests have responded</p>
       </Card>
     </div>

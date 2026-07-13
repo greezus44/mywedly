@@ -11,28 +11,19 @@ const ALLOWED_STYLES = new Set(["color", "font-weight", "font-style", "text-deco
 export function sanitizeHtml(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
   function cleanNode(node: Node) {
-    const children = Array.from(node.childNodes);
-    for (const child of children) {
+    for (const child of Array.from(node.childNodes)) {
       if (child.nodeType === Node.ELEMENT_NODE) {
         const el = child as Element;
-        const tag = el.tagName;
-        if (!ALLOWED_TAGS.has(tag)) {
+        if (!ALLOWED_TAGS.has(el.tagName)) {
           const parent = el.parentNode;
-          if (parent) {
-            while (el.firstChild) parent.insertBefore(el.firstChild, el);
-            parent.removeChild(el);
-          }
+          if (parent) { while (el.firstChild) parent.insertBefore(el.firstChild, el); parent.removeChild(el); }
           continue;
         }
-        const allowedAttrs = ALLOWED_ATTRS[tag] || new Set();
+        const allowedAttrs = ALLOWED_ATTRS[el.tagName] || new Set();
         Array.from(el.attributes).forEach((attr) => {
-          if (!allowedAttrs.has(attr.name)) {
-            el.removeAttribute(attr.name);
-          } else if (attr.name === "style") {
-            const styles = attr.value.split(";").filter((s) => {
-              const [prop] = s.split(":");
-              return ALLOWED_STYLES.has(prop.trim());
-            });
+          if (!allowedAttrs.has(attr.name)) el.removeAttribute(attr.name);
+          else if (attr.name === "style") {
+            const styles = attr.value.split(";").filter((s) => { const [prop] = s.split(":"); return ALLOWED_STYLES.has(prop.trim()); });
             el.setAttribute("style", styles.join(";"));
           }
         });

@@ -13,20 +13,14 @@ export default function ThemeEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
   const theme = event.draft_theme || event.theme || {};
-
   const saveMutation = useMutation({
-    mutationFn: async (newTheme: ThemeConfig) => {
-      const { error } = await supabase.from("user_events").update({ draft_theme: newTheme }).eq("id", event.id);
-      if (error) throw error;
-    },
+    mutationFn: async (newTheme: ThemeConfig) => { const { error } = await supabase.from("user_events").update({ draft_theme: newTheme }).eq("id", event.id); if (error) throw error; },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", event.id] }),
     onError: (err: any) => alert("Failed to save: " + (err.message || "Unknown error")),
   });
-
   const [local, setLocal] = React.useState<ThemeConfig>(theme);
   React.useEffect(() => setLocal(theme), [JSON.stringify(theme)]);
   const update = (patch: Partial<ThemeConfig>) => setLocal((prev) => ({ ...prev, ...patch }));
-
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -36,13 +30,13 @@ export default function ThemeEditor() {
       <SplitEditor preview={<CoverPreview event={{ ...event, draft_theme: local } as UserEvent} />}>
         <Card className="p-4 space-y-4">
           <FormField label="Preset">
-            <Select value="" onChange={(e) => { const preset = THEME_PRESETS.find((p) => p.name === e.target.value); if (preset) setLocal(preset.theme); }}>
+            <Select value="" onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { const preset = THEME_PRESETS.find((p) => p.name === e.target.value); if (preset) setLocal(preset.theme); }}>
               <option value="">Choose a preset...</option>
               {THEME_PRESETS.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
             </Select>
           </FormField>
           <FormField label="Font">
-            <Select value={local.font || ""} onChange={(e) => update({ font: e.target.value })}>
+            <Select value={local.font || ""} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => update({ font: e.target.value })}>
               {RICH_FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
             </Select>
           </FormField>

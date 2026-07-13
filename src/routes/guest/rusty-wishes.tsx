@@ -5,7 +5,7 @@ import { supabase, type UserEvent, type EventMessage } from "../../lib/supabase"
 import { useGuestAuth } from "../../lib/guest-auth";
 import { formatDateShort } from "../../lib/utils";
 
-export default function GuestWishes() {
+export default function RustyWishes() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const { guestName } = useGuestAuth();
   const queryClient = useQueryClient();
@@ -32,13 +32,13 @@ export default function GuestWishes() {
   return (
     <div className="max-w-2xl mx-auto">
       <h2 className="text-2xl font-serif text-center mb-6" style={{ color: "var(--event-primary)" }}>Wishes</h2>
-      <div className="mb-6">
-        <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Write a wish for the hosts..." rows={3} className="w-full px-4 py-2.5 rounded-lg border bg-white mb-2" style={{ borderColor: "var(--event-border)" }} />
-        <button onClick={() => submitMutation.mutate()} disabled={!message.trim() || submitMutation.isPending} className="px-6 py-2 rounded-lg text-white font-medium disabled:opacity-50" style={{ background: "var(--event-primary)" }}>{submitMutation.isPending ? "Posting..." : "Post Wish"}</button>
+      <div className="mb-6 p-4 rounded-xl" style={{ background: "var(--event-surface)", border: "2px solid var(--event-border)" }}>
+        <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Write a wish..." rows={3} className="w-full px-4 py-2.5 rounded-lg border bg-white mb-2" style={{ borderColor: "var(--event-border)" }} />
+        <button onClick={() => submitMutation.mutate()} disabled={!message.trim()} className="px-6 py-2 rounded-lg text-white font-medium disabled:opacity-50" style={{ background: "var(--event-primary)" }}>Post Wish</button>
       </div>
       <div className="space-y-3">
         {messages?.map((m) => (
-          <div key={m.id} className="p-4 rounded-lg border" style={{ borderColor: "var(--event-border)", background: "var(--event-surface)" }}>
+          <div key={m.id} className="p-4 rounded-lg" style={{ background: "var(--event-surface)", border: "1px solid var(--event-border)" }}>
             <p className="text-sm mb-1">{m.message}</p>
             <p className="text-xs event-muted-text">— {m.guest_name} on {formatDateShort(m.created_at)}</p>
           </div>

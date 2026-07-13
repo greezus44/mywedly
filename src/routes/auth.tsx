@@ -14,8 +14,7 @@ export default function Auth() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password });
@@ -25,34 +24,23 @@ export default function Auth() {
         if (error) throw error;
       }
       navigate("/dashboard");
-    } catch (err: any) {
-      setError(err.message || "Authentication failed");
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { setError(err.message || "Authentication failed"); }
+    finally { setLoading(false); }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
-        <h1 className="text-2xl font-semibold text-slate-900 mb-6 text-center">
-          {mode === "signin" ? "Sign In" : "Create Account"}
-        </h1>
+        <h1 className="text-2xl font-semibold text-slate-900 mb-6 text-center">{mode === "signin" ? "Sign In" : "Create Account"}</h1>
         {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <FormField label="Email">
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" />
-          </FormField>
-          <FormField label="Password">
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} placeholder="At least 6 characters" />
-          </FormField>
+          <FormField label="Email"><Input type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} required placeholder="you@example.com" /></FormField>
+          <FormField label="Password"><Input type="password" value={password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} required minLength={6} placeholder="At least 6 characters" /></FormField>
           <Button type="submit" loading={loading} className="w-full">{mode === "signin" ? "Sign In" : "Sign Up"}</Button>
         </form>
         <p className="mt-4 text-center text-sm text-slate-600">
           {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
-          <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")} className="text-teal-700 hover:underline">
-            {mode === "signin" ? "Sign up" : "Sign in"}
-          </button>
+          <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")} className="text-teal-700 hover:underline">{mode === "signin" ? "Sign up" : "Sign in"}</button>
         </p>
       </div>
     </div>

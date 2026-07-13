@@ -4,7 +4,7 @@ import type { UserEvent } from "../../lib/supabase";
 import { RichTextContent } from "../../lib/sanitize";
 import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
 
-export default function GuestHome() {
+export default function RustyHome() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const content = event.content || {};
   const cfg = event.cover_config || {};
@@ -12,12 +12,12 @@ export default function GuestHome() {
 
   return (
     <div className="space-y-8">
-      {cfg.cover_image && <img src={cfg.cover_image} alt="" className="w-full max-h-64 object-cover rounded-xl" />}
+      {cfg.cover_image && <img src={cfg.cover_image} alt="" className="w-full max-h-64 object-cover rounded-xl" style={{ border: "2px solid var(--event-border)" }} />}
       {content.title && <RichTextContent html={content.title} className="text-3xl md:text-4xl font-serif text-center" />}
       {content.subtitle && <RichTextContent html={content.subtitle} className="text-lg text-center event-muted-text" />}
       {content.body && <RichTextContent html={content.body} className="text-base leading-relaxed" />}
       {event.event_date && !countdown.isPast && (
-        <div className="text-center py-6">
+        <div className="text-center py-6 rounded-xl" style={{ background: "var(--event-surface)", border: "2px solid var(--event-border)" }}>
           <h3 className="text-xl font-serif mb-4" style={{ color: "var(--event-primary)" }}>Counting Down</h3>
           <div className="flex justify-center gap-4">
             <div className="text-center"><p className="text-3xl font-bold" style={{ color: "var(--event-primary)" }}>{countdown.days}</p><p className="text-sm event-muted-text">Days</p></div>

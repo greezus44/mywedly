@@ -16,6 +16,7 @@ const NAV_TABS = [
   { path: "groups", label: "Groups" },
   { path: "rsvp", label: "RSVP" },
   { path: "timeline", label: "Timeline" },
+  { path: "pages", label: "Pages" },
   { path: "sharing", label: "Sharing" },
   { path: "analytics", label: "Analytics" },
   { path: "settings", label: "Settings" },
@@ -37,10 +38,7 @@ export default function EventLayout() {
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      const updates: Record<string, any> = {
-        is_published: true,
-        published_at: new Date().toISOString(),
-      };
+      const updates: Record<string, any> = { is_published: true, published_at: new Date().toISOString() };
       if (event?.draft_name) updates.name = event.draft_name;
       if (event?.draft_event_type) updates.event_type = event.draft_event_type;
       if (event?.draft_event_date !== undefined) updates.event_date = event.draft_event_date;
@@ -56,7 +54,6 @@ export default function EventLayout() {
       if (event?.draft_sharing_config) updates.sharing_config = event.draft_sharing_config;
       if (event?.draft_slug) updates.slug = event.draft_slug;
       if (event?.draft_rsvp_deadline !== undefined) updates.rsvp_deadline = event.draft_rsvp_deadline;
-
       const { data, error } = await supabase.from("user_events").update(updates).eq("id", eventId).select().single();
       if (error) throw error;
       return data;
@@ -91,34 +88,22 @@ export default function EventLayout() {
             <div className="flex items-center gap-3">
               <Link to="/dashboard" className="text-dash-muted hover:text-dash-text"><ArrowLeft className="w-5 h-5" /></Link>
               <h1 className="text-lg font-semibold text-dash-text">{event.name}</h1>
-              <Badge variant={event.is_published ? "success" : "default"}>
-                {event.is_published ? "Published" : "Draft"}
-              </Badge>
+              <Badge variant={event.is_published ? "success" : "default"}>{event.is_published ? "Published" : "Draft"}</Badge>
             </div>
             <div className="flex items-center gap-2">
               {event.is_published && event.slug && (
-                <a href={`/e/${event.slug}`} target="_blank" rel="noopener" className="text-sm text-teal-700 hover:underline flex items-center gap-1">
-                  <Globe className="w-4 h-4" /> View
-                </a>
+                <a href={`/e/${event.slug}`} target="_blank" rel="noopener" className="text-sm text-teal-700 hover:underline flex items-center gap-1"><Globe className="w-4 h-4" /> View</a>
               )}
               {event.is_published ? (
                 <Button variant="secondary" size="sm" onClick={() => unpublishMutation.mutate()} loading={unpublishMutation.isPending}>Unpublish</Button>
               ) : (
-                <Button size="sm" onClick={() => publishMutation.mutate()} loading={publishMutation.isPending}>
-                  <Globe className="w-4 h-4" /> Publish
-                </Button>
+                <Button size="sm" onClick={() => publishMutation.mutate()} loading={publishMutation.isPending}><Globe className="w-4 h-4" /> Publish</Button>
               )}
             </div>
           </div>
           <nav className="flex flex-wrap gap-1 pb-2">
             {NAV_TABS.map((tab) => (
-              <NavLink
-                key={tab.path}
-                to={`/event/${eventId}/${tab.path}`}
-                className={({ isActive }) =>
-                  `px-3 py-1.5 rounded-full text-sm transition-colors ${isActive ? "bg-dash-primary text-white" : "text-dash-muted hover:bg-dash-primary-light hover:text-dash-primary"}`
-                }
-              >
+              <NavLink key={tab.path} to={`/event/${eventId}/${tab.path}`} className={({ isActive }) => `px-3 py-1.5 rounded-full text-sm transition-colors ${isActive ? "bg-dash-primary text-white" : "text-dash-muted hover:bg-dash-primary-light hover:text-dash-primary"}`}>
                 {tab.label}
               </NavLink>
             ))}
