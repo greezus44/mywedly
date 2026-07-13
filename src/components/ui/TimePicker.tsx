@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronUp, ChevronDown, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 interface TimePickerProps {
@@ -18,31 +18,19 @@ export function TimePicker({ value, onChange, label, placeholder = "Select time"
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  useEffect(() => {
-    if (open && listRef.current && value) {
-      const selected = listRef.current.querySelector(`[data-time="${value}"]`);
-      selected?.scrollIntoView({ block: "center" });
-    }
-  }, [open, value]);
+  useEffect(() => { if (open && listRef.current && value) { listRef.current.querySelector(`[data-time="${value}"]`)?.scrollIntoView({ block: "center" }); } }, [open, value]);
 
   const times: { value: string; label: string }[] = [];
   for (let h = 0; h < 24; h++) {
     for (let m = 0; m < 60; m += interval) {
-      const value24 = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
-      if (use24Hour) {
-        times.push({ value: value24, label: value24 });
-      } else {
-        const period = h >= 12 ? "PM" : "AM";
-        const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-        times.push({ value: value24, label: `${hour12}:${m.toString().padStart(2, "0")} ${period}` });
-      }
+      const v = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+      if (use24Hour) times.push({ value: v, label: v });
+      else { const p = h >= 12 ? "PM" : "AM"; const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h; times.push({ value: v, label: `${h12}:${m.toString().padStart(2, "0")} ${p}` }); }
     }
   }
 
@@ -50,39 +38,22 @@ export function TimePicker({ value, onChange, label, placeholder = "Select time"
     if (!val) return placeholder;
     if (use24Hour) return val;
     const [h, m] = val.split(":").map(Number);
-    const period = h >= 12 ? "PM" : "AM";
-    const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-    return `${hour12}:${m.toString().padStart(2, "0")} ${period}`;
+    const p = h >= 12 ? "PM" : "AM";
+    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${h12}:${m.toString().padStart(2, "0")} ${p}`;
   };
 
   return (
     <div className="relative" ref={ref}>
       {label && <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>}
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-900 transition-colors hover:border-gray-400 focus:outline-none focus:border-gray-900"
-      >
+      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-900 transition-colors hover:border-gray-400 focus:outline-none focus:border-gray-900">
         <Clock className="w-4 h-4 text-gray-400" />
         <span className={cn(!value && "text-gray-400")}>{formatDisplay(value)}</span>
       </button>
       {open && (
         <div className="absolute z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg w-40">
           <div ref={listRef} className="max-h-60 overflow-y-auto py-1">
-            {times.map(t => (
-              <button
-                key={t.value}
-                type="button"
-                data-time={t.value}
-                onClick={() => { onChange(t.value); setOpen(false); }}
-                className={cn(
-                  "w-full px-3 py-1.5 text-left text-sm transition-colors hover:bg-gray-100",
-                  value === t.value && "bg-gray-900 text-white hover:bg-gray-900"
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
+            {times.map(t => <button key={t.value} type="button" data-time={t.value} onClick={() => { onChange(t.value); setOpen(false); }} className={cn("w-full px-3 py-1.5 text-left text-sm transition-colors hover:bg-gray-100", value === t.value && "bg-gray-900 text-white hover:bg-gray-900")}>{t.label}</button>)}
           </div>
         </div>
       )}

@@ -1,251 +1,235 @@
-import { useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
+import { useState } from "react";
+import { supabase } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { DEFAULT_THEME } from "../../lib/theme";
 import { formatDate, formatTime } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
 import { Input, Textarea } from "../../components/ui/Input";
+import { MapPin, Calendar, Clock, Send, Mail } from "lucide-react";
 import type { FormEvent } from "react";
-import { MapPin, Calendar, Clock, Mail, Send, Phone } from "lucide-react";
+import type { GuestLayoutContext } from "./guest-layout";
 
 export default function Contact() {
-  const { event } = useOutletContext<{ event: UserEvent }>();
+  const { eventId } = useParams<{ eventId: string }>();
+  const { event } = useOutletContext<GuestLayoutContext>();
   const { guestName } = useGuestAuth();
-  const theme = { ...DEFAULT_THEME, ...event.theme };
   const queryClient = useQueryClient();
-  const [message, setMessage] = useState("");
-  const [contactInfo, setContactInfo] = useState("");
-  const [sent, setSent] = useState(false);
+  const theme = event.theme;
 
-  const mutation = useMutation<void, Error>({
+  const [name, setName] = useState(guestName || "");
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+
+  const mapsUrl = event.address
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`
+    : null;
+
+  const submitMutation = useMutation<void, Error>({
     mutationFn: async () => {
-      const name = guestName || "Guest";
-      const fullMessage = contactInfo.trim()
-        ? `${message.trim()}\n\nContact: ${contactInfo.trim()}`
-        : message.trim();
-      const { error } = await supabase.from("event_messages").insert({
-        event_id: event.id,
-        guest_name: name,
-        message: fullMessage,
-      });
+      if (!eventId) throw new Error("Event not found");
+      const payload = {
+        event_id: eventId,
+        guest_name: name.trim() || guestName || "Anonymous",
+        message: message.trim(),
+      };
+      const { error } = await supabase.from("event_messages").insert(payload);
       if (error) throw error;
     },
     onSuccess: () => {
-      setSent(true);
       setMessage("");
-      setContactInfo("");
-      queryClient.invalidateQueries({ queryKey: ["event-messages", event.id] });
-      setTimeout(() => setSent(false), 4000);
+      setEmail("");
+      queryClient.invalidateQueries({ queryKey: ["event-messages", eventId] });
     },
   });
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
-    mutation.mutate();
+    submitMutation.mutate();
   };
 
-  const mutationError = (mutation as any).error as Error | undefined;
-
-  const mapsUrl = event.address
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-        `${event.venue || ""} ${event.address}`.trim()
-      )}`
-    : null;
-
   return (
-    <div style={{ background: theme.bgColor, color: theme.bodyColor, fontFamily: theme.bodyFont }}>
-      <section
-        className="px-6 py-12 text-center"
-        style={{ maxWidth: theme.maxWidth, margin: "0 auto" }}
-      >
-        <div
-          className="w-14 h-14 rounded-full mx-auto flex items-center justify-center mb-4"
-          style={{ background: `${theme.primaryColor}15` }}
-        >
-          <Phone className="w-7 h-7" style={{ color: theme.primaryColor }} />
-        </div>
-        <h2
-          className="text-2xl font-bold mb-2"
-          style={{ color: theme.headingColor, fontFamily: theme.headingFont }}
-        >
-          Contact
-        </h2>
-        <p className="text-sm" style={{ color: theme.bodyColor }}>
-          Event details and inquiries
-        </p>
-      </section>
-
-      <section
-        className="px-6 pb-8"
-        style={{ maxWidth: theme.maxWidth, margin: "0 auto" }}
-      >
-        <div className="space-y-3">
-          {event.event_date && (
-            <div
-              className="flex items-start gap-3 p-4 rounded-xl"
-              style={{ background: `${theme.accentColor}10`, border: `1px solid ${theme.accentColor}20` }}
-            >
-              <Calendar className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: theme.primaryColor }} />
-              <div>
-                <p className="text-[10px] uppercase tracking-wider opacity-60 mb-0.5">Date</p>
-                <p className="text-sm font-medium" style={{ color: theme.headingColor }}>
-                  {formatDate(event.event_date)}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {event.event_time && (
-            <div
-              className="flex items-start gap-3 p-4 rounded-xl"
-              style={{ background: `${theme.accentColor}10`, border: `1px solid ${theme.accentColor}20` }}
-            >
-              <Clock className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: theme.primaryColor }} />
-              <div>
-                <p className="text-[10px] uppercase tracking-wider opacity-60 mb-0.5">Time</p>
-                <p className="text-sm font-medium" style={{ color: theme.headingColor }}>
-                  {formatTime(event.event_time)}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {(event.venue || event.address) && (
-            <div
-              className="flex items-start gap-3 p-4 rounded-xl"
-              style={{ background: `${theme.accentColor}10`, border: `1px solid ${theme.accentColor}20` }}
-            >
-              <MapPin className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: theme.primaryColor }} />
-              <div className="flex-1">
-                <p className="text-[10px] uppercase tracking-wider opacity-60 mb-0.5">Venue</p>
-                {event.venue && (
-                  <p className="text-sm font-medium" style={{ color: theme.headingColor }}>
-                    {event.venue}
-                  </p>
-                )}
-                {event.address && (
-                  <p className="text-xs mt-0.5 opacity-70">{event.address}</p>
-                )}
-                {mapsUrl && (
-                  <a
-                    href={mapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs mt-2 font-medium transition-colors hover:opacity-70"
-                    style={{ color: theme.primaryColor }}
-                  >
-                    <MapPin className="w-3 h-3" />
-                    View on Google Maps
-                  </a>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section
-        className="px-6 pb-12"
-        style={{ maxWidth: theme.maxWidth, margin: "0 auto" }}
-      >
-        <div className="mb-6">
-          <h3
-            className="text-lg font-semibold mb-1"
-            style={{ color: theme.headingColor, fontFamily: theme.headingFont }}
+    <div className="min-h-screen px-6 py-12" style={{ backgroundColor: theme.bgColor, color: theme.bodyColor, fontFamily: theme.bodyFont }}>
+      <div className="max-w-lg mx-auto">
+        <div className="text-center mb-10">
+          <div
+            className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4"
+            style={{ backgroundColor: `${theme.accentColor}20` }}
           >
-            Send a Message
-          </h3>
-          <p className="text-xs opacity-70" style={{ color: theme.bodyColor }}>
-            Have a question? Reach out to the host.
+            <MapPin className="w-7 h-7" style={{ color: theme.primaryColor }} />
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-bold mb-3" style={{ fontFamily: theme.headingFont, color: theme.headingColor }}>
+            Contact & Venue
+          </h1>
+          <p className="text-sm opacity-70" style={{ color: theme.bodyColor }}>
+            Event details and how to reach us
           </p>
         </div>
 
-        {sent ? (
-          <div
-            className="rounded-xl p-6 text-center space-y-2"
-            style={{ background: `${theme.primaryColor}10`, border: `1px solid ${theme.primaryColor}25` }}
-          >
-            <div
-              className="w-12 h-12 rounded-full mx-auto flex items-center justify-center"
-              style={{ background: `${theme.primaryColor}20` }}
-            >
-              <Mail className="w-6 h-6" style={{ color: theme.primaryColor }} />
-            </div>
-            <p className="text-sm font-medium" style={{ color: theme.headingColor }}>
-              Message sent!
-            </p>
-            <p className="text-xs opacity-70" style={{ color: theme.bodyColor }}>
-              The host will get back to you soon.
-            </p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label
-                className="block text-sm font-medium mb-2"
-                style={{ color: theme.headingColor }}
-              >
-                Your Email or Phone
-              </label>
-              <Input
-                type="text"
-                value={contactInfo}
-                onChange={(e) => setContactInfo(e.target.value)}
-                placeholder="email@example.com or +1 234 567 8900"
-                style={{
-                  background: theme.bgColor,
-                  color: theme.bodyColor,
-                  borderColor: `${theme.accentColor}40`,
-                }}
-              />
-            </div>
-
-            <div>
-              <label
-                className="block text-sm font-medium mb-2"
-                style={{ color: theme.headingColor }}
-              >
-                Message
-              </label>
-              <Textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Write your message..."
-                rows={4}
-                style={{
-                  background: theme.bgColor,
-                  color: theme.bodyColor,
-                  borderColor: `${theme.accentColor}40`,
-                  borderRadius: theme.buttonRadius,
-                }}
-              />
-            </div>
-
-            {mutationError && (
-              <p className="text-sm text-red-500">{mutationError.message}</p>
+        <div className="p-6 mb-8 bg-white border rounded-xl" style={{ borderColor: `${theme.accentColor}30`, backgroundColor: theme.bgColor }}>
+          <div className="space-y-5">
+            {event.event_date && (
+              <div className="flex items-start gap-3">
+                <Calendar className="w-5 h-5 flex-shrink-0 mt-0.5 opacity-50" style={{ color: theme.accentColor }} />
+                <div>
+                  <p className="text-xs uppercase tracking-wider opacity-50 mb-1" style={{ color: theme.bodyColor }}>
+                    Date
+                  </p>
+                  <p className="text-sm font-medium" style={{ color: theme.headingColor }}>
+                    {formatDate(event.event_date)}
+                  </p>
+                </div>
+              </div>
             )}
 
-            <Button
-              type="submit"
-              loading={mutation.isPending}
-              disabled={!message.trim()}
-              className="w-full"
-              style={{
-                background: theme.buttonBgColor,
-                color: theme.buttonTextColor,
-                borderRadius: theme.buttonRadius,
-                border: `1px solid ${theme.buttonBgColor}`,
-              }}
-            >
-              <Send className="w-4 h-4" />
-              Send Message
-            </Button>
-          </form>
-        )}
-      </section>
+            {event.event_time && (
+              <div className="flex items-start gap-3">
+                <Clock className="w-5 h-5 flex-shrink-0 mt-0.5 opacity-50" style={{ color: theme.accentColor }} />
+                <div>
+                  <p className="text-xs uppercase tracking-wider opacity-50 mb-1" style={{ color: theme.bodyColor }}>
+                    Time
+                  </p>
+                  <p className="text-sm font-medium" style={{ color: theme.headingColor }}>
+                    {formatTime(event.event_time)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {event.venue && (
+              <div className="flex items-start gap-3">
+                <MapPin className="w-5 h-5 flex-shrink-0 mt-0.5 opacity-50" style={{ color: theme.accentColor }} />
+                <div>
+                  <p className="text-xs uppercase tracking-wider opacity-50 mb-1" style={{ color: theme.bodyColor }}>
+                    Venue
+                  </p>
+                  <p className="text-sm font-medium" style={{ color: theme.headingColor }}>
+                    {event.venue}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {event.address && (
+              <div className="flex items-start gap-3">
+                <MapPin className="w-5 h-5 flex-shrink-0 mt-0.5 opacity-0" style={{ color: theme.accentColor }} />
+                <div className="flex-1">
+                  <p className="text-xs uppercase tracking-wider opacity-50 mb-1" style={{ color: theme.bodyColor }}>
+                    Address
+                  </p>
+                  <p className="text-sm mb-2" style={{ color: theme.bodyColor }}>
+                    {event.address}
+                  </p>
+                  {mapsUrl && (
+                    <a
+                      href={mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
+                      style={{ color: theme.primaryColor }}
+                    >
+                      <MapPin className="w-3.5 h-3.5" />
+                      View on Google Maps
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <h2 className="text-xl font-semibold mb-4" style={{ fontFamily: theme.headingFont, color: theme.headingColor }}>
+            Send a Message
+          </h2>
+          <div className="p-5 bg-white border rounded-xl" style={{ borderColor: `${theme.accentColor}30`, backgroundColor: theme.bgColor }}>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2" style={{ color: theme.headingColor }}>
+                  Your Name
+                </label>
+                <Input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Your name"
+                  required
+                  style={{
+                    borderColor: `${theme.accentColor}30`,
+                    color: theme.bodyColor,
+                    backgroundColor: theme.bgColor,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2" style={{ color: theme.headingColor }}>
+                  Email {`(optional)`}
+                </label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  style={{
+                    borderColor: `${theme.accentColor}30`,
+                    color: theme.bodyColor,
+                    backgroundColor: theme.bgColor,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2" style={{ color: theme.headingColor }}>
+                  Message
+                </label>
+                <Textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Your message..."
+                  rows={4}
+                  required
+                  style={{
+                    borderColor: `${theme.accentColor}30`,
+                    color: theme.bodyColor,
+                    backgroundColor: theme.bgColor,
+                  }}
+                />
+              </div>
+
+              {(submitMutation as any).error && (
+                <div className="px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: "rgba(220,38,38,0.08)", color: "#dc2626" }}>
+                  {(submitMutation as any).error.message || "Could not send message."}
+                </div>
+              )}
+
+              {submitMutation.isSuccess && !submitMutation.isPending && (
+                <div className="px-3 py-2 rounded-lg text-sm flex items-center gap-2" style={{ backgroundColor: `${theme.accentColor}15`, color: theme.primaryColor }}>
+                  <Mail className="w-4 h-4" />
+                  Message sent successfully!
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                size="lg"
+                loading={submitMutation.isPending}
+                disabled={!message.trim()}
+                className="w-full"
+                style={{
+                  backgroundColor: theme.buttonBgColor,
+                  color: theme.buttonTextColor,
+                  borderRadius: `${theme.buttonRadius}px`,
+                }}
+              >
+                <Send className="w-4 h-4" />
+                Send Message
+              </Button>
+            </form>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

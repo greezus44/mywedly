@@ -1,150 +1,245 @@
-import { useState, useEffect } from "react";
-import { useOutletContext, useParams, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useMemo } from "react";
+import { useOutletContext, useParams } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, UserEvent, SharingConfig } from "../../lib/supabase";
+import { DEFAULT_SHARING_CONFIG } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
 import { Input, Textarea } from "../../components/ui/Input";
-import { FormField, Toggle, ErrorState, Toast } from "../../components/ui/index";
-import { generateQrDataUrl } from "../../lib/qr";
-import { Copy, Check, Save, MessageCircle, Facebook, Twitter, Mail, QrCode } from "lucide-react";
+import { Card, FormField, Toggle, Toast, Skeleton } from "../../components/ui/index";
+import { generateQrDataUrl, downloadQrCode, downloadQrSvg } from "../../lib/qr";
+import { cn } from "../../lib/utils";
+import { Copy, Download, Link2, QrCode, Loader2, Check } from "lucide-react";
 
-type Ctx = { event: UserEvent | null };
-
-const defaultSharing: SharingConfig = {
-  showShareButtons: true, shareMessage: "", whatsappText: "", facebookText: "",
-  emailSubject: "", emailBody: "", qrColor: "#000000", qrBgColor: "#ffffff",
-};
-
-export default function Sharing() {
-  const { event } = useOutletContext<Ctx>();
+export default function SharingPage() {
+  const { event } = useOutletContext<{ event: UserEvent | null }>();
   const { eventId } = useParams<{ eventId: string }>();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [config, setConfig] = useState<SharingConfig>(defaultSharing);
+  const [toast, setToast] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<"success" | "error">("success");
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [qrSrc, setQrSrc] = useState<string>("");
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [qrUrl, setQrUrl] = useState<string>("");
+  const [qrLoading, setQrLoading] = useState(false);
 
-  const eventUrl = eventId ? `${window.location.origin}/e/${eventId}` : "";
+  const [config, setConfig] = useState<SharingConfig>({ ...DEFAULT_SHARING_CONFIG, ...(event?.draft_sharing_config || {}) });
 
   useEffect(() => {
-    if (event?.draft_sharing_config) {
-      setConfig({ ...defaultSharing, ...event.draft_sharing_config });
+    if (event) {
+      setConfig({ ...DEFAULT_SHARING_CONFIG, ...(event.draft_sharing_config || {}) });
     }
-  }, [event?.id]);
+  }, [event]);
+
+  const eventSlug = event?.slug || event?.draft_slug;
+  const eventUrl = useMemo(() => {
+    if (!eventSlug) return "";
+    return `${window.location.origin}/e/${eventSlug}`;
+  }, [eventSlug]);
 
   useEffect(() => {
     if (!eventUrl) return;
-    generateQrDataUrl(eventUrl, { color: config.qrColor, bgColor: config.qrBgColor, size: 200 }).then(setQrSrc);
+    let cancelled = false;
+    setQrLoading(true);
+    generateQrDataUrl(eventUrl, { color: config.qrColor, bgColor: config.qrBgColor, size: 300 })
+      .then((url) => {
+        if (!cancelled) setQrUrl(url);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setQrLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [eventUrl, config.qrColor, config.qrBgColor]);
 
-  const update = (patch: Partial<SharingConfig>) => setConfig(c => ({ ...c, ...patch }));
+  const showToast = (msg: string, type: "success" | "error" = "success") => {
+    setToast(msg);
+    setToastType(type);
+    setTimeout(() => setToast(null), 3000);
+  };
 
-  const handleCopy = async () => {
+  const saveMutation = useMutation<void, Error>({
+    mutationFn: async () => {
+      if (!eventId) return;
+      const { error } = await supabase
+        .from("user_events")
+        .update({ draft_sharing_config: config })
+        .eq("id", eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      showToast("Sharing settings saved");
+    },
+    onError: () => showToast("Failed to save", "error"),
+  });
+
+  const debouncedSave = useMemo(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const fn = async () => {
+      if (!eventId) return;
+      setSaving(true);
+      const { error } = await supabase
+        .from("user_events")
+        .update({ draft_sharing_config: config })
+        .eq("id", eventId);
+      setSaving(false);
+      if (error) {
+        showToast("Failed to save", "error");
+      }
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+    };
+    return (..._args: any[]) => {
+      clearTimeout(timer);
+      timer = setTimeout(fn, 800);
+    };
+  }, [eventId, queryClient, config]);
+
+  useEffect(() => {
+    if (!event) return;
+    debouncedSave();
+  }, [config, event, debouncedSave]);
+
+  const copyLink = async () => {
+    if (!eventUrl) {
+      showToast("No event URL available", "error");
+      return;
+    }
     try {
       await navigator.clipboard.writeText(eventUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+      showToast("Link copied to clipboard");
     } catch {
-      setToast({ message: "Failed to copy", type: "error" });
+      showToast("Failed to copy link", "error");
     }
   };
 
-  const handleSave = async () => {
-    if (!eventId) return;
-    setSaving(true);
-    try {
-      const { error } = await supabase.from("user_events").update({ draft_sharing_config: config }).eq("id", eventId);
-      if (error) throw error;
-      queryClient.setQueryData(["event", eventId], (old: UserEvent | null) => old ? { ...old, draft_sharing_config: config } : old);
-      setToast({ message: "Sharing settings saved", type: "success" });
-    } catch (err: any) {
-      setToast({ message: "Failed: " + err.message, type: "error" });
-    } finally {
-      setSaving(false);
-    }
+  const downloadPng = () => {
+    if (!qrUrl) return;
+    downloadQrCode(qrUrl, `qr-${eventSlug || eventId}.png`);
+    showToast("QR code downloaded as PNG");
   };
 
-  const shareText = config.shareMessage || `You're invited to ${event?.name || "our event"}!`;
-
-  const shareLinks = {
-    whatsapp: `https://wa.me/?text=${encodeURIComponent(`${shareText} ${eventUrl}`)}`,
-    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(eventUrl)}`,
-    twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(eventUrl)}`,
-    email: `mailto:?subject=${encodeURIComponent(config.emailSubject || shareText)}&body=${encodeURIComponent(config.emailBody || `${shareText}\n\n${eventUrl}`)}`,
+  const downloadSvg = async () => {
+    if (!eventUrl) return;
+    await downloadQrSvg(eventUrl, `qr-${eventSlug || eventId}.svg`, { color: config.qrColor, bgColor: config.qrBgColor });
+    showToast("QR code downloaded as SVG");
   };
 
-  if (!event) return <ErrorState message="Could not load event data" onRetry={() => navigate("/dashboard")} />;
+  if (!event) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Skeleton className="w-full h-32" />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Sharing</h1>
-          <p className="text-sm text-gray-500">Share your event with guests</p>
+          <h1 className="text-xl font-bold tracking-tight">Sharing</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Share your event and manage sharing settings</p>
         </div>
-        <Button onClick={handleSave} loading={saving}><Save className="w-4 h-4" /> Save Changes</Button>
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-900">Event Link</h3>
-        <div className="flex items-center gap-2">
-          <Input value={eventUrl} readOnly className="font-mono text-sm" />
-          <Button variant="secondary" onClick={handleCopy}>
-            {copied ? <><Check className="w-4 h-4" /> Copied</> : <><Copy className="w-4 h-4" /> Copy</>}
+        <div className="flex items-center gap-3">
+          {saving && (
+            <span className="flex items-center gap-1.5 text-xs text-gray-400">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...
+            </span>
+          )}
+          <Button size="sm" onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+            Save
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-          <h3 className="text-sm font-semibold text-gray-900">Social Share</h3>
-          <Toggle checked={config.showShareButtons} onChange={(v) => update({ showShareButtons: v })} label="Show share buttons on event page" />
-          <div className="grid grid-cols-4 gap-3">
-            <a href={shareLinks.whatsapp} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-gray-900 transition-colors">
-              <MessageCircle className="w-5 h-5 text-green-600" />
-              <span className="text-xs text-gray-600">WhatsApp</span>
-            </a>
-            <a href={shareLinks.facebook} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-gray-900 transition-colors">
-              <Facebook className="w-5 h-5 text-blue-600" />
-              <span className="text-xs text-gray-600">Facebook</span>
-            </a>
-            <a href={shareLinks.twitter} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-gray-900 transition-colors">
-              <Twitter className="w-5 h-5 text-gray-900" />
-              <span className="text-xs text-gray-600">Twitter</span>
-            </a>
-            <a href={shareLinks.email} className="flex flex-col items-center gap-2 p-3 rounded-lg border border-gray-200 hover:border-gray-900 transition-colors">
-              <Mail className="w-5 h-5 text-gray-700" />
-              <span className="text-xs text-gray-600">Email</span>
-            </a>
-          </div>
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Link2 className="w-5 h-5 text-gray-400" />
+          <h2 className="text-base font-semibold text-gray-900">Event URL</h2>
         </div>
+        {eventUrl ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Input value={eventUrl} readOnly className="flex-1 font-mono text-sm bg-gray-50" />
+              <Button variant="secondary" onClick={copyLink}>
+                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copied ? "Copied" : "Copy Link"}
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500">
+              Share this link with your guests. {event?.is_published ? "Your event is published and live." : "Your event is not yet published."}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-sm text-gray-600">No custom URL set. Set a slug in Settings to generate a shareable link.</p>
+            <Input value="" readOnly placeholder="No slug set" className="bg-gray-50" />
+          </div>
+        )}
+      </Card>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-          <h3 className="text-sm font-semibold text-gray-900">QR Code</h3>
-          <div className="flex justify-center">
-            <div className="w-44 h-44 flex items-center justify-center bg-gray-50 rounded-lg border border-gray-100">
-              {qrSrc ? <img src={qrSrc} alt="Event QR Code" className="w-40 h-40" /> : <QrCode className="w-16 h-16 text-gray-300" />}
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <QrCode className="w-5 h-5 text-gray-400" />
+          <h2 className="text-base font-semibold text-gray-900">QR Code</h2>
+        </div>
+        <div className="flex flex-col md:flex-row gap-6">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-48 h-48 rounded-lg border border-gray-200 flex items-center justify-center bg-white">
+              {qrLoading ? (
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+              ) : qrUrl ? (
+                <img src={qrUrl} alt="QR Code" className="w-full h-full object-contain p-2" />
+              ) : (
+                <div className="text-center text-sm text-gray-400 px-4">Set a slug to generate QR code</div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={downloadPng} disabled={!qrUrl}>
+                <Download className="w-3.5 h-3.5" /> PNG
+              </Button>
+              <Button variant="secondary" size="sm" onClick={downloadSvg} disabled={!eventUrl}>
+                <Download className="w-3.5 h-3.5" /> SVG
+              </Button>
             </div>
           </div>
-          <p className="text-xs text-gray-400 text-center">Scans to your event page</p>
+          <div className="flex-1 space-y-4">
+            <p className="text-sm text-gray-600">
+              Guests can scan this QR code to open your event page. The QR code automatically updates when the URL changes.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField label="QR Color">
+                <Input type="color" value={config.qrColor} onChange={(e) => setConfig({ ...config, qrColor: e.target.value })} className="h-10 p-1" />
+              </FormField>
+              <FormField label="QR Background">
+                <Input type="color" value={config.qrBgColor} onChange={(e) => setConfig({ ...config, qrBgColor: e.target.value })} className="h-10 p-1" />
+              </FormField>
+            </div>
+          </div>
         </div>
-      </div>
+      </Card>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-900">Share Message</h3>
-        <FormField label="Default Share Message" hint="Used for WhatsApp and Twitter shares">
-          <Textarea value={config.shareMessage} onChange={(e) => update({ shareMessage: e.target.value })} placeholder={`You're invited to ${event?.name || "our event"}!`} rows={2} />
-        </FormField>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField label="Email Subject"><Input value={config.emailSubject} onChange={(e) => update({ emailSubject: e.target.value })} placeholder="Email subject line" /></FormField>
-          <FormField label="Email Body"><Textarea value={config.emailBody} onChange={(e) => update({ emailBody: e.target.value })} placeholder="Email body text" rows={2} /></FormField>
+      <Card className="p-6">
+        <h2 className="text-base font-semibold text-gray-900 mb-4">Sharing Settings</h2>
+        <div className="space-y-5">
+          <Toggle
+            checked={config.showShareButtons}
+            onChange={(v) => setConfig({ ...config, showShareButtons: v })}
+            label="Show share buttons on event page"
+          />
+          <FormField label="Share Message" hint="This text appears when guests share your event link">
+            <Textarea
+              value={config.shareMessage}
+              onChange={(e) => setConfig({ ...config, shareMessage: e.target.value })}
+              rows={3}
+              placeholder="You're invited! Join us for our special event."
+            />
+          </FormField>
         </div>
-      </div>
+      </Card>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast} type={toastType} onClose={() => setToast(null)} />}
     </div>
   );
 }

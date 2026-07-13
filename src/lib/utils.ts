@@ -45,8 +45,46 @@ export function generateToken(): string {
 
 export function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): (...args: Parameters<T>) => void {
   let timer: ReturnType<typeof setTimeout>;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
+  return (...args: Parameters<T>) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
+}
+
+export function isRsvpClosed(deadline: string | null): boolean {
+  if (!deadline) return false;
+  const d = new Date(deadline);
+  if (isNaN(d.getTime())) return false;
+  return new Date() > d;
+}
+
+export function getRsvpStatus(deadline: string | null): "open" | "closing-soon" | "closed" {
+  if (!deadline) return "open";
+  const d = new Date(deadline);
+  if (isNaN(d.getTime())) return "open";
+  const now = new Date();
+  if (now > d) return "closed";
+  const diff = d.getTime() - now.getTime();
+  if (diff < 3 * 24 * 60 * 60 * 1000) return "closing-soon";
+  return "open";
+}
+
+export function formatDeadline(deadline: string | null): string {
+  if (!deadline) return "";
+  const d = new Date(deadline);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }) + " at " +
+    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+export function toDatetimeLocal(date: string | null): string {
+  if (!date) return "";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "";
+  const offset = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - offset).toISOString().slice(0, 16);
+}
+
+export function fromDatetimeLocal(value: string): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
 }

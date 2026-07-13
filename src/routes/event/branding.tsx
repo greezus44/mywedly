@@ -1,66 +1,151 @@
-import { useState, useEffect, useCallback } from "react";
-import { useOutletContext, useNavigate, useParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useMemo } from "react";
+import { useOutletContext, useParams } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, UserEvent, LogoConfig } from "../../lib/supabase";
 import { DEFAULT_LOGO_CONFIG } from "../../lib/theme";
+import { ImageUpload } from "../../components/ui/ImageUpload";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
-import { FormField, RangeInput, Toggle, ImageUpload, Toast, ErrorState, Card } from "../../components/ui/index";
+import { FormField, ColorInput, RangeInput, Toggle, Toast, Card } from "../../components/ui/index";
+import { LogoRenderer } from "../../components/preview/PreviewRenderers";
+import { debounce } from "../../lib/utils";
+import { Loader2 } from "lucide-react";
 
-type Ctx = { event: UserEvent | null };
-
-export default function BrandingEditor() {
-  const { event } = useOutletContext<Ctx>();
+export default function Branding() {
+  const { event } = useOutletContext<{ event: UserEvent | null }>();
   const { eventId } = useParams<{ eventId: string }>();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-
-  const [logoConfig, setLogoConfig] = useState<LogoConfig>(event?.draft_logo_config || DEFAULT_LOGO_CONFIG);
-  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => { if (event) setLogoConfig(event.draft_logo_config || DEFAULT_LOGO_CONFIG); }, [event?.id]);
+  const [logo, setLogo] = useState<LogoConfig>({ ...DEFAULT_LOGO_CONFIG, ...(event?.draft_logo_config || {}) });
 
-  const update = useCallback((patch: Partial<LogoConfig>) => setLogoConfig(p => ({ ...p, ...patch })), []);
+  useEffect(() => {
+    if (event) {
+      setLogo({ ...DEFAULT_LOGO_CONFIG, ...(event.draft_logo_config || {}) });
+    }
+  }, [event]);
 
-  const handleSave = useCallback(async () => {
-    if (!event || !eventId) return;
-    setSaving(true);
-    try {
-      const { error } = await supabase.from("user_events").update({ draft_logo_config: logoConfig }).eq("id", eventId);
+  const previewKey = useMemo(() => JSON.stringify(logo), [logo]);
+
+  const debouncedSave = useMemo(
+    () =>
+      debounce(async (logoConfig: LogoConfig) => {
+        if (!eventId) return;
+        setSaving(true);
+        const { error } = await supabase
+          .from("user_events")
+          .update({ draft_logo_config: logoConfig })
+          .eq("id", eventId);
+        setSaving(false);
+        if (error) {
+          setToast("Failed to save");
+          setTimeout(() => setToast(null), 3000);
+        }
+        queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      }, 800),
+    [eventId, queryClient]
+  );
+
+  useEffect(() => {
+    if (!event) return;
+    debouncedSave(logo);
+  }, [logo, event, debouncedSave]);
+
+  const saveMutation = useMutation<void, Error>({
+    mutationFn: async () => {
+      if (!eventId) return;
+      const { error } = await supabase
+        .from("user_events")
+        .update({ draft_logo_config: logo })
+        .eq("id", eventId);
       if (error) throw error;
-      queryClient.setQueryData(["event", eventId], (old: UserEvent | null) => old ? { ...old, draft_logo_config: logoConfig } : old);
-      setToast("Saved!"); setTimeout(() => setToast(null), 3000);
-    } catch (err: any) { setToast("Failed: " + err.message); setTimeout(() => setToast(null), 3000); }
-    finally { setSaving(false); }
-  }, [event, eventId, logoConfig, queryClient]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setToast("Saved");
+      setTimeout(() => setToast(null), 3000);
+    },
+    onError: () => {
+      setToast("Failed to save");
+      setTimeout(() => setToast(null), 3000);
+    },
+  });
 
-  if (!event) return <ErrorState message="Could not load event data" onRetry={() => navigate("/dashboard")} />;
+  if (!event) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-xl font-bold text-gray-900">Branding</h1><p className="text-sm text-gray-500">Logo and brand identity</p></div>
-        <Button onClick={handleSave} loading={saving}>Save Changes</Button>
-      </div>
-      <Card className="p-6 space-y-5">
-        <div><h3 className="text-sm font-semibold text-gray-900 mb-3">Logo</h3>
-          <div className="space-y-4">
-            <Toggle checked={logoConfig.enabled} onChange={(v) => update({ enabled: v })} label="Show Logo" />
-            {logoConfig.enabled && <>
-              <FormField label="Logo Image"><ImageUpload value={logoConfig.image} onChange={(v) => update({ image: v })} /></FormField>
-              {!logoConfig.image && <FormField label="Logo Text"><Input value={logoConfig.text} onChange={(e) => update({ text: e.target.value })} placeholder="e.g. E" /></FormField>}
-              <FormField label="Logo Size"><RangeInput value={logoConfig.fontSize} min={12} max={72} onChange={(v) => update({ fontSize: v })} /></FormField>
-              {!logoConfig.image && <FormField label="Logo Colour">
-                <div className="flex items-center gap-2">
-                  <input type="color" value={logoConfig.color} onChange={(e) => update({ color: e.target.value })} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5" />
-                  <input type="text" value={logoConfig.color} onChange={(e) => update({ color: e.target.value })} className="flex-1 px-3 py-2 rounded-lg border border-gray-300 text-sm font-mono uppercase" />
-                </div>
-              </FormField>}
-            </>}
-          </div>
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">Branding</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Logo and brand identity for your event</p>
         </div>
-      </Card>
+        <div className="flex items-center gap-3">
+          {saving && (
+            <span className="flex items-center gap-1.5 text-xs text-gray-400">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...
+            </span>
+          )}
+          <Button size="sm" onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+            Save
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold text-gray-900 mb-4">Logo Settings</h2>
+          <div className="space-y-5">
+            <Toggle checked={logo.enabled} onChange={(v) => setLogo({ ...logo, enabled: v })} label="Enable logo" />
+
+            {logo.enabled && (
+              <>
+                <FormField label="Logo Image">
+                  <ImageUpload value={logo.image} onChange={(url) => setLogo({ ...logo, image: url })} eventId={eventId} aspectRatio="square" />
+                </FormField>
+
+                {!logo.image && (
+                  <>
+                    <FormField label="Logo Text" hint="Used when no image is uploaded">
+                      <Input value={logo.text} onChange={(e) => setLogo({ ...logo, text: e.target.value })} placeholder="e.g. S&J" />
+                    </FormField>
+                    <FormField label="Font Size">
+                      <RangeInput value={logo.fontSize} min={12} max={64} onChange={(v) => setLogo({ ...logo, fontSize: v })} />
+                    </FormField>
+                    <FormField label="Color">
+                      <ColorInput value={logo.color} onChange={(v) => setLogo({ ...logo, color: v })} />
+                    </FormField>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <h2 className="text-sm font-semibold text-gray-900 mb-4">Preview</h2>
+          <div className="bg-gray-50 rounded-lg p-8 flex items-center justify-center min-h-[200px]" key={previewKey}>
+            {logo.enabled ? (
+              <LogoRenderer config={logo} />
+            ) : (
+              <p className="text-sm text-gray-400">Logo is disabled</p>
+            )}
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="text-xs text-gray-500">
+              The logo appears on the cover page and sign-in page when enabled. Upload an image for a custom logo, or use text as a monogram.
+            </p>
+          </div>
+        </Card>
+      </div>
+
       {toast && <Toast message={toast} type={toast.includes("Failed") ? "error" : "success"} onClose={() => setToast(null)} />}
     </div>
   );

@@ -4,3 +4,5 @@
 
 * { -webkit-font-smoothing: antialiased; }
 body { font-family: Inter, system-ui, sans-serif; }
+
+.rusty-page { background-color: #F5ECD7; min-height: 100vh; }

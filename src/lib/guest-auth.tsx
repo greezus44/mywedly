@@ -12,7 +12,6 @@ interface GuestAuthState {
 }
 
 const GuestAuthContext = createContext<GuestAuthState | null>(null);
-
 const STORAGE_KEY = "event_guest_auth";
 
 export function GuestAuthProvider({ children }: { children: ReactNode }) {
@@ -25,11 +24,8 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        const parsed = JSON.parse(stored);
-        setToken(parsed.token || null);
-        setGuestId(parsed.guestId || null);
-        setEventId(parsed.eventId || null);
-        setGuestName(parsed.guestName || null);
+        const p = JSON.parse(stored);
+        setToken(p.token || null); setGuestId(p.guestId || null); setEventId(p.eventId || null); setGuestName(p.guestName || null);
       }
     } catch {}
   }, []);
@@ -39,57 +35,32 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = useCallback(async (name: string, evId: string) => {
-    const { data, error } = await supabase
-      .from("event_guests")
-      .insert({ event_id: evId, name, token: Math.random().toString(36).substring(2) + Date.now().toString(36) })
-      .select()
-      .single();
+    const { data, error } = await supabase.from("event_guests").insert({ event_id: evId, name, token: Math.random().toString(36).substring(2) + Date.now().toString(36) }).select().single();
     if (error) {
-      const { data: existing } = await supabase
-        .from("event_guests")
-        .select("*")
-        .eq("event_id", evId)
-        .eq("name", name)
-        .maybeSingle();
+      const { data: existing } = await supabase.from("event_guests").select("*").eq("event_id", evId).eq("name", name).maybeSingle();
       if (existing) {
-        const newToken = existing.token || Math.random().toString(36).substring(2) + Date.now().toString(36);
-        setToken(newToken);
-        setGuestId(existing.id);
-        setEventId(evId);
-        setGuestName(name);
-        persist({ token: newToken, guestId: existing.id, eventId: evId, guestName: name });
+        const t = existing.token || Math.random().toString(36).substring(2) + Date.now().toString(36);
+        setToken(t); setGuestId(existing.id); setEventId(evId); setGuestName(name);
+        persist({ token: t, guestId: existing.id, eventId: evId, guestName: name });
         return;
       }
       throw error;
     }
-    setToken(data.token);
-    setGuestId(data.id);
-    setEventId(evId);
-    setGuestName(name);
+    setToken(data.token); setGuestId(data.id); setEventId(evId); setGuestName(name);
     persist({ token: data.token, guestId: data.id, eventId: evId, guestName: name });
   }, []);
 
   const signInWithToken = useCallback(async (tkn: string) => {
-    const { data, error } = await supabase
-      .from("event_guests")
-      .select("*")
-      .eq("token", tkn)
-      .maybeSingle();
+    const { data, error } = await supabase.from("event_guests").select("*").eq("token", tkn).maybeSingle();
     if (error) throw error;
     if (data) {
-      setToken(data.token);
-      setGuestId(data.id);
-      setEventId(data.event_id);
-      setGuestName(data.name);
+      setToken(data.token); setGuestId(data.id); setEventId(data.event_id); setGuestName(data.name);
       persist({ token: data.token, guestId: data.id, eventId: data.event_id, guestName: data.name });
     }
   }, []);
 
   const signOut = useCallback(() => {
-    setToken(null);
-    setGuestId(null);
-    setEventId(null);
-    setGuestName(null);
+    setToken(null); setGuestId(null); setEventId(null); setGuestName(null);
     localStorage.removeItem(STORAGE_KEY);
   }, []);
 

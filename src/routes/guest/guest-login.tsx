@@ -1,17 +1,35 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
+import { useEffect, useState } from "react";
+import { supabase, UserEvent, LoginConfig } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { DEFAULT_LOGIN_CONFIG, DEFAULT_LOGO_CONFIG } from "../../lib/theme";
+import { DEFAULT_LOGIN_CONFIG } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
-import type { FormEvent } from "react";
+import type { CSSProperties, FormEvent } from "react";
+
+function normalizeEvent(data: any): UserEvent {
+  return {
+    ...data,
+    cover_config: data.cover_config || {},
+    login_config: data.login_config || {},
+    theme: data.theme || {},
+    logo_config: data.logo_config || {},
+    content: data.content || {},
+    sharing_config: data.sharing_config || {},
+    draft_cover_config: data.draft_cover_config || data.cover_config || {},
+    draft_login_config: data.draft_login_config || data.login_config || {},
+    draft_theme: data.draft_theme || data.theme || {},
+    draft_logo_config: data.draft_logo_config || data.logo_config || {},
+    draft_content: data.draft_content || data.content || {},
+    draft_sharing_config: data.draft_sharing_config || data.sharing_config || {},
+  };
+}
 
 export default function GuestLogin() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  const { token, eventId: authEventId, signIn } = useGuestAuth();
+  const { signIn, token, eventId: authEventId, guestName } = useGuestAuth();
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,40 +37,34 @@ export default function GuestLogin() {
   const { data: event, isLoading } = useQuery<UserEvent | null>({
     queryKey: ["public-event", eventId],
     queryFn: async () => {
-      if (!eventId) return null;
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
         .eq("id", eventId)
-        .eq("is_published", true)
         .maybeSingle();
       if (error) throw error;
-      return data as UserEvent | null;
+      return data ? normalizeEvent(data) : null;
     },
     enabled: !!eventId,
+    staleTime: 30000,
   });
 
-  const isAuthenticated = !!token && authEventId === eventId;
-
   useEffect(() => {
-    if (isAuthenticated && eventId) {
+    if (token && authEventId === eventId && guestName) {
       navigate(`/${eventId}/home`, { replace: true });
     }
-  }, [isAuthenticated, eventId, navigate]);
-
-  const config = event ? { ...DEFAULT_LOGIN_CONFIG, ...event.login_config } : DEFAULT_LOGIN_CONFIG;
-  const logoConfig = event ? { ...DEFAULT_LOGO_CONFIG, ...event.logo_config } : DEFAULT_LOGO_CONFIG;
+  }, [token, authEventId, eventId, guestName, navigate]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !eventId) return;
-    setSubmitting(true);
     setError(null);
+    setSubmitting(true);
     try {
       await signIn(name.trim(), eventId);
       navigate(`/${eventId}/home`, { replace: true });
-    } catch {
-      setError("Unable to sign in. Please try again.");
+    } catch (err: any) {
+      setError(err.message || "Could not sign in. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -60,112 +72,135 @@ export default function GuestLogin() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="animate-pulse text-white/60 text-sm">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
       </div>
     );
   }
 
   if (!event) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
-        <div className="text-center">
-          <h2 className="text-lg font-semibold text-gray-900">Event not found</h2>
-          <p className="mt-1 text-sm text-gray-500">This event may be private or no longer available.</p>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-gray-50 px-6">
+        <p className="text-sm text-gray-500">This event could not be found.</p>
+        <button onClick={() => navigate("/")} className="text-sm text-gray-700 underline">
+          Go home
+        </button>
       </div>
     );
   }
 
+  const config: LoginConfig = {
+    ...DEFAULT_LOGIN_CONFIG,
+    ...event.login_config,
+  };
+
+  const bgStyle: CSSProperties = config.bgImage
+    ? { backgroundImage: `url(${config.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" }
+    : { backgroundColor: config.bgColor };
+
+  const overlayStyle = config.bgImage && config.overlayOpacity
+    ? { backgroundColor: "rgba(0,0,0,0.4)", opacity: config.overlayOpacity }
+    : {};
+
   return (
-    <div
-      className="relative min-h-screen flex items-center justify-center px-6 py-12"
-      style={{
-        background: config.bgImage
-          ? `linear-gradient(rgba(0,0,0,${config.overlayOpacity}), rgba(0,0,0,${config.overlayOpacity})), url(${config.bgImage}) center/cover no-repeat`
-          : config.bgColor,
-        color: config.textColor,
-        fontFamily: config.font,
-      }}
-    >
-      <div
-        className="relative z-10 w-full max-w-sm rounded-2xl shadow-2xl"
-        style={{
-          background: config.cardBgColor,
-          border: `1px solid ${config.borderColor}`,
-        }}
-      >
-        <div className="p-8 space-y-5">
-          {config.showLogo && logoConfig.enabled && (
-            <div className="text-center">
-              {logoConfig.image ? (
-                <img src={logoConfig.image} alt="Logo" className="h-14 mx-auto object-contain" />
+    <div className="min-h-screen relative flex items-center justify-center px-6 py-12" style={{ ...bgStyle, color: config.textColor }}>
+      {config.bgImage && <div className="absolute inset-0 pointer-events-none" style={overlayStyle} />}
+
+      <div className="relative z-10 w-full max-w-sm">
+        <div
+          className="rounded-2xl border p-8 sm:p-10 shadow-xl"
+          style={{
+            backgroundColor: config.cardBgColor,
+            borderColor: config.borderColor,
+            color: config.textColor,
+          }}
+        >
+          {config.showLogo && event.logo_config?.enabled && (
+            <div className="flex justify-center mb-6">
+              {event.logo_config.image ? (
+                <img
+                  src={event.logo_config.image}
+                  alt={event.logo_config.text || event.name}
+                  className="max-h-16 object-contain"
+                />
               ) : (
                 <div
-                  className="font-bold leading-none"
-                  style={{ color: logoConfig.color, fontSize: logoConfig.fontSize }}
+                  className="w-14 h-14 rounded-full flex items-center justify-center font-bold"
+                  style={{
+                    backgroundColor: config.buttonColor,
+                    color: config.cardBgColor,
+                    fontSize: `${event.logo_config.fontSize || 32}px`,
+                  }}
                 >
-                  {logoConfig.text}
+                  {event.logo_config.text || event.name.charAt(0)}
                 </div>
               )}
             </div>
           )}
 
-          <div className="text-center space-y-1">
-            <h2
-              className="font-bold"
-              style={{
-                fontFamily: config.headingFont,
-                fontSize: config.headingFontSize,
-                fontWeight: config.headingWeight,
-                color: config.textColor,
-              }}
-            >
-              {config.title}
-            </h2>
-            <p className="text-sm opacity-70" style={{ color: config.textColor }}>
+          <h1
+            className="text-center mb-2 font-bold"
+            style={{
+              fontFamily: config.headingFont,
+              fontSize: `${config.headingFontSize}px`,
+              fontWeight: config.headingWeight,
+              color: config.textColor,
+            }}
+          >
+            {config.title}
+          </h1>
+
+          {config.subtitle && (
+            <p className="text-center text-sm mb-1 opacity-70" style={{ fontFamily: config.font }}>
               {config.subtitle}
             </p>
-          </div>
+          )}
 
-          <p className="text-sm text-center opacity-80" style={{ color: config.textColor }}>
-            {config.welcomeMessage}
-          </p>
+          {config.welcomeMessage && (
+            <p className="text-center text-sm mb-8 opacity-60 italic" style={{ fontFamily: config.font }}>
+              {config.welcomeMessage}
+            </p>
+          )}
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+          {error && (
+            <div className="mb-4 px-3 py-2 rounded-lg text-sm" style={{ backgroundColor: "rgba(220,38,38,0.08)", color: "#dc2626" }}>
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
             <Input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={config.inputPlaceholder}
-              disabled={submitting}
               required
               autoFocus
               className="text-center"
               style={{
-                background: config.inputBgColor,
+                backgroundColor: config.inputBgColor,
+                borderColor: config.borderColor,
                 color: config.textColor,
-                border: `1px solid ${config.borderColor}`,
               }}
             />
             <Button
               type="submit"
+              size="lg"
               loading={submitting}
-              disabled={!name.trim()}
               className="w-full"
               style={{
-                background: config.buttonColor,
-                color: "#ffffff",
-                border: `1px solid ${config.buttonColor}`,
+                backgroundColor: config.buttonColor,
+                color: config.cardBgColor,
+                borderRadius: "10px",
               }}
             >
               {config.buttonText}
             </Button>
           </form>
 
-          {error && (
-            <p className="text-sm text-red-500 text-center">{error}</p>
-          )}
+          <p className="text-center text-xs mt-6 opacity-50" style={{ fontFamily: config.font }}>
+            {event.name}
+          </p>
         </div>
       </div>
     </div>

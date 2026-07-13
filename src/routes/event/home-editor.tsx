@@ -1,85 +1,182 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useOutletContext, useNavigate, useParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { supabase, UserEvent, EventContent, ThemeConfig } from "../../lib/supabase";
-import { DEFAULT_CONTENT, DEFAULT_THEME } from "../../lib/theme";
+import { useState, useEffect, useMemo } from "react";
+import { useOutletContext, useParams } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase, UserEvent, EventContent } from "../../lib/supabase";
+import { DEFAULT_CONTENT } from "../../lib/theme";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
+import { ImageUpload } from "../../components/ui/ImageUpload";
 import { Button } from "../../components/ui/Button";
 import { Input, Textarea } from "../../components/ui/Input";
-import { FormField, ImageUpload, Toast, ErrorState } from "../../components/ui/index";
+import { FormField, Toast } from "../../components/ui/index";
 import { DatePicker } from "../../components/ui/DatePicker";
 import { TimePicker } from "../../components/ui/TimePicker";
 import { debounce } from "../../lib/utils";
-
-type Ctx = { event: UserEvent | null };
+import { Loader2 } from "lucide-react";
 
 export default function HomeEditor() {
-  const { event } = useOutletContext<Ctx>();
+  const { event } = useOutletContext<{ event: UserEvent | null }>();
   const { eventId } = useParams<{ eventId: string }>();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-
-  const [content, setContent] = useState<EventContent>(event?.draft_content || DEFAULT_CONTENT);
-  const [theme] = useState<ThemeConfig>(event?.draft_theme || DEFAULT_THEME);
-  const [eventDate, setEventDate] = useState<string | null>(event?.draft_event_date || event?.event_date || null);
-  const [eventTime, setEventTime] = useState<string | null>(event?.draft_event_time || event?.event_time || null);
-  const [venue, setVenue] = useState(event?.draft_venue || event?.venue || "");
-  const [address, setAddress] = useState(event?.draft_address || event?.address || "");
-  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [previewKey, setPreviewKey] = useState("0");
+  const [saving, setSaving] = useState(false);
+
+  const [content, setContent] = useState<EventContent>({ ...DEFAULT_CONTENT, ...(event?.draft_content || {}) });
+  const [date, setDate] = useState<string | null>(event?.draft_event_date || null);
+  const [time, setTime] = useState<string | null>(event?.draft_event_time || null);
+  const [venue, setVenue] = useState<string>(event?.draft_venue || "");
+  const [address, setAddress] = useState<string>(event?.draft_address || "");
 
   useEffect(() => {
     if (event) {
-      setContent(event.draft_content || DEFAULT_CONTENT);
-      setEventDate(event.draft_event_date || event.event_date || null);
-      setEventTime(event.draft_event_time || event.event_time || null);
-      setVenue(event.draft_venue || event.venue || "");
-      setAddress(event.draft_address || event.address || "");
+      setContent({ ...DEFAULT_CONTENT, ...(event.draft_content || {}) });
+      setDate(event.draft_event_date || null);
+      setTime(event.draft_event_time || null);
+      setVenue(event.draft_venue || "");
+      setAddress(event.draft_address || "");
     }
-  }, [event?.id]);
+  }, [event]);
 
-  const debouncedPreview = useMemo(() => debounce(() => setPreviewKey(k => String(Number(k) + 1)), 150), []);
-  const updateContent = useCallback((patch: Partial<EventContent>) => { setContent(p => ({ ...p, ...patch })); debouncedPreview(); }, [debouncedPreview]);
+  const previewKey = useMemo(() => JSON.stringify({ content, date, time, venue, address }), [content, date, time, venue, address]);
 
-  const handleSave = useCallback(async () => {
-    if (!event || !eventId) return;
-    setSaving(true);
-    try {
-      const { error } = await supabase.from("user_events").update({
-        draft_content: content, draft_event_date: eventDate, draft_event_time: eventTime, draft_venue: venue, draft_address: address,
-      }).eq("id", eventId);
+  const debouncedSave = useMemo(
+    () =>
+      debounce(async (data: { content: EventContent; date: string | null; time: string | null; venue: string; address: string }) => {
+        if (!eventId) return;
+        setSaving(true);
+        const { error } = await supabase
+          .from("user_events")
+          .update({
+            draft_content: data.content,
+            draft_event_date: data.date,
+            draft_event_time: data.time,
+            draft_venue: data.venue || null,
+            draft_address: data.address || null,
+          })
+          .eq("id", eventId);
+        setSaving(false);
+        if (error) {
+          setToast("Failed to save");
+          setTimeout(() => setToast(null), 3000);
+        }
+        queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      }, 800),
+    [eventId, queryClient]
+  );
+
+  useEffect(() => {
+    if (!event) return;
+    debouncedSave({ content, date, time, venue, address });
+  }, [content, date, time, venue, address, event, debouncedSave]);
+
+  const saveMutation = useMutation<void, Error>({
+    mutationFn: async () => {
+      if (!eventId) return;
+      const { error } = await supabase
+        .from("user_events")
+        .update({
+          draft_content: content,
+          draft_event_date: date,
+          draft_event_time: time,
+          draft_venue: venue || null,
+          draft_address: address || null,
+        })
+        .eq("id", eventId);
       if (error) throw error;
-      queryClient.setQueryData(["event", eventId], (old: UserEvent | null) => old ? { ...old, draft_content: content, draft_event_date: eventDate, draft_event_time: eventTime, draft_venue: venue, draft_address: address } : old);
-      setToast("Saved!"); setTimeout(() => setToast(null), 3000);
-    } catch (err: any) { setToast("Failed: " + err.message); setTimeout(() => setToast(null), 3000); }
-    finally { setSaving(false); }
-  }, [event, eventId, content, eventDate, eventTime, venue, address, queryClient]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setToast("Saved");
+      setTimeout(() => setToast(null), 3000);
+    },
+    onError: () => {
+      setToast("Failed to save");
+      setTimeout(() => setToast(null), 3000);
+    },
+  });
 
-  if (!event) return <ErrorState message="Could not load event data" onRetry={() => navigate("/dashboard")} />;
-  const previewEvent = { ...event, draft_content: content, draft_theme: theme, draft_event_date: eventDate, draft_event_time: eventTime, draft_venue: venue, draft_address: address };
+  if (!event) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  const previewEvent = { ...event, draft_event_date: date, draft_event_time: time, draft_venue: venue, draft_address: address };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-xl font-bold text-gray-900">Home Page</h1><p className="text-sm text-gray-500">Event details and story</p></div>
-        <Button onClick={handleSave} loading={saving}>Save Changes</Button>
+        <div>
+          <h1 className="text-xl font-bold tracking-tight">Home Page</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Story, invitation, and event details</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {saving && (
+            <span className="flex items-center gap-1.5 text-xs text-gray-400">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...
+            </span>
+          )}
+          <Button size="sm" onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+            Save
+          </Button>
+        </div>
       </div>
-      <SplitEditor title="Home Page Content" previewKey={previewKey} preview={<HomePreview event={previewEvent} theme={theme} content={content} />} children={
+
+      <SplitEditor title="Home Page Content" preview={<HomePreview event={previewEvent} theme={event.draft_theme} content={content} />} previewKey={previewKey}>
         <div className="space-y-5">
-          <div className="space-y-3"><h3 className="text-sm font-semibold text-gray-900">Event Details</h3>
-            <DatePicker value={eventDate} onChange={(v) => { setEventDate(v); debouncedPreview(); }} label="Event Date" />
-            <TimePicker value={eventTime} onChange={(v) => { setEventTime(v); debouncedPreview(); }} label="Event Time" />
-            <FormField label="Venue"><Input value={venue} onChange={(e) => { setVenue(e.target.value); debouncedPreview(); }} /></FormField>
-            <FormField label="Address"><Textarea value={address} onChange={(e) => { setAddress(e.target.value); debouncedPreview(); }} /></FormField>
+          <div className="pt-2 border-t border-gray-100">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Event Details</h3>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <DatePicker value={date} onChange={setDate} label="Event Date" />
+                <TimePicker value={time} onChange={setTime} label="Event Time" />
+              </div>
+              <FormField label="Venue">
+                <Input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="e.g. Grand Ballroom" />
+              </FormField>
+              <FormField label="Address">
+                <Textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Full venue address" rows={2} />
+              </FormField>
+            </div>
           </div>
-          <div className="space-y-3 border-t border-gray-200 pt-4"><h3 className="text-sm font-semibold text-gray-900">Our Story</h3>
-            <FormField label="Story"><Textarea value={content.story} onChange={(e) => updateContent({ story: e.target.value })} placeholder="Tell your story..." className="min-h-[120px]" /></FormField>
-            <FormField label="Story Image"><ImageUpload value={content.story_image} onChange={(v) => updateContent({ story_image: v })} /></FormField>
+
+          <div className="pt-2 border-t border-gray-100">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Our Story</h3>
+            <div className="space-y-4">
+              <FormField label="Story">
+                <Textarea value={content.story} onChange={(e) => setContent({ ...content, story: e.target.value })} rows={5} placeholder="Share your story..." />
+              </FormField>
+              <FormField label="Story Image">
+                <ImageUpload value={content.story_image} onChange={(url) => setContent({ ...content, story_image: url })} eventId={eventId} />
+              </FormField>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-gray-100">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Invitation</h3>
+            <div className="space-y-4">
+              <FormField label="Invitation Title">
+                <Input value={content.invitation_title} onChange={(e) => setContent({ ...content, invitation_title: e.target.value })} placeholder="e.g. Our Wedding" />
+              </FormField>
+              <FormField label="Invitation Subtitle">
+                <Input value={content.invitation_subtitle} onChange={(e) => setContent({ ...content, invitation_subtitle: e.target.value })} placeholder="e.g. We invite you to celebrate" />
+              </FormField>
+              <FormField label="Invitation Body">
+                <Textarea value={content.invitation_body} onChange={(e) => setContent({ ...content, invitation_body: e.target.value })} rows={4} placeholder="Main invitation message" />
+              </FormField>
+              <FormField label="Invitation Text">
+                <Textarea value={content.invitation_text} onChange={(e) => setContent({ ...content, invitation_text: e.target.value })} rows={2} placeholder="Additional text" />
+              </FormField>
+              <FormField label="RSVP Button Text">
+                <Input value={content.rsvp_button_text} onChange={(e) => setContent({ ...content, rsvp_button_text: e.target.value })} placeholder="RSVP Now" />
+              </FormField>
+            </div>
           </div>
         </div>
-      } />
+      </SplitEditor>
+
       {toast && <Toast message={toast} type={toast.includes("Failed") ? "error" : "success"} onClose={() => setToast(null)} />}
     </div>
   );

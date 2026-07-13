@@ -8,24 +8,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
+  auth: { persistSession: true, autoRefreshToken: true },
 });
 
 export type EventType =
-  | "wedding"
-  | "engagement"
-  | "reception"
-  | "birthday"
-  | "anniversary"
-  | "baby_shower"
-  | "graduation"
-  | "corporate"
-  | "conference"
-  | "party"
-  | "other";
+  | "wedding" | "engagement" | "reception" | "birthday" | "anniversary"
+  | "baby_shower" | "graduation" | "corporate" | "conference" | "party" | "other";
 
 export const EVENT_TYPES: { value: EventType; label: string }[] = [
   { value: "wedding", label: "Wedding" },
@@ -41,15 +29,24 @@ export const EVENT_TYPES: { value: EventType; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-export const EVENT_TEMPLATES: { id: string; name: string; type: EventType; description: string }[] = [
-  { id: "wedding-classic", name: "Classic Wedding", type: "wedding", description: "Elegant and timeless" },
-  { id: "wedding-modern", name: "Modern Wedding", type: "wedding", description: "Clean and contemporary" },
-  { id: "birthday-fun", name: "Fun Birthday", type: "birthday", description: "Playful and bright" },
-  { id: "birthday-elegant", name: "Elegant Birthday", type: "birthday", description: "Sophisticated celebration" },
-  { id: "corporate-formal", name: "Formal Corporate", type: "corporate", description: "Professional and polished" },
-  { id: "conference-tech", name: "Tech Conference", type: "conference", description: "Modern and informative" },
-  { id: "minimal", name: "Minimal", type: "other", description: "Clean slate, fully custom" },
-  { id: "luxury", name: "Luxury", type: "other", description: "Premium and sophisticated" },
+export type TemplateId = "default" | "rusty";
+
+export interface EventTemplate {
+  id: string;
+  name: string;
+  type: EventType;
+  description: string;
+  template_id: TemplateId;
+}
+
+export const EVENT_TEMPLATES: EventTemplate[] = [
+  { id: "wedding-classic", name: "Classic Wedding", type: "wedding", description: "Elegant and timeless", template_id: "default" },
+  { id: "wedding-modern", name: "Modern Wedding", type: "wedding", description: "Clean and contemporary", template_id: "default" },
+  { id: "birthday-fun", name: "Fun Birthday", type: "birthday", description: "Playful and bright", template_id: "default" },
+  { id: "corporate-formal", name: "Formal Corporate", type: "corporate", description: "Professional and polished", template_id: "default" },
+  { id: "minimal", name: "Minimal", type: "other", description: "Clean slate, fully custom", template_id: "default" },
+  { id: "luxury", name: "Luxury", type: "other", description: "Premium and sophisticated", template_id: "default" },
+  { id: "rusty", name: "Rusty's Template", type: "wedding", description: "Luxury wedding invitation with gold accents", template_id: "rusty" },
 ];
 
 export interface UserEvent {
@@ -57,6 +54,9 @@ export interface UserEvent {
   creator_id: string;
   name: string;
   event_type: EventType;
+  template_id: TemplateId;
+  slug: string | null;
+  draft_slug: string | null;
   event_date: string | null;
   event_time: string | null;
   venue: string | null;
@@ -68,6 +68,8 @@ export interface UserEvent {
   logo_config: LogoConfig;
   content: EventContent;
   sharing_config: SharingConfig;
+  rsvp_deadline: string | null;
+  draft_rsvp_deadline: string | null;
   draft_cover_config: CoverConfig;
   draft_login_config: LoginConfig;
   draft_theme: ThemeConfig;
@@ -78,6 +80,7 @@ export interface UserEvent {
   draft_event_time: string | null;
   draft_venue: string | null;
   draft_address: string | null;
+  draft_cover_image: string | null;
   is_published: boolean;
   is_archived: boolean;
   published_at: string | null;
@@ -136,6 +139,7 @@ export interface ThemeConfig {
   buttonRadius: number;
   sectionPadding: number;
   maxWidth: number;
+  applyToAll: boolean;
 }
 
 export interface LogoConfig {
@@ -146,11 +150,25 @@ export interface LogoConfig {
   color: string;
 }
 
+export interface InfoSection {
+  id: string;
+  title: string;
+  body: string;
+  image: string;
+  visible: boolean;
+  order_index: number;
+}
+
 export interface EventContent {
   story: string;
   story_image: string;
   gallery: string[];
-  sections: { id: string; title: string; body: string; image: string }[];
+  sections: InfoSection[];
+  invitation_title: string;
+  invitation_subtitle: string;
+  invitation_body: string;
+  invitation_text: string;
+  rsvp_button_text: string;
 }
 
 export interface SharingConfig {
@@ -168,13 +186,12 @@ export interface EventGuest {
   id: string;
   event_id: string;
   name: string;
-  email: string | null;
-  phone: string | null;
+  table_number: string | null;
+  plus_ones: number | null;
   group_name: string | null;
-  side: string | null;
   token: string | null;
   rsvp_status: "pending" | "attending" | "declined" | null;
-  plus_ones: number | null;
+  rsvp_submitted_at: string | null;
   dietary: string | null;
   message: string | null;
   created_at: string;
@@ -214,5 +231,12 @@ export interface EventMessage {
   event_id: string;
   guest_name: string;
   message: string;
+  created_at: string;
+}
+
+export interface SlugRedirect {
+  id: string;
+  slug: string;
+  event_id: string;
   created_at: string;
 }
