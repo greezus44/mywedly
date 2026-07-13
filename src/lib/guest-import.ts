@@ -2,11 +2,10 @@ import * as XLSX from "xlsx";
 
 export type ParsedRow = Record<string, string>;
 
-export type GuestField = "full_name" | "access_code" | "group_name" | null;
+export type GuestField = "full_name" | "group_name" | null;
 
 export const FIELD_LABELS: Record<Exclude<GuestField, null>, string> = {
   full_name: "Guest name",
-  access_code: "Password / Access code",
   group_name: "Guest group",
 };
 
@@ -63,7 +62,6 @@ export function autoMap(headers: string[]): Record<string, GuestField> {
     const l = h.toLowerCase();
     if (!map[h]) {
       if (/name|nama|guest/.test(l) && !/group|kumpulan/.test(l)) map[h] = "full_name";
-      else if (/pass|code|kod|access/.test(l)) map[h] = "access_code";
       else if (/group|kumpulan|category|table/.test(l)) map[h] = "group_name";
       else map[h] = null;
     }

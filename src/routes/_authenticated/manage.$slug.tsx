@@ -321,16 +321,10 @@ function InfoEditor({ wedding }: { wedding: Wedding }) {
 }
 function SigninEditor({ wedding }: { wedding: Wedding }) {
   const qc = useQueryClient();
-  const [mode, setMode] = useState<"shared" | "per_guest" | "none">(wedding.password_mode ?? "shared");
-  const [password, setPassword] = useState(wedding.guest_password ?? "");
   const [helper, setHelper] = useState(wedding.signin_helper ?? "");
-  const [showPw, setShowPw] = useState(false);
-
   const saveAccess = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("weddings").update({
-        password_mode: mode,
-        guest_password: mode === "shared" ? (password.trim() || null) : null,
         signin_helper: helper || null,
       }).eq("id", wedding.id);
       if (error) throw error;
@@ -342,53 +336,23 @@ function SigninEditor({ wedding }: { wedding: Wedding }) {
   return (
     <div className="space-y-8">
       <form onSubmit={(e) => { e.preventDefault(); saveAccess.mutate(); }} className="max-w-2xl bg-card border border-onyx/10 p-8 space-y-6">
-        <p className="eyebrow">Guest login mode</p>
-        <div className="grid gap-3">
-          {[
-            { v: "shared", t: "Shared password", d: "All guests use the same password below." },
-            { v: "per_guest", t: "Per-guest access code", d: "Each guest gets a unique code (set on the Guest List)." },
-            { v: "none", t: "Name only", d: "Guests only enter their name — no password." },
-          ].map((opt) => (
-            <label key={opt.v} className={`border p-4 flex gap-3 cursor-pointer ${mode === opt.v ? "border-onyx bg-mist/30" : "border-onyx/15"}`}>
-              <input type="radio" name="mode" checked={mode === opt.v} onChange={() => setMode(opt.v as any)} />
-              <div>
-                <p className="text-sm font-medium">{opt.t}</p>
-                <p className="text-xs text-onyx/60">{opt.d}</p>
-              </div>
-            </label>
-          ))}
-        </div>
-        {mode === "shared" && (
-          <div>
-            <label className="eyebrow block mb-2">Shared password</label>
-            <div className="relative">
-              <input
-                type={showPw ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="e.g. hazlyn2026"
-                className="w-full border-b border-onyx/20 bg-transparent py-2 pr-10 outline-none focus:border-onyx"
-              />
-              <button type="button" onClick={() => setShowPw((s) => !s)} className="absolute right-0 top-1/2 -translate-y-1/2 p-1 text-onyx/60 hover:text-onyx" aria-label="Toggle visibility">
-                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-        )}
+        <p className="eyebrow">Guest sign-in</p>
+        <p className="text-sm text-onyx/60">
+          Guests sign in with their name only. Names must be unique per wedding — add each guest under the <strong>Guests</strong> tab so they can be recognised on sign-in.
+        </p>
         <div>
           <label className="eyebrow block mb-2">Helper text on sign-in page</label>
           <textarea value={helper} onChange={(e) => setHelper(e.target.value)} rows={3}
-            placeholder="Please enter the name and password provided in your invitation."
+            placeholder="Please enter the name as printed on your invitation."
             className="w-full border border-onyx/20 bg-transparent p-3 outline-none focus:border-onyx" />
         </div>
-        <button className="bg-onyx text-parchment px-6 py-3 text-xs uppercase tracking-widest hover:bg-ink">Save login settings</button>
+        <button className="bg-onyx text-parchment px-6 py-3 text-xs uppercase tracking-widest hover:bg-ink">Save</button>
       </form>
 
       <FieldsEditor wedding={wedding} title="Sign-in page copy" description="Customize the wording guests see on the sign-in screen."
         fields={[
           { key: "signin_heading", label: "Heading", placeholder: "SIGN IN" },
           { key: "signin_name_placeholder", label: "Name field placeholder", placeholder: "ENTER YOUR NAME" },
-          { key: "signin_password_placeholder", label: "Password field placeholder", placeholder: "PASSWORD" },
           { key: "signin_helper", label: "Description / helper", type: "textarea", rows: 2, placeholder: "As stated on your invitation" },
         ]} />
     </div>
@@ -620,7 +584,7 @@ function GuestsTab({ wedding }: { wedding: Wedding }) {
   const [filterGroup, setFilterGroup] = useState<string>("");
   const [showImport, setShowImport] = useState(false);
 
-  const emptyForm = { full_name: "", access_code: "", group_id: "" };
+  const emptyForm = { full_name: "", group_id: "" };
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -638,7 +602,6 @@ function GuestsTab({ wedding }: { wedding: Wedding }) {
       const payload = {
         wedding_id: wedding.id,
         full_name: form.full_name.trim(),
-        access_code: form.access_code.trim() || null,
         group_id: form.group_id || null,
       };
       if (!payload.full_name) throw new Error("Name required");
@@ -671,11 +634,11 @@ function GuestsTab({ wedding }: { wedding: Wedding }) {
     return (guests ?? []).filter((g: any) => {
       if (filterGroup && g.group_id !== filterGroup) return false;
       if (!q) return true;
-      return g.full_name.toLowerCase().includes(q) || (g.access_code ?? "").toLowerCase().includes(q);
+      return g.full_name.toLowerCase().includes(q);
     });
   }, [guests, search, filterGroup]);
 
-  const load = (g: any) => { setEditing(g.id); setForm({ full_name: g.full_name ?? "", access_code: g.access_code ?? "", group_id: g.group_id ?? "" }); };
+  const load = (g: any) => { setEditing(g.id); setForm({ full_name: g.full_name ?? "", group_id: g.group_id ?? "" }); };
 
   return (
     <div className="space-y-6">
@@ -685,8 +648,7 @@ function GuestsTab({ wedding }: { wedding: Wedding }) {
             <p className="eyebrow">{editing ? "Edit guest" : "Add guest"}</p>
             <button type="button" onClick={() => setShowImport(true)} className="text-xs flex items-center gap-1 text-onyx/60 hover:text-onyx"><Upload className="w-3 h-3" />Import</button>
           </div>
-          <input required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Full name" className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx" />
-          <input value={form.access_code} onChange={(e) => setForm({ ...form, access_code: e.target.value })} placeholder="Password / access code" className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx" />
+          <input required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Full name (unique per wedding)" className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx" />
           <select value={form.group_id} onChange={(e) => setForm({ ...form, group_id: e.target.value })} className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx">
             <option value="">No group</option>
             {(groups ?? []).map((g: any) => <option key={g.id} value={g.id}>{g.name}</option>)}
@@ -716,7 +678,7 @@ function GuestsTab({ wedding }: { wedding: Wedding }) {
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">{g.full_name}</p>
                     <p className="text-xs text-onyx/50">
-                      {[g.access_code && `code: ${g.access_code}`, (groups ?? []).find((gr: any) => gr.id === g.group_id)?.name].filter(Boolean).join(" · ") || "—"}
+                      {(groups ?? []).find((gr: any) => gr.id === g.group_id)?.name || "—"}
                     </p>
                   </div>
                   <select value={g.group_id ?? ""} onChange={(e) => updateGuest.mutate({ id: g.id, patch: { group_id: e.target.value || null } })} className="text-xs border border-onyx/20 bg-transparent px-2 py-1">
@@ -764,7 +726,6 @@ function BulkImportModal({ wedding, groups, onClose, onDone }: { wedding: Weddin
     mutationFn: async () => {
       const nameCol = Object.entries(mapping).find(([, v]) => v === "full_name")?.[0];
       if (!nameCol) throw new Error("Map a column to Guest name");
-      const codeCol = Object.entries(mapping).find(([, v]) => v === "access_code")?.[0];
       const groupCol = Object.entries(mapping).find(([, v]) => v === "group_name")?.[0];
 
       // ensure groups exist
@@ -787,14 +748,13 @@ function BulkImportModal({ wedding, groups, onClose, onDone }: { wedding: Weddin
       for (const r of rows) {
         const name = (r[nameCol] ?? "").trim();
         if (!name) continue;
-        const code = codeCol ? (r[codeCol] ?? "").trim() || null : null;
         const gname = groupCol ? (r[groupCol] ?? "").trim() : "";
         const groupId = gname ? groupIdByName.get(gname.toLowerCase()) ?? null : (defaultGroup || null);
         const existingId = existingByName.get(name.toLowerCase());
         if (existingId) {
-          if (duplicates === "update") updates.push({ id: existingId, patch: { access_code: code, group_id: groupId } });
+          if (duplicates === "update") updates.push({ id: existingId, patch: { group_id: groupId } });
         } else {
-          inserts.push({ wedding_id: wedding.id, full_name: name, access_code: code, group_id: groupId });
+          inserts.push({ wedding_id: wedding.id, full_name: name, group_id: groupId });
         }
       }
       if (inserts.length) {

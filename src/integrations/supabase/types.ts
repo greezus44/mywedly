@@ -378,7 +378,6 @@ export type Database = {
       }
       guests: {
         Row: {
-          access_code: string | null
           address: string | null
           created_at: string
           email: string | null
@@ -394,7 +393,6 @@ export type Database = {
           wedding_id: string
         }
         Insert: {
-          access_code?: string | null
           address?: string | null
           created_at?: string
           email?: string | null
@@ -410,7 +408,6 @@ export type Database = {
           wedding_id: string
         }
         Update: {
-          access_code?: string | null
           address?: string | null
           created_at?: string
           email?: string | null
@@ -669,13 +666,11 @@ export type Database = {
           couple_name_two: string
           created_at: string
           created_by: string
-          guest_password: string | null
           hashtag: string | null
           hero_image_url: string | null
           id: string
           is_published: boolean
           location: string | null
-          password_mode: string
           signin_helper: string | null
           slug: string
           story: string | null
@@ -689,13 +684,11 @@ export type Database = {
           couple_name_two: string
           created_at?: string
           created_by: string
-          guest_password?: string | null
           hashtag?: string | null
           hero_image_url?: string | null
           id?: string
           is_published?: boolean
           location?: string | null
-          password_mode?: string
           signin_helper?: string | null
           slug: string
           story?: string | null
@@ -709,13 +702,11 @@ export type Database = {
           couple_name_two?: string
           created_at?: string
           created_by?: string
-          guest_password?: string | null
           hashtag?: string | null
           hero_image_url?: string | null
           id?: string
           is_published?: boolean
           location?: string | null
-          password_mode?: string
           signin_helper?: string | null
           slug?: string
           story?: string | null
@@ -731,7 +722,7 @@ export type Database = {
     }
     Functions: {
       guest_events: {
-        Args: { p_guest_id: string; p_password: string }
+        Args: { p_guest_id: string }
         Returns: {
           dress_code: string
           id: string
@@ -744,16 +735,11 @@ export type Database = {
         }[]
       }
       guest_rsvp: {
-        Args: {
-          p_event_id: string
-          p_guest_id: string
-          p_password: string
-          p_status: string
-        }
+        Args: { p_event_id: string; p_guest_id: string; p_status: string }
         Returns: undefined
       }
       guest_signin: {
-        Args: { p_name: string; p_password: string; p_slug: string }
+        Args: { p_name: string; p_slug: string }
         Returns: {
           full_name: string
           group_id: string
