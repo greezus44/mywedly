@@ -1,298 +1,247 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
-import { supabase, type Wedding, type WeddingEvent, type Rsvp } from "../../lib/supabase";
-import { useGuestAuth } from "../../lib/guest-auth";
+import { supabase, type Wedding, type WeddingEvent, type Rsvp, type WeddingContent } from "../../lib/supabase";
 import { useLang } from "../../lib/lang-context";
-import { themeToCssVars, getTheme, getLogoConfig, getLogoStyle, shouldShowLogo } from "../../lib/theme";
+import { useGuestAuth } from "../../lib/guest-auth";
+import {
+  themeToCssVars,
+  getTheme,
+  getLogoConfig,
+  getLogoStyle,
+  shouldShowLogo,
+} from "../../lib/theme";
 import { formatDate, formatTime, getDeviceType, cn } from "../../lib/utils";
-import { Check, Clock, MapPin } from "lucide-react";
+import { Button } from "../../components/ui/Button";
+import { Check, Calendar, MapPin, Clock } from "lucide-react";
 
 export function Rsvp() {
   const { slug } = useParams<{ slug: string }>();
+  const { t, lang } = useLang();
   const { session } = useGuestAuth();
-  const { lang, t } = useLang();
   const [wedding, setWedding] = useState<Wedding | null>(null);
   const [events, setEvents] = useState<WeddingEvent[]>([]);
-  const [rsvps, setRsvps] = useState<Record<string, Rsvp>>({});
+  const [rsvps, setRsvps] = useState<Record<string, Rsvp | undefined>>({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [submittedEvent, setSubmittedEvent] = useState<string | null>(null);
 
   useEffect(() => {
     if (!slug) return;
-    (async () => {
-      const { data: wData } = await supabase.from("weddings").select("*").eq("slug", slug).maybeSingle();
-      if (wData) {
-        const w = wData as Wedding;
-        setWedding(w);
-        // Fetch events
-        const { data: eData } = await supabase
-          .from("events")
-          .select("*")
-          .eq("wedding_id", w.id)
-          .order("sort_order", { ascending: true });
-        if (eData) setEvents(eData as WeddingEvent[]);
-        // Fetch existing RSVPs for this guest
+    supabase.from("weddings").select("*").eq("slug", slug).maybeSingle().then(({ data }) => {
+      if (data) {
+        setWedding(data as Wedding);
+        const w = data as Wedding;
+        supabase.from("events").select("*").eq("wedding_id", w.id).order("sort_order", { ascending: true }).then(({ data: evts }) => {
+          setEvents((evts as WeddingEvent[]) || []);
+          setLoading(false);
+        });
         if (session?.guest_id) {
-          const { data: rData } = await supabase
-            .from("rsvps")
-            .select("*")
-            .eq("guest_id", session.guest_id);
-          if (rData) {
-            const map: Record<string, Rsvp> = {};
-            for (const r of rData as Rsvp[]) {
-              map[r.event_id] = r;
+          supabase.from("rsvps").select("*").eq("guest_id", session.guest_id).then(({ data: rData }) => {
+            if (rData) {
+              const map: Record<string, Rsvp | undefined> = {};
+              (rData as Rsvp[]).forEach((r) => { map[r.event_id] = r; });
+              setRsvps(map);
             }
-            setRsvps(map);
-          }
+          });
         }
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
-    })();
+    });
   }, [slug, session?.guest_id]);
 
   const theme = getTheme(wedding);
-  const content = (wedding?.draft_content || wedding?.content || {}) as Record<string, unknown>;
+  const content = (wedding?.draft_content || wedding?.content || {}) as WeddingContent;
   const logo = getLogoConfig(wedding);
   const device = getDeviceType();
   const showLogo = shouldShowLogo(logo, "rsvp");
 
-  const handleRsvp = async (event: WeddingEvent, status: "attending" | "declined") => {
+  const handleRsvp = async (eventId: string, status: "attending" | "declined") => {
     if (!session?.guest_id || !wedding) return;
-    setSubmitting(event.id);
-    setError(null);
+    setSubmitting(eventId);
+    const existing = rsvps[eventId];
 
-    const existing = rsvps[event.id];
-
-    try {
-      if (existing) {
-        // Update existing RSVP
-        const { data, error: uError } = await supabase
-          .from("rsvps")
-          .update({ status, updated_at: new Date().toISOString() })
-          .eq("id", existing.id)
-          .select()
-          .single();
-        if (uError) throw uError;
-        setRsvps({ ...rsvps, [event.id]: data as Rsvp });
-      } else {
-        // Create new RSVP
-        const { data, error: iError } = await supabase
-          .from("rsvps")
-          .insert({
-            wedding_id: wedding.id,
-            guest_id: session.guest_id,
-            event_id: event.id,
-            status,
-            number_of_guests: 1,
-          })
-          .select()
-          .single();
-        if (iError) throw iError;
-        setRsvps({ ...rsvps, [event.id]: data as Rsvp });
+    if (existing) {
+      const { data } = await supabase.from("rsvps").update({
+        status,
+        updated_at: new Date().toISOString(),
+      }).eq("id", existing.id).select("*").single();
+      if (data) {
+        setRsvps((prev) => ({ ...prev, [eventId]: data as Rsvp }));
       }
-    } catch {
-      setError(lang === "en" ? "Failed to submit RSVP. Please try again." : "Gagal menghantar RSVP. Sila cuba lagi.");
-    } finally {
-      setSubmitting(null);
+    } else {
+      const { data } = await supabase.from("rsvps").insert({
+        wedding_id: wedding.id,
+        guest_id: session.guest_id,
+        event_id: eventId,
+        status,
+        number_of_guests: 1,
+      }).select("*").single();
+      if (data) {
+        setRsvps((prev) => ({ ...prev, [eventId]: data as Rsvp }));
+      }
     }
+
+    setSubmitting(null);
+    setSubmittedEvent(eventId);
+    setTimeout(() => setSubmittedEvent(null), 3000);
   };
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--color-bg)" }}>
-        <div className="animate-pulse text-sm tracking-widest uppercase" style={{ color: "var(--color-text-muted)" }}>
-          {t.loading}
-        </div>
+      <div className="flex min-h-[60vh] items-center justify-center" style={{ ...themeToCssVars(theme), background: "var(--color-bg)" } as React.CSSProperties}>
+        <p className="font-body text-sm" style={{ color: "var(--color-text-muted)" }}>{t.loading}</p>
       </div>
     );
   }
 
   return (
     <div
-      className="min-h-screen px-6 py-12 md:py-16"
-      style={{
-        ...themeToCssVars(theme),
-        background: "var(--color-bg)",
-        color: "var(--color-text)",
-        fontFamily: "var(--font-body)",
-      } as React.CSSProperties}
+      className="min-h-screen"
+      style={{ ...themeToCssVars(theme), background: "var(--color-bg)", color: "var(--color-text)", fontFamily: "var(--font-body)" } as React.CSSProperties}
     >
-      <div className="max-w-2xl mx-auto">
-        {/* Logo */}
-        {showLogo && logo.url && (
-          <div className="flex justify-center mb-8 animate-fade-in">
-            <img src={logo.url} alt="logo" style={getLogoStyle(logo, device)} />
-          </div>
-        )}
-
-        {/* Header */}
-        <div className="text-center mb-10 animate-fade-in-up">
-          <p className="text-xs tracking-[0.3em] uppercase mb-3" style={{ color: "var(--color-text-muted)" }}>
-            {lang === "en" ? "Kindly Respond" : "Sila Maklum"}
-          </p>
-          <h1
-            className="font-heading"
-            style={{ color: "var(--color-primary)", fontSize: "2.5rem", fontWeight: 400, letterSpacing: "-0.01em" }}
-          >
-            {t.rsvp}
-          </h1>
+      {/* Logo */}
+      {showLogo && logo.url && (
+        <div className="flex justify-center pt-8">
+          <img src={logo.url} alt="logo" style={getLogoStyle(logo, device)} />
         </div>
+      )}
 
-        {/* Intro text */}
-        {Boolean(content.rsvp_intro) ? (
-          <p
-            className="text-center text-sm leading-relaxed mb-10 max-w-md mx-auto animate-fade-in-up"
-            style={{ color: "var(--color-text-muted)", animationDelay: "0.1s" }}
-          >
+      {/* Header */}
+      <div className="px-6 py-10 text-center md:py-16">
+        <p className="animate-fade-in-up text-[0.625rem] uppercase tracking-[0.4em]" style={{ color: "var(--color-text-muted)" }}>
+          {lang === "ms" ? "RSVP" : "RSVP"}
+        </p>
+        <h1 className="mt-4 animate-fade-in-up font-heading text-3xl md:text-5xl" style={{ color: "var(--color-primary)", animationDelay: "0.1s" }}>
+          {lang === "ms" ? "Jemputan" : "Invitation"}
+        </h1>
+
+        {/* Conditional using Boolean() and String() */}
+        {Boolean(content.rsvp_intro) && (
+          <p className="mx-auto mt-4 max-w-lg animate-fade-in-up font-body text-sm leading-relaxed md:text-base" style={{ color: "var(--color-text-muted)", animationDelay: "0.2s" }}>
             {String(content.rsvp_intro)}
           </p>
-        ) : null}
+        )}
+      </div>
 
-        {/* Error */}
-        {error && (
-          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
+      {/* Event cards */}
+      <div className="mx-auto max-w-2xl px-6 pb-12">
+        {events.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="font-body text-sm" style={{ color: "var(--color-text-muted)" }}>
+              {lang === "ms" ? "Tiada acara dijumpai." : "No events found."}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {events.map((event, idx) => {
+              const currentRsvp = rsvps[event.id];
+              const isSubmitting = submitting === event.id;
+              const justSubmitted = submittedEvent === event.id;
+
+              return (
+                <div
+                  key={event.id}
+                  className="animate-fade-in-up rounded-2xl border p-6 md:p-8"
+                  style={{
+                    borderColor: "var(--color-border)",
+                    background: "var(--color-surface)",
+                    animationDelay: `${0.1 * idx + 0.1}s`,
+                  }}
+                >
+                  {/* Event name */}
+                  <h3 className="font-heading text-xl md:text-2xl" style={{ color: "var(--color-primary)" }}>
+                    {event.name}
+                  </h3>
+
+                  {/* Event details */}
+                  <div className="mt-4 space-y-2">
+                    {event.starts_at && (
+                      <div className="flex items-center gap-2 font-body text-sm" style={{ color: "var(--color-text-muted)" }}>
+                        <Calendar className="h-4 w-4" style={{ color: "var(--color-accent)" }} />
+                        {formatDate(event.starts_at, lang)}
+                        <Clock className="ml-2 h-4 w-4" style={{ color: "var(--color-accent)" }} />
+                        {formatTime(event.starts_at)}
+                      </div>
+                    )}
+                    {event.venue_name && (
+                      <div className="flex items-center gap-2 font-body text-sm" style={{ color: "var(--color-text-muted)" }}>
+                        <MapPin className="h-4 w-4" style={{ color: "var(--color-accent)" }} />
+                        {event.venue_name}
+                      </div>
+                    )}
+                    {event.venue_address && (
+                      <p className="ml-6 font-body text-xs" style={{ color: "var(--color-text-muted)" }}>
+                        {event.venue_address}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Description */}
+                  {event.description && (
+                    <p className="mt-4 font-body text-sm leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
+                      {event.description}
+                    </p>
+                  )}
+
+                  {/* RSVP status */}
+                  {currentRsvp && (
+                    <div className="mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium" style={{
+                      background: currentRsvp.status === "attending" ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+                      color: currentRsvp.status === "attending" ? "#16a34a" : "#dc2626",
+                    }}>
+                      <Check className="h-3 w-3" />
+                      {currentRsvp.status === "attending" ? t.attending : t.declined}
+                    </div>
+                  )}
+
+                  {/* Buttons */}
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                    <Button
+                      onClick={() => handleRsvp(event.id, "attending")}
+                      disabled={isSubmitting}
+                      className={cn("flex-1 transition", currentRsvp?.status === "attending" && "ring-2 ring-green-500")}
+                      style={{
+                        background: currentRsvp?.status === "attending" ? "#16a34a" : "var(--color-button-bg)",
+                        color: "var(--color-button-text)",
+                      } as React.CSSProperties}
+                    >
+                      {justSubmitted && currentRsvp?.status === "attending" ? (
+                        <span className="flex items-center justify-center gap-1.5">
+                          <Check className="h-4 w-4" /> {t.thankYou}
+                        </span>
+                      ) : (
+                        t.attending
+                      )}
+                    </Button>
+                    <Button
+                      onClick={() => handleRsvp(event.id, "declined")}
+                      disabled={isSubmitting}
+                      variant="outline"
+                      className={cn("flex-1 transition", currentRsvp?.status === "declined" && "ring-2 ring-red-500")}
+                      style={{
+                        borderColor: "var(--color-border)",
+                        color: "var(--color-text)",
+                      } as React.CSSProperties}
+                    >
+                      {t.declined}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
-
-        {/* Event Cards */}
-        <div className="space-y-6">
-          {events.length === 0 && (
-            <p className="text-center text-sm" style={{ color: "var(--color-text-muted)" }}>
-              {lang === "en" ? "No events available." : "Tiada acara tersedia."}
-            </p>
-          )}
-          {events.map((event, i) => {
-            const currentRsvp = rsvps[event.id];
-            const isSubmitting = submitting === event.id;
-            return (
-              <div
-                key={event.id}
-                className="rounded-2xl border p-6 md:p-8 animate-fade-in-up transition-all"
-                style={{
-                  borderColor: "var(--color-border)",
-                  background: "var(--color-surface)",
-                  animationDelay: `${0.15 * (i + 1)}s`,
-                }}
-              >
-                {/* Event name */}
-                <h3
-                  className="font-heading text-xl md:text-2xl mb-2"
-                  style={{ color: "var(--color-primary)", fontWeight: 400 }}
-                >
-                  {event.name}
-                </h3>
-
-                {/* Event kind badge */}
-                {event.kind && (
-                  <span
-                    className="inline-block text-xs tracking-widest uppercase mb-4"
-                    style={{ color: "var(--color-text-muted)" }}
-                  >
-                    {event.kind}
-                  </span>
-                )}
-
-                {/* Date & Time */}
-                {event.starts_at && (
-                  <div className="flex items-center gap-2 mb-2 text-sm" style={{ color: "var(--color-text-muted)" }}>
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>{formatDate(event.starts_at, lang)} · {formatTime(event.starts_at)}</span>
-                  </div>
-                )}
-
-                {/* Venue */}
-                {event.venue_name && (
-                  <div className="flex items-center gap-2 mb-2 text-sm" style={{ color: "var(--color-text-muted)" }}>
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span>{event.venue_name}</span>
-                  </div>
-                )}
-
-                {/* Venue address */}
-                {event.venue_address && (
-                  <p className="text-sm mb-3 pl-5" style={{ color: "var(--color-text-muted)" }}>
-                    {event.venue_address}
-                  </p>
-                )}
-
-                {/* Description */}
-                {event.description && (
-                  <p className="text-sm mb-4 leading-relaxed" style={{ color: "var(--color-text)" }}>
-                    {event.description}
-                  </p>
-                )}
-
-                {/* Dress code */}
-                {event.dress_code && (
-                  <p className="text-xs mb-4 tracking-wider" style={{ color: "var(--color-text-muted)" }}>
-                    {lang === "en" ? "Dress Code" : "Pakaian"}: {event.dress_code}
-                  </p>
-                )}
-
-                {/* RSVP Status */}
-                {currentRsvp && (
-                  <div className="mb-4 flex items-center gap-2 text-sm" style={{ color: "var(--color-primary)" }}>
-                    <Check className="w-4 h-4" />
-                    <span>
-                      {currentRsvp.status === "attending"
-                        ? t.attending
-                        : currentRsvp.status === "declined"
-                        ? t.declined
-                        : t.pending}
-                    </span>
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="flex gap-3 mt-4">
-                  <button
-                    onClick={() => handleRsvp(event, "attending")}
-                    disabled={isSubmitting}
-                    className={cn(
-                      "flex-1 rounded-lg py-3 text-sm font-medium transition-all disabled:opacity-50",
-                      currentRsvp?.status === "attending" ? "ring-2" : ""
-                    )}
-                    style={{
-                      background: currentRsvp?.status === "attending" ? "var(--color-button-bg)" : "transparent",
-                      color: currentRsvp?.status === "attending" ? "var(--color-button-text)" : "var(--color-text)",
-                      border: `1px solid ${currentRsvp?.status === "attending" ? "var(--color-button-bg)" : "var(--color-border)"}`,
-                    }}
-                  >
-                    {t.attending}
-                  </button>
-                  <button
-                    onClick={() => handleRsvp(event, "declined")}
-                    disabled={isSubmitting}
-                    className={cn(
-                      "flex-1 rounded-lg py-3 text-sm font-medium transition-all disabled:opacity-50",
-                      currentRsvp?.status === "declined" ? "ring-2" : ""
-                    )}
-                    style={{
-                      background: currentRsvp?.status === "declined" ? "var(--color-text)" : "transparent",
-                      color: currentRsvp?.status === "declined" ? "var(--color-bg)" : "var(--color-text)",
-                      border: `1px solid ${currentRsvp?.status === "declined" ? "var(--color-text)" : "var(--color-border)"}`,
-                    }}
-                  >
-                    {t.declined}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Closing text */}
-        {content.rsvp_closing ? (
-          <p
-            className="text-center text-sm italic mt-12 animate-fade-in-up"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            {String(content.rsvp_closing)}
-          </p>
-        ) : null}
       </div>
+
+      {/* Closing text */}
+      {content.rsvp_closing && (
+        <div className="px-6 pb-16 text-center">
+          <p className="mx-auto max-w-lg font-body text-sm italic" style={{ color: "var(--color-text-muted)" }}>
+            {content.rsvp_closing}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

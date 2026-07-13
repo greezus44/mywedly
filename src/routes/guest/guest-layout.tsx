@@ -3,23 +3,15 @@ import { useNavigate, useParams, Outlet, NavLink } from "react-router-dom";
 import { supabase, type Wedding } from "../../lib/supabase";
 import { useLang } from "../../lib/lang-context";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { themeToCssVars, getTheme, getLogoConfig, getLogoStyle } from "../../lib/theme";
+import { themeToCssVars, getTheme, getLogoConfig, getLogoStyle, shouldShowLogo } from "../../lib/theme";
 import { cn, getDeviceType } from "../../lib/utils";
 import { Menu, X, Globe } from "lucide-react";
-
-const navItems = [
-  { to: "", labelKey: "home" as const, end: true },
-  { to: "rsvp", labelKey: "rsvp" as const },
-  { to: "doa", labelKey: "doa" as const },
-  { to: "contact", labelKey: "contact" as const },
-  { to: "send-message", labelKey: "sendMessage" as const },
-];
 
 export function GuestLayout() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { session, loading } = useGuestAuth();
   const { lang, setLang, t } = useLang();
+  const { session, loading } = useGuestAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [wedding, setWedding] = useState<Wedding | null>(null);
 
@@ -31,7 +23,7 @@ export function GuestLayout() {
   }, [slug]);
 
   useEffect(() => {
-    if (!loading && !session) {
+    if (!loading && !session && slug) {
       navigate(`/w/${slug}/login`, { replace: true });
     }
   }, [loading, session, slug, navigate]);
@@ -39,7 +31,7 @@ export function GuestLayout() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="animate-pulse text-gray-400 font-body text-sm tracking-widest uppercase">{t.loading}</div>
+        <p className="font-body text-sm text-gray-400">{t.loading}</p>
       </div>
     );
   }
@@ -48,107 +40,112 @@ export function GuestLayout() {
 
   const theme = getTheme(wedding);
   const logo = getLogoConfig(wedding);
-  const showNavLogo = logo.showInNavbar && logo.url;
+  const device = getDeviceType();
+  const showLogoInNav = logo.showInNavbar && shouldShowLogo(logo, "nav");
 
-  const baseRoute = `/w/${slug}`;
+  const navItems = [
+    { to: `/w/${slug}/home`, label: t.home, end: false },
+    { to: `/w/${slug}/rsvp`, label: t.rsvp, end: false },
+    { to: `/w/${slug}/doa`, label: t.doa, end: false },
+    { to: `/w/${slug}/send-message`, label: t.sendMessage, end: false },
+    { to: `/w/${slug}/contact`, label: t.contact, end: false },
+  ];
 
   return (
-    <div className="min-h-screen bg-white" style={{ ...themeToCssVars(theme), fontFamily: "var(--font-body)" } as React.CSSProperties}>
-      {/* Top Nav */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b" style={{ borderColor: "var(--color-border)" }}>
-        <div className="mx-auto max-w-3xl px-4 sm:px-6">
-          <div className="flex h-16 items-center justify-between">
-            {/* Left: Hamburger */}
-            <button
-              onClick={() => setMenuOpen(true)}
-              className="p-2 -ml-2 transition-opacity hover:opacity-60"
-              style={{ color: "var(--color-text)" }}
-              aria-label="Open menu"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-
-            {/* Center: Logo (if showInNavbar) */}
-            {showNavLogo && (
-              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                <img
-                  src={logo.url!}
-                  alt="logo"
-                  style={getLogoStyle(logo, getDeviceType())}
-                  className="transition-opacity hover:opacity-80"
-                />
-              </div>
-            )}
-
-            {/* Right: Language toggle */}
-            <button
-              onClick={() => setLang(lang === "en" ? "ms" : "en")}
-              className="flex items-center gap-1.5 p-2 -mr-2 transition-opacity hover:opacity-60"
-              style={{ color: "var(--color-text)" }}
-              aria-label="Toggle language"
-            >
-              <Globe className="h-5 w-5" />
-              <span className="text-xs font-medium uppercase tracking-wider hidden sm:inline">{lang}</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Slide-out Menu */}
-      {menuOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-50 bg-black/30 animate-fade-in"
-            onClick={() => setMenuOpen(false)}
-          />
-          <aside
-            className={cn(
-              "fixed inset-y-0 left-0 z-50 w-72 max-w-[80vw] bg-white shadow-xl transition-transform duration-300",
-              menuOpen ? "translate-x-0" : "-translate-x-full"
-            )}
-            style={{ borderColor: "var(--color-border)" }}
+    <div className="min-h-screen" style={{ ...themeToCssVars(theme), background: "var(--color-bg)", color: "var(--color-text)", fontFamily: "var(--font-body)" } as React.CSSProperties}>
+      {/* Nav bar */}
+      <header className="sticky top-0 z-40 border-b backdrop-blur-md" style={{ borderColor: "var(--color-border)", background: "rgba(255,255,255,0.85)" }}>
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 md:px-6">
+          {/* Left: hamburger */}
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="p-1.5 transition hover:opacity-70"
+            style={{ color: "var(--color-text)" }}
+            aria-label="Menu"
           >
-            <div className="flex h-16 items-center justify-between px-5 border-b" style={{ borderColor: "var(--color-border)" }}>
-              <span className="font-heading text-lg" style={{ color: "var(--color-text)" }}>
-                {wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "Menu"}
+            {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+
+          {/* Center: logo or couple names */}
+          <div className="flex items-center gap-2">
+            {showLogoInNav && logo.url ? (
+              <img src={logo.url} alt="logo" style={getLogoStyle(logo, device)} />
+            ) : (
+              <span className="font-heading text-sm tracking-wide md:text-base" style={{ color: "var(--color-text)" }}>
+                {wedding?.couple_name_one || ""} & {wedding?.couple_name_two || ""}
               </span>
-              <button onClick={() => setMenuOpen(false)} className="p-1 transition-opacity hover:opacity-60" style={{ color: "var(--color-text)" }}>
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <nav className="flex flex-col p-4 gap-1">
-              {navItems.map((item) => {
-                const to = item.to === "" ? baseRoute : `${baseRoute}/${item.to}`;
-                return (
+            )}
+          </div>
+
+          {/* Right: language toggle */}
+          <button
+            onClick={() => setLang(lang === "en" ? "ms" : "en")}
+            className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition hover:opacity-70 md:text-sm"
+            style={{ borderColor: "var(--color-border)", color: "var(--color-text)" }}
+          >
+            <Globe className="h-3.5 w-3.5" />
+            {lang === "en" ? "EN" : "MS"}
+          </button>
+        </div>
+
+        {/* Mobile menu */}
+        {menuOpen && (
+          <nav className="border-t" style={{ borderColor: "var(--color-border)" }}>
+            <div className="mx-auto max-w-5xl px-4 py-2 md:px-6">
+              {navItems.map((item) => (
                 <NavLink
                   key={item.to}
-                  to={to}
+                  to={item.to}
                   end={item.end}
                   onClick={() => setMenuOpen(false)}
                   className={({ isActive }) =>
                     cn(
-                      "flex items-center rounded-lg px-4 py-3 text-sm font-medium transition-all",
-                      isActive
-                        ? "bg-black text-white"
-                        : "hover:bg-gray-100"
+                      "block rounded-lg px-3 py-2.5 text-sm font-medium transition",
+                      isActive ? "opacity-100" : "opacity-60 hover:opacity-100"
                     )
                   }
                   style={({ isActive }) => ({
-                    background: isActive ? "var(--color-button-bg)" : "transparent",
+                    background: isActive ? "var(--color-primary)" : "transparent",
                     color: isActive ? "var(--color-button-text)" : "var(--color-text)",
                   })}
                 >
-                  {t[item.labelKey]}
+                  {item.label}
                 </NavLink>
-                );
-              })}
-            </nav>
-          </aside>
-        </>
-      )}
+              ))}
+            </div>
+          </nav>
+        )}
+      </header>
 
-      {/* Page Content */}
-      <main className="mx-auto max-w-3xl px-4 sm:px-6 py-8 md:py-12">
+      {/* Desktop nav links */}
+      <nav className="hidden border-b md:block" style={{ borderColor: "var(--color-border)" }}>
+        <div className="mx-auto max-w-5xl px-6">
+          <div className="flex items-center gap-1 py-2">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  cn(
+                    "rounded-lg px-4 py-2 text-sm font-medium transition",
+                    isActive ? "opacity-100" : "opacity-60 hover:opacity-100"
+                  )
+                }
+                style={({ isActive }) => ({
+                  background: isActive ? "var(--color-primary)" : "transparent",
+                  color: isActive ? "var(--color-button-text)" : "var(--color-text)",
+                })}
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </div>
+        </div>
+      </nav>
+
+      {/* Page content */}
+      <main className="mx-auto max-w-5xl px-4 py-6 md:px-6 md:py-8">
         <Outlet />
       </main>
     </div>

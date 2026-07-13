@@ -1,43 +1,42 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase, type Wedding, type LoginConfig } from "../../lib/supabase";
+import { supabase, type Wedding } from "../../lib/supabase";
 import { useLang } from "../../lib/lang-context";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { loginToCssVars, getLoginConfig, getLogoStyle } from "../../lib/theme";
+import {
+  loginToCssVars,
+  getLoginConfig,
+  getLogoStyle,
+} from "../../lib/theme";
 import { getDeviceType } from "../../lib/utils";
 
 export function GuestLogin() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { signIn } = useGuestAuth();
   const { lang, setLang } = useLang();
+  const { signIn } = useGuestAuth();
   const [wedding, setWedding] = useState<Wedding | null>(null);
-  const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
     supabase.from("weddings").select("*").eq("slug", slug).maybeSingle().then(({ data }) => {
       if (data) {
-        const w = data as Wedding;
-        setWedding(w);
-        // Set default language from login config
-        const loginConfig = getLoginConfig(w);
-        if (loginConfig.language.enabled) {
+        setWedding(data as Wedding);
+        const loginConfig = (data as Wedding).draft_login_config || (data as Wedding).login_config;
+        if (loginConfig?.language?.default_lang) {
           setLang(loginConfig.language.default_lang);
         }
       }
-      setLoading(false);
     });
   }, [slug, setLang]);
 
-  const loginConfig: LoginConfig = getLoginConfig(wedding);
-  const bg = loginConfig.background;
+  const loginConfig = getLoginConfig(wedding);
   const device = getDeviceType();
+  const bg = loginConfig.background;
 
-  // Background style
   const bgStyle: React.CSSProperties = {};
   if (bg.type === "image" && bg.image_url) {
     bgStyle.backgroundImage = `url(${bg.image_url})`;
@@ -47,8 +46,8 @@ export function GuestLogin() {
     bgStyle.background = bg.color;
   }
 
-  const vPosClass = loginConfig.layout.vertical_position === "top" ? "justify-start" : loginConfig.layout.vertical_position === "bottom" ? "justify-end" : "justify-center";
   const alignClass = loginConfig.layout.content_alignment === "left" ? "items-start text-left" : loginConfig.layout.content_alignment === "right" ? "items-end text-right" : "items-center text-center";
+  const vPosClass = loginConfig.layout.vertical_position === "top" ? "justify-start" : loginConfig.layout.vertical_position === "bottom" ? "justify-end" : "justify-center";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,24 +63,7 @@ export function GuestLogin() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: bg.color }}>
-        <div className="animate-pulse text-white/40 text-sm tracking-widest uppercase">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!wedding) {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: bg.color }}>
-        <div className="text-center text-white/60">
-          <p className="font-heading text-2xl mb-2">Invitation Not Found</p>
-          <p className="text-sm">Please check your invitation link.</p>
-        </div>
-      </div>
-    );
-  }
+  const logo = loginConfig.branding.logo;
 
   return (
     <div
@@ -110,30 +92,25 @@ export function GuestLogin() {
 
       {/* Content */}
       <div
-        className={`relative z-10 flex flex-col p-6 md:p-8 ${vPosClass} ${alignClass} animate-fade-in`}
+        className={`relative z-10 flex min-h-screen flex-col p-6 ${vPosClass} ${alignClass}`}
         style={{ maxWidth: loginConfig.layout.max_width, margin: loginConfig.layout.margin, width: "100%", gap: loginConfig.layout.spacing, padding: loginConfig.layout.padding }}
       >
         {/* Logo */}
-        {loginConfig.branding.logo.visible && loginConfig.branding.logo.url && (
-          <div className="flex justify-center mb-2 animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
-            <img
-              src={loginConfig.branding.logo.url}
-              alt="logo"
-              style={getLogoStyle(loginConfig.branding.logo, device)}
-            />
+        {logo.visible && logo.url && (
+          <div className="animate-fade-in">
+            <img src={logo.url} alt="logo" style={getLogoStyle(logo, device)} />
           </div>
         )}
 
         {/* Title */}
         <h1
-          className="font-heading animate-fade-in-up"
+          className="animate-fade-in-up font-heading"
           style={{
             color: "var(--login-text)",
             fontSize: "var(--login-heading-size)",
-            fontWeight: loginConfig.typography.heading_weight,
-            letterSpacing: loginConfig.typography.letter_spacing,
-            fontFamily: "var(--login-heading-font)",
-            animationDelay: "0.15s",
+            fontWeight: "var(--login-heading-weight)",
+            letterSpacing: "var(--login-letter-spacing)",
+            animationDelay: "0.1s",
           }}
         >
           {loginConfig.text.title}
@@ -142,12 +119,11 @@ export function GuestLogin() {
         {/* Subtitle */}
         {loginConfig.text.subtitle && (
           <p
-            className="font-body animate-fade-in-up"
+            className="animate-fade-in-up font-body"
             style={{
               color: "var(--login-text)",
               fontSize: "var(--login-body-size)",
               opacity: 0.85,
-              fontFamily: "var(--login-body-font)",
               animationDelay: "0.2s",
             }}
           >
@@ -155,32 +131,31 @@ export function GuestLogin() {
           </p>
         )}
 
-        {/* Welcome Message */}
+        {/* Welcome message */}
         {loginConfig.text.welcome_message && (
           <p
-            className="font-body animate-fade-in-up"
+            className="animate-fade-in-up font-body"
             style={{
               color: "var(--login-text)",
               fontSize: "var(--login-body-size)",
               opacity: 0.7,
-              fontFamily: "var(--login-body-font)",
-              animationDelay: "0.25s",
+              animationDelay: "0.3s",
             }}
           >
             {loginConfig.text.welcome_message}
           </p>
         )}
 
-        {/* Language Selector - Segmented Control */}
+        {/* Language selector — segmented control */}
         {loginConfig.language.enabled && (
           <div
-            className="inline-flex animate-fade-in-up self-center"
+            className="inline-flex animate-fade-in-up"
             style={{
               borderRadius: loginConfig.language_selector.button_radius,
               border: `1px solid ${loginConfig.language_selector.border_color}`,
               overflow: "hidden",
               background: "transparent",
-              animationDelay: "0.3s",
+              animationDelay: "0.4s",
             }}
           >
             {loginConfig.language.order.map((l) => (
@@ -198,7 +173,6 @@ export function GuestLogin() {
                   transition: "all 0.25s ease",
                   border: "none",
                   cursor: "pointer",
-                  fontFamily: "var(--login-body-font)",
                 }}
               >
                 {loginConfig.language.labels[l]}
@@ -207,30 +181,25 @@ export function GuestLogin() {
           </div>
         )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="w-full animate-fade-in-up" style={{ animationDelay: "0.35s" }}>
-          {/* Username Label */}
+        {/* Sign-in form */}
+        <form onSubmit={handleSubmit} className="flex w-full animate-fade-in-up flex-col" style={{ gap: loginConfig.layout.spacing, animationDelay: "0.5s" }}>
+          {/* Username label */}
           {loginConfig.form.username_field.show_label && (
             <label
-              className="block font-body text-sm mb-2"
-              style={{
-                color: "var(--login-text)",
-                opacity: 0.8,
-                fontFamily: "var(--login-body-font)",
-              }}
+              className="font-body text-sm"
+              style={{ color: "var(--login-text)", opacity: 0.8 }}
             >
               {loginConfig.form.username_field.label_text}
             </label>
           )}
 
-          {/* Username Input */}
+          {/* Username input */}
           <input
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder={loginConfig.text.username_placeholder}
             disabled={submitting}
-            className="w-full transition-all focus:outline-none"
             style={{
               width: loginConfig.form.input.width,
               height: loginConfig.form.input.height,
@@ -241,34 +210,21 @@ export function GuestLogin() {
               fontSize: loginConfig.form.input.font_size,
               padding: loginConfig.form.input.padding,
               boxShadow: loginConfig.form.input.shadow,
-              fontFamily: "var(--login-body-font)",
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = loginConfig.form.input.focus_border_color;
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = loginConfig.form.input.border_color;
+              outline: "none",
             }}
           />
 
           {/* Error message */}
           {error && (
-            <p
-              className="mt-3 text-sm font-body"
-              style={{
-                color: "#f87171",
-                fontFamily: "var(--login-body-font)",
-              }}
-            >
+            <p className="font-body text-sm" style={{ color: "#ef4444" }}>
               {error}
             </p>
           )}
 
-          {/* Sign-in Button */}
+          {/* Sign-in button */}
           <button
             type="submit"
             disabled={submitting || !username.trim()}
-            className="mt-4 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               width: loginConfig.form.button.width,
               height: loginConfig.form.button.height,
@@ -279,8 +235,9 @@ export function GuestLogin() {
               fontWeight: loginConfig.form.button.font_weight,
               boxShadow: loginConfig.form.button.shadow,
               border: "none",
-              cursor: "pointer",
-              fontFamily: "var(--login-body-font)",
+              cursor: submitting || !username.trim() ? "not-allowed" : "pointer",
+              opacity: submitting || !username.trim() ? 0.6 : 1,
+              transition: "background 0.25s ease",
             }}
           >
             {submitting ? loginConfig.form.button.loading_text : loginConfig.text.button_text}
@@ -290,13 +247,8 @@ export function GuestLogin() {
         {/* Helper text */}
         {loginConfig.text.helper_text && (
           <p
-            className="font-body text-sm animate-fade-in-up"
-            style={{
-              color: "var(--login-text)",
-              opacity: 0.6,
-              fontFamily: "var(--login-body-font)",
-              animationDelay: "0.4s",
-            }}
+            className="animate-fade-in-up font-body text-sm"
+            style={{ color: "var(--login-text)", opacity: 0.6, animationDelay: "0.6s" }}
           >
             {loginConfig.text.helper_text}
           </p>
@@ -305,13 +257,8 @@ export function GuestLogin() {
         {/* Footer message */}
         {loginConfig.text.footer_message && (
           <p
-            className="font-body text-sm mt-4 animate-fade-in-up"
-            style={{
-              color: "var(--login-text)",
-              opacity: 0.5,
-              fontFamily: "var(--login-body-font)",
-              animationDelay: "0.45s",
-            }}
+            className="animate-fade-in-up font-body text-sm"
+            style={{ color: "var(--login-text)", opacity: 0.5, marginTop: "1rem", animationDelay: "0.7s" }}
           >
             {loginConfig.text.footer_message}
           </p>

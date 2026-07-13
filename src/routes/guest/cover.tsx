@@ -2,8 +2,15 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase, type Wedding } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { coverToCssVars, getCoverConfig, getLogoStyle, getLogoPositionClasses } from "../../lib/theme";
-import { getCountdown, formatDate, getDeviceType } from "../../lib/utils";
+import {
+  themeToCssVars,
+  coverToCssVars,
+  getTheme,
+  getCoverConfig,
+  getLogoStyle,
+  getLogoPositionClasses,
+} from "../../lib/theme";
+import { getCountdown, getDeviceType } from "../../lib/utils";
 import { ArrowRight } from "lucide-react";
 
 export function Cover() {
@@ -13,27 +20,15 @@ export function Cover() {
   const [wedding, setWedding] = useState<Wedding | null>(null);
   const [loading, setLoading] = useState(true);
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false });
-  const [slideshowIndex, setSlideshowIndex] = useState(0);
+  const [slideIndex, setSlideIndex] = useState(0);
 
+  // Fetch wedding + handle QR token
   useEffect(() => {
     if (!slug) return;
-    let tokenHandled = false;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("t");
 
-    (async () => {
-      // Check for QR token in URL
-      const params = new URLSearchParams(window.location.search);
-      const token = params.get("t");
-      if (token) {
-        const { error } = await signInWithToken(token);
-        if (!error) {
-          tokenHandled = true;
-          navigate(`/w/${slug}/home`, { replace: true });
-          return;
-        }
-      }
-
-      // Fetch wedding
-      const { data } = await supabase.from("weddings").select("*").eq("slug", slug).maybeSingle();
+    supabase.from("weddings").select("*").eq("slug", slug).maybeSingle().then(async ({ data }) => {
       if (data) {
         setWedding(data as Wedding);
         // Track visit
@@ -42,13 +37,20 @@ export function Cover() {
           event_type: "visit",
           device_type: getDeviceType(),
         }).then(() => {});
+        // QR token login
+        if (token) {
+          const { error } = await signInWithToken(token);
+          if (!error) {
+            navigate(`/w/${slug}/home`, { replace: true });
+            return;
+          }
+        }
       }
       setLoading(false);
-    })();
+    });
+  }, [slug, navigate, signInWithToken]);
 
-    return () => { tokenHandled = true; };
-  }, [slug, signInWithToken, navigate]);
-
+  // Countdown
   useEffect(() => {
     if (!wedding?.wedding_date) return;
     const tick = () => setCountdown(getCountdown(wedding.wedding_date));
@@ -57,42 +59,30 @@ export function Cover() {
     return () => clearInterval(id);
   }, [wedding?.wedding_date]);
 
-  // Slideshow rotation
+  // Slideshow
+  const cover = getCoverConfig(wedding);
   useEffect(() => {
-    const cover = getCoverConfig(wedding);
     if (cover.background.type !== "slideshow" || cover.background.slideshow_urls.length <= 1) return;
     const id = setInterval(() => {
-      setSlideshowIndex((prev) => (prev + 1) % cover.background.slideshow_urls.length);
+      setSlideIndex((prev) => (prev + 1) % cover.background.slideshow_urls.length);
     }, 5000);
     return () => clearInterval(id);
-  }, [wedding]);
+  }, [cover.background.type, cover.background.slideshow_urls.length]);
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <div className="animate-pulse text-white/40 text-sm tracking-widest uppercase">Loading...</div>
+      <div className="flex min-h-screen items-center justify-center" style={{ background: cover.background.color }}>
+        <div className="animate-pulse text-sm font-light tracking-widest uppercase text-white/60">Loading...</div>
       </div>
     );
   }
 
-  if (!wedding) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <div className="text-center text-white/60">
-          <p className="font-heading text-2xl mb-2">Invitation Not Found</p>
-          <p className="text-sm">Please check your invitation link.</p>
-        </div>
-      </div>
-    );
-  }
-
-  const cover = getCoverConfig(wedding);
+  const theme = getTheme(wedding);
   const bg = cover.background;
   const logo = cover.branding.logo;
-  const logoPos = getLogoPositionClasses(logo.position);
   const device = getDeviceType();
+  const pos = getLogoPositionClasses(logo.position || "top-center");
 
-  // Background style
   const bgStyle: React.CSSProperties = {};
   if (bg.type === "image" && bg.image_url) {
     bgStyle.backgroundImage = `url(${bg.image_url})`;
@@ -100,24 +90,21 @@ export function Cover() {
     bgStyle.backgroundPosition = "center";
   } else if (bg.type === "color") {
     bgStyle.background = bg.color;
-  } else if (bg.type === "slideshow" && bg.slideshow_urls.length > 0) {
-    bgStyle.backgroundImage = `url(${bg.slideshow_urls[slideshowIndex]})`;
-    bgStyle.backgroundSize = "cover";
-    bgStyle.backgroundPosition = "center";
-    bgStyle.transition = "background-image 1.5s ease-in-out";
   }
 
   const vPosClass = cover.layout.vertical_position === "top" ? "justify-start" : cover.layout.vertical_position === "bottom" ? "justify-end" : "justify-center";
   const alignClass = cover.layout.content_alignment === "left" ? "items-start text-left" : cover.layout.content_alignment === "right" ? "items-end text-right" : "items-center text-center";
 
   const handleEnter = () => {
-    navigate(`/w/${slug}/login`);
+    if (slug) navigate(`/w/${slug}/login`);
   };
+
+  const countdownKeys = ["days", "hours", "minutes", "seconds"] as const;
 
   return (
     <div
       className="relative flex min-h-screen flex-col overflow-hidden"
-      style={{ ...coverToCssVars(cover), ...bgStyle, filter: `brightness(${cover.brightness}) blur(${cover.blur})` } as React.CSSProperties}
+      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover), ...bgStyle, filter: `brightness(${cover.brightness}) blur(${cover.blur})` } as React.CSSProperties}
     >
       {/* Video background */}
       {bg.type === "video" && bg.video_url && (
@@ -131,6 +118,22 @@ export function Cover() {
         />
       )}
 
+      {/* Slideshow background */}
+      {bg.type === "slideshow" && bg.slideshow_urls.length > 0 && (
+        <div className="absolute inset-0">
+          {bg.slideshow_urls.map((url, i) => (
+            <div
+              key={i}
+              className="absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
+              style={{
+                backgroundImage: `url(${url})`,
+                opacity: i === slideIndex ? 1 : 0,
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       {/* Overlay */}
       {cover.overlay.enabled && (
         <div
@@ -141,21 +144,21 @@ export function Cover() {
 
       {/* Content */}
       <div
-        className={`relative z-10 flex flex-col p-6 md:p-8 ${vPosClass} ${alignClass} animate-fade-in`}
+        className={`relative z-10 flex min-h-screen flex-col p-6 ${vPosClass} ${alignClass}`}
         style={{ maxWidth: cover.layout.max_width, margin: "0 auto", width: "100%", padding: cover.layout.padding }}
       >
         {/* Logo */}
         {logo.visible && logo.url && (
-          <div className={`flex w-full ${logoPos.container} mb-6`}>
-            <div className={logoPos.item} style={{ transform: `translate(${logo.offsetX}, ${logo.offsetY})` }}>
+          <div className={`flex w-full ${pos.container} animate-fade-in`}>
+            <div className={pos.item} style={{ transform: `translate(${logo.offsetX}, ${logo.offsetY})` }}>
               <img src={logo.url} alt="logo" style={getLogoStyle(logo, device)} />
             </div>
           </div>
         )}
 
-        {/* Couple Names */}
+        {/* Couple names */}
         <h1
-          className="font-heading leading-tight animate-fade-in-up"
+          className="mt-4 animate-fade-in-up font-heading"
           style={{
             color: cover.typography.heading_color,
             fontSize: cover.typography.heading_size,
@@ -164,15 +167,15 @@ export function Cover() {
             animationDelay: "0.1s",
           }}
         >
-          {cover.branding.couple_name_one || wedding.couple_name_one}
+          {cover.branding.couple_name_one || wedding?.couple_name_one || ""}
         </h1>
 
-        <p className="font-script text-3xl md:text-4xl my-2 animate-fade-in-up" style={{ color: cover.typography.body_color, animationDelay: "0.2s" }}>
+        <p className="my-2 animate-fade-in-up font-script text-3xl" style={{ color: cover.typography.body_color, animationDelay: "0.2s" }}>
           &
         </p>
 
         <h1
-          className="font-heading leading-tight animate-fade-in-up"
+          className="animate-fade-in-up font-heading"
           style={{
             color: cover.typography.heading_color,
             fontSize: cover.typography.heading_size,
@@ -181,32 +184,32 @@ export function Cover() {
             animationDelay: "0.3s",
           }}
         >
-          {cover.branding.couple_name_two || wedding.couple_name_two}
+          {cover.branding.couple_name_two || wedding?.couple_name_two || ""}
         </h1>
 
         {/* Date */}
-        {cover.show_date && (cover.branding.date || wedding.wedding_date) && (
+        {cover.show_date && (cover.branding.date || wedding?.wedding_date) && (
           <p
-            className="mt-5 font-body tracking-wider uppercase animate-fade-in-up"
+            className="mt-4 animate-fade-in-up font-body"
             style={{ color: cover.typography.body_color, fontSize: cover.typography.body_size, animationDelay: "0.4s" }}
           >
-            {cover.branding.date || formatDate(wedding.wedding_date)}
+            {cover.branding.date || wedding?.wedding_date}
           </p>
         )}
 
         {/* Countdown */}
         {cover.show_countdown && !countdown.isPast && (
-          <div className="mt-8 flex gap-4 md:gap-8 animate-fade-in-up" style={{ animationDelay: "0.5s" }}>
-            {(["days", "hours", "minutes", "seconds"] as const).map((k) => (
+          <div className="mt-8 flex animate-fade-in-up gap-6 md:gap-10" style={{ animationDelay: "0.5s" }}>
+            {countdownKeys.map((k) => (
               <div key={k} className="text-center">
                 <div
-                  className="font-heading text-3xl md:text-4xl"
+                  className="font-heading text-2xl md:text-4xl"
                   style={{ color: cover.typography.heading_color }}
                 >
                   {String(countdown[k]).padStart(2, "0")}
                 </div>
                 <div
-                  className="text-xs uppercase tracking-widest mt-1"
+                  className="mt-1 text-[0.625rem] uppercase tracking-widest md:text-xs"
                   style={{ color: cover.typography.body_color }}
                 >
                   {k}
@@ -216,10 +219,10 @@ export function Cover() {
           </div>
         )}
 
-        {/* Enter Button */}
+        {/* Enter button */}
         <button
           onClick={handleEnter}
-          className="group mt-10 font-body inline-flex items-center gap-2 transition-all hover:scale-105 animate-fade-in-up"
+          className="mt-10 flex animate-fade-in-up items-center gap-2 font-body transition hover:scale-105"
           style={{
             background: cover.button.bg_color,
             color: cover.button.text_color,
@@ -229,7 +232,7 @@ export function Cover() {
           }}
         >
           {cover.enter_button_text || "Enter Website"}
-          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </div>

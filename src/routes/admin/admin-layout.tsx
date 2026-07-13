@@ -25,12 +25,7 @@ const navItems = [
 export function AdminLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate("/admin-login");
-  };
-
+  const handleSignOut = async () => { await supabase.auth.signOut(); navigate("/admin-login"); };
   return (
     <div className="min-h-screen bg-gray-50 dash-root">
       <aside className={cn("fixed inset-y-0 left-0 z-50 w-64 transform bg-white border-r border-gray-200 transition-transform lg:translate-x-0", sidebarOpen ? "translate-x-0" : "-translate-x-full")}>

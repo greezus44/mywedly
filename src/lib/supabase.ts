@@ -7,7 +7,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: { persistSession: true, autoRefreshToken: true },
 });
 
-// ---------- Theme Types ----------
 export interface ThemeConfig {
   primary: string; secondary: string; accent: string; bg: string; surface: string;
   text: string; textMuted: string; border: string; buttonBg: string; buttonText: string;
