@@ -13,7 +13,6 @@ import { Save } from "lucide-react";
 export function ContentDoaPage() {
   const [device, setDevice] = useState<DeviceType>("desktop");
   const [content, setContent] = useState<WeddingContent>({});
-  const [toast, setToast] = useState<string | null>(null);
   const qc = useQueryClient();
 
   const { data: wedding } = useQuery({
@@ -37,52 +36,26 @@ export function ContentDoaPage() {
       const { error } = await supabase.from("weddings").update({ draft_content: content }).eq("created_by", user.user.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["wedding"] });
-      setToast("Draft saved");
-      setTimeout(() => setToast(null), 2000);
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wedding"] }),
   });
 
   const update = (patch: Partial<WeddingContent>) => setContent({ ...content, ...patch });
-
-  const previewWedding: Wedding | null = wedding ? { ...wedding, draft_content: content } : null;
+  const previewWedding = wedding ? { ...wedding, draft_content: content } : null;
 
   return (
     <AdminLayout>
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-gray-900">Doa Editor</h2>
-        <Button onClick={() => save.mutate()} disabled={save.isPending}>
-          <Save className="mr-2 h-4 w-4" /> {save.isPending ? "Saving..." : "Save Draft"}
-        </Button>
+        <h2 className="text-xl font-semibold text-gray-900">Doa Content</h2>
+        <Button onClick={() => save.mutate()} disabled={save.isPending}><Save className="mr-2 h-4 w-4" /> {save.isPending ? "Saving..." : "Save Draft"}</Button>
       </div>
 
       <SplitEditor device={device} onDeviceChange={setDevice} preview={(d) => <DoaPreview wedding={previewWedding} device={d} />}>
-        <div className="space-y-4">
-          <Card className="space-y-4">
-            <h3 className="font-semibold text-gray-900">Doa Content</h3>
-            <FormField label="Doa Title">
-              <Input value={content.doa_title || ""} onChange={(e) => update({ doa_title: e.target.value })} placeholder="e.g. Doa & Prayers" />
-            </FormField>
-            <FormField label="Doa Body">
-              <Textarea value={content.doa_body || ""} onChange={(e) => update({ doa_body: e.target.value })} placeholder="Prayer text or message" />
-            </FormField>
-            <FormField label="Doa Image">
-              <ImageUpload
-                value={content.doa_image_url ?? null}
-                onChange={(url) => update({ doa_image_url: url ?? undefined })}
-                label="Upload a doa image"
-              />
-            </FormField>
-          </Card>
-        </div>
+        <Card className="space-y-4">
+          <FormField label="Doa Title"><Input value={content.doa_title || ""} onChange={(e) => update({ doa_title: e.target.value })} placeholder="Doa title" /></FormField>
+          <FormField label="Doa Body"><Textarea value={content.doa_body || ""} onChange={(e) => update({ doa_body: e.target.value })} placeholder="Doa body text" /></FormField>
+          <FormField label="Doa Image"><ImageUpload value={content.doa_image_url ?? null} onChange={(url) => update({ doa_image_url: url ?? undefined })} label="Doa Image" /></FormField>
+        </Card>
       </SplitEditor>
-
-      {toast && (
-        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white shadow-lg">
-          {toast}
-        </div>
-      )}
     </AdminLayout>
   );
 }

@@ -1,93 +1,64 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { supabase, type Wedding } from "../../lib/supabase";
+import { useGuestAuth } from "../../lib/guest-auth";
 import { useLang } from "../../lib/lang-context";
-import { useGuestAuth, GuestAuthProvider } from "../../lib/guest-auth";
-import {
-  themeToCssVars,
-  getTheme,
-  getLogoConfig,
-  getLogoStyle,
-  shouldShowLogo,
-} from "../../lib/theme";
+import { themeToCssVars, getTheme, getLogoConfig, getLogoStyle, shouldShowLogo } from "../../lib/theme";
 import { getDeviceType } from "../../lib/utils";
-import { Heart, Phone, Mail, MapPin } from "lucide-react";
+import { Phone, Mail, MapPin } from "lucide-react";
 
-function ContactInner() {
+export function Contact() {
   const { slug } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
-  const { session, loading } = useGuestAuth();
+  const { session } = useGuestAuth();
   const { lang, t } = useLang();
   const [wedding, setWedding] = useState<Wedding | null>(null);
 
   useEffect(() => {
-    if (loading) return;
-    if (!session || (slug && session.wedding_slug !== slug)) {
-      navigate(`/w/${slug}/login`, { replace: true });
-    }
-  }, [session, loading, slug, navigate]);
-
-  useEffect(() => {
-    if (!session) return;
-    supabase
-      .from("weddings")
-      .select("*")
-      .eq("id", session.wedding_id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setWedding(data as Wedding);
-      });
-  }, [session]);
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--color-bg)" }}>
-        <Heart className="h-8 w-8 animate-pulse" style={{ color: "var(--color-primary)" }} />
-      </div>
-    );
-  }
-
-  if (!session) return null;
+    if (!slug) return;
+    supabase.from("weddings").select("*").eq("slug", slug).maybeSingle().then(({ data }) => {
+      if (data) setWedding(data as Wedding);
+    });
+  }, [slug]);
 
   const theme = getTheme(wedding);
-  const content = (wedding?.content || wedding?.draft_content || {}) as Record<string, unknown>;
+  const content = (wedding?.draft_content || wedding?.content || {}) as Record<string, unknown>;
   const logo = getLogoConfig(wedding);
   const device = getDeviceType();
+  const showLogo = shouldShowLogo(logo, "contact");
 
-  const phone = typeof content.contact_phone === "string" ? content.contact_phone : null;
-  const email = typeof content.contact_email === "string" ? content.contact_email : null;
-  const address = typeof content.contact_address === "string" ? content.contact_address : null;
+  const phone = content.contact_phone ? String(content.contact_phone) : "";
+  const email = content.contact_email ? String(content.contact_email) : "";
+  const address = content.contact_address ? String(content.contact_address) : "";
 
   return (
     <div
-      className="min-h-screen"
-      style={{ ...themeToCssVars(theme) } as React.CSSProperties}
+      className="min-h-screen px-6 py-12 md:py-16"
+      style={{
+        ...themeToCssVars(theme),
+        background: "var(--color-bg)",
+        color: "var(--color-text)",
+        fontFamily: "var(--font-body)",
+      } as React.CSSProperties}
     >
-      <div className="mx-auto max-w-2xl px-4 py-8">
+      <div className="max-w-xl mx-auto">
         {/* Logo */}
-        {shouldShowLogo(logo, "contact") && logo.url && (
-          <div className="mb-8 flex justify-center animate-fade-in">
-            <img src={logo.url} alt="Logo" style={getLogoStyle(logo, device)} />
+        {showLogo && logo.url && (
+          <div className="flex justify-center mb-8 animate-fade-in">
+            <img src={logo.url} alt="logo" style={getLogoStyle(logo, device)} />
           </div>
         )}
 
         {/* Header */}
-        <div className="mb-8 text-center animate-fade-in-up">
+        <div className="text-center mb-12 animate-fade-in-up">
+          <p className="text-xs tracking-[0.3em] uppercase mb-3" style={{ color: "var(--color-text-muted)" }}>
+            {lang === "en" ? "Get In Touch" : "Hubungi Kami"}
+          </p>
           <h1
-            className="mb-2"
-            style={{
-              color: "var(--color-text)",
-              fontFamily: "var(--font-heading)",
-              fontSize: "2rem",
-            }}
+            className="font-heading"
+            style={{ color: "var(--color-primary)", fontSize: "2.5rem", fontWeight: 400, letterSpacing: "-0.01em" }}
           >
             {t.contact}
           </h1>
-          <div className="mx-auto flex w-16 items-center justify-center gap-2">
-            <span className="h-px flex-1" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
-            <Heart className="h-4 w-4" style={{ color: "var(--color-primary)" }} />
-            <span className="h-px flex-1" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
-          </div>
         </div>
 
         {/* Contact cards */}
@@ -96,30 +67,24 @@ function ContactInner() {
           {phone && (
             <a
               href={`tel:${phone}`}
-              className="flex items-center gap-4 rounded-2xl p-5 transition-all duration-200 hover:scale-[1.01] animate-fade-in-up"
+              className="flex items-center gap-4 rounded-2xl border p-5 transition-all hover:scale-[1.02] animate-fade-in-up"
               style={{
+                borderColor: "var(--color-border)",
                 background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
                 animationDelay: "0.1s",
               }}
             >
               <div
-                className="flex h-12 w-12 items-center justify-center rounded-full"
-                style={{ background: "color-mix(in srgb, var(--color-primary) 15%, transparent)" }}
+                className="flex h-11 w-11 items-center justify-center rounded-full"
+                style={{ background: "var(--color-button-bg)" }}
               >
-                <Phone className="h-5 w-5" style={{ color: "var(--color-primary)" }} />
+                <Phone className="w-4 h-4" style={{ color: "var(--color-button-text)" }} />
               </div>
               <div>
-                <p
-                  className="text-xs uppercase tracking-wider"
-                  style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-body)" }}
-                >
-                  {lang === "ms" ? "Telefon" : "Phone"}
+                <p className="text-xs tracking-widest uppercase mb-1" style={{ color: "var(--color-text-muted)" }}>
+                  {lang === "en" ? "Phone" : "Telefon"}
                 </p>
-                <p
-                  className="text-sm font-medium"
-                  style={{ color: "var(--color-text)", fontFamily: "var(--font-body)" }}
-                >
+                <p className="text-sm font-medium" style={{ color: "var(--color-text)" }}>
                   {phone}
                 </p>
               </div>
@@ -130,30 +95,24 @@ function ContactInner() {
           {email && (
             <a
               href={`mailto:${email}`}
-              className="flex items-center gap-4 rounded-2xl p-5 transition-all duration-200 hover:scale-[1.01] animate-fade-in-up"
+              className="flex items-center gap-4 rounded-2xl border p-5 transition-all hover:scale-[1.02] animate-fade-in-up"
               style={{
+                borderColor: "var(--color-border)",
                 background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-                animationDelay: "0.2s",
+                animationDelay: "0.15s",
               }}
             >
               <div
-                className="flex h-12 w-12 items-center justify-center rounded-full"
-                style={{ background: "color-mix(in srgb, var(--color-primary) 15%, transparent)" }}
+                className="flex h-11 w-11 items-center justify-center rounded-full"
+                style={{ background: "var(--color-button-bg)" }}
               >
-                <Mail className="h-5 w-5" style={{ color: "var(--color-primary)" }} />
+                <Mail className="w-4 h-4" style={{ color: "var(--color-button-text)" }} />
               </div>
-              <div className="min-w-0">
-                <p
-                  className="text-xs uppercase tracking-wider"
-                  style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-body)" }}
-                >
-                  {lang === "ms" ? "E-mel" : "Email"}
+              <div>
+                <p className="text-xs tracking-widest uppercase mb-1" style={{ color: "var(--color-text-muted)" }}>
+                  {lang === "en" ? "Email" : "E-mel"}
                 </p>
-                <p
-                  className="truncate text-sm font-medium"
-                  style={{ color: "var(--color-text)", fontFamily: "var(--font-body)" }}
-                >
+                <p className="text-sm font-medium break-all" style={{ color: "var(--color-text)" }}>
                   {email}
                 </p>
               </div>
@@ -163,69 +122,41 @@ function ContactInner() {
           {/* Address */}
           {address && (
             <div
-              className="flex items-start gap-4 rounded-2xl p-5 animate-fade-in-up"
+              className="flex items-start gap-4 rounded-2xl border p-5 animate-fade-in-up"
               style={{
+                borderColor: "var(--color-border)",
                 background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-                animationDelay: "0.3s",
+                animationDelay: "0.2s",
               }}
             >
               <div
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
-                style={{ background: "color-mix(in srgb, var(--color-primary) 15%, transparent)" }}
+                className="flex h-11 w-11 items-center justify-center rounded-full flex-shrink-0"
+                style={{ background: "var(--color-button-bg)" }}
               >
-                <MapPin className="h-5 w-5" style={{ color: "var(--color-primary)" }} />
+                <MapPin className="w-4 h-4" style={{ color: "var(--color-button-text)" }} />
               </div>
               <div>
-                <p
-                  className="mb-1 text-xs uppercase tracking-wider"
-                  style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-body)" }}
-                >
-                  {lang === "ms" ? "Alamat" : "Address"}
+                <p className="text-xs tracking-widest uppercase mb-1" style={{ color: "var(--color-text-muted)" }}>
+                  {lang === "en" ? "Address" : "Alamat"}
                 </p>
-                <p
-                  className="text-sm leading-relaxed"
-                  style={{ color: "var(--color-text)", fontFamily: "var(--font-body)" }}
-                >
+                <p className="text-sm font-medium leading-relaxed whitespace-pre-line" style={{ color: "var(--color-text)" }}>
                   {address}
                 </p>
               </div>
             </div>
           )}
 
-          {/* Fallback if no contact info */}
+          {/* No contact info */}
           {!phone && !email && !address && (
-            <div
-              className="rounded-2xl p-8 text-center animate-fade-in-up"
-              style={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-              }}
-            >
-              <Heart className="mx-auto mb-4 h-8 w-8" style={{ color: "var(--color-primary)" }} />
-              <p
-                style={{
-                  color: "var(--color-text-muted)",
-                  fontFamily: "var(--font-body)",
-                }}
-              >
-                {lang === "ms"
-                  ? "Maklumat hubungan akan dikemaskini tidak lama lagi."
-                  : "Contact information will be updated soon."}
+            <div className="text-center py-12">
+              <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
+                {lang === "en" ? "No contact information available." : "Tiada maklumat hubungan tersedia."}
               </p>
             </div>
           )}
         </div>
       </div>
     </div>
-  );
-}
-
-export function Contact() {
-  return (
-    <GuestAuthProvider>
-      <ContactInner />
-    </GuestAuthProvider>
   );
 }
 

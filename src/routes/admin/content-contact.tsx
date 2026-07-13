@@ -13,7 +13,6 @@ import { Save } from "lucide-react";
 export function ContentContactPage() {
   const [device, setDevice] = useState<DeviceType>("desktop");
   const [content, setContent] = useState<WeddingContent>({});
-  const [toast, setToast] = useState<string | null>(null);
   const qc = useQueryClient();
 
   const { data: wedding } = useQuery({
@@ -37,48 +36,26 @@ export function ContentContactPage() {
       const { error } = await supabase.from("weddings").update({ draft_content: content }).eq("created_by", user.user.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["wedding"] });
-      setToast("Draft saved");
-      setTimeout(() => setToast(null), 2000);
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wedding"] }),
   });
 
   const update = (patch: Partial<WeddingContent>) => setContent({ ...content, ...patch });
-
-  const previewWedding: Wedding | null = wedding ? { ...wedding, draft_content: content } : null;
+  const previewWedding = wedding ? { ...wedding, draft_content: content } : null;
 
   return (
     <AdminLayout>
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-gray-900">Contact Editor</h2>
-        <Button onClick={() => save.mutate()} disabled={save.isPending}>
-          <Save className="mr-2 h-4 w-4" /> {save.isPending ? "Saving..." : "Save Draft"}
-        </Button>
+        <h2 className="text-xl font-semibold text-gray-900">Contact Content</h2>
+        <Button onClick={() => save.mutate()} disabled={save.isPending}><Save className="mr-2 h-4 w-4" /> {save.isPending ? "Saving..." : "Save Draft"}</Button>
       </div>
 
       <SplitEditor device={device} onDeviceChange={setDevice} preview={(d) => <ContactPreview wedding={previewWedding} device={d} />}>
-        <div className="space-y-4">
-          <Card className="space-y-4">
-            <h3 className="font-semibold text-gray-900">Contact Information</h3>
-            <FormField label="Phone Number">
-              <Input value={content.contact_phone || ""} onChange={(e) => update({ contact_phone: e.target.value })} placeholder="+60 12 345 6789" />
-            </FormField>
-            <FormField label="Email Address">
-              <Input value={content.contact_email || ""} onChange={(e) => update({ contact_email: e.target.value })} placeholder="contact@example.com" />
-            </FormField>
-            <FormField label="Address">
-              <Textarea value={content.contact_address || ""} onChange={(e) => update({ contact_address: e.target.value })} placeholder="Venue or contact address" />
-            </FormField>
-          </Card>
-        </div>
+        <Card className="space-y-4">
+          <FormField label="Phone"><Input value={content.contact_phone || ""} onChange={(e) => update({ contact_phone: e.target.value })} placeholder="Phone number" /></FormField>
+          <FormField label="Email"><Input value={content.contact_email || ""} onChange={(e) => update({ contact_email: e.target.value })} placeholder="Email address" /></FormField>
+          <FormField label="Address"><Textarea value={content.contact_address || ""} onChange={(e) => update({ contact_address: e.target.value })} placeholder="Venue address" /></FormField>
+        </Card>
       </SplitEditor>
-
-      {toast && (
-        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white shadow-lg">
-          {toast}
-        </div>
-      )}
     </AdminLayout>
   );
 }

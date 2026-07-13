@@ -3,15 +3,15 @@
 @tailwind utilities;
 
 :root {
-  --color-primary: #C9A961;
-  --color-secondary: #F5E6D3;
-  --color-accent: #8B6F47;
-  --color-bg: #FFFBF5;
-  --color-surface: #FFFFFF;
-  --color-text: #2D2D2D;
+  --color-primary: #1A1A1A;
+  --color-secondary: #F5F5F5;
+  --color-accent: #8B8B8B;
+  --color-bg: #FFFFFF;
+  --color-surface: #FAFAFA;
+  --color-text: #1A1A1A;
   --color-text-muted: #8B8B8B;
-  --color-border: #E5DDD5;
-  --color-button-bg: #C9A961;
+  --color-border: #E5E5E5;
+  --color-button-bg: #1A1A1A;
   --color-button-text: #FFFFFF;
   --font-script: "Great Vibes", cursive;
   --font-heading: "Playfair Display", serif;
@@ -24,16 +24,15 @@
   --letter-spacing: 0.02em;
 }
 
-/* Dashboard theme isolation */
 .dash-root {
   --dash-bg: #F9FAFB;
   --dash-surface: #FFFFFF;
   --dash-text: #111827;
   --dash-text-muted: #6B7280;
   --dash-border: #E5E7EB;
-  --dash-accent: #4F46E5;
-  --dash-accent-bg: #EEF2FF;
-  --dash-accent-text: #4F46E5;
+  --dash-accent: #1A1A1A;
+  --dash-accent-bg: #F3F4F6;
+  --dash-accent-text: #1A1A1A;
 }
 
 body {
@@ -47,13 +46,11 @@ body {
 .font-body { font-family: var(--font-body), sans-serif; }
 .font-ui { font-family: var(--font-ui), sans-serif; }
 
-/* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
 
-/* Delay utilities */
 .delay-100 { animation-delay: 0.1s; }
 .delay-200 { animation-delay: 0.2s; }
 .delay-300 { animation-delay: 0.3s; }

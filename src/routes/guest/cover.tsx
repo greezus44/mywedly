@@ -1,323 +1,238 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase, type Wedding } from "../../lib/supabase";
-import { useGuestAuth, GuestAuthProvider } from "../../lib/guest-auth";
-import {
-  themeToCssVars,
-  coverToCssVars,
-  getCoverConfig,
-  getCoverContent,
-  getTheme,
-  getLogoStyle,
-  getLogoPositionClasses,
-  DEFAULT_COVER_CONFIG,
-} from "../../lib/theme";
-import { getCountdown, getDeviceType } from "../../lib/utils";
-import { Heart, ChevronRight } from "lucide-react";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { coverToCssVars, getCoverConfig, getLogoStyle, getLogoPositionClasses } from "../../lib/theme";
+import { getCountdown, formatDate, getDeviceType } from "../../lib/utils";
+import { ArrowRight } from "lucide-react";
 
-function CoverInner() {
+export function Cover() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { signInWithToken } = useGuestAuth();
   const [wedding, setWedding] = useState<Wedding | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tokenChecked, setTokenChecked] = useState(false);
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false });
+  const [slideshowIndex, setSlideshowIndex] = useState(0);
 
-  // Fetch wedding by slug
   useEffect(() => {
     if (!slug) return;
-    supabase
-      .from("weddings")
-      .select("*")
-      .eq("slug", slug)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setWedding(data as Wedding);
-        setLoading(false);
-      });
-  }, [slug]);
+    let tokenHandled = false;
 
-  // Handle QR token login via ?t=token
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("t");
-    if (!token || !wedding) return;
-    signInWithToken(token).then(({ error }) => {
-      if (!error) {
-        navigate(`/w/${slug}/home`, { replace: true });
+    (async () => {
+      // Check for QR token in URL
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get("t");
+      if (token) {
+        const { error } = await signInWithToken(token);
+        if (!error) {
+          tokenHandled = true;
+          navigate(`/w/${slug}/home`, { replace: true });
+          return;
+        }
       }
-      setTokenChecked(true);
-    });
-  }, [wedding, slug, navigate, signInWithToken]);
 
-  // Track visit
-  const trackVisit = useCallback(async () => {
-    if (!wedding) return;
-    await supabase.from("sharing_events").insert({
-      wedding_id: wedding.id,
-      event_type: "visit",
-      device_type: getDeviceType(),
-    });
-  }, [wedding]);
+      // Fetch wedding
+      const { data } = await supabase.from("weddings").select("*").eq("slug", slug).maybeSingle();
+      if (data) {
+        setWedding(data as Wedding);
+        // Track visit
+        supabase.from("sharing_events").insert({
+          wedding_id: (data as Wedding).id,
+          event_type: "visit",
+          device_type: getDeviceType(),
+        }).then(() => {});
+      }
+      setLoading(false);
+    })();
 
-  useEffect(() => {
-    if (wedding) trackVisit();
-  }, [wedding, trackVisit]);
+    return () => { tokenHandled = true; };
+  }, [slug, signInWithToken, navigate]);
 
-  // Countdown ticker
   useEffect(() => {
     if (!wedding?.wedding_date) return;
-    const update = () => setCountdown(getCountdown(wedding.wedding_date));
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
+    const tick = () => setCountdown(getCountdown(wedding.wedding_date));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, [wedding?.wedding_date]);
+
+  // Slideshow rotation
+  useEffect(() => {
+    const cover = getCoverConfig(wedding);
+    if (cover.background.type !== "slideshow" || cover.background.slideshow_urls.length <= 1) return;
+    const id = setInterval(() => {
+      setSlideshowIndex((prev) => (prev + 1) % cover.background.slideshow_urls.length);
+    }, 5000);
+    return () => clearInterval(id);
+  }, [wedding]);
 
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black">
-        <Heart className="h-8 w-8 animate-pulse text-white" />
+        <div className="animate-pulse text-white/40 text-sm tracking-widest uppercase">Loading...</div>
       </div>
     );
   }
 
-  const cover = getCoverContent(wedding);
-  const theme = getTheme(wedding);
-  const device = getDeviceType();
-  const logo = cover.branding?.logo;
-  const logoPos = getLogoPositionClasses(logo?.position || "top-center");
-
-  // Background rendering
-  const renderBackground = () => {
-    const bg = cover.background;
-    const overlayStyle: React.CSSProperties = {
-      background: cover.overlay.color,
-      opacity: cover.overlay.opacity,
-    };
-
-    let bgElement: React.ReactNode = null;
-    if (bg.type === "image" && bg.image_url) {
-      bgElement = (
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{
-            backgroundImage: `url(${bg.image_url})`,
-            filter: `blur(${cover.blur}) brightness(${cover.brightness})`,
-          }}
-        />
-      );
-    } else if (bg.type === "video" && bg.video_url) {
-      bgElement = (
-        <video
-          className="absolute inset-0 h-full w-full object-cover"
-          autoPlay
-          muted
-          loop
-          playsInline
-          style={{ filter: `blur(${cover.blur}) brightness(${cover.brightness})` }}
-        >
-          <source src={bg.video_url} />
-        </video>
-      );
-    } else if (bg.type === "slideshow" && bg.slideshow_urls.length > 0) {
-      bgElement = (
-        <Slideshow
-          urls={bg.slideshow_urls}
-          blur={cover.blur}
-          brightness={cover.brightness}
-        />
-      );
-    } else {
-      bgElement = <div className="absolute inset-0" style={{ background: bg.color }} />;
-    }
-
+  if (!wedding) {
     return (
-      <>
-        {bgElement}
-        {cover.overlay.enabled && (
-          <div className="absolute inset-0" style={overlayStyle} />
-        )}
-      </>
+      <div className="flex min-h-screen items-center justify-center bg-black">
+        <div className="text-center text-white/60">
+          <p className="font-heading text-2xl mb-2">Invitation Not Found</p>
+          <p className="text-sm">Please check your invitation link.</p>
+        </div>
+      </div>
     );
+  }
+
+  const cover = getCoverConfig(wedding);
+  const bg = cover.background;
+  const logo = cover.branding.logo;
+  const logoPos = getLogoPositionClasses(logo.position);
+  const device = getDeviceType();
+
+  // Background style
+  const bgStyle: React.CSSProperties = {};
+  if (bg.type === "image" && bg.image_url) {
+    bgStyle.backgroundImage = `url(${bg.image_url})`;
+    bgStyle.backgroundSize = "cover";
+    bgStyle.backgroundPosition = "center";
+  } else if (bg.type === "color") {
+    bgStyle.background = bg.color;
+  } else if (bg.type === "slideshow" && bg.slideshow_urls.length > 0) {
+    bgStyle.backgroundImage = `url(${bg.slideshow_urls[slideshowIndex]})`;
+    bgStyle.backgroundSize = "cover";
+    bgStyle.backgroundPosition = "center";
+    bgStyle.transition = "background-image 1.5s ease-in-out";
+  }
+
+  const vPosClass = cover.layout.vertical_position === "top" ? "justify-start" : cover.layout.vertical_position === "bottom" ? "justify-end" : "justify-center";
+  const alignClass = cover.layout.content_alignment === "left" ? "items-start text-left" : cover.layout.content_alignment === "right" ? "items-end text-right" : "items-center text-center";
+
+  const handleEnter = () => {
+    navigate(`/w/${slug}/login`);
   };
 
   return (
     <div
-      className="relative min-h-screen overflow-hidden"
-      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover) } as React.CSSProperties}
+      className="relative flex min-h-screen flex-col overflow-hidden"
+      style={{ ...coverToCssVars(cover), ...bgStyle, filter: `brightness(${cover.brightness}) blur(${cover.blur})` } as React.CSSProperties}
     >
-      {renderBackground()}
+      {/* Video background */}
+      {bg.type === "video" && bg.video_url && (
+        <video
+          src={bg.video_url}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+
+      {/* Overlay */}
+      {cover.overlay.enabled && (
+        <div
+          className="absolute inset-0"
+          style={{ background: cover.overlay.color, opacity: cover.overlay.opacity }}
+        />
+      )}
 
       {/* Content */}
-      <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4">
-        <div
-          className={`flex flex-col ${logoPos.container} w-full`}
-          style={{ maxWidth: cover.layout.max_width, padding: cover.layout.padding }}
+      <div
+        className={`relative z-10 flex flex-col p-6 md:p-8 ${vPosClass} ${alignClass} animate-fade-in`}
+        style={{ maxWidth: cover.layout.max_width, margin: "0 auto", width: "100%", padding: cover.layout.padding }}
+      >
+        {/* Logo */}
+        {logo.visible && logo.url && (
+          <div className={`flex w-full ${logoPos.container} mb-6`}>
+            <div className={logoPos.item} style={{ transform: `translate(${logo.offsetX}, ${logo.offsetY})` }}>
+              <img src={logo.url} alt="logo" style={getLogoStyle(logo, device)} />
+            </div>
+          </div>
+        )}
+
+        {/* Couple Names */}
+        <h1
+          className="font-heading leading-tight animate-fade-in-up"
+          style={{
+            color: cover.typography.heading_color,
+            fontSize: cover.typography.heading_size,
+            fontWeight: cover.typography.heading_weight,
+            letterSpacing: cover.typography.letter_spacing,
+            animationDelay: "0.1s",
+          }}
         >
-          {/* Logo */}
-          {logo?.url && logo.visible && (
-            <div className={`flex ${logoPos.container} mb-6`}>
-              <img
-                src={logo.url}
-                alt="Logo"
-                style={getLogoStyle(logo, device)}
-                className="animate-fade-in"
-              />
-            </div>
-          )}
+          {cover.branding.couple_name_one || wedding.couple_name_one}
+        </h1>
 
-          {/* Couple names */}
-          <div className="text-center animate-fade-in-up">
-            <p
-              className="mb-2 text-sm uppercase tracking-widest"
-              style={{
-                color: "var(--cover-body-color)",
-                fontFamily: "var(--cover-body-font)",
-                fontSize: "var(--cover-body-size)",
-              }}
-            >
-              {wedding?.hashtag ? `#${wedding.hashtag}` : "We Invite You"}
-            </p>
-            <h1
-              className="mb-1"
-              style={{
-                color: "var(--cover-text)",
-                fontFamily: "var(--cover-heading-font)",
-                fontSize: "var(--cover-heading-size)",
-                fontWeight: cover.typography.heading_weight,
-                letterSpacing: cover.typography.letter_spacing,
-                lineHeight: 1.2,
-              }}
-            >
-              {cover.branding.couple_name_one || wedding?.couple_name_one}
-            </h1>
-            <div className="my-2 flex items-center justify-center gap-3">
-              <span className="h-px w-12" style={{ background: "var(--cover-text)", opacity: 0.4 }} />
-              <Heart className="h-5 w-5" style={{ color: "var(--cover-text)" }} />
-              <span className="h-px w-12" style={{ background: "var(--cover-text)", opacity: 0.4 }} />
-            </div>
-            <h1
-              className="mb-6"
-              style={{
-                color: "var(--cover-text)",
-                fontFamily: "var(--cover-heading-font)",
-                fontSize: "var(--cover-heading-size)",
-                fontWeight: cover.typography.heading_weight,
-                letterSpacing: cover.typography.letter_spacing,
-                lineHeight: 1.2,
-              }}
-            >
-              {cover.branding.couple_name_two || wedding?.couple_name_two}
-            </h1>
-          </div>
+        <p className="font-script text-3xl md:text-4xl my-2 animate-fade-in-up" style={{ color: cover.typography.body_color, animationDelay: "0.2s" }}>
+          &
+        </p>
 
-          {/* Date */}
-          {cover.show_date && (cover.branding.date || wedding?.wedding_date) && (
-            <p
-              className="mb-6 text-center animate-fade-in-up"
-              style={{
-                animationDelay: "0.15s",
-                color: "var(--cover-body-color)",
-                fontFamily: "var(--cover-body-font)",
-                fontSize: "var(--cover-body-size)",
-              }}
-            >
-              {cover.branding.date || wedding?.wedding_date}
-            </p>
-          )}
+        <h1
+          className="font-heading leading-tight animate-fade-in-up"
+          style={{
+            color: cover.typography.heading_color,
+            fontSize: cover.typography.heading_size,
+            fontWeight: cover.typography.heading_weight,
+            letterSpacing: cover.typography.letter_spacing,
+            animationDelay: "0.3s",
+          }}
+        >
+          {cover.branding.couple_name_two || wedding.couple_name_two}
+        </h1>
 
-          {/* Countdown */}
-          {cover.show_countdown && !countdown.isPast && (
-            <div className="mb-8 flex justify-center gap-3 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
-              {[
-                { label: "Days", value: countdown.days },
-                { label: "Hours", value: countdown.hours },
-                { label: "Min", value: countdown.minutes },
-                { label: "Sec", value: countdown.seconds },
-              ].map((item) => (
+        {/* Date */}
+        {cover.show_date && (cover.branding.date || wedding.wedding_date) && (
+          <p
+            className="mt-5 font-body tracking-wider uppercase animate-fade-in-up"
+            style={{ color: cover.typography.body_color, fontSize: cover.typography.body_size, animationDelay: "0.4s" }}
+          >
+            {cover.branding.date || formatDate(wedding.wedding_date)}
+          </p>
+        )}
+
+        {/* Countdown */}
+        {cover.show_countdown && !countdown.isPast && (
+          <div className="mt-8 flex gap-4 md:gap-8 animate-fade-in-up" style={{ animationDelay: "0.5s" }}>
+            {(["days", "hours", "minutes", "seconds"] as const).map((k) => (
+              <div key={k} className="text-center">
                 <div
-                  key={item.label}
-                  className="flex min-w-[60px] flex-col items-center rounded-lg px-3 py-2"
-                  style={{
-                    background: "color-mix(in srgb, var(--cover-text) 10%, transparent)",
-                    border: "1px solid color-mix(in srgb, var(--cover-text) 20%, transparent)",
-                  }}
+                  className="font-heading text-3xl md:text-4xl"
+                  style={{ color: cover.typography.heading_color }}
                 >
-                  <span
-                    className="text-xl font-bold tabular-nums"
-                    style={{ color: "var(--cover-text)", fontFamily: "var(--cover-heading-font)" }}
-                  >
-                    {String(item.value).padStart(2, "0")}
-                  </span>
-                  <span
-                    className="text-[0.625rem] uppercase tracking-wider"
-                    style={{ color: "var(--cover-body-color)", fontFamily: "var(--cover-body-font)" }}
-                  >
-                    {item.label}
-                  </span>
+                  {String(countdown[k]).padStart(2, "0")}
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* Enter button */}
-          <div className="flex justify-center animate-fade-in-up" style={{ animationDelay: "0.45s" }}>
-            <button
-              onClick={() => navigate(`/w/${slug}/login`)}
-              className="group flex items-center gap-2 font-medium transition-transform hover:scale-105 active:scale-100"
-              style={{
-                background: "var(--cover-button)",
-                color: "var(--cover-button-text)",
-                borderRadius: cover.button.border_radius,
-                paddingLeft: cover.button.padding_x,
-                paddingRight: cover.button.padding_x,
-                paddingTop: cover.button.padding_y,
-                paddingBottom: cover.button.padding_y,
-              }}
-            >
-              {cover.enter_button_text || cover.button.text}
-              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </button>
+                <div
+                  className="text-xs uppercase tracking-widest mt-1"
+                  style={{ color: cover.typography.body_color }}
+                >
+                  {k}
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+        )}
+
+        {/* Enter Button */}
+        <button
+          onClick={handleEnter}
+          className="group mt-10 font-body inline-flex items-center gap-2 transition-all hover:scale-105 animate-fade-in-up"
+          style={{
+            background: cover.button.bg_color,
+            color: cover.button.text_color,
+            borderRadius: cover.button.border_radius,
+            padding: `${cover.button.padding_y} ${cover.button.padding_x}`,
+            animationDelay: "0.6s",
+          }}
+        >
+          {cover.enter_button_text || "Enter Website"}
+          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+        </button>
       </div>
     </div>
-  );
-}
-
-// Slideshow component
-function Slideshow({ urls, blur, brightness }: { urls: string[]; blur: string; brightness: number }) {
-  const [index, setIndex] = useState(0);
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIndex((i) => (i + 1) % urls.length);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [urls.length]);
-
-  return (
-    <div className="absolute inset-0 overflow-hidden">
-      {urls.map((url, i) => (
-        <div
-          key={i}
-          className="absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
-          style={{
-            backgroundImage: `url(${url})`,
-            opacity: i === index ? 1 : 0,
-            filter: `blur(${blur}) brightness(${brightness})`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-export function Cover() {
-  return (
-    <GuestAuthProvider>
-      <CoverInner />
-    </GuestAuthProvider>
   );
 }
 

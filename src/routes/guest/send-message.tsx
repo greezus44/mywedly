@@ -1,208 +1,163 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { supabase, type Wedding } from "../../lib/supabase";
+import { useGuestAuth } from "../../lib/guest-auth";
 import { useLang } from "../../lib/lang-context";
-import { useGuestAuth, GuestAuthProvider } from "../../lib/guest-auth";
-import {
-  themeToCssVars,
-  getTheme,
-  getLogoConfig,
-  getLogoStyle,
-  shouldShowLogo,
-} from "../../lib/theme";
-import { getDeviceType } from "../../lib/utils";
-import { Button } from "../../components/ui/Button";
-import { Textarea } from "../../components/ui/Input";
-import { Heart, Send, Check } from "lucide-react";
+import { themeToCssVars, getTheme, getLogoConfig, getLogoStyle, shouldShowLogo } from "../../lib/theme";
+import { getDeviceType, cn } from "../../lib/utils";
+import { Send, Check } from "lucide-react";
 
 const MAX_CHARS = 500;
 
-function SendMessageInner() {
+export function SendMessage() {
   const { slug } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
-  const { session, loading } = useGuestAuth();
+  const { session } = useGuestAuth();
   const { lang, t } = useLang();
   const [wedding, setWedding] = useState<Wedding | null>(null);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (loading) return;
-    if (!session || (slug && session.wedding_slug !== slug)) {
-      navigate(`/w/${slug}/login`, { replace: true });
-    }
-  }, [session, loading, slug, navigate]);
+    if (!slug) return;
+    supabase.from("weddings").select("*").eq("slug", slug).maybeSingle().then(({ data }) => {
+      if (data) setWedding(data as Wedding);
+    });
+  }, [slug]);
 
-  useEffect(() => {
-    if (!session) return;
-    supabase
-      .from("weddings")
-      .select("*")
-      .eq("id", session.wedding_id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setWedding(data as Wedding);
-      });
-  }, [session]);
+  const theme = getTheme(wedding);
+  const content = (wedding?.draft_content || wedding?.content || {}) as Record<string, unknown>;
+  const logo = getLogoConfig(wedding);
+  const device = getDeviceType();
+  const showLogo = shouldShowLogo(logo, "send-message");
+
+  const messageIntro = content.message_intro ? String(content.message_intro) : "";
+  const authorName = session?.guest_name || "";
+  const charCount = message.length;
+  const remaining = MAX_CHARS - charCount;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!session || !message.trim()) return;
+    if (!message.trim() || !wedding || !session) return;
     setSubmitting(true);
-    const { error } = await supabase.from("guestbook_entries").insert({
-      wedding_id: session.wedding_id,
-      guest_id: session.guest_id,
-      author_name: session.guest_name,
-      message: message.trim(),
-      status: "pending",
-    });
-    if (!error) {
+    setError(null);
+
+    try {
+      const { error: iError } = await supabase.from("guestbook_entries").insert({
+        wedding_id: wedding.id,
+        guest_id: session.guest_id,
+        author_name: authorName,
+        message: message.trim(),
+        status: "pending",
+      });
+
+      if (iError) throw iError;
+
       setSubmitted(true);
       setMessage("");
+    } catch {
+      setError(lang === "en" ? "Failed to send message. Please try again." : "Gagal menghantar mesej. Sila cuba lagi.");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--color-bg)" }}>
-        <Heart className="h-8 w-8 animate-pulse" style={{ color: "var(--color-primary)" }} />
-      </div>
-    );
-  }
-
-  if (!session) return null;
-
-  const theme = getTheme(wedding);
-  const content = (wedding?.content || wedding?.draft_content || {}) as Record<string, unknown>;
-  const logo = getLogoConfig(wedding);
-  const device = getDeviceType();
-  const remaining = MAX_CHARS - message.length;
 
   return (
     <div
-      className="min-h-screen"
-      style={{ ...themeToCssVars(theme) } as React.CSSProperties}
+      className="min-h-screen px-6 py-12 md:py-16"
+      style={{
+        ...themeToCssVars(theme),
+        background: "var(--color-bg)",
+        color: "var(--color-text)",
+        fontFamily: "var(--font-body)",
+      } as React.CSSProperties}
     >
-      <div className="mx-auto max-w-2xl px-4 py-8">
+      <div className="max-w-xl mx-auto">
         {/* Logo */}
-        {shouldShowLogo(logo, "send-message") && logo.url && (
-          <div className="mb-8 flex justify-center animate-fade-in">
-            <img src={logo.url} alt="Logo" style={getLogoStyle(logo, device)} />
+        {showLogo && logo.url && (
+          <div className="flex justify-center mb-8 animate-fade-in">
+            <img src={logo.url} alt="logo" style={getLogoStyle(logo, device)} />
           </div>
         )}
 
         {/* Header */}
-        <div className="mb-8 text-center animate-fade-in-up">
+        <div className="text-center mb-10 animate-fade-in-up">
+          <p className="text-xs tracking-[0.3em] uppercase mb-3" style={{ color: "var(--color-text-muted)" }}>
+            {lang === "en" ? "Share Your Wishes" : "Kongsi Ucapan"}
+          </p>
           <h1
-            className="mb-2"
-            style={{
-              color: "var(--color-text)",
-              fontFamily: "var(--font-heading)",
-              fontSize: "2rem",
-            }}
+            className="font-heading"
+            style={{ color: "var(--color-primary)", fontSize: "2.5rem", fontWeight: 400, letterSpacing: "-0.01em" }}
           >
             {t.sendMessage}
           </h1>
-          <div className="mx-auto flex w-16 items-center justify-center gap-2">
-            <span className="h-px flex-1" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
-            <Heart className="h-4 w-4" style={{ color: "var(--color-primary)" }} />
-            <span className="h-px flex-1" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
-          </div>
         </div>
 
-        {/* Message intro */}
-        {typeof content.message_intro === "string" && content.message_intro && (
+        {/* Intro */}
+        {messageIntro && (
           <p
-            className="mb-6 text-center leading-relaxed animate-fade-in-up"
-            style={{
-              color: "var(--color-text-muted)",
-              fontFamily: "var(--font-body)",
-              animationDelay: "0.1s",
-            }}
+            className="text-center text-sm leading-relaxed mb-8 max-w-md mx-auto animate-fade-in-up"
+            style={{ color: "var(--color-text-muted)", animationDelay: "0.1s" }}
           >
-            {content.message_intro}
+            {messageIntro}
           </p>
         )}
 
-        {/* Success message */}
+        {/* Success state */}
         {submitted ? (
           <div
-            className="rounded-2xl p-8 text-center animate-fade-in-up"
+            className="rounded-2xl border p-10 text-center animate-fade-in-up"
             style={{
+              borderColor: "var(--color-border)",
               background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
             }}
           >
-            <div
-              className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
-              style={{ background: "color-mix(in srgb, var(--color-primary) 15%, transparent)" }}
-            >
-              <Check className="h-8 w-8" style={{ color: "var(--color-primary)" }} />
+            <div className="flex justify-center mb-4">
+              <div
+                className="rounded-full p-3"
+                style={{ background: "var(--color-button-bg)" }}
+              >
+                <Check className="w-6 h-6" style={{ color: "var(--color-button-text)" }} />
+              </div>
             </div>
             <h3
-              className="mb-2"
-              style={{
-                color: "var(--color-text)",
-                fontFamily: "var(--font-heading)",
-                fontSize: "1.5rem",
-              }}
+              className="font-heading text-xl mb-2"
+              style={{ color: "var(--color-primary)" }}
             >
               {t.thankYou}
             </h3>
-            <p
-              style={{
-                color: "var(--color-text-muted)",
-                fontFamily: "var(--font-body)",
-              }}
-            >
+            <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
               {t.messageSent}
             </p>
-            <Button
-              variant="outline"
-              className="mt-6"
-              onClick={() => {
-                setSubmitted(false);
-                setMessage("");
-              }}
-              style={{
-                borderColor: "var(--color-border)",
-                color: "var(--color-text)",
-              }}
+            <button
+              onClick={() => setSubmitted(false)}
+              className="mt-6 text-sm underline transition-opacity hover:opacity-70"
+              style={{ color: "var(--color-primary)" }}
             >
-              {lang === "ms" ? "Hantar Mesej Lain" : "Send Another Message"}
-            </Button>
+              {lang === "en" ? "Send another message" : "Hantar mesej lain"}
+            </button>
           </div>
         ) : (
-          /* Message form */
-          <form
-            onSubmit={handleSubmit}
-            className="rounded-2xl p-6 animate-fade-in-up"
-            style={{
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-              animationDelay: "0.15s",
-            }}
-          >
-            {/* Auto-filled name */}
-            <div className="mb-4">
+          /* Form */
+          <form onSubmit={handleSubmit} className="animate-fade-in-up" style={{ animationDelay: "0.15s" }}>
+            {/* Name (auto-filled, read-only) */}
+            <div className="mb-6">
               <label
-                className="mb-1.5 block text-sm font-medium"
-                style={{ color: "var(--color-text)", fontFamily: "var(--font-body)" }}
+                className="block text-xs tracking-widest uppercase mb-2"
+                style={{ color: "var(--color-text-muted)" }}
               >
-                {lang === "ms" ? "Nama" : "Name"}
+                {lang === "en" ? "Your Name" : "Nama Anda"}
               </label>
               <input
                 type="text"
-                value={session.guest_name}
+                value={authorName}
                 readOnly
-                className="w-full cursor-not-allowed rounded-lg px-4 py-3 text-sm outline-none"
+                className="w-full rounded-xl border px-4 py-3 text-sm cursor-not-allowed"
                 style={{
-                  background: "color-mix(in srgb, var(--color-text-muted) 8%, transparent)",
-                  border: "1px solid var(--color-border)",
-                  color: "var(--color-text)",
-                  fontFamily: "var(--font-body)",
+                  borderColor: "var(--color-border)",
+                  background: "var(--color-surface)",
+                  color: "var(--color-text-muted)",
                 }}
               />
             </div>
@@ -210,69 +165,70 @@ function SendMessageInner() {
             {/* Message textarea */}
             <div className="mb-2">
               <label
-                className="mb-1.5 block text-sm font-medium"
-                style={{ color: "var(--color-text)", fontFamily: "var(--font-body)" }}
+                className="block text-xs tracking-widest uppercase mb-2"
+                style={{ color: "var(--color-text-muted)" }}
               >
-                {lang === "ms" ? "Mesej" : "Message"}
+                {lang === "en" ? "Message" : "Mesej"}
               </label>
               <textarea
                 value={message}
-                onChange={(e) => setMessage(e.target.value.slice(0, MAX_CHARS))}
+                onChange={(e) => {
+                  if (e.target.value.length <= MAX_CHARS) {
+                    setMessage(e.target.value);
+                  }
+                }}
                 placeholder={t.messagePlaceholder}
-                maxLength={MAX_CHARS}
                 rows={5}
-                className="w-full resize-y rounded-lg px-4 py-3 text-sm outline-none transition focus:ring-2"
+                maxLength={MAX_CHARS}
+                className="w-full rounded-xl border px-4 py-3 text-sm resize-none transition-all focus:outline-none"
                 style={{
-                  background: "var(--color-bg)",
-                  border: "1px solid var(--color-border)",
+                  borderColor: "var(--color-border)",
+                  background: "var(--color-surface)",
                   color: "var(--color-text)",
-                  fontFamily: "var(--font-body)",
-                  // @ts-expect-error CSS custom property
-                  "--tw-ring-color": "var(--color-primary)",
                 }}
               />
             </div>
 
             {/* Character counter */}
-            <div className="mb-4 flex justify-end">
+            <div className="flex justify-end mb-6">
               <span
-                className="text-xs"
-                style={{
-                  color: remaining < 50 ? "#e57373" : "var(--color-text-muted)",
-                  fontFamily: "var(--font-body)",
-                }}
+                className={cn("text-xs", remaining < 50 ? "text-red-500" : "")}
+                style={remaining < 50 ? {} : { color: "var(--color-text-muted)" }}
               >
-                {message.length} / {MAX_CHARS}
+                {charCount} / {MAX_CHARS}
               </span>
             </div>
+
+            {/* Error */}
+            {error && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+            )}
 
             {/* Submit button */}
             <button
               type="submit"
               disabled={submitting || !message.trim()}
-              className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-all duration-200 hover:scale-[1.01] active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-xl py-4 text-sm font-medium transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               style={{
                 background: "var(--color-button-bg)",
                 color: "var(--color-button-text)",
-                border: "none",
-                cursor: submitting ? "not-allowed" : "pointer",
               }}
             >
-              <Send className="h-4 w-4" />
-              {submitting ? t.loading : t.submit}
+              {submitting ? (
+                <span className="animate-pulse">{t.loading}</span>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  {t.submit}
+                </>
+              )}
             </button>
           </form>
         )}
       </div>
     </div>
-  );
-}
-
-export function SendMessage() {
-  return (
-    <GuestAuthProvider>
-      <SendMessageInner />
-    </GuestAuthProvider>
   );
 }
 

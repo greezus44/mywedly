@@ -1,17 +1,16 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Wedding, type CoverConfig } from "../../lib/supabase";
-import { DEFAULT_COVER_CONFIG } from "../../lib/theme";
+import { DEFAULT_COVER_CONFIG, FONT_OPTIONS } from "../../lib/theme";
 import { AdminLayout } from "./admin-layout";
 import { SplitEditor, type DeviceType } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
 import { LogoControls } from "../../components/ui/LogoControls";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Select, Toggle, ColorInput, RangeInput, Label } from "../../components/ui/Input";
+import { Input, Select, Toggle, ColorInput, RangeInput } from "../../components/ui/Input";
 import { Card } from "../../components/ui/index";
 import { ImageUpload, VideoUpload, FormField } from "../../components/ui/ImageUpload";
-import { FONT_OPTIONS } from "../../lib/theme";
-import { Save, Upload } from "lucide-react";
+import { Save } from "lucide-react";
 
 type Tab = "logo" | "branding" | "colours" | "typography" | "layout" | "background";
 
@@ -27,10 +26,7 @@ export function CoverEditorPage() {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
       const { data } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).maybeSingle();
-      if (data) {
-        const c = (data as Wedding).draft_cover_config || (data as Wedding).cover_config || DEFAULT_COVER_CONFIG;
-        setConfig(c);
-      }
+      if (data) { const c = (data as Wedding).draft_cover_config || (data as Wedding).cover_config || DEFAULT_COVER_CONFIG; setConfig(c); }
       return data as Wedding | null;
     },
   });
@@ -46,33 +42,20 @@ export function CoverEditorPage() {
   });
 
   const update = (patch: Partial<CoverConfig>) => setConfig({ ...config, ...patch });
-
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "logo", label: "Logo" }, { id: "branding", label: "Branding" }, { id: "colours", label: "Colours" },
-    { id: "typography", label: "Typography" }, { id: "layout", label: "Layout" }, { id: "background", label: "Background" },
-  ];
+  const tabs: { id: Tab; label: string }[] = [{ id: "logo", label: "Logo" }, { id: "branding", label: "Branding" }, { id: "colours", label: "Colours" }, { id: "typography", label: "Typography" }, { id: "layout", label: "Layout" }, { id: "background", label: "Background" }];
 
   return (
     <AdminLayout>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-semibold text-gray-900">Cover Page Editor</h2>
-        <Button onClick={() => save.mutate()} disabled={save.isPending}>
-          <Save className="mr-2 h-4 w-4" /> {save.isPending ? "Saving..." : "Save Draft"}
-        </Button>
+        <Button onClick={() => save.mutate()} disabled={save.isPending}><Save className="mr-2 h-4 w-4" /> {save.isPending ? "Saving..." : "Save Draft"}</Button>
       </div>
-
       <div className="mb-4 flex gap-2 border-b border-gray-200 overflow-x-auto">
-        {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t.id ? "border-indigo-500 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
-            {t.label}
-          </button>
-        ))}
+        {tabs.map((t) => (<button key={t.id} onClick={() => setTab(t.id)} className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t.id ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-700"}`}>{t.label}</button>))}
       </div>
-
       <SplitEditor device={device} onDeviceChange={setDevice} preview={(d) => <CoverPreview wedding={wedding || null} device={d} />}>
         <Card className="space-y-4">
           {tab === "logo" && <LogoControls logo={config.branding.logo} onChange={(logo) => update({ branding: { ...config.branding, logo } })} device={device} />}
-
           {tab === "branding" && (
             <div className="space-y-4">
               <FormField label="Couple Name One"><Input value={config.branding.couple_name_one} onChange={(e) => update({ branding: { ...config.branding, couple_name_one: e.target.value } })} /></FormField>
@@ -83,7 +66,6 @@ export function CoverEditorPage() {
               <Toggle checked={config.show_countdown} onChange={(v) => update({ show_countdown: v })} label="Show countdown" />
             </div>
           )}
-
           {tab === "colours" && (
             <div className="space-y-4">
               <ColorInput label="Heading Colour" value={config.typography.heading_color} onChange={(v) => update({ typography: { ...config.typography, heading_color: v } })} />
@@ -94,7 +76,6 @@ export function CoverEditorPage() {
               <RangeInput label="Overlay Opacity" value={config.overlay.opacity} min={0} max={1} step={0.05} onChange={(v) => update({ overlay: { ...config.overlay, opacity: v } })} />
             </div>
           )}
-
           {tab === "typography" && (
             <div className="space-y-4">
               <FormField label="Heading Font"><Select value={config.typography.heading_font} onChange={(e) => update({ typography: { ...config.typography, heading_font: e.target.value } })}>{FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}</Select></FormField>
@@ -105,7 +86,6 @@ export function CoverEditorPage() {
               <Input label="Letter Spacing" value={config.typography.letter_spacing} onChange={(e) => update({ typography: { ...config.typography, letter_spacing: e.target.value } })} />
             </div>
           )}
-
           {tab === "layout" && (
             <div className="space-y-4">
               <FormField label="Content Alignment"><Select value={config.layout.content_alignment} onChange={(e) => update({ layout: { ...config.layout, content_alignment: e.target.value as "left" | "center" | "right" } })}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></Select></FormField>
@@ -118,7 +98,6 @@ export function CoverEditorPage() {
               <Input label="Button Padding Y" value={config.button.padding_y} onChange={(e) => update({ button: { ...config.button, padding_y: e.target.value } })} />
             </div>
           )}
-
           {tab === "background" && (
             <div className="space-y-4">
               <FormField label="Background Type"><Select value={config.background.type} onChange={(e) => update({ background: { ...config.background, type: e.target.value as "image" | "video" | "slideshow" | "color" } })}><option value="image">Image</option><option value="video">Video</option><option value="slideshow">Slideshow</option><option value="color">Solid Colour</option></Select></FormField>

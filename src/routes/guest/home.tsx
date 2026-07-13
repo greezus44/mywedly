@@ -1,254 +1,249 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { supabase, type Wedding } from "../../lib/supabase";
+import { useGuestAuth } from "../../lib/guest-auth";
 import { useLang } from "../../lib/lang-context";
-import { useGuestAuth, GuestAuthProvider } from "../../lib/guest-auth";
-import {
-  themeToCssVars,
-  getTheme,
-  getLogoConfig,
-  getLogoStyle,
-  shouldShowLogo,
-} from "../../lib/theme";
+import { themeToCssVars, getTheme, getLogoConfig, getLogoStyle, shouldShowLogo } from "../../lib/theme";
 import { getCountdown, formatDate, getDeviceType } from "../../lib/utils";
-import { Heart, Calendar, Clock, MapPin } from "lucide-react";
+import { Heart } from "lucide-react";
 
-function HomeInner() {
+export function Home() {
   const { slug } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
-  const { session, loading } = useGuestAuth();
-  const { lang, t } = useLang();
+  const { session } = useGuestAuth();
+  const { lang } = useLang();
   const [wedding, setWedding] = useState<Wedding | null>(null);
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false });
 
   useEffect(() => {
-    if (loading) return;
-    if (!session || (slug && session.wedding_slug !== slug)) {
-      navigate(`/w/${slug}/login`, { replace: true });
-    }
-  }, [session, loading, slug, navigate]);
-
-  useEffect(() => {
-    if (!session) return;
-    supabase
-      .from("weddings")
-      .select("*")
-      .eq("id", session.wedding_id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setWedding(data as Wedding);
-      });
-  }, [session]);
+    if (!slug) return;
+    supabase.from("weddings").select("*").eq("slug", slug).maybeSingle().then(({ data }) => {
+      if (data) setWedding(data as Wedding);
+    });
+  }, [slug]);
 
   useEffect(() => {
     if (!wedding?.wedding_date) return;
-    const update = () => setCountdown(getCountdown(wedding.wedding_date));
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
+    const tick = () => setCountdown(getCountdown(wedding.wedding_date));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
   }, [wedding?.wedding_date]);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--color-bg)" }}>
-        <Heart className="h-8 w-8 animate-pulse" style={{ color: "var(--color-primary)" }} />
-      </div>
-    );
-  }
-
-  if (!session) return null;
-
   const theme = getTheme(wedding);
-  const content = (wedding?.content || wedding?.draft_content || {}) as Record<string, unknown>;
+  const content = (wedding?.draft_content || wedding?.content || {}) as Record<string, unknown>;
   const logo = getLogoConfig(wedding);
   const device = getDeviceType();
+  const showLogo = shouldShowLogo(logo, "home");
+
+  // Minimalist luxury palette - monochromatic
+  const monoStyles = {
+    bg: "#FFFFFF",
+    bgAlt: "#FAFAFA",
+    text: "#1A1A1A",
+    textMuted: "#8B8B8B",
+    border: "#E5E5E5",
+    accent: "#1A1A1A",
+  };
+
+  const subtitle = content.home_subtitle ? String(content.home_subtitle) : "";
+  const homeBody = content.home_body ? String(content.home_body) : "";
+  const quranVerse = content.quran_verse ? String(content.quran_verse) : "";
+  const quranTranslation = content.quran_translation ? String(content.quran_translation) : "";
+  const quranReference = content.quran_reference ? String(content.quran_reference) : "";
+  const closingText = content.home_closing_text ? String(content.home_closing_text) : "";
 
   return (
     <div
       className="min-h-screen"
-      style={{ ...themeToCssVars(theme) } as React.CSSProperties}
+      style={{
+        ...themeToCssVars(theme),
+        background: monoStyles.bg,
+        color: monoStyles.text,
+        fontFamily: "var(--font-body)",
+      } as React.CSSProperties}
     >
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        {/* Logo */}
-        {shouldShowLogo(logo, "home") && logo.url && (
-          <div className="mb-8 flex justify-center animate-fade-in">
-            <img src={logo.url} alt="Logo" style={getLogoStyle(logo, device)} />
-          </div>
-        )}
-
-        {/* Welcome */}
-        <div className="text-center animate-fade-in-up">
-          <p
-            className="mb-2 text-sm uppercase tracking-widest"
-            style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-body)" }}
-          >
-            {t.welcome}
-          </p>
-          <h2
-            className="mb-1"
-            style={{
-              color: "var(--color-text)",
-              fontFamily: "var(--font-script)",
-              fontSize: "2.5rem",
-              lineHeight: 1.2,
-            }}
-          >
-            {wedding?.couple_name_one}
-          </h2>
-          <div className="my-2 flex items-center justify-center gap-3">
-            <span className="h-px w-10" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
-            <Heart className="h-4 w-4" style={{ color: "var(--color-primary)" }} />
-            <span className="h-px w-10" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
-          </div>
-          <h2
-            className="mb-6"
-            style={{
-              color: "var(--color-text)",
-              fontFamily: "var(--font-script)",
-              fontSize: "2.5rem",
-              lineHeight: 1.2,
-            }}
-          >
-            {wedding?.couple_name_two}
-          </h2>
+      {/* Logo */}
+      {showLogo && logo.url && (
+        <div className="flex justify-center pt-16 pb-8 animate-fade-in">
+          <img src={logo.url} alt="logo" style={getLogoStyle(logo, device)} />
         </div>
+      )}
 
-        {/* Date & Location */}
-        {wedding?.wedding_date && (
-          <div className="mb-8 flex flex-col items-center gap-2 animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
-            <div className="flex items-center gap-2" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-body)" }}>
-              <Calendar className="h-4 w-4" />
-              <span>{formatDate(wedding.wedding_date, lang)}</span>
-            </div>
-            {wedding?.location && (
-              <div className="flex items-center gap-2" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-body)" }}>
-                <MapPin className="h-4 w-4" />
-                <span>{wedding.location}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Welcome body text */}
-        {typeof content.home_body === "string" && content.home_body && (
+      {/* Hero Section */}
+      <section className="px-6 py-20 md:py-32 text-center">
+        <div className="max-w-2xl mx-auto">
+          {/* Small label */}
           <p
-            className="mb-8 text-center leading-relaxed animate-fade-in-up"
+            className="text-xs tracking-[0.3em] uppercase mb-8 animate-fade-in-up"
+            style={{ color: monoStyles.textMuted, animationDelay: "0s" }}
+          >
+            {lang === "en" ? "The Wedding Of" : "Perkahwinan"}
+          </p>
+
+          {/* Couple Names - Large Serif */}
+          <h1
+            className="font-heading leading-[1.1] animate-fade-in-up"
             style={{
-              color: "var(--color-text)",
-              fontFamily: "var(--font-body)",
-              fontSize: "var(--font-body-size)",
-              animationDelay: "0.2s",
+              fontSize: "clamp(2.5rem, 8vw, 5rem)",
+              fontWeight: 400,
+              letterSpacing: "-0.02em",
+              color: monoStyles.text,
+              animationDelay: "0.1s",
             }}
           >
-            {content.home_body}
-          </p>
-        )}
+            {wedding?.couple_name_one || "Name"}
+          </h1>
 
-        {/* Quran verse */}
-        {typeof content.quran_verse === "string" && content.quran_verse && (
-          <div
-            className="mb-8 rounded-2xl p-6 text-center animate-fade-in-up"
+          <p
+            className="font-script text-3xl md:text-4xl my-4 animate-fade-in-up"
+            style={{ color: monoStyles.textMuted, animationDelay: "0.2s" }}
+          >
+            &
+          </p>
+
+          <h1
+            className="font-heading leading-[1.1] animate-fade-in-up"
             style={{
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
+              fontSize: "clamp(2.5rem, 8vw, 5rem)",
+              fontWeight: 400,
+              letterSpacing: "-0.02em",
+              color: monoStyles.text,
               animationDelay: "0.3s",
             }}
           >
+            {wedding?.couple_name_two || "Name"}
+          </h1>
+
+          {/* Divider */}
+          <div className="flex items-center justify-center my-10 animate-fade-in-up" style={{ animationDelay: "0.4s" }}>
+            <div className="h-px w-12" style={{ background: monoStyles.border }} />
+            <div className="mx-3">
+              <Heart className="w-3 h-3" style={{ color: monoStyles.textMuted }} />
+            </div>
+            <div className="h-px w-12" style={{ background: monoStyles.border }} />
+          </div>
+
+          {/* Date */}
+          {wedding?.wedding_date && (
             <p
-              className="mb-3 leading-loose"
-              style={{
-                color: "var(--color-text)",
-                fontFamily: "var(--font-heading)",
-                fontSize: "1.25rem",
-                direction: "rtl",
-              }}
+              className="text-sm tracking-[0.2em] uppercase animate-fade-in-up"
+              style={{ color: monoStyles.textMuted, animationDelay: "0.5s" }}
             >
-              {content.quran_verse}
+              {formatDate(wedding.wedding_date, lang)}
             </p>
-            {typeof content.quran_translation === "string" && content.quran_translation && (
+          )}
+
+          {subtitle && (
+            <p
+              className="mt-4 text-sm tracking-wider animate-fade-in-up"
+              style={{ color: monoStyles.textMuted, animationDelay: "0.55s" }}
+            >
+              {subtitle}
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* Welcome Body */}
+      {homeBody && (
+        <section className="px-6 py-16 md:py-20 text-center" style={{ background: monoStyles.bgAlt }}>
+          <div className="max-w-xl mx-auto">
+            <p
+              className="font-body text-base md:text-lg leading-relaxed animate-fade-in-up"
+              style={{ color: monoStyles.text, animationDelay: "0.1s" }}
+            >
+              {homeBody}
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* Quran Verse */}
+      {quranVerse && (
+        <section className="px-6 py-20 md:py-28 text-center">
+          <div className="max-w-lg mx-auto">
+            <p
+              className="font-heading text-xl md:text-2xl italic leading-relaxed animate-fade-in-up"
+              style={{ color: monoStyles.text, animationDelay: "0.1s" }}
+            >
+              "{quranVerse}"
+            </p>
+            {quranTranslation && (
               <p
-                className="mb-2 italic leading-relaxed"
-                style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-body)" }}
+                className="mt-6 text-sm leading-relaxed animate-fade-in-up"
+                style={{ color: monoStyles.textMuted, animationDelay: "0.2s" }}
               >
-                {content.quran_translation}
+                {quranTranslation}
               </p>
             )}
-            {typeof content.quran_reference === "string" && content.quran_reference && (
+            {quranReference && (
               <p
-                className="text-sm font-medium"
-                style={{ color: "var(--color-primary)", fontFamily: "var(--font-body)" }}
+                className="mt-4 text-xs tracking-[0.2em] uppercase animate-fade-in-up"
+                style={{ color: monoStyles.textMuted, animationDelay: "0.3s" }}
               >
-                — {content.quran_reference}
+                — {quranReference}
               </p>
             )}
           </div>
-        )}
+        </section>
+      )}
 
-        {/* Countdown */}
-        {!countdown.isPast && wedding?.wedding_date && (
-          <div className="mb-8 animate-fade-in-up" style={{ animationDelay: "0.4s" }}>
+      {/* Countdown */}
+      {!countdown.isPast && wedding?.wedding_date && (
+        <section className="px-6 py-20 md:py-24 text-center" style={{ background: monoStyles.bgAlt }}>
+          <div className="max-w-2xl mx-auto">
             <p
-              className="mb-3 text-center text-sm uppercase tracking-widest"
-              style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-body)" }}
+              className="text-xs tracking-[0.3em] uppercase mb-10 animate-fade-in-up"
+              style={{ color: monoStyles.textMuted }}
             >
-              {lang === "ms" ? "Menghitung Hari" : "Counting Down"}
+              {lang === "en" ? "Counting Down" : "Kiraan Mundur"}
             </p>
-            <div className="flex justify-center gap-3">
-              {[
-                { label: t.days, value: countdown.days },
-                { label: t.hours, value: countdown.hours },
-                { label: t.minutes, value: countdown.minutes },
-                { label: t.seconds, value: countdown.seconds },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  className="flex min-w-[60px] flex-col items-center rounded-xl px-3 py-3"
-                  style={{
-                    background: "var(--color-surface)",
-                    border: "1px solid var(--color-border)",
-                  }}
-                >
-                  <span
-                    className="text-2xl font-bold tabular-nums"
-                    style={{ color: "var(--color-primary)", fontFamily: "var(--font-heading)" }}
+            <div className="flex justify-center gap-8 md:gap-16">
+              {(["days", "hours", "minutes", "seconds"] as const).map((k, i) => (
+                <div key={k} className="text-center animate-fade-in-up" style={{ animationDelay: `${0.1 * (i + 1)}s` }}>
+                  <div
+                    className="font-heading text-4xl md:text-6xl"
+                    style={{ color: monoStyles.text, fontWeight: 300 }}
                   >
-                    {String(item.value).padStart(2, "0")}
-                  </span>
-                  <span
-                    className="text-[0.625rem] uppercase tracking-wider"
-                    style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-body)" }}
+                    {String(countdown[k]).padStart(2, "0")}
+                  </div>
+                  <div
+                    className="text-xs tracking-[0.2em] uppercase mt-2"
+                    style={{ color: monoStyles.textMuted }}
                   >
-                    {item.label}
-                  </span>
+                    {k}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
-        )}
+        </section>
+      )}
 
-        {/* Closing dua */}
-        {typeof content.home_closing_text === "string" && content.home_closing_text && (
-          <p
-            className="text-center italic leading-relaxed animate-fade-in-up"
-            style={{
-              color: "var(--color-text-muted)",
-              fontFamily: "var(--font-body)",
-              animationDelay: "0.5s",
-            }}
-          >
-            {content.home_closing_text}
-          </p>
-        )}
-      </div>
+      {/* Closing Dua */}
+      {closingText && (
+        <section className="px-6 py-20 md:py-28 text-center">
+          <div className="max-w-md mx-auto">
+            <p
+              className="font-heading text-lg md:text-xl italic leading-relaxed animate-fade-in-up"
+              style={{ color: monoStyles.textMuted }}
+            >
+              {closingText}
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* Footer */}
+      <footer className="px-6 py-12 text-center border-t" style={{ borderColor: monoStyles.border }}>
+        <p
+          className="text-xs tracking-[0.2em] uppercase"
+          style={{ color: monoStyles.textMuted }}
+        >
+          {wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : ""}
+        </p>
+      </footer>
     </div>
-  );
-}
-
-export function Home() {
-  return (
-    <GuestAuthProvider>
-      <HomeInner />
-    </GuestAuthProvider>
   );
 }
 

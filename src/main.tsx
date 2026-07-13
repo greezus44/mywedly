@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { LanguageProvider } from "./lib/lang-context";
 import { GuestAuthProvider } from "./lib/guest-auth";
 import { Landing } from "./routes/landing";
-import { HostLogin } from "./routes/host-login";
+import { AdminLogin } from "./routes/admin-login";
 import { GuestLayout } from "./routes/guest/guest-layout";
 import { Cover } from "./routes/guest/cover";
 import { GuestLogin } from "./routes/guest/guest-login";
@@ -40,7 +40,7 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Landing />} />
-            <Route path="/host-login" element={<HostLogin />} />
+            <Route path="/admin-login" element={<AdminLogin />} />
             <Route path="/w/:slug" element={<Cover />} />
             <Route path="/w/:slug/login" element={<GuestAuthProvider><GuestLogin /></GuestAuthProvider>} />
             <Route path="/w/:slug" element={<GuestAuthProvider><GuestLayout /></GuestAuthProvider>}>

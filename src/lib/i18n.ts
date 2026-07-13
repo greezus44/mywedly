@@ -1,30 +1,13 @@
 export type Language = "en" | "ms";
 
 export interface Translation {
-  home: string;
-  rsvp: string;
-  doa: string;
-  contact: string;
-  sendMessage: string;
-  enter: string;
-  signOut: string;
-  welcome: string;
-  days: string;
-  hours: string;
-  minutes: string;
-  seconds: string;
-  attending: string;
-  declined: string;
-  pending: string;
-  submit: string;
-  cancel: string;
-  messagePlaceholder: string;
-  namePlaceholder: string;
-  thankYou: string;
-  rsvpSubmitted: string;
-  messageSent: string;
-  loading: string;
-  invalidName: string;
+  home: string; rsvp: string; doa: string; contact: string; sendMessage: string;
+  enter: string; signOut: string; welcome: string;
+  days: string; hours: string; minutes: string; seconds: string;
+  attending: string; declined: string; pending: string;
+  submit: string; cancel: string;
+  messagePlaceholder: string; namePlaceholder: string;
+  thankYou: string; rsvpSubmitted: string; messageSent: string; loading: string; invalidName: string;
 }
 
 export const translations: Record<Language, Translation> = {

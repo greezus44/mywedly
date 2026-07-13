@@ -1,19 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase, type Wedding } from "../../lib/supabase";
+import { supabase, type Wedding, type LoginConfig } from "../../lib/supabase";
 import { useLang } from "../../lib/lang-context";
-import { useGuestAuth, GuestAuthProvider } from "../../lib/guest-auth";
-import {
-  loginToCssVars,
-  getLoginConfig,
-  getLogoStyle,
-  getLogoPositionClasses,
-  DEFAULT_LOGIN_CONFIG,
-} from "../../lib/theme";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { loginToCssVars, getLoginConfig, getLogoStyle } from "../../lib/theme";
 import { getDeviceType } from "../../lib/utils";
-import { Heart, ArrowRight } from "lucide-react";
 
-function GuestLoginInner() {
+export function GuestLogin() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { signIn } = useGuestAuth();
@@ -21,44 +14,50 @@ function GuestLoginInner() {
   const [wedding, setWedding] = useState<Wedding | null>(null);
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!slug) return;
-    supabase
-      .from("weddings")
-      .select("*")
-      .eq("slug", slug)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setWedding(data as Wedding);
-        setLoading(false);
-      });
-  }, [slug]);
+    supabase.from("weddings").select("*").eq("slug", slug).maybeSingle().then(({ data }) => {
+      if (data) {
+        const w = data as Wedding;
+        setWedding(w);
+        // Set default language from login config
+        const loginConfig = getLoginConfig(w);
+        if (loginConfig.language.enabled) {
+          setLang(loginConfig.language.default_lang);
+        }
+      }
+      setLoading(false);
+    });
+  }, [slug, setLang]);
 
-  // Set default language from login config
-  useEffect(() => {
-    if (!wedding) return;
-    const config = getLoginConfig(wedding);
-    if (config.language.enabled) {
-      setLang(config.language.default_lang);
-    }
-  }, [wedding, setLang]);
-
-  const loginConfig = getLoginConfig(wedding);
+  const loginConfig: LoginConfig = getLoginConfig(wedding);
+  const bg = loginConfig.background;
   const device = getDeviceType();
-  const logo = loginConfig.branding?.logo;
-  const logoPos = getLogoPositionClasses(logo?.position || "top-center");
+
+  // Background style
+  const bgStyle: React.CSSProperties = {};
+  if (bg.type === "image" && bg.image_url) {
+    bgStyle.backgroundImage = `url(${bg.image_url})`;
+    bgStyle.backgroundSize = "cover";
+    bgStyle.backgroundPosition = "center";
+  } else if (bg.type === "color") {
+    bgStyle.background = bg.color;
+  }
+
+  const vPosClass = loginConfig.layout.vertical_position === "top" ? "justify-start" : loginConfig.layout.vertical_position === "bottom" ? "justify-end" : "justify-center";
+  const alignClass = loginConfig.layout.content_alignment === "left" ? "items-start text-left" : loginConfig.layout.content_alignment === "right" ? "items-end text-right" : "items-center text-center";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !slug) return;
     setSubmitting(true);
     setError(null);
-    const { error } = await signIn(username, slug);
-    if (error) {
-      setError(error);
+    const { error: signInError } = await signIn(username, slug);
+    if (signInError) {
+      setError(signInError);
       setSubmitting(false);
     } else {
       navigate(`/w/${slug}/home`, { replace: true });
@@ -67,298 +66,258 @@ function GuestLoginInner() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <Heart className="h-8 w-8 animate-pulse text-white" />
+      <div className="flex min-h-screen items-center justify-center" style={{ background: bg.color }}>
+        <div className="animate-pulse text-white/40 text-sm tracking-widest uppercase">Loading...</div>
       </div>
     );
   }
 
-  // Background rendering
-  const renderBackground = () => {
-    const bg = loginConfig.background;
-    const overlayStyle: React.CSSProperties = {
-      background: loginConfig.overlay.color,
-      opacity: loginConfig.overlay.opacity,
-    };
-
-    let bgElement: React.ReactNode = null;
-    if (bg.type === "image" && bg.image_url) {
-      bgElement = (
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{
-            backgroundImage: `url(${bg.image_url})`,
-            filter: `blur(${loginConfig.blur}) brightness(${loginConfig.brightness})`,
-          }}
-        />
-      );
-    } else if (bg.type === "video" && bg.video_url) {
-      bgElement = (
-        <video
-          className="absolute inset-0 h-full w-full object-cover"
-          autoPlay
-          muted
-          loop
-          playsInline
-          style={{ filter: `blur(${loginConfig.blur}) brightness(${loginConfig.brightness})` }}
-        >
-          <source src={bg.video_url} />
-        </video>
-      );
-    } else {
-      bgElement = <div className="absolute inset-0" style={{ background: bg.color }} />;
-    }
-
+  if (!wedding) {
     return (
-      <>
-        {bgElement}
-        {loginConfig.overlay.enabled && (
-          <div className="absolute inset-0" style={overlayStyle} />
-        )}
-      </>
+      <div className="flex min-h-screen items-center justify-center" style={{ background: bg.color }}>
+        <div className="text-center text-white/60">
+          <p className="font-heading text-2xl mb-2">Invitation Not Found</p>
+          <p className="text-sm">Please check your invitation link.</p>
+        </div>
+      </div>
     );
-  };
-
-  const inputStyles = loginConfig.form.input;
-  const buttonStyles = loginConfig.form.button;
-  const langSelector = loginConfig.language_selector;
-  const text = loginConfig.text;
+  }
 
   return (
     <div
-      className="relative min-h-screen overflow-hidden"
-      style={{ ...loginToCssVars(loginConfig) } as React.CSSProperties}
+      className="relative flex min-h-screen flex-col overflow-hidden"
+      style={{ ...loginToCssVars(loginConfig), ...bgStyle, filter: `brightness(${loginConfig.brightness}) blur(${loginConfig.blur})` } as React.CSSProperties}
     >
-      {renderBackground()}
+      {/* Video background */}
+      {bg.type === "video" && bg.video_url && (
+        <video
+          src={bg.video_url}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+
+      {/* Overlay */}
+      {loginConfig.overlay.enabled && (
+        <div
+          className="absolute inset-0"
+          style={{ background: loginConfig.overlay.color, opacity: loginConfig.overlay.opacity }}
+        />
+      )}
 
       {/* Content */}
-      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-8">
-        <div
-          className="w-full animate-fade-in-up"
+      <div
+        className={`relative z-10 flex flex-col p-6 md:p-8 ${vPosClass} ${alignClass} animate-fade-in`}
+        style={{ maxWidth: loginConfig.layout.max_width, margin: loginConfig.layout.margin, width: "100%", gap: loginConfig.layout.spacing, padding: loginConfig.layout.padding }}
+      >
+        {/* Logo */}
+        {loginConfig.branding.logo.visible && loginConfig.branding.logo.url && (
+          <div className="flex justify-center mb-2 animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
+            <img
+              src={loginConfig.branding.logo.url}
+              alt="logo"
+              style={getLogoStyle(loginConfig.branding.logo, device)}
+            />
+          </div>
+        )}
+
+        {/* Title */}
+        <h1
+          className="font-heading animate-fade-in-up"
           style={{
-            maxWidth: loginConfig.layout.max_width,
-            padding: loginConfig.layout.padding,
+            color: "var(--login-text)",
+            fontSize: "var(--login-heading-size)",
+            fontWeight: loginConfig.typography.heading_weight,
+            letterSpacing: loginConfig.typography.letter_spacing,
+            fontFamily: "var(--login-heading-font)",
+            animationDelay: "0.15s",
           }}
         >
-          {/* Card */}
-          <div
-            className="mx-auto rounded-2xl backdrop-blur-xl"
+          {loginConfig.text.title}
+        </h1>
+
+        {/* Subtitle */}
+        {loginConfig.text.subtitle && (
+          <p
+            className="font-body animate-fade-in-up"
             style={{
-              background: "color-mix(in srgb, var(--login-text) 6%, transparent)",
-              border: "1px solid var(--login-border)",
-              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
-              padding: "2.5rem 2rem",
+              color: "var(--login-text)",
+              fontSize: "var(--login-body-size)",
+              opacity: 0.85,
+              fontFamily: "var(--login-body-font)",
+              animationDelay: "0.2s",
             }}
           >
-            {/* Logo */}
-            {logo?.url && logo.visible && (
-              <div className={`mb-6 flex ${logoPos.container}`}>
-                <img
-                  src={logo.url}
-                  alt="Logo"
-                  style={getLogoStyle(logo, device)}
-                />
-              </div>
-            )}
+            {loginConfig.text.subtitle}
+          </p>
+        )}
 
-            {/* Title */}
-            <h1
-              className="mb-1 text-center"
-              style={{
-                color: "var(--login-text)",
-                fontFamily: "var(--login-heading-font)",
-                fontSize: "var(--login-heading-size)",
-                fontWeight: loginConfig.typography.heading_weight,
-                letterSpacing: loginConfig.typography.letter_spacing,
-              }}
-            >
-              {text.title}
-            </h1>
+        {/* Welcome Message */}
+        {loginConfig.text.welcome_message && (
+          <p
+            className="font-body animate-fade-in-up"
+            style={{
+              color: "var(--login-text)",
+              fontSize: "var(--login-body-size)",
+              opacity: 0.7,
+              fontFamily: "var(--login-body-font)",
+              animationDelay: "0.25s",
+            }}
+          >
+            {loginConfig.text.welcome_message}
+          </p>
+        )}
 
-            {/* Subtitle */}
-            <p
-              className="mb-1 text-center"
-              style={{
-                color: "var(--login-text)",
-                opacity: 0.7,
-                fontFamily: "var(--login-body-font)",
-                fontSize: "var(--login-body-size)",
-              }}
-            >
-              {text.subtitle}
-            </p>
-
-            {/* Welcome message */}
-            <p
-              className="mb-6 text-center"
-              style={{
-                color: "var(--login-text)",
-                opacity: 0.6,
-                fontFamily: "var(--login-body-font)",
-                fontSize: "calc(var(--login-body-size) * 0.875)",
-              }}
-            >
-              {text.welcome_message}
-            </p>
-
-            {/* Language selector — segmented control */}
-            {loginConfig.language.enabled && (
-              <div className="mb-6 flex justify-center">
-                <div
-                  className="inline-flex"
-                  style={{
-                    borderRadius: langSelector.button_radius,
-                    border: `1px solid ${langSelector.border_color}`,
-                    padding: "4px",
-                    background: "color-mix(in srgb, var(--login-text) 4%, transparent)",
-                  }}
-                >
-                  {loginConfig.language.order.map((langCode) => {
-                    const isActive = lang === langCode;
-                    const label = loginConfig.language.labels[langCode];
-                    return (
-                      <button
-                        key={langCode}
-                        type="button"
-                        onClick={() => setLang(langCode)}
-                        className="transition-all duration-200 hover:opacity-90"
-                        style={{
-                          background: isActive
-                            ? langSelector.active_bg
-                            : langSelector.inactive_bg,
-                          color: isActive
-                            ? langSelector.active_text
-                            : langSelector.inactive_text,
-                          borderRadius: langSelector.button_radius,
-                          paddingLeft: langSelector.button_padding_x,
-                          paddingRight: langSelector.button_padding_x,
-                          paddingTop: langSelector.button_padding_y,
-                          paddingBottom: langSelector.button_padding_y,
-                          fontSize: langSelector.font_size,
-                          fontWeight: langSelector.font_weight,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Username label (optional) */}
-              {loginConfig.form.username_field.show_label && (
-                <label
-                  className="block text-sm font-medium"
-                  style={{
-                    color: "var(--login-text)",
-                    fontFamily: "var(--login-body-font)",
-                  }}
-                >
-                  {loginConfig.form.username_field.label_text}
-                </label>
-              )}
-
-              {/* Username input */}
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder={text.username_placeholder}
-                autoFocus
-                className="w-full outline-none transition-all duration-200 focus:ring-2"
-                style={{
-                  height: inputStyles.height,
-                  borderRadius: inputStyles.border_radius,
-                  border: `1px solid ${inputStyles.border_color}`,
-                  background: inputStyles.background,
-                  color: inputStyles.text_color,
-                  fontSize: inputStyles.font_size,
-                  padding: inputStyles.padding,
-                  boxShadow: inputStyles.shadow,
-                  // @ts-expect-error CSS custom property
-                  "--tw-ring-color": inputStyles.focus_border_color,
-                }}
-              />
-
-              {/* Error */}
-              {error && (
-                <p
-                  className="text-sm text-center animate-fade-in"
-                  style={{ color: "#ff6b6b" }}
-                >
-                  {error}
-                </p>
-              )}
-
-              {/* Sign-in button */}
+        {/* Language Selector - Segmented Control */}
+        {loginConfig.language.enabled && (
+          <div
+            className="inline-flex animate-fade-in-up self-center"
+            style={{
+              borderRadius: loginConfig.language_selector.button_radius,
+              border: `1px solid ${loginConfig.language_selector.border_color}`,
+              overflow: "hidden",
+              background: "transparent",
+              animationDelay: "0.3s",
+            }}
+          >
+            {loginConfig.language.order.map((l) => (
               <button
-                type="submit"
-                disabled={submitting || !username.trim()}
-                className="group flex w-full items-center justify-center gap-2 transition-all duration-200 hover:scale-[1.02] active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
+                key={l}
+                type="button"
+                onClick={() => setLang(l)}
                 style={{
-                  height: buttonStyles.height,
-                  borderRadius: buttonStyles.border_radius,
-                  background: buttonStyles.bg_color,
-                  color: buttonStyles.text_color,
-                  fontSize: buttonStyles.font_size,
-                  fontWeight: buttonStyles.font_weight,
-                  boxShadow: buttonStyles.shadow,
+                  padding: `${loginConfig.language_selector.button_padding_y} ${loginConfig.language_selector.button_padding_x}`,
+                  fontSize: loginConfig.language_selector.font_size,
+                  fontWeight: loginConfig.language_selector.font_weight,
+                  borderRadius: loginConfig.language_selector.button_radius,
+                  background: lang === l ? loginConfig.language_selector.active_bg : loginConfig.language_selector.inactive_bg,
+                  color: lang === l ? loginConfig.language_selector.active_text : loginConfig.language_selector.inactive_text,
+                  transition: "all 0.25s ease",
                   border: "none",
-                  cursor: submitting ? "not-allowed" : "pointer",
-                }}
-              >
-                {submitting ? buttonStyles.loading_text : text.button_text}
-                {!submitting && <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />}
-              </button>
-            </form>
-
-            {/* Helper text */}
-            {text.helper_text && (
-              <p
-                className="mt-4 text-center text-sm"
-                style={{
-                  color: "var(--login-text)",
-                  opacity: 0.5,
+                  cursor: "pointer",
                   fontFamily: "var(--login-body-font)",
                 }}
               >
-                {text.helper_text}
-              </p>
-            )}
-
-            {/* Footer message */}
-            {text.footer_message && (
-              <div className="mt-6 flex items-center justify-center gap-2">
-                <span className="h-px w-8" style={{ background: "var(--login-border)" }} />
-                <p
-                  className="text-center text-xs italic"
-                  style={{
-                    color: "var(--login-text)",
-                    opacity: 0.6,
-                    fontFamily: "var(--login-body-font)",
-                  }}
-                >
-                  {text.footer_message}
-                </p>
-                <span className="h-px w-8" style={{ background: "var(--login-border)" }} />
-              </div>
-            )}
+                {loginConfig.language.labels[l]}
+              </button>
+            ))}
           </div>
-        </div>
+        )}
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="w-full animate-fade-in-up" style={{ animationDelay: "0.35s" }}>
+          {/* Username Label */}
+          {loginConfig.form.username_field.show_label && (
+            <label
+              className="block font-body text-sm mb-2"
+              style={{
+                color: "var(--login-text)",
+                opacity: 0.8,
+                fontFamily: "var(--login-body-font)",
+              }}
+            >
+              {loginConfig.form.username_field.label_text}
+            </label>
+          )}
+
+          {/* Username Input */}
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder={loginConfig.text.username_placeholder}
+            disabled={submitting}
+            className="w-full transition-all focus:outline-none"
+            style={{
+              width: loginConfig.form.input.width,
+              height: loginConfig.form.input.height,
+              borderRadius: loginConfig.form.input.border_radius,
+              border: `1px solid ${loginConfig.form.input.border_color}`,
+              background: loginConfig.form.input.background,
+              color: loginConfig.form.input.text_color,
+              fontSize: loginConfig.form.input.font_size,
+              padding: loginConfig.form.input.padding,
+              boxShadow: loginConfig.form.input.shadow,
+              fontFamily: "var(--login-body-font)",
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = loginConfig.form.input.focus_border_color;
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = loginConfig.form.input.border_color;
+            }}
+          />
+
+          {/* Error message */}
+          {error && (
+            <p
+              className="mt-3 text-sm font-body"
+              style={{
+                color: "#f87171",
+                fontFamily: "var(--login-body-font)",
+              }}
+            >
+              {error}
+            </p>
+          )}
+
+          {/* Sign-in Button */}
+          <button
+            type="submit"
+            disabled={submitting || !username.trim()}
+            className="mt-4 transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              width: loginConfig.form.button.width,
+              height: loginConfig.form.button.height,
+              borderRadius: loginConfig.form.button.border_radius,
+              background: "var(--login-button-bg)",
+              color: "var(--login-button-text)",
+              fontSize: loginConfig.form.button.font_size,
+              fontWeight: loginConfig.form.button.font_weight,
+              boxShadow: loginConfig.form.button.shadow,
+              border: "none",
+              cursor: "pointer",
+              fontFamily: "var(--login-body-font)",
+            }}
+          >
+            {submitting ? loginConfig.form.button.loading_text : loginConfig.text.button_text}
+          </button>
+        </form>
+
+        {/* Helper text */}
+        {loginConfig.text.helper_text && (
+          <p
+            className="font-body text-sm animate-fade-in-up"
+            style={{
+              color: "var(--login-text)",
+              opacity: 0.6,
+              fontFamily: "var(--login-body-font)",
+              animationDelay: "0.4s",
+            }}
+          >
+            {loginConfig.text.helper_text}
+          </p>
+        )}
+
+        {/* Footer message */}
+        {loginConfig.text.footer_message && (
+          <p
+            className="font-body text-sm mt-4 animate-fade-in-up"
+            style={{
+              color: "var(--login-text)",
+              opacity: 0.5,
+              fontFamily: "var(--login-body-font)",
+              animationDelay: "0.45s",
+            }}
+          >
+            {loginConfig.text.footer_message}
+          </p>
+        )}
       </div>
     </div>
-  );
-}
-
-export function GuestLogin() {
-  return (
-    <GuestAuthProvider>
-      <GuestLoginInner />
-    </GuestAuthProvider>
   );
 }
 

@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type Wedding, type GuestbookEntry, type WeddingEvent, type Rsvp, type Guest, type SharingEvent } from "../../lib/supabase";
+import { supabase, type Wedding, type WeddingEvent, type GuestbookEntry, type SharingEvent } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { Card, Badge, EmptyState } from "../../components/ui/index";
 import { formatDate, formatTime } from "../../lib/utils";
-import { Users, Calendar, Heart, MessageSquare, Globe, Eye, CheckCircle2, Clock } from "lucide-react";
+import { Users, Calendar, MessageSquare, Eye, Globe, CheckCircle, Clock } from "lucide-react";
 
 export function OverviewPage() {
-  const { data: wedding, isLoading } = useQuery({
+  const { data: wedding, isLoading: wLoading } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -16,38 +16,24 @@ export function OverviewPage() {
     },
   });
 
-  const { data: guests } = useQuery({
-    queryKey: ["guests"],
+  const { data: stats } = useQuery({
+    queryKey: ["overview-stats", wedding?.id],
     queryFn: async () => {
-      if (!wedding) return [];
-      const { data } = await supabase.from("guests").select("*").eq("wedding_id", wedding.id);
-      return (data || []) as Guest[];
+      if (!wedding) return { guests: 0, events: 0, rsvps: 0, messages: 0, visits: 0 };
+      const [guests, events, rsvps, messages, visits] = await Promise.all([
+        supabase.from("guests").select("id", { count: "exact", head: true }).eq("wedding_id", wedding.id),
+        supabase.from("events").select("id", { count: "exact", head: true }).eq("wedding_id", wedding.id),
+        supabase.from("rsvps").select("id", { count: "exact", head: true }).eq("wedding_id", wedding.id),
+        supabase.from("guestbook_entries").select("id", { count: "exact", head: true }).eq("wedding_id", wedding.id),
+        supabase.from("sharing_events").select("id", { count: "exact", head: true }).eq("wedding_id", wedding.id),
+      ]);
+      return { guests: guests.count || 0, events: events.count || 0, rsvps: rsvps.count || 0, messages: messages.count || 0, visits: visits.count || 0 };
     },
     enabled: !!wedding,
   });
 
-  const { data: events } = useQuery({
-    queryKey: ["events"],
-    queryFn: async () => {
-      if (!wedding) return [];
-      const { data } = await supabase.from("events").select("*").eq("wedding_id", wedding.id).order("starts_at", { ascending: true });
-      return (data || []) as WeddingEvent[];
-    },
-    enabled: !!wedding,
-  });
-
-  const { data: rsvps } = useQuery({
-    queryKey: ["rsvps"],
-    queryFn: async () => {
-      if (!wedding) return [];
-      const { data } = await supabase.from("rsvps").select("*").eq("wedding_id", wedding.id);
-      return (data || []) as Rsvp[];
-    },
-    enabled: !!wedding,
-  });
-
-  const { data: messages } = useQuery({
-    queryKey: ["messages"],
+  const { data: recentMessages } = useQuery({
+    queryKey: ["recent-messages", wedding?.id],
     queryFn: async () => {
       if (!wedding) return [];
       const { data } = await supabase.from("guestbook_entries").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false }).limit(5);
@@ -56,135 +42,77 @@ export function OverviewPage() {
     enabled: !!wedding,
   });
 
-  const { data: visits } = useQuery({
-    queryKey: ["sharing-events"],
+  const { data: upcomingEvents } = useQuery({
+    queryKey: ["upcoming-events", wedding?.id],
     queryFn: async () => {
       if (!wedding) return [];
-      const { count } = await supabase.from("sharing_events").select("*", { count: "exact", head: true }).eq("wedding_id", wedding.id).eq("event_type", "visit");
-      return count || 0;
+      const { data } = await supabase.from("events").select("*").eq("wedding_id", wedding.id).order("starts_at", { ascending: true }).limit(5);
+      return (data || []) as WeddingEvent[];
     },
     enabled: !!wedding,
   });
 
-  const upcomingEvents = (events || [])
-    .filter((e) => e.starts_at && new Date(e.starts_at) > new Date())
-    .slice(0, 5);
+  if (wLoading) return <AdminLayout><div className="flex items-center justify-center py-12 text-gray-500">Loading...</div></AdminLayout>;
 
-  const stats = [
-    { label: "Total Guests", value: guests?.length || 0, icon: Users, color: "text-indigo-600", bg: "bg-indigo-50" },
-    { label: "Events", value: events?.length || 0, icon: Calendar, color: "text-blue-600", bg: "bg-blue-50" },
-    { label: "RSVPs", value: rsvps?.length || 0, icon: Heart, color: "text-pink-600", bg: "bg-pink-50" },
-    { label: "Messages", value: messages?.length || 0, icon: MessageSquare, color: "text-green-600", bg: "bg-green-50" },
-    {
-      label: "Published",
-      value: wedding?.is_published ? "Yes" : "No",
-      icon: wedding?.is_published ? CheckCircle2 : Globe,
-      color: wedding?.is_published ? "text-green-600" : "text-gray-500",
-      bg: wedding?.is_published ? "bg-green-50" : "bg-gray-100",
-    },
-    { label: "Visits", value: visits || 0, icon: Eye, color: "text-purple-600", bg: "bg-purple-50" },
+  const statCards = [
+    { label: "Total Guests", value: stats?.guests ?? 0, icon: Users, color: "text-gray-900" },
+    { label: "Events", value: stats?.events ?? 0, icon: Calendar, color: "text-gray-900" },
+    { label: "RSVPs", value: stats?.rsvps ?? 0, icon: CheckCircle, color: "text-gray-900" },
+    { label: "Messages", value: stats?.messages ?? 0, icon: MessageSquare, color: "text-gray-900" },
+    { label: "Published", value: wedding?.is_published ? "Yes" : "No", icon: Globe, color: "text-gray-900" },
+    { label: "Visits", value: stats?.visits ?? 0, icon: Eye, color: "text-gray-900" },
   ];
-
-  if (isLoading) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center py-20">
-          <div className="text-gray-500">Loading dashboard...</div>
-        </div>
-      </AdminLayout>
-    );
-  }
-
-  if (!wedding) {
-    return (
-      <AdminLayout>
-        <Card>
-          <EmptyState icon={<Heart className="h-12 w-12" />} title="No wedding found" description="Create a wedding to get started." />
-        </Card>
-      </AdminLayout>
-    );
-  }
 
   return (
     <AdminLayout>
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Dashboard Overview</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          Welcome back! Here's what's happening with {wedding.couple_name_one} & {wedding.couple_name_two}'s wedding.
-        </p>
-      </div>
-
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="p-4">
-            <div className="flex items-center justify-between">
-              <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${stat.bg}`}>
-                <stat.icon className={`h-5 w-5 ${stat.color}`} />
-              </div>
+      <h2 className="mb-6 text-xl font-semibold text-gray-900">Dashboard Overview</h2>
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {statCards.map((s) => (
+          <Card key={s.label} className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">{s.label}</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900">{s.value}</p>
             </div>
-            <p className="mt-3 text-2xl font-semibold text-gray-900">{stat.value}</p>
-            <p className="text-sm text-gray-500">{stat.label}</p>
+            <div className="rounded-lg bg-gray-100 p-3"><s.icon className="h-6 w-6 text-gray-700" /></div>
           </Card>
         ))}
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        {/* Recent Messages */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">Recent Messages</h3>
-            <Badge variant="info">{messages?.length || 0}</Badge>
-          </div>
-          {messages && messages.length > 0 ? (
+          <h3 className="mb-4 text-base font-semibold text-gray-900">Recent Messages</h3>
+          {recentMessages && recentMessages.length > 0 ? (
             <div className="space-y-3">
-              {messages.map((msg) => (
-                <div key={msg.id} className="border-b border-gray-100 pb-3 last:border-0">
+              {recentMessages.map((m) => (
+                <div key={m.id} className="border-b border-gray-200 pb-3 last:border-0">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-900">{msg.author_name}</span>
-                    <Badge variant={msg.status === "approved" ? "success" : msg.status === "pending" ? "warning" : "error"}>
-                      {msg.status}
-                    </Badge>
+                    <span className="text-sm font-medium text-gray-900">{m.author_name}</span>
+                    <Badge variant={m.status === "approved" ? "success" : m.status === "rejected" ? "error" : "warning"}>{m.status}</Badge>
                   </div>
-                  <p className="mt-1 text-sm text-gray-600 line-clamp-2">{msg.message}</p>
+                  <p className="mt-1 text-sm text-gray-500 line-clamp-2">{m.message}</p>
                 </div>
               ))}
             </div>
-          ) : (
-            <EmptyState icon={<MessageSquare className="h-8 w-8" />} title="No messages yet" description="Guest messages will appear here." />
-          )}
+          ) : <EmptyState icon={<MessageSquare className="h-8 w-8" />} title="No messages yet" />}
         </Card>
 
-        {/* Upcoming Events */}
         <Card>
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">Upcoming Events</h3>
-            <Badge variant="info">{upcomingEvents.length}</Badge>
-          </div>
-          {upcomingEvents.length > 0 ? (
+          <h3 className="mb-4 text-base font-semibold text-gray-900">Upcoming Events</h3>
+          {upcomingEvents && upcomingEvents.length > 0 ? (
             <div className="space-y-3">
-              {upcomingEvents.map((event) => (
-                <div key={event.id} className="flex items-start gap-3 border-b border-gray-100 pb-3 last:border-0">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50">
-                    <Calendar className="h-5 w-5 text-indigo-600" />
-                  </div>
+              {upcomingEvents.map((e) => (
+                <div key={e.id} className="flex items-start gap-3 border-b border-gray-200 pb-3 last:border-0">
+                  <div className="rounded-lg bg-gray-100 p-2"><Calendar className="h-4 w-4 text-gray-700" /></div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">{event.name}</p>
-                    <div className="mt-1 flex items-center gap-3 text-xs text-gray-500">
-                      {event.starts_at && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" /> {formatDate(event.starts_at)} · {formatTime(event.starts_at)}
-                        </span>
-                      )}
-                      {event.venue_name && <span>{event.venue_name}</span>}
-                    </div>
+                    <p className="text-sm font-medium text-gray-900">{e.name}</p>
+                    <p className="text-sm text-gray-500">{formatDate(e.starts_at)} {e.starts_at && `at ${formatTime(e.starts_at)}`}</p>
+                    {e.venue_name && <p className="text-xs text-gray-400">{e.venue_name}</p>}
                   </div>
+                  <Badge variant="info">{e.kind}</Badge>
                 </div>
               ))}
             </div>
-          ) : (
-            <EmptyState icon={<Calendar className="h-8 w-8" />} title="No upcoming events" description="Add events to see them here." />
-          )}
+          ) : <EmptyState icon={<Clock className="h-8 w-8" />} title="No events yet" />}
         </Card>
       </div>
     </AdminLayout>

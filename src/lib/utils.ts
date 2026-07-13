@@ -10,32 +10,27 @@ export function formatDate(date: string | null, lang: "en" | "ms" = "en"): strin
       ? ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"]
       : ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
-  } catch {
-    return date;
-  }
+  } catch { return date; }
 }
 
 export function formatTime(date: string | null): string {
   if (!date) return "";
-  try {
-    const d = new Date(date);
-    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return date;
-  }
+  try { const d = new Date(date); return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }); }
+  catch { return date; }
 }
 
 export function getCountdown(targetDate: string | null): { days: number; hours: number; minutes: number; seconds: number; isPast: boolean } {
   if (!targetDate) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
   const target = new Date(targetDate).getTime();
-  const now = Date.now();
-  const diff = target - now;
+  const diff = target - Date.now();
   if (diff < 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-  return { days, hours, minutes, seconds, isPast: false };
+  return {
+    days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+    hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+    minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+    seconds: Math.floor((diff % (1000 * 60)) / 1000),
+    isPast: false,
+  };
 }
 
 export function generateToken(): string {

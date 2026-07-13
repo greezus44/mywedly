@@ -5,7 +5,7 @@ import { AdminLayout } from "./admin-layout";
 import { SplitEditor, type DeviceType } from "../../components/preview/SplitEditor";
 import { SendMessagePreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Textarea } from "../../components/ui/Input";
+import { Input, Textarea } from "../../components/ui/Input";
 import { Card } from "../../components/ui/index";
 import { FormField } from "../../components/ui/ImageUpload";
 import { Save } from "lucide-react";
@@ -13,7 +13,6 @@ import { Save } from "lucide-react";
 export function ContentMessagePage() {
   const [device, setDevice] = useState<DeviceType>("desktop");
   const [content, setContent] = useState<WeddingContent>({});
-  const [toast, setToast] = useState<string | null>(null);
   const qc = useQueryClient();
 
   const { data: wedding } = useQuery({
@@ -37,52 +36,26 @@ export function ContentMessagePage() {
       const { error } = await supabase.from("weddings").update({ draft_content: content }).eq("created_by", user.user.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["wedding"] });
-      setToast("Draft saved");
-      setTimeout(() => setToast(null), 2000);
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wedding"] }),
   });
 
   const update = (patch: Partial<WeddingContent>) => setContent({ ...content, ...patch });
-
-  const previewWedding: Wedding | null = wedding ? { ...wedding, draft_content: content } : null;
+  const previewWedding = wedding ? { ...wedding, draft_content: content } : null;
 
   return (
     <AdminLayout>
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-gray-900">Message Editor</h2>
-        <Button onClick={() => save.mutate()} disabled={save.isPending}>
-          <Save className="mr-2 h-4 w-4" /> {save.isPending ? "Saving..." : "Save Draft"}
-        </Button>
+        <h2 className="text-xl font-semibold text-gray-900">Message Content</h2>
+        <Button onClick={() => save.mutate()} disabled={save.isPending}><Save className="mr-2 h-4 w-4" /> {save.isPending ? "Saving..." : "Save Draft"}</Button>
       </div>
 
       <SplitEditor device={device} onDeviceChange={setDevice} preview={(d) => <SendMessagePreview wedding={previewWedding} device={d} />}>
-        <div className="space-y-4">
-          <Card className="space-y-4">
-            <h3 className="font-semibold text-gray-900">Message Settings</h3>
-            <FormField label="Message Intro">
-              <Textarea value={content.message_intro || ""} onChange={(e) => update({ message_intro: e.target.value })} placeholder="Introduction for the guestbook / message section" />
-            </FormField>
-          </Card>
-
-          <Card className="space-y-4">
-            <h3 className="font-semibold text-gray-900">RSVP Settings</h3>
-            <FormField label="RSVP Intro">
-              <Textarea value={content.rsvp_intro || ""} onChange={(e) => update({ rsvp_intro: e.target.value })} placeholder="Introduction text for RSVP section" />
-            </FormField>
-            <FormField label="RSVP Closing">
-              <Textarea value={content.rsvp_closing || ""} onChange={(e) => update({ rsvp_closing: e.target.value })} placeholder="Closing message after RSVP" />
-            </FormField>
-          </Card>
-        </div>
+        <Card className="space-y-4">
+          <FormField label="Message Intro"><Textarea value={content.message_intro || ""} onChange={(e) => update({ message_intro: e.target.value })} placeholder="Message intro text" /></FormField>
+          <FormField label="RSVP Intro"><Textarea value={content.rsvp_intro || ""} onChange={(e) => update({ rsvp_intro: e.target.value })} placeholder="RSVP intro text" /></FormField>
+          <FormField label="RSVP Closing"><Input value={content.rsvp_closing || ""} onChange={(e) => update({ rsvp_closing: e.target.value })} placeholder="RSVP closing text" /></FormField>
+        </Card>
       </SplitEditor>
-
-      {toast && (
-        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white shadow-lg">
-          {toast}
-        </div>
-      )}
     </AdminLayout>
   );
 }

@@ -26,10 +26,7 @@ export function LoginEditorPage() {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
       const { data } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).maybeSingle();
-      if (data) {
-        const c = (data as Wedding).draft_login_config || (data as Wedding).login_config || DEFAULT_LOGIN_CONFIG;
-        setConfig(c);
-      }
+      if (data) { const c = (data as Wedding).draft_login_config || (data as Wedding).login_config || DEFAULT_LOGIN_CONFIG; setConfig(c); }
       return data as Wedding | null;
     },
   });
@@ -45,7 +42,6 @@ export function LoginEditorPage() {
   });
 
   const update = (patch: Partial<LoginConfig>) => setConfig({ ...config, ...patch });
-
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: "branding", label: "Branding", icon: <Sparkles className="h-4 w-4" /> },
     { id: "text", label: "Text Content", icon: <Type className="h-4 w-4" /> },
@@ -66,26 +62,12 @@ export function LoginEditorPage() {
           <Button onClick={() => save.mutate()} disabled={save.isPending}><Save className="mr-2 h-4 w-4" /> {save.isPending ? "Saving..." : "Save Draft"}</Button>
         </div>
       </div>
-
       <div className="mb-4 flex gap-2 border-b border-gray-200 overflow-x-auto">
-        {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t.id ? "border-indigo-500 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
-            {t.icon} {t.label}
-          </button>
-        ))}
+        {tabs.map((t) => (<button key={t.id} onClick={() => setTab(t.id)} className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t.id ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-700"}`}>{t.icon} {t.label}</button>))}
       </div>
-
       <SplitEditor device={device} onDeviceChange={setDevice} preview={(d) => <LoginPreview wedding={wedding || null} device={d} />}>
         <Card className="space-y-4">
-          {/* Branding */}
-          {tab === "branding" && (
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-900">Logo</h3>
-              <LogoControls logo={config.branding.logo} onChange={(logo) => update({ branding: { logo } })} device={device} />
-            </div>
-          )}
-
-          {/* Text Content */}
+          {tab === "branding" && (<div className="space-y-4"><h3 className="text-sm font-semibold text-gray-900">Logo</h3><LogoControls logo={config.branding.logo} onChange={(logo) => update({ branding: { logo } })} device={device} /></div>)}
           {tab === "text" && (
             <div className="space-y-4">
               <FormField label="Page Title"><Input value={config.text.title} onChange={(e) => update({ text: { ...config.text, title: e.target.value } })} /></FormField>
@@ -97,8 +79,6 @@ export function LoginEditorPage() {
               <FormField label="Footer Message"><Input value={config.text.footer_message} onChange={(e) => update({ text: { ...config.text, footer_message: e.target.value } })} /></FormField>
             </div>
           )}
-
-          {/* Language Settings */}
           {tab === "language" && (
             <div className="space-y-4">
               <Toggle checked={config.language.enabled} onChange={(v) => update({ language: { ...config.language, enabled: v } })} label="Enable language selector" />
@@ -106,7 +86,6 @@ export function LoginEditorPage() {
               <FormField label="English Label"><Input value={config.language.labels.en} onChange={(e) => update({ language: { ...config.language, labels: { ...config.language.labels, en: e.target.value } } })} /></FormField>
               <FormField label="Bahasa Melayu Label"><Input value={config.language.labels.ms} onChange={(e) => update({ language: { ...config.language, labels: { ...config.language.labels, ms: e.target.value } } })} /></FormField>
               <FormField label="Language Order"><Select value={config.language.order.join(",")} onChange={(e) => update({ language: { ...config.language, order: e.target.value.split(",") as ("en" | "ms")[] } })}><option value="en,ms">English first</option><option value="ms,en">Bahasa Melayu first</option></Select></FormField>
-
               <div className="border-t pt-4">
                 <h4 className="mb-3 text-sm font-semibold text-gray-900">Language Selector Style</h4>
                 <FormField label="Selector Style"><Select value={config.language_selector.style} onChange={(e) => update({ language_selector: { ...config.language_selector, style: e.target.value as "segmented" | "dropdown" } })}><option value="segmented">Segmented Control</option><option value="dropdown">Dropdown</option></Select></FormField>
@@ -126,14 +105,10 @@ export function LoginEditorPage() {
                   <ColorInput label="Inactive Text" value={config.language_selector.inactive_text} onChange={(v) => update({ language_selector: { ...config.language_selector, inactive_text: v } })} />
                   <ColorInput label="Border" value={config.language_selector.border_color} onChange={(v) => update({ language_selector: { ...config.language_selector, border_color: v } })} />
                 </div>
-                <div className="mt-3">
-                  <Input label="Font Weight" value={config.language_selector.font_weight} onChange={(e) => update({ language_selector: { ...config.language_selector, font_weight: e.target.value } })} />
-                </div>
+                <div className="mt-3"><Input label="Font Weight" value={config.language_selector.font_weight} onChange={(e) => update({ language_selector: { ...config.language_selector, font_weight: e.target.value } })} /></div>
               </div>
             </div>
           )}
-
-          {/* Background */}
           {tab === "background" && (
             <div className="space-y-4">
               <FormField label="Background Type"><Select value={config.background.type} onChange={(e) => update({ background: { ...config.background, type: e.target.value as "image" | "video" | "color" } })}><option value="image">Image</option><option value="video">Video</option><option value="color">Solid Colour</option></Select></FormField>
@@ -147,8 +122,6 @@ export function LoginEditorPage() {
               <RangeInput label="Brightness" value={config.brightness} min={0} max={2} step={0.05} onChange={(v) => update({ brightness: v })} />
             </div>
           )}
-
-          {/* Theme Colours */}
           {tab === "theme" && (
             <div className="space-y-4">
               <ColorInput label="Primary Colour" value={config.theme.primary} onChange={(v) => update({ theme: { ...config.theme, primary: v } })} />
@@ -161,8 +134,6 @@ export function LoginEditorPage() {
               <ColorInput label="Border Colour" value={config.theme.border} onChange={(v) => update({ theme: { ...config.theme, border: v } })} />
             </div>
           )}
-
-          {/* Typography */}
           {tab === "typography" && (
             <div className="space-y-4">
               <FormField label="Heading Font"><Select value={config.typography.heading_font} onChange={(e) => update({ typography: { ...config.typography, heading_font: e.target.value } })}>{FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}</Select></FormField>
@@ -174,8 +145,6 @@ export function LoginEditorPage() {
               <Input label="Letter Spacing" value={config.typography.letter_spacing} onChange={(e) => update({ typography: { ...config.typography, letter_spacing: e.target.value } })} />
             </div>
           )}
-
-          {/* Form Customisation */}
           {tab === "form" && (
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-gray-900">Username Input</h4>
@@ -200,7 +169,6 @@ export function LoginEditorPage() {
               <Input label="Padding" value={config.form.input.padding} onChange={(e) => update({ form: { ...config.form, input: { ...config.form.input, padding: e.target.value } } })} />
               <Toggle checked={config.form.username_field.show_label} onChange={(v) => update({ form: { ...config.form, username_field: { ...config.form.username_field, show_label: v } } })} label="Show field label" />
               <FormField label="Label Text"><Input value={config.form.username_field.label_text} onChange={(e) => update({ form: { ...config.form, username_field: { ...config.form.username_field, label_text: e.target.value } } })} /></FormField>
-
               <div className="border-t pt-4">
                 <h4 className="text-sm font-semibold text-gray-900">Sign-In Button</h4>
                 <div className="mt-3 grid grid-cols-2 gap-3">
@@ -219,17 +187,11 @@ export function LoginEditorPage() {
                   <ColorInput label="Hover BG" value={config.form.button.hover_bg_color} onChange={(v) => update({ form: { ...config.form, button: { ...config.form.button, hover_bg_color: v } } })} />
                   <Input label="Font Weight" value={config.form.button.font_weight} onChange={(e) => update({ form: { ...config.form, button: { ...config.form.button, font_weight: e.target.value } } })} />
                 </div>
-                <div className="mt-3">
-                  <Input label="Shadow" value={config.form.button.shadow} onChange={(e) => update({ form: { ...config.form, button: { ...config.form.button, shadow: e.target.value } } })} />
-                </div>
-                <div className="mt-3">
-                  <FormField label="Loading Text"><Input value={config.form.button.loading_text} onChange={(e) => update({ form: { ...config.form, button: { ...config.form.button, loading_text: e.target.value } } })} /></FormField>
-                </div>
+                <div className="mt-3"><Input label="Shadow" value={config.form.button.shadow} onChange={(e) => update({ form: { ...config.form, button: { ...config.form.button, shadow: e.target.value } } })} /></div>
+                <div className="mt-3"><FormField label="Loading Text"><Input value={config.form.button.loading_text} onChange={(e) => update({ form: { ...config.form, button: { ...config.form.button, loading_text: e.target.value } } })} /></FormField></div>
               </div>
             </div>
           )}
-
-          {/* Layout */}
           {tab === "layout" && (
             <div className="space-y-4">
               <FormField label="Content Alignment"><Select value={config.layout.content_alignment} onChange={(e) => update({ layout: { ...config.layout, content_alignment: e.target.value as "left" | "center" | "right" } })}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></Select></FormField>
