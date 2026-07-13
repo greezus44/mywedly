@@ -1,134 +1,278 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Send } from "lucide-react";
-import { supabase } from "../../lib/supabase";
-import { useGuestAuth } from "../../lib/guest-auth";
+import { supabase, type Wedding } from "../../lib/supabase";
 import { useLang } from "../../lib/lang-context";
-import { themeToCssVars, coverToCssVars, getTheme, getCoverConfig, getCoverContent, getLogoConfig, getLogoStyle } from "../../lib/theme";
-import { getDeviceType, cn } from "../../lib/utils";
+import { useGuestAuth, GuestAuthProvider } from "../../lib/guest-auth";
+import {
+  themeToCssVars,
+  getTheme,
+  getLogoConfig,
+  getLogoStyle,
+  shouldShowLogo,
+} from "../../lib/theme";
+import { getDeviceType } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { Textarea, Label } from "../../components/ui/Input";
+import { Textarea } from "../../components/ui/Input";
+import { Heart, Send, Check } from "lucide-react";
 
 const MAX_CHARS = 500;
 
-export function SendMessage() {
+function SendMessageInner() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { session } = useGuestAuth();
+  const { session, loading } = useGuestAuth();
   const { lang, t } = useLang();
+  const [wedding, setWedding] = useState<Wedding | null>(null);
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
-    if (!session) navigate(`/w/${slug}/login`, { replace: true });
-  }, [session, slug, navigate]);
+    if (loading) return;
+    if (!session || (slug && session.wedding_slug !== slug)) {
+      navigate(`/w/${slug}/login`, { replace: true });
+    }
+  }, [session, loading, slug, navigate]);
 
-  if (!session) return null;
-
-  const wedding = session.wedding;
-  const theme = getTheme(wedding);
-  const cover = getCoverConfig(wedding);
-  const content = getCoverContent(wedding);
-  const logo = getLogoConfig(wedding);
-  const device = getDeviceType();
-  const authorName = session.guest.full_name;
-
-  const showLogo = logo.visible && logo.url && (logo.showOnPages === "all-pages" || (logo.showOnPages === "custom" && logo.customPages.includes("send-message")));
+  useEffect(() => {
+    if (!session) return;
+    supabase
+      .from("weddings")
+      .select("*")
+      .eq("id", session.wedding_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setWedding(data as Wedding);
+      });
+  }, [session]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim()) return;
+    if (!session || !message.trim()) return;
     setSubmitting(true);
-    setError(null);
-    const { error: insertError } = await supabase.from("guestbook_entries").insert({
-      wedding_id: wedding.id,
-      author_name: authorName,
+    const { error } = await supabase.from("guestbook_entries").insert({
+      wedding_id: session.wedding_id,
+      guest_id: session.guest_id,
+      author_name: session.guest_name,
       message: message.trim(),
-      is_approved: false,
+      status: "pending",
     });
-    if (insertError) { setError("Failed to send message. Please try again."); setSubmitting(false); return; }
-    setSuccess(true);
-    setMessage("");
+    if (!error) {
+      setSubmitted(true);
+      setMessage("");
+    }
     setSubmitting(false);
-    setTimeout(() => setSuccess(false), 4000);
   };
 
-  const charsRemaining = MAX_CHARS - message.length;
-  const isOverLimit = message.length > MAX_CHARS;
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--color-bg)" }}>
+        <Heart className="h-8 w-8 animate-pulse" style={{ color: "var(--color-primary)" }} />
+      </div>
+    );
+  }
+
+  if (!session) return null;
+
+  const theme = getTheme(wedding);
+  const content = (wedding?.content || wedding?.draft_content || {}) as Record<string, unknown>;
+  const logo = getLogoConfig(wedding);
+  const device = getDeviceType();
+  const remaining = MAX_CHARS - message.length;
 
   return (
     <div
-      className="min-h-screen px-6 py-12 md:py-20"
-      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover) } as React.CSSProperties}
+      className="min-h-screen"
+      style={{ ...themeToCssVars(theme) } as React.CSSProperties}
     >
-      <div className="max-w-2xl mx-auto">
-        {showLogo && (
-          <div className="flex justify-center mb-8 animate-fade-in">
-            <img src={logo.url!} alt="Logo" style={getLogoStyle(logo, device)} />
+      <div className="mx-auto max-w-2xl px-4 py-8">
+        {/* Logo */}
+        {shouldShowLogo(logo, "send-message") && logo.url && (
+          <div className="mb-8 flex justify-center animate-fade-in">
+            <img src={logo.url} alt="Logo" style={getLogoStyle(logo, device)} />
           </div>
         )}
 
-        <div className="text-center mb-8 animate-fade-in-up">
-          <h1 className="font-script text-4xl text-[var(--color-primary)] mb-3">{t("sendMessage")}</h1>
-          {content.message_intro && (
-            <p className="font-body text-lg text-[var(--color-text-muted)]">{content.message_intro}</p>
-          )}
+        {/* Header */}
+        <div className="mb-8 text-center animate-fade-in-up">
+          <h1
+            className="mb-2"
+            style={{
+              color: "var(--color-text)",
+              fontFamily: "var(--font-heading)",
+              fontSize: "2rem",
+            }}
+          >
+            {t.sendMessage}
+          </h1>
+          <div className="mx-auto flex w-16 items-center justify-center gap-2">
+            <span className="h-px flex-1" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
+            <Heart className="h-4 w-4" style={{ color: "var(--color-primary)" }} />
+            <span className="h-px flex-1" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
+          </div>
         </div>
 
-        <div className="bg-[var(--color-surface)] border border-[var(--color-border)]/20 rounded-lg p-6 md:p-8 animate-fade-in-up opacity-0-init delay-200">
-          {success && (
-            <div className="mb-6 px-4 py-3 bg-[var(--color-success)]/10 border border-[var(--color-success)]/30 rounded-lg text-center animate-success-pop">
-              <p className="font-ui text-sm text-[var(--color-success)]">{t("messageSent")}</p>
-            </div>
-          )}
+        {/* Message intro */}
+        {typeof content.message_intro === "string" && content.message_intro && (
+          <p
+            className="mb-6 text-center leading-relaxed animate-fade-in-up"
+            style={{
+              color: "var(--color-text-muted)",
+              fontFamily: "var(--font-body)",
+              animationDelay: "0.1s",
+            }}
+          >
+            {content.message_intro}
+          </p>
+        )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <Label>{t("username")}</Label>
-              <div className="px-4 py-3 bg-[var(--color-bg)] border border-[var(--color-border)]/20 rounded-lg font-ui text-sm text-[var(--color-text-muted)]">
-                {authorName}
-              </div>
-            </div>
-
-            <div>
-              <Label>{t("sendMessage")}</Label>
-              <Textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Write your message to the couple..."
-                rows={5}
-                maxLength={MAX_CHARS}
-              />
-              <div className="flex justify-end mt-1.5">
-                <span className={cn(
-                  "font-ui text-xs",
-                  isOverLimit ? "text-[var(--color-error)]" : "text-[var(--color-text-muted)]"
-                )}>
-                  {charsRemaining} {t("charactersRemaining")}
-                </span>
-              </div>
-            </div>
-
-            {error && (
-              <p className="font-ui text-xs text-[var(--color-error)] text-center">{error}</p>
-            )}
-
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              disabled={submitting || !message.trim() || isOverLimit}
-              className="w-full"
+        {/* Success message */}
+        {submitted ? (
+          <div
+            className="rounded-2xl p-8 text-center animate-fade-in-up"
+            style={{
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+            }}
+          >
+            <div
+              className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
+              style={{ background: "color-mix(in srgb, var(--color-primary) 15%, transparent)" }}
             >
-              <Send size={14} className="mr-2" />
-              {submitting ? t("loading") : t("submit")}
+              <Check className="h-8 w-8" style={{ color: "var(--color-primary)" }} />
+            </div>
+            <h3
+              className="mb-2"
+              style={{
+                color: "var(--color-text)",
+                fontFamily: "var(--font-heading)",
+                fontSize: "1.5rem",
+              }}
+            >
+              {t.thankYou}
+            </h3>
+            <p
+              style={{
+                color: "var(--color-text-muted)",
+                fontFamily: "var(--font-body)",
+              }}
+            >
+              {t.messageSent}
+            </p>
+            <Button
+              variant="outline"
+              className="mt-6"
+              onClick={() => {
+                setSubmitted(false);
+                setMessage("");
+              }}
+              style={{
+                borderColor: "var(--color-border)",
+                color: "var(--color-text)",
+              }}
+            >
+              {lang === "ms" ? "Hantar Mesej Lain" : "Send Another Message"}
             </Button>
+          </div>
+        ) : (
+          /* Message form */
+          <form
+            onSubmit={handleSubmit}
+            className="rounded-2xl p-6 animate-fade-in-up"
+            style={{
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
+              animationDelay: "0.15s",
+            }}
+          >
+            {/* Auto-filled name */}
+            <div className="mb-4">
+              <label
+                className="mb-1.5 block text-sm font-medium"
+                style={{ color: "var(--color-text)", fontFamily: "var(--font-body)" }}
+              >
+                {lang === "ms" ? "Nama" : "Name"}
+              </label>
+              <input
+                type="text"
+                value={session.guest_name}
+                readOnly
+                className="w-full cursor-not-allowed rounded-lg px-4 py-3 text-sm outline-none"
+                style={{
+                  background: "color-mix(in srgb, var(--color-text-muted) 8%, transparent)",
+                  border: "1px solid var(--color-border)",
+                  color: "var(--color-text)",
+                  fontFamily: "var(--font-body)",
+                }}
+              />
+            </div>
+
+            {/* Message textarea */}
+            <div className="mb-2">
+              <label
+                className="mb-1.5 block text-sm font-medium"
+                style={{ color: "var(--color-text)", fontFamily: "var(--font-body)" }}
+              >
+                {lang === "ms" ? "Mesej" : "Message"}
+              </label>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value.slice(0, MAX_CHARS))}
+                placeholder={t.messagePlaceholder}
+                maxLength={MAX_CHARS}
+                rows={5}
+                className="w-full resize-y rounded-lg px-4 py-3 text-sm outline-none transition focus:ring-2"
+                style={{
+                  background: "var(--color-bg)",
+                  border: "1px solid var(--color-border)",
+                  color: "var(--color-text)",
+                  fontFamily: "var(--font-body)",
+                  // @ts-expect-error CSS custom property
+                  "--tw-ring-color": "var(--color-primary)",
+                }}
+              />
+            </div>
+
+            {/* Character counter */}
+            <div className="mb-4 flex justify-end">
+              <span
+                className="text-xs"
+                style={{
+                  color: remaining < 50 ? "#e57373" : "var(--color-text-muted)",
+                  fontFamily: "var(--font-body)",
+                }}
+              >
+                {message.length} / {MAX_CHARS}
+              </span>
+            </div>
+
+            {/* Submit button */}
+            <button
+              type="submit"
+              disabled={submitting || !message.trim()}
+              className="flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-all duration-200 hover:scale-[1.01] active:scale-100 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{
+                background: "var(--color-button-bg)",
+                color: "var(--color-button-text)",
+                border: "none",
+                cursor: submitting ? "not-allowed" : "pointer",
+              }}
+            >
+              <Send className="h-4 w-4" />
+              {submitting ? t.loading : t.submit}
+            </button>
           </form>
-        </div>
+        )}
       </div>
     </div>
+  );
+}
+
+export function SendMessage() {
+  return (
+    <GuestAuthProvider>
+      <SendMessageInner />
+    </GuestAuthProvider>
   );
 }
 

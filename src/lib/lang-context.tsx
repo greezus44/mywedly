@@ -1,20 +1,32 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-import type { Language } from "./i18n";
-import { t as translate, type TranslationKey } from "./i18n";
+import { createContext, useContext, useState, useEffect, createElement, type ReactNode } from "react";
+import { translations, type Language } from "./i18n";
 
-interface LanguageContextValue { lang: Language; setLang: (lang: Language) => void; t: (key: TranslationKey) => string; }
-const LanguageContext = createContext<LanguageContextValue | null>(null);
-
-export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Language>(() => { const saved = localStorage.getItem("wedding-lang"); return saved === "ms" ? "ms" : "en"; });
-  useEffect(() => { localStorage.setItem("wedding-lang", lang); }, [lang]);
-  const setLang = (l: Language) => setLangState(l);
-  const t = (key: TranslationKey) => translate(lang, key);
-  return <LanguageContext.Provider value={{ lang, setLang, t }}>{children}</LanguageContext.Provider>;
+interface LangContextValue {
+  lang: Language;
+  setLang: (l: Language) => void;
+  t: (typeof translations)["en"];
 }
 
-export function useLang() {
-  const ctx = useContext(LanguageContext);
+const LangContext = createContext<LangContextValue | undefined>(undefined);
+
+export function LanguageProvider({ children }: { children: ReactNode }) {
+  const [lang, setLangState] = useState<Language>("en");
+
+  useEffect(() => {
+    const stored = localStorage.getItem("lang") as Language | null;
+    if (stored && (stored === "en" || stored === "ms")) setLangState(stored);
+  }, []);
+
+  const setLang = (l: Language) => {
+    setLangState(l);
+    localStorage.setItem("lang", l);
+  };
+
+  return createElement(LangContext.Provider, { value: { lang, setLang, t: translations[lang] } }, children);
+}
+
+export function useLang(): LangContextValue {
+  const ctx = useContext(LangContext);
   if (!ctx) throw new Error("useLang must be used within LanguageProvider");
   return ctx;
 }

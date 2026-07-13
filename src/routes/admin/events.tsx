@@ -1,234 +1,317 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Wedding, type WeddingEvent, type EventKind, type EventVisibility } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
-import { SplitEditor } from "../../components/preview/SplitEditor";
+import { SplitEditor, type DeviceType } from "../../components/preview/SplitEditor";
 import { RsvpPreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Select } from "../../components/ui/Input";
-import { Card, Badge, Modal, EmptyState, Toast } from "../../components/ui/index";
+import { Input, Textarea, Select, Label } from "../../components/ui/Input";
+import { Card, Badge, Modal, EmptyState } from "../../components/ui/index";
 import { FormField } from "../../components/ui/ImageUpload";
 import { formatDate, formatTime } from "../../lib/utils";
-import { Save, Calendar, Plus, Pencil, Trash2, Clock, MapPin } from "lucide-react";
+import { Plus, Pencil, Trash2, Calendar, Save } from "lucide-react";
 
-const EVENT_KINDS: { value: EventKind; label: string }[] = [
-  { value: "ceremony", label: "Ceremony" },
-  { value: "reception", label: "Reception" },
-  { value: "welcome", label: "Welcome" },
-  { value: "rehearsal", label: "Rehearsal" },
-  { value: "brunch", label: "Brunch" },
-  { value: "cultural", label: "Cultural" },
-  { value: "other", label: "Other" },
-];
+interface EventForm {
+  name: string;
+  kind: EventKind;
+  starts_at: string;
+  venue_name: string;
+  venue_address: string;
+  dress_code: string;
+  notes: string;
+  visibility: EventVisibility;
+  sort_order: number;
+  description: string;
+  maps_url: string;
+  image_url: string;
+  rsvp_deadline: string;
+  capacity: string;
+  programme: string;
+}
+
+const emptyForm: EventForm = {
+  name: "",
+  kind: "other",
+  starts_at: "",
+  venue_name: "",
+  venue_address: "",
+  dress_code: "",
+  notes: "",
+  visibility: "public",
+  sort_order: 0,
+  description: "",
+  maps_url: "",
+  image_url: "",
+  rsvp_deadline: "",
+  capacity: "",
+  programme: "",
+};
 
 export function EventsPage() {
-  const queryClient = useQueryClient();
+  const [device, setDevice] = useState<DeviceType>("desktop");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<EventForm>(emptyForm);
   const [toast, setToast] = useState<string | null>(null);
-  const [editingEvent, setEditingEvent] = useState<WeddingEvent | null>(null);
-  const [showModal, setShowModal] = useState(false);
+  const qc = useQueryClient();
 
-  const { data: wedding, isLoading } = useQuery({
+  const { data: wedding } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
-      const { data, error } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).single();
-      if (error) throw error;
-      return data as Wedding;
+      const { data } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).maybeSingle();
+      return data as Wedding | null;
     },
   });
 
-  const { data: events, isLoading: eventsLoading } = useQuery({
-    queryKey: ["events", wedding?.id],
+  const { data: events, isLoading } = useQuery({
+    queryKey: ["events"],
     queryFn: async () => {
       if (!wedding) return [];
-      const { data } = await supabase.from("events").select("*").eq("wedding_id", wedding.id).order("sort_order");
+      const { data } = await supabase.from("events").select("*").eq("wedding_id", wedding.id).order("sort_order", { ascending: true });
       return (data || []) as WeddingEvent[];
     },
     enabled: !!wedding,
   });
 
-  const createEvent = useMutation({
-    mutationFn: async (event: Omit<WeddingEvent, "id" | "created_at">) => {
-      const { error } = await supabase.from("events").insert(event);
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      if (!wedding) throw new Error("No wedding");
+      const { error } = await supabase.from("events").insert({
+        wedding_id: wedding.id,
+        name: form.name,
+        kind: form.kind,
+        starts_at: form.starts_at || null,
+        venue_name: form.venue_name || null,
+        venue_address: form.venue_address || null,
+        dress_code: form.dress_code || null,
+        notes: form.notes || null,
+        visibility: form.visibility,
+        sort_order: form.sort_order,
+        description: form.description || null,
+        maps_url: form.maps_url || null,
+        image_url: form.image_url || null,
+        rsvp_deadline: form.rsvp_deadline || null,
+        capacity: form.capacity ? Number(form.capacity) : null,
+        programme: form.programme || null,
+      });
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events"] }); setToast("Event created"); setShowModal(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["events"] });
+      setModalOpen(false);
+      setForm(emptyForm);
+      setToast("Event created");
+      setTimeout(() => setToast(null), 2000);
+    },
   });
 
-  const updateEvent = useMutation({
-    mutationFn: async ({ id, ...event }: Partial<WeddingEvent> & { id: string }) => {
-      const { error } = await supabase.from("events").update(event).eq("id", id);
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingId) throw new Error("No event selected");
+      const { error } = await supabase.from("events").update({
+        name: form.name,
+        kind: form.kind,
+        starts_at: form.starts_at || null,
+        venue_name: form.venue_name || null,
+        venue_address: form.venue_address || null,
+        dress_code: form.dress_code || null,
+        notes: form.notes || null,
+        visibility: form.visibility,
+        sort_order: form.sort_order,
+        description: form.description || null,
+        maps_url: form.maps_url || null,
+        image_url: form.image_url || null,
+        rsvp_deadline: form.rsvp_deadline || null,
+        capacity: form.capacity ? Number(form.capacity) : null,
+        programme: form.programme || null,
+      }).eq("id", editingId);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events"] }); setToast("Event updated"); setShowModal(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["events"] });
+      setModalOpen(false);
+      setEditingId(null);
+      setForm(emptyForm);
+      setToast("Event updated");
+      setTimeout(() => setToast(null), 2000);
+    },
   });
 
-  const deleteEvent = useMutation({
+  const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("events").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events"] }); setToast("Event deleted"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["events"] });
+      setToast("Event deleted");
+      setTimeout(() => setToast(null), 2000);
+    },
   });
 
-  if (isLoading) return <AdminLayout><div className="flex items-center justify-center h-full"><div className="animate-pulse text-gray-400">Loading...</div></div></AdminLayout>;
-  if (!wedding) return <AdminLayout><div className="p-6 text-gray-500">Wedding not found</div></AdminLayout>;
-
-  const handleAdd = () => {
-    setEditingEvent(null);
-    setShowModal(true);
+  const openCreate = () => {
+    setEditingId(null);
+    setForm({ ...emptyForm, sort_order: events?.length || 0 });
+    setModalOpen(true);
   };
 
-  const handleEdit = (event: WeddingEvent) => {
-    setEditingEvent(event);
-    setShowModal(true);
+  const openEdit = (event: WeddingEvent) => {
+    setEditingId(event.id);
+    setForm({
+      name: event.name,
+      kind: event.kind,
+      starts_at: event.starts_at || "",
+      venue_name: event.venue_name || "",
+      venue_address: event.venue_address || "",
+      dress_code: event.dress_code || "",
+      notes: event.notes || "",
+      visibility: event.visibility,
+      sort_order: event.sort_order,
+      description: event.description || "",
+      maps_url: event.maps_url || "",
+      image_url: event.image_url || "",
+      rsvp_deadline: event.rsvp_deadline || "",
+      capacity: event.capacity?.toString() || "",
+      programme: event.programme || "",
+    });
+    setModalOpen(true);
   };
 
-  const handleSave = (formData: Record<string, string>) => {
-    const eventData = {
-      wedding_id: wedding.id,
-      name: formData.name || "Untitled Event",
-      kind: (formData.kind || "ceremony") as EventKind,
-      starts_at: formData.starts_at || null,
-      venue_name: formData.venue_name || null,
-      venue_address: formData.venue_address || null,
-      dress_code: formData.dress_code || null,
-      notes: formData.notes || null,
-      visibility: (formData.visibility || "public") as EventVisibility,
-      sort_order: Number(formData.sort_order) || 0,
-      description: formData.description || null,
-      maps_url: formData.maps_url || null,
-      image_url: formData.image_url || null,
-      capacity: formData.capacity ? Number(formData.capacity) : null,
-      programme: formData.programme || null,
-      rsvp_deadline: formData.rsvp_deadline || null,
-    };
-
-    if (editingEvent) {
-      updateEvent.mutate({ id: editingEvent.id, ...eventData });
-    } else {
-      createEvent.mutate(eventData);
-    }
+  const handleSubmit = () => {
+    if (editingId) updateMutation.mutate();
+    else createMutation.mutate();
   };
+
+  const update = (patch: Partial<EventForm>) => setForm({ ...form, ...patch });
+
+  if (isLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center py-20 text-gray-500">Loading events...</div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
-      <SplitEditor title="Events Manager" preview={<RsvpPreview wedding={wedding} events={events || []} />}>
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Calendar size={18} className="text-indigo-600" />
-              <h2 className="font-ui text-base font-semibold text-gray-900">Events</h2>
-            </div>
-            <Button variant="primary" size="sm" onClick={handleAdd}>
-              <Plus size={14} className="mr-1" /> Add Event
-            </Button>
-          </div>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-gray-900">Events</h2>
+        <Button onClick={openCreate}>
+          <Plus className="mr-2 h-4 w-4" /> Add Event
+        </Button>
+      </div>
 
-          {eventsLoading ? (
-            <div className="text-center py-8 text-gray-400 font-ui text-sm">Loading events...</div>
-          ) : events && events.length > 0 ? (
-            <div className="space-y-3">
-              {events.map((event) => (
-                <Card key={event.id} className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-ui text-sm font-semibold text-gray-900">{event.name}</h3>
-                        <Badge variant="default">{event.kind}</Badge>
-                        <Badge variant={event.visibility === "public" ? "success" : "warning"}>{event.visibility}</Badge>
-                      </div>
-                      {event.starts_at && (
-                        <div className="flex items-center gap-1.5 font-ui text-xs text-gray-500 mb-1">
-                          <Clock size={12} />
-                          {formatDate(event.starts_at)} at {formatTime(event.starts_at)}
-                        </div>
-                      )}
-                      {event.venue_name && (
-                        <div className="flex items-center gap-1.5 font-ui text-xs text-gray-500">
-                          <MapPin size={12} />
-                          {event.venue_name}
-                        </div>
-                      )}
+      <SplitEditor device={device} onDeviceChange={setDevice} preview={(d) => <RsvpPreview wedding={wedding || null} device={d} />}>
+        <div className="space-y-3">
+          {events && events.length > 0 ? (
+            events.map((event) => (
+              <Card key={event.id} className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-gray-900">{event.name}</h3>
+                      <Badge variant="info">{event.kind}</Badge>
+                      <Badge variant={event.visibility === "public" ? "success" : "default"}>{event.visibility}</Badge>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => handleEdit(event)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"><Pencil size={14} className="text-gray-500" /></button>
-                      <button onClick={() => { if (confirm("Delete this event?")) deleteEvent.mutate(event.id); }} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={14} className="text-red-500" /></button>
-                    </div>
+                    {event.starts_at && (
+                      <p className="mt-1 flex items-center gap-1 text-sm text-gray-500">
+                        <Calendar className="h-3 w-3" /> {formatDate(event.starts_at)} · {formatTime(event.starts_at)}
+                      </p>
+                    )}
+                    {event.venue_name && <p className="mt-1 text-sm text-gray-600">{event.venue_name}</p>}
+                    {event.description && <p className="mt-1 text-sm text-gray-500 line-clamp-2">{event.description}</p>}
                   </div>
-                  {event.description && <p className="font-ui text-xs text-gray-500 mt-2">{event.description}</p>}
-                </Card>
-              ))}
-            </div>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(event)}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => deleteMutation.mutate(event.id)}>
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))
           ) : (
-            <EmptyState icon={<Calendar size={48} />} title="No events yet" description="Add your wedding events so guests can RSVP to them." action={<Button variant="primary" size="sm" onClick={handleAdd}><Plus size={14} className="mr-1" /> Add Event</Button>} />
+            <Card>
+              <EmptyState icon={<Calendar className="h-10 w-10" />} title="No events yet" description="Click 'Add Event' to create your first event." />
+            </Card>
           )}
         </div>
       </SplitEditor>
 
-      {showModal && (
-        <EventModal event={editingEvent} onClose={() => setShowModal(false)} onSave={handleSave} />
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingId ? "Edit Event" : "Add Event"}>
+        <div className="space-y-4">
+          <FormField label="Event Name">
+            <Input value={form.name} onChange={(e) => update({ name: e.target.value })} placeholder="e.g. Wedding Reception" />
+          </FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Event Type">
+              <Select value={form.kind} onChange={(e) => update({ kind: e.target.value as EventKind })}>
+                <option value="akad">Akad</option>
+                <option value="resepsi">Resepsi</option>
+                <option value="majlis">Majlis</option>
+                <option value="other">Other</option>
+              </Select>
+            </FormField>
+            <FormField label="Visibility">
+              <Select value={form.visibility} onChange={(e) => update({ visibility: e.target.value as EventVisibility })}>
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+              </Select>
+            </FormField>
+          </div>
+          <FormField label="Start Date & Time">
+            <Input type="datetime-local" value={form.starts_at} onChange={(e) => update({ starts_at: e.target.value })} />
+          </FormField>
+          <FormField label="Venue Name">
+            <Input value={form.venue_name} onChange={(e) => update({ venue_name: e.target.value })} placeholder="e.g. Grand Ballroom" />
+          </FormField>
+          <FormField label="Venue Address">
+            <Textarea value={form.venue_address} onChange={(e) => update({ venue_address: e.target.value })} placeholder="Full address" />
+          </FormField>
+          <FormField label="Maps URL">
+            <Input value={form.maps_url} onChange={(e) => update({ maps_url: e.target.value })} placeholder="Google Maps link" />
+          </FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Dress Code">
+              <Input value={form.dress_code} onChange={(e) => update({ dress_code: e.target.value })} placeholder="e.g. Formal" />
+            </FormField>
+            <FormField label="Capacity">
+              <Input type="number" value={form.capacity} onChange={(e) => update({ capacity: e.target.value })} placeholder="e.g. 200" />
+            </FormField>
+          </div>
+          <FormField label="RSVP Deadline">
+            <Input type="datetime-local" value={form.rsvp_deadline} onChange={(e) => update({ rsvp_deadline: e.target.value })} />
+          </FormField>
+          <FormField label="Sort Order">
+            <Input type="number" value={form.sort_order} onChange={(e) => update({ sort_order: Number(e.target.value) })} />
+          </FormField>
+          <FormField label="Description">
+            <Textarea value={form.description} onChange={(e) => update({ description: e.target.value })} placeholder="Event description" />
+          </FormField>
+          <FormField label="Programme">
+            <Textarea value={form.programme} onChange={(e) => update({ programme: e.target.value })} placeholder="Event programme details" />
+          </FormField>
+          <FormField label="Notes">
+            <Textarea value={form.notes} onChange={(e) => update({ notes: e.target.value })} placeholder="Additional notes" />
+          </FormField>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending || !form.name}>
+              <Save className="mr-2 h-4 w-4" /> {editingId ? "Update" : "Create"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white shadow-lg">
+          {toast}
+        </div>
       )}
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </AdminLayout>
-  );
-}
-
-function EventModal({ event, onClose, onSave }: { event: WeddingEvent | null; onClose: () => void; onSave: (data: Record<string, string>) => void }) {
-  const [form, setForm] = useState<Record<string, string>>({
-    name: event?.name || "",
-    kind: event?.kind || "ceremony",
-    starts_at: event?.starts_at ? new Date(event.starts_at).toISOString().slice(0, 16) : "",
-    venue_name: event?.venue_name || "",
-    venue_address: event?.venue_address || "",
-    dress_code: event?.dress_code || "",
-    notes: event?.notes || "",
-    visibility: event?.visibility || "public",
-    sort_order: String(event?.sort_order || 0),
-    description: event?.description || "",
-    maps_url: event?.maps_url || "",
-    image_url: event?.image_url || "",
-    capacity: event?.capacity ? String(event.capacity) : "",
-    programme: event?.programme || "",
-  });
-
-  const set = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
-
-  return (
-    <Modal open onClose={onClose} title={event ? "Edit Event" : "Add Event"} maxWidth="max-w-xl">
-      <div className="space-y-4">
-        <FormField label="Event Name"><Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Akad Nikah" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
-        <div className="grid grid-cols-2 gap-4">
-          <FormField label="Event Type">
-            <Select value={form.kind} onChange={(e) => set("kind", e.target.value)} className="!bg-white !border-gray-200 !text-gray-700">
-              {EVENT_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
-            </Select>
-          </FormField>
-          <FormField label="Visibility">
-            <Select value={form.visibility} onChange={(e) => set("visibility", e.target.value)} className="!bg-white !border-gray-200 !text-gray-700">
-              <option value="public">Public</option>
-              <option value="private">Private</option>
-            </Select>
-          </FormField>
-        </div>
-        <FormField label="Date & Time"><Input type="datetime-local" value={form.starts_at} onChange={(e) => set("starts_at", e.target.value)} className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
-        <div className="grid grid-cols-2 gap-4">
-          <FormField label="Venue Name"><Input value={form.venue_name} onChange={(e) => set("venue_name", e.target.value)} placeholder="Venue name" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
-          <FormField label="Capacity"><Input type="number" value={form.capacity} onChange={(e) => set("capacity", e.target.value)} placeholder="Max guests" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
-        </div>
-        <FormField label="Venue Address"><Textarea value={form.venue_address} onChange={(e) => set("venue_address", e.target.value)} placeholder="Full address" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
-        <FormField label="Maps URL"><Input value={form.maps_url} onChange={(e) => set("maps_url", e.target.value)} placeholder="Google Maps link" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
-        <FormField label="Dress Code"><Input value={form.dress_code} onChange={(e) => set("dress_code", e.target.value)} placeholder="e.g. Formal / Smart Casual" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
-        <FormField label="Description"><Textarea value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Event description" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
-        <FormField label="Programme"><Textarea value={form.programme} onChange={(e) => set("programme", e.target.value)} placeholder="Event programme details" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
-        <FormField label="Notes"><Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Additional notes" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
-        <FormField label="Sort Order"><Input type="number" value={form.sort_order} onChange={(e) => set("sort_order", e.target.value)} className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
-        <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-          <Button variant="outline" size="md" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" size="md" onClick={() => onSave(form)}><Save size={14} className="mr-1" /> {event ? "Update" : "Create"}</Button>
-        </div>
-      </div>
-    </Modal>
   );
 }

@@ -1,209 +1,137 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Wedding, type CoverConfig, type LogoConfig } from "../../lib/supabase";
+import { supabase, type Wedding, type CoverConfig } from "../../lib/supabase";
+import { DEFAULT_COVER_CONFIG } from "../../lib/theme";
 import { AdminLayout } from "./admin-layout";
 import { SplitEditor, type DeviceType } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
-import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Label, Select, Toggle, ColorInput, RangeInput } from "../../components/ui/Input";
-import { Card, Toast } from "../../components/ui/index";
-import { ImageUpload, VideoUpload, FormField } from "../../components/ui/ImageUpload";
 import { LogoControls } from "../../components/ui/LogoControls";
-import { DEFAULT_COVER_CONFIG, DEFAULT_LOGO_CONFIG, FONT_OPTIONS } from "../../lib/theme";
-import { cn } from "../../lib/utils";
-import { Save, Upload, Eye } from "lucide-react";
+import { Button } from "../../components/ui/Button";
+import { Input, Textarea, Select, Toggle, ColorInput, RangeInput, Label } from "../../components/ui/Input";
+import { Card } from "../../components/ui/index";
+import { ImageUpload, VideoUpload, FormField } from "../../components/ui/ImageUpload";
+import { FONT_OPTIONS } from "../../lib/theme";
+import { Save, Upload } from "lucide-react";
+
+type Tab = "logo" | "branding" | "colours" | "typography" | "layout" | "background";
 
 export function CoverEditorPage() {
-  const queryClient = useQueryClient();
+  const [tab, setTab] = useState<Tab>("logo");
   const [device, setDevice] = useState<DeviceType>("desktop");
-  const [toast, setToast] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<string>("logo");
+  const [config, setConfig] = useState<CoverConfig>(DEFAULT_COVER_CONFIG);
+  const qc = useQueryClient();
 
-  const { data: wedding, isLoading } = useQuery({
+  const { data: wedding } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
-      const { data, error } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).single();
-      if (error) throw error;
-      return data as Wedding;
+      const { data } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).maybeSingle();
+      if (data) {
+        const c = (data as Wedding).draft_cover_config || (data as Wedding).cover_config || DEFAULT_COVER_CONFIG;
+        setConfig(c);
+      }
+      return data as Wedding | null;
     },
   });
 
-  const coverConfig: CoverConfig = (wedding?.draft_cover_config && "colors" in wedding.draft_cover_config ? wedding.draft_cover_config : wedding?.cover_config && "colors" in wedding.cover_config ? wedding.cover_config : DEFAULT_COVER_CONFIG) as CoverConfig;
-
-  const [config, setConfig] = useState<CoverConfig>(coverConfig);
-
-  // Sync config when wedding loads
-  if (wedding && config === coverConfig && JSON.stringify(coverConfig) !== JSON.stringify(coverConfig)) {
-    setConfig(coverConfig);
-  }
-
-  const saveDraft = useMutation({
-    mutationFn: async (newConfig: CoverConfig) => {
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("weddings").update({ draft_cover_config: newConfig }).eq("created_by", user.user.id);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wedding"] }); setToast("Draft saved"); },
-  });
-
-  const publish = useMutation({
+  const save = useMutation({
     mutationFn: async () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("weddings").update({ cover_config: config, draft_cover_config: config }).eq("created_by", user.user.id);
+      const { error } = await supabase.from("weddings").update({ draft_cover_config: config }).eq("created_by", user.user.id);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wedding"] }); setToast("Published successfully"); },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wedding"] }),
   });
 
-  const update = (patch: Partial<CoverConfig>) => {
-    const newConfig = { ...config, ...patch };
-    setConfig(newConfig);
-    saveDraft.mutate(newConfig);
-  };
+  const update = (patch: Partial<CoverConfig>) => setConfig({ ...config, ...patch });
 
-  const updateLogo = (logo: LogoConfig) => {
-    update({ branding: { ...config.branding, logo, logoUrl: logo.url, logoVisible: logo.visible, logoPosition: logo.position === "center" ? "center" : logo.position.includes("left") ? "left" : logo.position.includes("right") ? "right" : "center", logoSize: logo.width } });
-  };
-
-  if (isLoading) return <AdminLayout><div className="flex items-center justify-center h-full"><div className="animate-pulse text-gray-400">Loading...</div></div></AdminLayout>;
-  if (!wedding) return <AdminLayout><div className="p-6 text-gray-500">Wedding not found</div></AdminLayout>;
-
-  const cc = config.colors || {};
-  const ct = config.typography || {};
-  const cl = config.layout || {};
-  const cb = config.background || {};
-  const logo = config.branding?.logo || DEFAULT_LOGO_CONFIG;
-
-  const sections = [
-    { key: "logo", label: "Logo" },
-    { key: "branding", label: "Branding" },
-    { key: "colors", label: "Colours" },
-    { key: "typography", label: "Typography" },
-    { key: "layout", label: "Layout" },
-    { key: "background", label: "Background" },
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "logo", label: "Logo" }, { id: "branding", label: "Branding" }, { id: "colours", label: "Colours" },
+    { id: "typography", label: "Typography" }, { id: "layout", label: "Layout" }, { id: "background", label: "Background" },
   ];
 
   return (
     <AdminLayout>
-      <SplitEditor title="Cover Page Editor" device={device} preview={<CoverPreview wedding={{ ...wedding, draft_cover_config: config } as Wedding} device={device} />}>
-        <div className="space-y-6">
-          {/* Section tabs */}
-          <div className="flex gap-1 flex-wrap border-b border-gray-100 pb-3">
-            {sections.map((s) => (
-              <button key={s.key} onClick={() => setActiveSection(s.key)} className={cn("px-3 py-1.5 text-xs font-ui font-medium rounded-lg transition-all", activeSection === s.key ? "bg-indigo-50 text-indigo-600" : "text-gray-500 hover:text-gray-700")}>{s.label}</button>
-            ))}
-          </div>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-gray-900">Cover Page Editor</h2>
+        <Button onClick={() => save.mutate()} disabled={save.isPending}>
+          <Save className="mr-2 h-4 w-4" /> {save.isPending ? "Saving..." : "Save Draft"}
+        </Button>
+      </div>
 
-          {activeSection === "logo" && (
-            <LogoControls logo={logo} onChange={updateLogo} device={device} onDeviceChange={setDevice} />
-          )}
+      <div className="mb-4 flex gap-2 border-b border-gray-200 overflow-x-auto">
+        {tabs.map((t) => (
+          <button key={t.id} onClick={() => setTab(t.id)} className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium transition ${tab === t.id ? "border-indigo-500 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-          {activeSection === "branding" && (
+      <SplitEditor device={device} onDeviceChange={setDevice} preview={(d) => <CoverPreview wedding={wedding || null} device={d} />}>
+        <Card className="space-y-4">
+          {tab === "logo" && <LogoControls logo={config.branding.logo} onChange={(logo) => update({ branding: { ...config.branding, logo } })} device={device} />}
+
+          {tab === "branding" && (
             <div className="space-y-4">
-              <FormField label="Divider Style">
-                <Select value={config.branding?.divider || "line"} onChange={(e) => update({ branding: { ...config.branding, divider: e.target.value as any } })} className="!bg-white !border-gray-200 !text-gray-700">
-                  <option value="none">None</option>
-                  <option value="line">Line</option>
-                  <option value="floral">Floral</option>
-                  <option value="ornate">Ornate</option>
-                </Select>
-              </FormField>
+              <FormField label="Couple Name One"><Input value={config.branding.couple_name_one} onChange={(e) => update({ branding: { ...config.branding, couple_name_one: e.target.value } })} /></FormField>
+              <FormField label="Couple Name Two"><Input value={config.branding.couple_name_two} onChange={(e) => update({ branding: { ...config.branding, couple_name_two: e.target.value } })} /></FormField>
+              <FormField label="Date Display"><Input value={config.branding.date} onChange={(e) => update({ branding: { ...config.branding, date: e.target.value } })} /></FormField>
+              <FormField label="Enter Button Text"><Input value={config.enter_button_text} onChange={(e) => update({ enter_button_text: e.target.value })} /></FormField>
+              <Toggle checked={config.show_date} onChange={(v) => update({ show_date: v })} label="Show date" />
+              <Toggle checked={config.show_countdown} onChange={(v) => update({ show_countdown: v })} label="Show countdown" />
             </div>
           )}
 
-          {activeSection === "colors" && (
+          {tab === "colours" && (
             <div className="space-y-4">
-              <FormField label="Primary Colour"><ColorInput value={cc.primary || "#b8973a"} onChange={(v) => update({ colors: { ...cc, primary: v } })} /></FormField>
-              <FormField label="Secondary Colour"><ColorInput value={cc.secondary || "#d4b85c"} onChange={(v) => update({ colors: { ...cc, secondary: v } })} /></FormField>
-              <FormField label="Accent Colour"><ColorInput value={cc.accent || "#c9a0a0"} onChange={(v) => update({ colors: { ...cc, accent: v } })} /></FormField>
-              <FormField label="Background Colour"><ColorInput value={cc.background || "#1a1a1a"} onChange={(v) => update({ colors: { ...cc, background: v } })} /></FormField>
-              <FormField label="Text Colour"><ColorInput value={cc.text || "#ffffff"} onChange={(v) => update({ colors: { ...cc, text: v } })} /></FormField>
-              <FormField label="Button Colour"><ColorInput value={cc.buttonColor || "#b8973a"} onChange={(v) => update({ colors: { ...cc, buttonColor: v } })} /></FormField>
-              <FormField label="Button Text Colour"><ColorInput value={cc.buttonTextColor || "#ffffff"} onChange={(v) => update({ colors: { ...cc, buttonTextColor: v } })} /></FormField>
-              <FormField label="Overlay Colour"><ColorInput value={cc.overlayColor || "#000000"} onChange={(v) => update({ colors: { ...cc, overlayColor: v } })} /></FormField>
-              <FormField label="Overlay Opacity"><RangeInput value={(cc.overlayOpacity ?? 0.4) * 100} onChange={(v) => update({ colors: { ...cc, overlayOpacity: v / 100 } })} min={0} max={100} step={5} unit="%" /></FormField>
+              <ColorInput label="Heading Colour" value={config.typography.heading_color} onChange={(v) => update({ typography: { ...config.typography, heading_color: v } })} />
+              <ColorInput label="Body Colour" value={config.typography.body_color} onChange={(v) => update({ typography: { ...config.typography, body_color: v } })} />
+              <ColorInput label="Button Background" value={config.button.bg_color} onChange={(v) => update({ button: { ...config.button, bg_color: v } })} />
+              <ColorInput label="Button Text" value={config.button.text_color} onChange={(v) => update({ button: { ...config.button, text_color: v } })} />
+              <ColorInput label="Overlay Colour" value={config.overlay.color} onChange={(v) => update({ overlay: { ...config.overlay, color: v } })} />
+              <RangeInput label="Overlay Opacity" value={config.overlay.opacity} min={0} max={1} step={0.05} onChange={(v) => update({ overlay: { ...config.overlay, opacity: v } })} />
             </div>
           )}
 
-          {activeSection === "typography" && (
+          {tab === "typography" && (
             <div className="space-y-4">
-              <FormField label="Heading Font">
-                <Select value={ct.headingFont || "Playfair Display"} onChange={(e) => update({ typography: { ...ct, headingFont: e.target.value } })} className="!bg-white !border-gray-200 !text-gray-700">
-                  {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-                </Select>
-              </FormField>
-              <FormField label="Body Font">
-                <Select value={ct.bodyFont || "Cormorant Garamond"} onChange={(e) => update({ typography: { ...ct, bodyFont: e.target.value } })} className="!bg-white !border-gray-200 !text-gray-700">
-                  {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-                </Select>
-              </FormField>
-              <FormField label="Heading Size"><Input value={ct.headingSize || "3rem"} onChange={(e) => update({ typography: { ...ct, headingSize: e.target.value } })} /></FormField>
-              <FormField label="Body Size"><Input value={ct.bodySize || "1rem"} onChange={(e) => update({ typography: { ...ct, bodySize: e.target.value } })} /></FormField>
-              <FormField label="Letter Spacing"><Input value={ct.letterSpacing || "0.15em"} onChange={(e) => update({ typography: { ...ct, letterSpacing: e.target.value } })} /></FormField>
+              <FormField label="Heading Font"><Select value={config.typography.heading_font} onChange={(e) => update({ typography: { ...config.typography, heading_font: e.target.value } })}>{FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}</Select></FormField>
+              <FormField label="Body Font"><Select value={config.typography.body_font} onChange={(e) => update({ typography: { ...config.typography, body_font: e.target.value } })}>{FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}</Select></FormField>
+              <Input label="Heading Size" value={config.typography.heading_size} onChange={(e) => update({ typography: { ...config.typography, heading_size: e.target.value } })} />
+              <Input label="Body Size" value={config.typography.body_size} onChange={(e) => update({ typography: { ...config.typography, body_size: e.target.value } })} />
+              <Input label="Heading Weight" value={config.typography.heading_weight} onChange={(e) => update({ typography: { ...config.typography, heading_weight: e.target.value } })} />
+              <Input label="Letter Spacing" value={config.typography.letter_spacing} onChange={(e) => update({ typography: { ...config.typography, letter_spacing: e.target.value } })} />
             </div>
           )}
 
-          {activeSection === "layout" && (
+          {tab === "layout" && (
             <div className="space-y-4">
-              <FormField label="Content Alignment">
-                <Select value={cl.contentAlignment || "center"} onChange={(e) => update({ layout: { ...cl, contentAlignment: e.target.value as any } })} className="!bg-white !border-gray-200 !text-gray-700">
-                  <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option>
-                </Select>
-              </FormField>
-              <FormField label="Vertical Position">
-                <Select value={cl.verticalPosition || "center"} onChange={(e) => update({ layout: { ...cl, verticalPosition: e.target.value as any } })} className="!bg-white !border-gray-200 !text-gray-700">
-                  <option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option>
-                </Select>
-              </FormField>
-              <FormField label="Button Style">
-                <Select value={cl.buttonStyle || "outline"} onChange={(e) => update({ layout: { ...cl, buttonStyle: e.target.value as any } })} className="!bg-white !border-gray-200 !text-gray-700">
-                  <option value="outline">Outline</option><option value="solid">Solid</option><option value="underline">Underline</option>
-                </Select>
-              </FormField>
-              <FormField label="Border Radius"><Input value={cl.borderRadius || "8px"} onChange={(e) => update({ layout: { ...cl, borderRadius: e.target.value } })} /></FormField>
-              <FormField label="Spacing"><Input value={cl.spacing || "1.5rem"} onChange={(e) => update({ layout: { ...cl, spacing: e.target.value } })} /></FormField>
+              <FormField label="Content Alignment"><Select value={config.layout.content_alignment} onChange={(e) => update({ layout: { ...config.layout, content_alignment: e.target.value as "left" | "center" | "right" } })}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></Select></FormField>
+              <FormField label="Vertical Position"><Select value={config.layout.vertical_position} onChange={(e) => update({ layout: { ...config.layout, vertical_position: e.target.value as "top" | "center" | "bottom" } })}><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></Select></FormField>
+              <Input label="Max Width" value={config.layout.max_width} onChange={(e) => update({ layout: { ...config.layout, max_width: e.target.value } })} />
+              <Input label="Padding" value={config.layout.padding} onChange={(e) => update({ layout: { ...config.layout, padding: e.target.value } })} />
+              <Input label="Corner Radius" value={config.corner_radius} onChange={(e) => update({ corner_radius: e.target.value })} />
+              <Input label="Button Border Radius" value={config.button.border_radius} onChange={(e) => update({ button: { ...config.button, border_radius: e.target.value } })} />
+              <Input label="Button Padding X" value={config.button.padding_x} onChange={(e) => update({ button: { ...config.button, padding_x: e.target.value } })} />
+              <Input label="Button Padding Y" value={config.button.padding_y} onChange={(e) => update({ button: { ...config.button, padding_y: e.target.value } })} />
             </div>
           )}
 
-          {activeSection === "background" && (
+          {tab === "background" && (
             <div className="space-y-4">
-              <FormField label="Background Type">
-                <Select value={cb.type || "image"} onChange={(e) => update({ background: { ...cb, type: e.target.value as any } })} className="!bg-white !border-gray-200 !text-gray-700">
-                  <option value="image">Image</option><option value="video">Video</option><option value="slideshow">Slideshow</option><option value="color">Colour</option>
-                </Select>
-              </FormField>
-              {cb.type === "image" && <ImageUpload label="Background Image" value={cb.imageUrl || null} onChange={(url) => update({ background: { ...cb, imageUrl: url } })} />}
-              {cb.type === "video" && <VideoUpload label="Background Video URL" value={cb.videoUrl || null} onChange={(url) => update({ background: { ...cb, videoUrl: url } })} />}
-              {cb.type === "slideshow" && (
-                <div className="space-y-2">
-                  {(cb.slideshowUrls || []).map((url, i) => (
-                    <div key={i} className="flex gap-2">
-                      <input type="text" value={url} onChange={(e) => { const urls = [...(cb.slideshowUrls || [])]; urls[i] = e.target.value; update({ background: { ...cb, slideshowUrls: urls } }); }} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg font-ui text-sm text-gray-700" placeholder="Image URL" />
-                      <button onClick={() => update({ background: { ...cb, slideshowUrls: (cb.slideshowUrls || []).filter((_, idx) => idx !== i) } })} className="px-3 py-2 text-xs text-red-500 hover:bg-red-50 rounded-lg">Remove</button>
-                    </div>
-                  ))}
-                  <button onClick={() => update({ background: { ...cb, slideshowUrls: [...(cb.slideshowUrls || []), ""] } })} className="text-xs font-ui text-indigo-600 hover:text-indigo-700">+ Add Image</button>
-                </div>
-              )}
-              <FormField label="Blur Intensity"><RangeInput value={cb.blur || 0} onChange={(v) => update({ background: { ...cb, blur: v } })} min={0} max={20} step={1} unit="px" /></FormField>
-              <FormField label="Brightness"><RangeInput value={cb.brightness || 100} onChange={(v) => update({ background: { ...cb, brightness: v } })} min={0} max={200} step={5} unit="%" /></FormField>
-              <FormField label="Overlay Gradient"><Input value={cb.overlayGradient || ""} onChange={(e) => update({ background: { ...cb, overlayGradient: e.target.value } })} placeholder="e.g. linear-gradient(...)" /></FormField>
+              <FormField label="Background Type"><Select value={config.background.type} onChange={(e) => update({ background: { ...config.background, type: e.target.value as "image" | "video" | "slideshow" | "color" } })}><option value="image">Image</option><option value="video">Video</option><option value="slideshow">Slideshow</option><option value="color">Solid Colour</option></Select></FormField>
+              {config.background.type === "image" && <ImageUpload value={config.background.image_url} onChange={(url) => update({ background: { ...config.background, image_url: url } })} label="Background Image" />}
+              {config.background.type === "video" && <VideoUpload value={config.background.video_url} onChange={(url) => update({ background: { ...config.background, video_url: url } })} label="Background Video" />}
+              {config.background.type === "color" && <ColorInput label="Background Colour" value={config.background.color} onChange={(v) => update({ background: { ...config.background, color: v } })} />}
+              <Input label="Blur" value={config.blur} onChange={(e) => update({ blur: e.target.value })} />
+              <RangeInput label="Brightness" value={config.brightness} min={0} max={2} step={0.05} onChange={(v) => update({ brightness: v })} />
+              <Toggle checked={config.overlay.enabled} onChange={(v) => update({ overlay: { ...config.overlay, enabled: v } })} label="Enable Overlay" />
             </div>
           )}
-
-          {/* Publish button */}
-          <div className="pt-4 border-t border-gray-100">
-            <Button variant="primary" size="md" className="w-full" onClick={() => publish.mutate()} disabled={publish.isPending}>
-              <Save size={14} className="mr-2" /> Publish Cover Page
-            </Button>
-          </div>
-        </div>
+        </Card>
       </SplitEditor>
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </AdminLayout>
   );
 }

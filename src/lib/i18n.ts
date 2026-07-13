@@ -1,12 +1,53 @@
 export type Language = "en" | "ms";
 
-export const translations = {
-  en: { enter: "Enter", enterWebsite: "Enter Website", welcome: "Welcome", home: "Home", rsvp: "RSVP", events: "Events", contact: "Contact", doa: "Doa", sendMessage: "Send Message", gallery: "Gallery", guestLogin: "Guest Sign In", username: "Username", language: "Language", days: "Days", hours: "Hours", minutes: "Minutes", seconds: "Seconds", accept: "Accept", decline: "Decline", accepted: "Accepted", declined: "Declined", pending: "Pending", date: "Date", time: "Time", venue: "Venue", address: "Address", dressCode: "Dress Code", programme: "Programme", submit: "Submit", messageSent: "Message sent successfully!", charactersRemaining: "characters remaining", selectLanguage: "Select Language", english: "English", bahasaMelayu: "Bahasa Melayu", loading: "Loading...", noEvents: "No events available", invitation: "Invitation", bismillah: "In the name of Allah, the Most Gracious, the Most Merciful" },
-  ms: { enter: "Masuk", enterWebsite: "Masuk Laman Web", welcome: "Selamat Datang", home: "Utama", rsvp: "RSVP", events: "Acara", contact: "Hubungi", doa: "Doa", sendMessage: "Hantar Mesej", gallery: "Galeri", guestLogin: "Daftar Masuk Tetamu", username: "Nama Pengguna", language: "Bahasa", days: "Hari", hours: "Jam", minutes: "Minit", seconds: "Saat", accept: "Terima", decline: "Tolak", accepted: "Diterima", declined: "Ditolak", pending: "Menunggu", date: "Tarikh", time: "Masa", venue: "Tempat", address: "Alamat", dressCode: "Pakaian", programme: "Program", submit: "Hantar", messageSent: "Mesej berjaya dihantar!", charactersRemaining: "aksara lagi", selectLanguage: "Pilih Bahasa", english: "English", bahasaMelayu: "Bahasa Melayu", loading: "Memuatkan...", noEvents: "Tiada acara tersedia", invitation: "Jemputan", bismillah: "Dengan nama Allah, Yang Maha Pemurah, Yang Maha Penyayang" },
-} as const;
-
-export type TranslationKey = keyof typeof translations.en;
-
-export function t(lang: Language, key: TranslationKey): string {
-  return translations[lang][key] || translations.en[key] || key;
+export interface Translation {
+  home: string;
+  rsvp: string;
+  doa: string;
+  contact: string;
+  sendMessage: string;
+  enter: string;
+  signOut: string;
+  welcome: string;
+  days: string;
+  hours: string;
+  minutes: string;
+  seconds: string;
+  attending: string;
+  declined: string;
+  pending: string;
+  submit: string;
+  cancel: string;
+  messagePlaceholder: string;
+  namePlaceholder: string;
+  thankYou: string;
+  rsvpSubmitted: string;
+  messageSent: string;
+  loading: string;
+  invalidName: string;
 }
+
+export const translations: Record<Language, Translation> = {
+  en: {
+    home: "Home", rsvp: "RSVP", doa: "Doa", contact: "Contact", sendMessage: "Send Message",
+    enter: "Enter", signOut: "Sign Out", welcome: "Welcome",
+    days: "Days", hours: "Hours", minutes: "Minutes", seconds: "Seconds",
+    attending: "Attending", declined: "Declined", pending: "Pending",
+    submit: "Submit", cancel: "Cancel",
+    messagePlaceholder: "Write your message...", namePlaceholder: "Enter your name",
+    thankYou: "Thank You!", rsvpSubmitted: "Your RSVP has been submitted.",
+    messageSent: "Your message has been sent!", loading: "Loading...",
+    invalidName: "Invalid name. Please check your invitation.",
+  },
+  ms: {
+    home: "Utama", rsvp: "RSVP", doa: "Doa", contact: "Hubungi", sendMessage: "Hantar Mesej",
+    enter: "Masuk", signOut: "Log Keluar", welcome: "Selamat Datang",
+    days: "Hari", hours: "Jam", minutes: "Minit", seconds: "Saat",
+    attending: "Hadir", declined: "Tidak Hadir", pending: "Menunggu",
+    submit: "Hantar", cancel: "Batal",
+    messagePlaceholder: "Tulis mesej anda...", namePlaceholder: "Masukkan nama anda",
+    thankYou: "Terima Kasih!", rsvpSubmitted: "RSVP anda telah dihantar.",
+    messageSent: "Mesej anda telah dihantar!", loading: "Memuatkan...",
+    invalidName: "Nama tidak sah. Sila semak jemputan anda.",
+  },
+};

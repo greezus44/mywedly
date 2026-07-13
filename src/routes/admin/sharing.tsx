@@ -3,43 +3,53 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Wedding, type Guest, type GuestToken, type SharingConfig } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Toggle } from "../../components/ui/Input";
-import { Card, Badge, EmptyState, Toast } from "../../components/ui/index";
-import { FormField } from "../../components/ui/ImageUpload";
-import { generateToken, cn } from "../../lib/utils";
+import { Input, Textarea, Toggle, Label } from "../../components/ui/Input";
+import { Card, Badge, EmptyState } from "../../components/ui/index";
+import { ImageUpload, FormField } from "../../components/ui/ImageUpload";
 import { generateQRDataURL, downloadQRPNG, downloadQRSVG, downloadQRHighRes, downloadAllGuestQRsAsZip, downloadAllGuestQRsAsPDF, copyToClipboard, getShareUrl } from "../../lib/qr";
-import { QrCode, Download, Copy, Share2, MessageCircle, Send, Mail, Smartphone, Globe, Link2, RefreshCw, Users, Check } from "lucide-react";
+import { QrCode, Download, Copy, Share2, Users, Globe, Link2, Save } from "lucide-react";
 
 export function SharingPage() {
-  const queryClient = useQueryClient();
-  const [toast, setToast] = useState<string | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<"share" | "qr" | "guests" | "og">("share");
+  const [guestQrUrls, setGuestQrUrls] = useState<Record<string, string>>({});
+  const [toast, setToast] = useState<string | null>(null);
+  const [sharing, setSharing] = useState<SharingConfig>({
+    enabled: false,
+    share_url: null,
+    og_title: "",
+    og_description: "",
+    og_image_url: null,
+    twitter_card: "summary_large_image",
+    allow_qr_bypass: false,
+  });
+  const qc = useQueryClient();
 
-  const { data: wedding, isLoading } = useQuery({
+  const { data: wedding } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
-      const { data, error } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).single();
-      if (error) throw error;
-      return data as Wedding;
+      const { data } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).maybeSingle();
+      if (data) {
+        const w = data as Wedding;
+        if (w.sharing_config) setSharing(w.sharing_config);
+      }
+      return data as Wedding | null;
     },
   });
 
   const { data: guests } = useQuery({
-    queryKey: ["guests", wedding?.id],
+    queryKey: ["guests"],
     queryFn: async () => {
       if (!wedding) return [];
-      const { data } = await supabase.from("guests").select("*").eq("wedding_id", wedding.id).order("full_name");
+      const { data } = await supabase.from("guests").select("*").eq("wedding_id", wedding.id).order("name", { ascending: true });
       return (data || []) as Guest[];
     },
     enabled: !!wedding,
   });
 
   const { data: guestTokens } = useQuery({
-    queryKey: ["guest-tokens", wedding?.id],
+    queryKey: ["guest-tokens"],
     queryFn: async () => {
       if (!wedding) return [];
       const { data } = await supabase.from("guest_tokens").select("*").eq("wedding_id", wedding.id);
@@ -48,283 +58,218 @@ export function SharingPage() {
     enabled: !!wedding,
   });
 
-  const updateSharing = useMutation({
-    mutationFn: async (config: SharingConfig) => {
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("weddings").update({ sharing_config: config }).eq("created_by", user.user.id);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wedding"] }); setToast("Sharing settings saved"); },
-  });
+  const shareUrl = wedding ? getShareUrl(wedding.slug) : "";
+  const qrToken = wedding?.qr_token || "";
 
-  const regenerateQrToken = useMutation({
+  useEffect(() => {
+    if (shareUrl) {
+      generateQRDataURL(shareUrl).then(setQrUrl).catch(() => {});
+    }
+  }, [shareUrl]);
+
+  useEffect(() => {
+    if (shareUrl && guests && guests.length > 0) {
+      const tokenMap = new Map((guestTokens || []).map((t) => [t.guest_id, t.token]));
+      const promises = guests.slice(0, 50).map(async (g) => {
+        const token = tokenMap.get(g.id) || g.username;
+        const url = `${shareUrl}?t=${token}`;
+        const dataUrl = await generateQRDataURL(url, { width: 128 });
+        return [g.id, dataUrl] as [string, string];
+      });
+      Promise.all(promises).then((entries) => {
+        setGuestQrUrls(Object.fromEntries(entries));
+      }).catch(() => {});
+    }
+  }, [shareUrl, guests, guestTokens]);
+
+  const saveSharing = useMutation({
     mutationFn: async () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
-      const newToken = generateToken();
-      const { error } = await supabase.from("weddings").update({ qr_token: newToken }).eq("created_by", user.user.id);
+      const { error } = await supabase.from("weddings").update({ sharing_config: sharing }).eq("created_by", user.user.id);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wedding"] }); setToast("QR token regenerated"); },
-  });
-
-  const generateGuestToken = useMutation({
-    mutationFn: async (guestId: string) => {
-      const token = generateToken();
-      const { error } = await supabase.from("guest_tokens").insert({ guest_id: guestId, wedding_id: wedding!.id, token, bypass_login: false });
-      if (error) throw error;
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["wedding"] });
+      setToast("Sharing settings saved");
+      setTimeout(() => setToast(null), 2000);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["guest-tokens"] }); setToast("Guest QR code generated"); },
   });
-
-  const [sharingConfig, setSharingConfig] = useState<SharingConfig>({});
-
-  useEffect(() => {
-    if (wedding) setSharingConfig(wedding.sharing_config || {});
-  }, [wedding]);
-
-  useEffect(() => {
-    if (wedding?.qr_token) {
-      const url = getShareUrl("whatsapp", `${window.location.origin}/w/${wedding.slug}`, "");
-      generateQRDataURL(`${window.location.origin}/w/${wedding.slug}?qr=${wedding.qr_token}`).then(setQrUrl).catch(() => {});
-    }
-  }, [wedding]);
-
-  if (isLoading) return <AdminLayout><div className="flex items-center justify-center h-full"><div className="animate-pulse text-gray-400">Loading...</div></div></AdminLayout>;
-  if (!wedding) return <AdminLayout><div className="p-6 text-gray-500">Wedding not found</div></AdminLayout>;
-
-  const websiteUrl = `${window.location.origin}/w/${wedding.slug}`;
-  const qrLink = `${window.location.origin}/w/${wedding.slug}?qr=${wedding.qr_token || ""}`;
-  const shareText = sharingConfig.invitationMessage || `You're invited to ${wedding.couple_name_one} & ${wedding.couple_name_two}'s wedding!`;
 
   const handleCopy = async (text: string) => {
-    await copyToClipboard(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-    setToast("Copied to clipboard");
+    const ok = await copyToClipboard(text);
+    setToast(ok ? "Copied to clipboard" : "Copy failed");
+    setTimeout(() => setToast(null), 2000);
   };
 
-  const guestTokenMap = new Map((guestTokens || []).map((t) => [t.guest_id, t]));
-
-  const guestQrItems = (guests || [])
-    .filter((g) => guestTokenMap.has(g.id))
-    .map((g) => ({ guestName: g.full_name, token: guestTokenMap.get(g.id)!.token }));
-
-  const tabs = [
-    { key: "share", label: "Share", icon: Share2 },
-    { key: "qr", label: "QR Code", icon: QrCode },
-    { key: "guests", label: "Guest QR", icon: Users },
-    { key: "og", label: "OG / Social", icon: Globe },
-  ] as const;
+  const handleShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: sharing.og_title || "Wedding Invitation", text: sharing.og_description || "", url: shareUrl });
+      } catch {
+        // user cancelled
+      }
+    } else {
+      handleCopy(shareUrl);
+    }
+  };
 
   return (
     <AdminLayout>
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center gap-2 mb-6">
-            <Share2 size={18} className="text-indigo-600" />
-            <h1 className="font-ui text-xl font-bold text-gray-900">Sharing</h1>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex gap-1 mb-6 border-b border-gray-100">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={cn("flex items-center gap-1.5 px-4 py-2.5 font-ui text-xs font-medium transition-all border-b-2", activeTab === tab.key ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700")}>
-                  <Icon size={14} /> {tab.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Share tab */}
-          {activeTab === "share" && (
-            <div className="space-y-6">
-              <Card className="p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Link2 size={16} className="text-indigo-600" />
-                  <h3 className="font-ui text-sm font-semibold text-gray-900">Website URL</h3>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input readOnly value={websiteUrl} className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg font-mono text-sm text-gray-700" />
-                  <Button variant="primary" size="md" onClick={() => handleCopy(websiteUrl)}>{copied ? <Check size={14} className="mr-1" /> : <Copy size={14} className="mr-1" />} Copy</Button>
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <h3 className="font-ui text-sm font-semibold text-gray-900 mb-4">One-Click Sharing</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {([
-                    { platform: "whatsapp", label: "WhatsApp", icon: MessageCircle, color: "text-green-600", bg: "bg-green-50" },
-                    { platform: "telegram", label: "Telegram", icon: Send, color: "text-blue-500", bg: "bg-blue-50" },
-                    { platform: "facebook", label: "Facebook", icon: Share2, color: "text-blue-600", bg: "bg-blue-50" },
-                    { platform: "twitter", label: "Twitter/X", icon: Share2, color: "text-gray-700", bg: "bg-gray-100" },
-                    { platform: "email", label: "Email", icon: Mail, color: "text-amber-600", bg: "bg-amber-50" },
-                    { platform: "sms", label: "SMS", icon: Smartphone, color: "text-purple-600", bg: "bg-purple-50" },
-                    { platform: "messenger", label: "Messenger", icon: MessageCircle, color: "text-blue-500", bg: "bg-blue-50" },
-                  ] as const).map((s) => {
-                    const Icon = s.icon;
-                    return (
-                      <a key={s.platform} href={getShareUrl(s.platform, websiteUrl, shareText)} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-2 p-4 bg-white border border-gray-200 rounded-lg hover:border-indigo-400 transition-colors">
-                        <div className={`p-2.5 rounded-lg ${s.bg}`}><Icon size={20} className={s.color} /></div>
-                        <span className="font-ui text-xs text-gray-700">{s.label}</span>
-                      </a>
-                    );
-                  })}
-                </div>
-              </Card>
-
-              <Card className="p-6">
-                <h3 className="font-ui text-sm font-semibold text-gray-900 mb-4">Invitation Message</h3>
-                <FormField label="Default share message">
-                  <Textarea value={sharingConfig.invitationMessage || ""} onChange={(e) => setSharingConfig((prev) => ({ ...prev, invitationMessage: e.target.value }))} placeholder="You're invited to our wedding!" className="!bg-white !border-gray-200 !text-gray-700" />
-                </FormField>
-                <div className="mt-4">
-                  <Button variant="primary" size="md" onClick={() => updateSharing.mutate(sharingConfig)} disabled={updateSharing.isPending}>Save Message</Button>
-                </div>
-              </Card>
-            </div>
-          )}
-
-          {/* QR Code tab */}
-          {activeTab === "qr" && (
-            <div className="space-y-6">
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <QrCode size={16} className="text-indigo-600" />
-                    <h3 className="font-ui text-sm font-semibold text-gray-900">Wedding QR Code</h3>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={() => regenerateQrToken.mutate()} disabled={regenerateQrToken.isPending}>
-                    <RefreshCw size={14} className="mr-1" /> Regenerate Token
-                  </Button>
-                </div>
-
-                <div className="flex flex-col items-center gap-4">
-                  {qrUrl ? (
-                    <img src={qrUrl} alt="QR Code" className="w-48 h-48 rounded-lg border border-gray-200" />
-                  ) : (
-                    <div className="w-48 h-48 flex items-center justify-center bg-gray-50 rounded-lg border border-gray-200">
-                      <QrCode size={48} className="text-gray-300" />
-                    </div>
-                  )}
-                  <p className="font-mono text-xs text-gray-500 text-center break-all">{qrLink}</p>
-                  <div className="flex gap-2 flex-wrap justify-center">
-                    <Button variant="outline" size="sm" onClick={() => downloadQRPNG(qrLink, `${wedding.slug}-qr.png`)}><Download size={14} className="mr-1" /> PNG</Button>
-                    <Button variant="outline" size="sm" onClick={() => downloadQRSVG(qrLink, `${wedding.slug}-qr.svg`)}><Download size={14} className="mr-1" /> SVG</Button>
-                    <Button variant="outline" size="sm" onClick={() => downloadQRHighRes(qrLink, `${wedding.slug}-qr-hires.png`)}><Download size={14} className="mr-1" /> High-Res PNG</Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleCopy(qrLink)}><Copy size={14} className="mr-1" /> Copy Link</Button>
-                  </div>
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-gray-100 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <Toggle checked={sharingConfig.enableGuestQr ?? false} onChange={(v) => { const newConfig = { ...sharingConfig, enableGuestQr: v }; setSharingConfig(newConfig); updateSharing.mutate(newConfig); }} />
-                    <span className="font-ui text-sm text-gray-700">Enable guest-specific QR codes</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Toggle checked={sharingConfig.qrBypassLogin ?? false} onChange={(v) => { const newConfig = { ...sharingConfig, qrBypassLogin: v }; setSharingConfig(newConfig); updateSharing.mutate(newConfig); }} />
-                    <span className="font-ui text-sm text-gray-700">QR codes bypass guest login</span>
-                  </div>
-                </div>
-              </Card>
-            </div>
-          )}
-
-          {/* Guest QR tab */}
-          {activeTab === "guests" && (
-            <div className="space-y-6">
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Users size={16} className="text-indigo-600" />
-                    <h3 className="font-ui text-sm font-semibold text-gray-900">Guest QR Codes</h3>
-                    {guestQrItems.length > 0 && <Badge variant="default">{guestQrItems.length} generated</Badge>}
-                  </div>
-                  {guestQrItems.length > 0 && (
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => downloadAllGuestQRsAsZip(guestQrItems, `${wedding.slug}-guest-qr-codes.zip`, (token) => `${websiteUrl}?qr=${token}`)}><Download size={14} className="mr-1" /> ZIP</Button>
-                      <Button variant="outline" size="sm" onClick={() => downloadAllGuestQRsAsPDF(guestQrItems, `${wedding.slug}-guest-qr-codes.pdf`, (token) => `${websiteUrl}?qr=${token}`)}><Download size={14} className="mr-1" /> PDF</Button>
-                    </div>
-                  )}
-                </div>
-
-                {guests && guests.length > 0 ? (
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {guests.map((guest) => {
-                      const token = guestTokenMap.get(guest.id);
-                      return (
-                        <div key={guest.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
-                          <div>
-                            <div className="font-ui text-sm font-medium text-gray-900">{guest.full_name}</div>
-                            <div className="font-ui text-xs text-gray-500">@{guest.username}</div>
-                          </div>
-                          {token ? (
-                            <div className="flex items-center gap-2">
-                              <Badge variant="success">QR Ready</Badge>
-                              <button onClick={() => downloadQRPNG(`${websiteUrl}?qr=${token.token}`, `${guest.username}-qr.png`)} className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"><Download size={14} className="text-gray-500" /></button>
-                            </div>
-                          ) : (
-                            <Button variant="ghost" size="sm" onClick={() => generateGuestToken.mutate(guest.id)}><QrCode size={14} className="mr-1" /> Generate</Button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <EmptyState icon={<Users size={48} />} title="No guests yet" description="Add guests first to generate their individual QR codes." />
-                )}
-              </Card>
-            </div>
-          )}
-
-          {/* OG / Social tab */}
-          {activeTab === "og" && (
-            <div className="space-y-6">
-              <Card className="p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Globe size={16} className="text-indigo-600" />
-                  <h3 className="font-ui text-sm font-semibold text-gray-900">Social Media Preview (Open Graph)</h3>
-                </div>
-                <div className="space-y-4">
-                  <FormField label="OG Title">
-                    <Input value={sharingConfig.ogTitle || ""} onChange={(e) => setSharingConfig((prev) => ({ ...prev, ogTitle: e.target.value }))} placeholder="Our Wedding" className="!bg-white !border-gray-200 !text-gray-700" />
-                  </FormField>
-                  <FormField label="OG Description">
-                    <Textarea value={sharingConfig.ogDescription || ""} onChange={(e) => setSharingConfig((prev) => ({ ...prev, ogDescription: e.target.value }))} placeholder="Description shown on social media" className="!bg-white !border-gray-200 !text-gray-700" />
-                  </FormField>
-                  <FormField label="OG Image URL">
-                    <Input value={sharingConfig.ogImageUrl || ""} onChange={(e) => setSharingConfig((prev) => ({ ...prev, ogImageUrl: e.target.value || null }))} placeholder="https://..." className="!bg-white !border-gray-200 !text-gray-700" />
-                  </FormField>
-                  <Button variant="primary" size="md" onClick={() => updateSharing.mutate(sharingConfig)} disabled={updateSharing.isPending}><Check size={14} className="mr-1" /> Save OG Settings</Button>
-                </div>
-              </Card>
-
-              {/* Preview */}
-              <Card className="p-6">
-                <h3 className="font-ui text-sm font-semibold text-gray-900 mb-4">Share Preview</h3>
-                <div className="max-w-sm border border-gray-200 rounded-lg overflow-hidden">
-                  {sharingConfig.ogImageUrl ? (
-                    <img src={sharingConfig.ogImageUrl} alt="OG Preview" className="w-full h-48 object-cover" />
-                  ) : (
-                    <div className="w-full h-48 bg-gradient-to-br from-indigo-50 to-purple-50 flex items-center justify-center">
-                      <Globe size={40} className="text-gray-300" />
-                    </div>
-                  )}
-                  <div className="p-4">
-                    <p className="font-ui text-xs text-gray-400 uppercase tracking-wider mb-1">{websiteUrl}</p>
-                    <h4 className="font-ui text-sm font-semibold text-gray-900 mb-1">{sharingConfig.ogTitle || `${wedding.couple_name_one} & ${wedding.couple_name_two}`}</h4>
-                    <p className="font-ui text-xs text-gray-500">{sharingConfig.ogDescription || shareText}</p>
-                  </div>
-                </div>
-              </Card>
-            </div>
-          )}
-        </div>
+      <div className="mb-4">
+        <h2 className="text-xl font-semibold text-gray-900">Sharing</h2>
+        <p className="mt-1 text-sm text-gray-500">Share your wedding invitation via QR codes and social media.</p>
       </div>
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+
+      <div className="space-y-6">
+        {/* Website URL & Share */}
+        <Card>
+          <h3 className="mb-3 flex items-center gap-2 font-semibold text-gray-900">
+            <Globe className="h-4 w-4 text-indigo-600" /> Website URL
+          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex-1 min-w-[200px] rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+              {shareUrl}
+            </div>
+            <Button variant="outline" onClick={() => handleCopy(shareUrl)}>
+              <Copy className="mr-2 h-4 w-4" /> Copy
+            </Button>
+            <Button onClick={handleShare}>
+              <Share2 className="mr-2 h-4 w-4" /> Share
+            </Button>
+          </div>
+          {qrToken && (
+            <div className="mt-3">
+              <p className="text-xs text-gray-500">QR Token: <code className="rounded bg-gray-100 px-1.5 py-0.5 text-gray-700">{qrToken}</code></p>
+            </div>
+          )}
+        </Card>
+
+        {/* Main QR Code */}
+        <Card>
+          <h3 className="mb-4 flex items-center gap-2 font-semibold text-gray-900">
+            <QrCode className="h-4 w-4 text-indigo-600" /> Main QR Code
+          </h3>
+          <div className="flex flex-col items-center gap-4 md:flex-row md:items-start">
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              {qrUrl ? (
+                <img src={qrUrl} alt="QR Code" className="h-48 w-48" />
+              ) : (
+                <div className="flex h-48 w-48 items-center justify-center text-gray-400">Generating...</div>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <p className="text-sm text-gray-600">Download your QR code in different formats:</p>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => downloadQRPNG(shareUrl, "wedding-qr.png")}>
+                  <Download className="mr-2 h-4 w-4" /> PNG
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => downloadQRSVG(shareUrl, "wedding-qr.svg")}>
+                  <Download className="mr-2 h-4 w-4" /> SVG
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => downloadQRHighRes(shareUrl, "wedding-qr-hd.png", 1024)}>
+                  <Download className="mr-2 h-4 w-4" /> High-Res
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Guest QR Codes */}
+        <Card>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 font-semibold text-gray-900">
+              <Users className="h-4 w-4 text-indigo-600" /> Guest QR Codes
+            </h3>
+            {guests && guests.length > 0 && (
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => downloadAllGuestQRsAsZip(guests, shareUrl)}>
+                  <Download className="mr-2 h-4 w-4" /> ZIP
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => downloadAllGuestQRsAsPDF(guests, shareUrl)}>
+                  <Download className="mr-2 h-4 w-4" /> PDF
+                </Button>
+              </div>
+            )}
+          </div>
+          {guests && guests.length > 0 ? (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+              {guests.slice(0, 24).map((guest) => (
+                <div key={guest.id} className="flex flex-col items-center rounded-lg border border-gray-200 p-3">
+                  {guestQrUrls[guest.id] ? (
+                    <img src={guestQrUrls[guest.id]} alt={guest.name} className="h-24 w-24" />
+                  ) : (
+                    <div className="flex h-24 w-24 items-center justify-center text-gray-400">...</div>
+                  )}
+                  <p className="mt-2 text-center text-xs font-medium text-gray-700 truncate w-full">{guest.name}</p>
+                  <button
+                    onClick={() => {
+                      const tokenMap = new Map((guestTokens || []).map((t) => [t.guest_id, t.token]));
+                      const token = tokenMap.get(guest.id) || guest.username;
+                      handleCopy(`${shareUrl}?t=${token}`);
+                    }}
+                    className="mt-1 text-xs text-indigo-600 hover:underline"
+                  >
+                    Copy link
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon={<Users className="h-10 w-10" />} title="No guests yet" description="Add guests to generate individual QR codes." />
+          )}
+        </Card>
+
+        {/* OG / Share Preview Settings */}
+        <Card className="space-y-4">
+          <h3 className="font-semibold text-gray-900">Open Graph Settings</h3>
+          <div className="flex items-center justify-between">
+            <Label>Enable sharing</Label>
+            <Toggle checked={sharing.enabled} onChange={(v) => setSharing({ ...sharing, enabled: v })} label={sharing.enabled ? "On" : "Off"} />
+          </div>
+          <FormField label="OG Title">
+            <Input value={sharing.og_title} onChange={(e) => setSharing({ ...sharing, og_title: e.target.value })} placeholder="Title for social media" />
+          </FormField>
+          <FormField label="OG Description">
+            <Textarea value={sharing.og_description} onChange={(e) => setSharing({ ...sharing, og_description: e.target.value })} placeholder="Description for social media" />
+          </FormField>
+          <FormField label="OG Image">
+            <ImageUpload
+              value={sharing.og_image_url ?? null}
+              onChange={(url) => setSharing({ ...sharing, og_image_url: url ?? null })}
+              label="Preview image (1200x630 recommended)"
+            />
+          </FormField>
+          <Button onClick={() => saveSharing.mutate()} disabled={saveSharing.isPending}>
+            <Save className="mr-2 h-4 w-4" /> {saveSharing.isPending ? "Saving..." : "Save Settings"}
+          </Button>
+        </Card>
+
+        {/* Share Preview */}
+        <Card>
+          <h3 className="mb-3 flex items-center gap-2 font-semibold text-gray-900">
+            <Link2 className="h-4 w-4 text-indigo-600" /> Share Preview
+          </h3>
+          <div className="max-w-md overflow-hidden rounded-lg border border-gray-200">
+            {sharing.og_image_url ? (
+              <img src={sharing.og_image_url} alt="OG preview" className="h-48 w-full object-cover" />
+            ) : (
+              <div className="flex h-48 items-center justify-center bg-gray-100 text-gray-400">No image</div>
+            )}
+            <div className="p-4">
+              <p className="text-xs text-gray-500">{shareUrl}</p>
+              <p className="mt-1 font-semibold text-gray-900">{sharing.og_title || "Your Wedding Invitation"}</p>
+              <p className="mt-1 text-sm text-gray-600">{sharing.og_description || "View our wedding invitation and RSVP."}</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white shadow-lg">
+          {toast}
+        </div>
+      )}
     </AdminLayout>
   );
 }

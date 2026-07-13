@@ -1,17 +1,19 @@
-import { Link } from "react-router-dom";
-import { Heart, ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
+import { Heart, ArrowRight } from "lucide-react";
 
 export function Landing() {
+  const navigate = useNavigate();
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center px-6">
-      <div className="text-center max-w-2xl">
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-[var(--color-primary)]/10 rounded-full mb-6">
-          <Heart size={36} className="text-[var(--color-primary)]" />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col items-center justify-center p-8">
+      <div className="max-w-2xl text-center">
+        <Heart className="mx-auto h-16 w-16 text-rose-400 mb-6" />
+        <h1 className="text-4xl font-bold text-gray-900 mb-3">Wedding Invitation Platform</h1>
+        <p className="text-lg text-gray-600 mb-8">Create beautiful, customisable digital wedding invitations with QR codes, RSVP management, and more.</p>
+        <div className="flex gap-3 justify-center">
+          <Button size="lg" onClick={() => navigate("/host-login")}>Host Login <ArrowRight className="ml-2 h-4 w-4" /></Button>
+          <Button size="lg" variant="outline" onClick={() => navigate("/w/demo")}>View Demo</Button>
         </div>
-        <h1 className="font-script text-5xl text-[var(--color-primary)] mb-4">Wedding Invitation</h1>
-        <p className="font-body text-lg text-[var(--color-text-muted)] mb-8">Create a beautiful digital wedding invitation for your special day.</p>
-        <Link to="/host-login"><Button variant="primary" size="lg">Get Started<ArrowRight size={16} className="ml-2" /></Button></Link>
       </div>
     </div>
   );

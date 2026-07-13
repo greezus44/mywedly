@@ -1,57 +1,117 @@
-import { createContext, useContext, useState, useEffect, createElement, type ReactNode } from "react";
-import type { GuestSession } from "./supabase";
+import { createContext, createElement, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import { supabase } from "./supabase";
+
+interface GuestSession {
+  guest_id: string;
+  guest_name: string;
+  wedding_id: string;
+  wedding_slug: string;
+}
 
 interface GuestAuthContextValue {
   session: GuestSession | null;
   loading: boolean;
-  signIn: (username: string, slug: string) => Promise<{ error: string | null }>;
+  signIn: (username: string, weddingSlug: string) => Promise<{ error: string | null }>;
   signInWithToken: (token: string) => Promise<{ error: string | null }>;
   signOut: () => void;
 }
 
-const GuestAuthContext = createContext<GuestAuthContextValue | null>(null);
+const GuestAuthContext = createContext<GuestAuthContextValue | undefined>(undefined);
+
+const STORAGE_KEY = "guest_session";
 
 export function GuestAuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<GuestSession | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem("guest-session");
-    if (stored) { try { setSession(JSON.parse(stored)); } catch { sessionStorage.removeItem("guest-session"); } }
+    try {
+      const stored = sessionStorage.getItem(STORAGE_KEY);
+      if (stored) setSession(JSON.parse(stored));
+    } catch { /* ignore */ }
     setLoading(false);
   }, []);
 
-  const signIn = async (username: string, slug: string) => {
+  const signIn = useCallback(async (username: string, weddingSlug: string) => {
     try {
-      const { data: wedding, error: wErr } = await supabase.from("weddings").select("*").eq("slug", slug).eq("is_published", true).single();
-      if (wErr || !wedding) return { error: "Wedding not found" };
-      const { data: guest, error: gErr } = await supabase.from("guests").select("*").eq("wedding_id", wedding.id).eq("username", username.trim()).maybeSingle();
-      if (gErr || !guest) return { error: "Invalid username. Please check your invitation." };
-      const newSession: GuestSession = { guest, wedding };
-      setSession(newSession);
-      sessionStorage.setItem("guest-session", JSON.stringify(newSession));
-      return { error: null };
-    } catch { return { error: "Sign in failed. Please try again." }; }
-  };
+      const { data: wedding, error: wError } = await supabase
+        .from("weddings")
+        .select("id, slug")
+        .eq("slug", weddingSlug)
+        .maybeSingle();
+      if (wError || !wedding) return { error: "Wedding not found" };
 
-  const signInWithToken = async (token: string) => {
+      const { data: guest, error: gError } = await supabase
+        .from("guests")
+        .select("id, name, wedding_id")
+        .eq("wedding_id", wedding.id)
+        .eq("username", username.trim())
+        .maybeSingle();
+      if (gError || !guest) return { error: "Invalid name. Please check your invitation." };
+
+      const s: GuestSession = {
+        guest_id: guest.id,
+        guest_name: guest.name,
+        wedding_id: guest.wedding_id,
+        wedding_slug: wedding.slug,
+      };
+      setSession(s);
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+      return { error: null };
+    } catch {
+      return { error: "Sign-in failed. Please try again." };
+    }
+  }, []);
+
+  const signInWithToken = useCallback(async (token: string) => {
     try {
-      const { data: guestToken, error: tErr } = await supabase.from("guest_tokens").select("*, guest:guests(*), wedding:weddings(*)").eq("token", token).maybeSingle();
-      if (tErr || !guestToken) return { error: "Invalid or expired QR code." };
-      const newSession: GuestSession = { guest: guestToken.guest as any, wedding: guestToken.wedding as any };
-      setSession(newSession);
-      sessionStorage.setItem("guest-session", JSON.stringify(newSession));
+      const { data: tokenRow, error: tError } = await supabase
+        .from("guest_tokens")
+        .select("guest_id, wedding_id")
+        .eq("token", token)
+        .maybeSingle();
+      if (tError || !tokenRow) return { error: "Invalid or expired token" };
+
+      const { data: guest, error: gError } = await supabase
+        .from("guests")
+        .select("id, name, wedding_id")
+        .eq("id", tokenRow.guest_id)
+        .maybeSingle();
+      if (gError || !guest) return { error: "Guest not found" };
+
+      const { data: wedding } = await supabase
+        .from("weddings")
+        .select("slug")
+        .eq("id", guest.wedding_id)
+        .maybeSingle();
+
+      const s: GuestSession = {
+        guest_id: guest.id,
+        guest_name: guest.name,
+        wedding_id: guest.wedding_id,
+        wedding_slug: wedding?.slug || "",
+      };
+      setSession(s);
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(s));
       return { error: null };
-    } catch { return { error: "QR code sign in failed." }; }
-  };
+    } catch {
+      return { error: "Token sign-in failed." };
+    }
+  }, []);
 
-  const signOut = () => { setSession(null); sessionStorage.removeItem("guest-session"); };
+  const signOut = useCallback(() => {
+    setSession(null);
+    sessionStorage.removeItem(STORAGE_KEY);
+  }, []);
 
-  return createElement(GuestAuthContext.Provider, { value: { session, loading, signIn, signInWithToken, signOut } }, children);
+  return createElement(
+    GuestAuthContext.Provider,
+    { value: { session, loading, signIn, signInWithToken, signOut } },
+    children
+  );
 }
 
-export function useGuestAuth() {
+export function useGuestAuth(): GuestAuthContextValue {
   const ctx = useContext(GuestAuthContext);
   if (!ctx) throw new Error("useGuestAuth must be used within GuestAuthProvider");
   return ctx;

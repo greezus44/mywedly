@@ -1,111 +1,65 @@
-@import "tailwindcss";
-
-@theme {
-  --color-parchment: #f5edda;
-  --color-parchment-light: #faf5e8;
-  --color-parchment-dark: #ebe0c4;
-  --color-gold: #b8973a;
-  --color-gold-light: #d4b85c;
-  --color-gold-dark: #8a6f28;
-  --color-gold-pale: #e8d99f;
-  --color-ink: #2a2a2a;
-  --color-mist: #8a8a8a;
-  --color-card: #ffffff;
-  --color-cream: #faf5e8;
-  --color-sand: #f0e6d2;
-  --color-sage: #8a9a7b;
-  --color-rose: #c9a0a0;
-  --color-onyx: #1a1a1a;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --font-script: "Playfair Display", serif;
-  --font-heading: "Cormorant Garamond", serif;
-  --font-body: "Cormorant Garamond", serif;
-  --font-ui: "Jost", sans-serif;
-  --color-primary: #b8973a;
-  --color-primary-light: #d4b85c;
-  --color-primary-dark: #8a6f28;
-  --color-bg: #f5edda;
-  --color-bg-light: #faf5e8;
-  --color-surface: #ffffff;
-  --color-text: #2a2a2a;
-  --color-text-muted: #8a8a8a;
-  --color-border: #b8973a;
-  --color-accent: #c9a0a0;
-  --color-success: #8a9a7b;
-  --color-warning: #d4b85c;
-  --color-error: #c97070;
-  --radius: 8px;
-  --button-radius: 8px;
-  --shadow-soft: 0 2px 8px rgba(184, 151, 58, 0.08);
-  --shadow-card: 0 4px 24px rgba(184, 151, 58, 0.12);
+  --color-primary: #C9A961;
+  --color-secondary: #F5E6D3;
+  --color-accent: #8B6F47;
+  --color-bg: #FFFBF5;
+  --color-surface: #FFFFFF;
+  --color-text: #2D2D2D;
+  --color-text-muted: #8B8B8B;
+  --color-border: #E5DDD5;
+  --color-button-bg: #C9A961;
+  --color-button-text: #FFFFFF;
+  --font-script: "Great Vibes", cursive;
+  --font-heading: "Playfair Display", serif;
+  --font-body: "Montserrat", sans-serif;
+  --font-ui: "Inter", sans-serif;
+  --font-heading-size: 3rem;
+  --font-body-size: 1rem;
+  --font-heading-weight: 600;
+  --font-body-weight: 400;
+  --letter-spacing: 0.02em;
 }
 
-@layer base {
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
-  body {
-    background: var(--color-bg, #f5edda);
-    color: var(--color-text, #2a2a2a);
-    font-family: var(--font-body, "Cormorant Garamond", serif);
-    font-size: 17px;
-    line-height: 1.6;
-    overflow-x: hidden;
-  }
-  ::selection { background: var(--color-primary, #b8973a); color: #fff; }
-}
-
-@layer utilities {
-  .font-script { font-family: var(--font-script, "Playfair Display"), serif; }
-  .font-heading { font-family: var(--font-heading, "Cormorant Garamond"), serif; }
-  .font-body { font-family: var(--font-body, "Cormorant Garamond"), serif; }
-  .font-ui { font-family: var(--font-ui, "Jost"), sans-serif; }
-  .tracking-luxe { letter-spacing: 0.25em; }
-  .tracking-wider-luxe { letter-spacing: 0.15em; }
-  .animate-fade-in { animation: fadeIn 0.8s ease-out forwards; }
-  .animate-fade-in-up { animation: fadeInUp 0.8s ease-out forwards; }
-  .animate-fade-in-down { animation: fadeInDown 0.8s ease-out forwards; }
-  .animate-scale-in { animation: scaleIn 0.6s ease-out forwards; }
-  .animate-success-pop { animation: successPop 0.5s ease-out forwards; }
-  .opacity-0-init { opacity: 0; }
-  .delay-100 { animation-delay: 0.1s; }
-  .delay-200 { animation-delay: 0.2s; }
-  .delay-300 { animation-delay: 0.3s; }
-  .delay-400 { animation-delay: 0.4s; }
-  .delay-500 { animation-delay: 0.5s; }
-  .delay-700 { animation-delay: 0.7s; }
-  .delay-1000 { animation-delay: 1s; }
-  .scrollbar-hide::-webkit-scrollbar { display: none; }
-  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-}
-
+/* Dashboard theme isolation */
 .dash-root {
-  --dash-bg: #fafafa;
-  --dash-surface: #ffffff;
-  --dash-border: #e5e7eb;
-  --dash-text: #1f2937;
-  --dash-text-muted: #6b7280;
-  --dash-accent: #6366f1;
-  --dash-accent-light: #818cf8;
-  --dash-accent-bg: #eef2ff;
-  --dash-radius: 10px;
-  --dash-shadow: 0 1px 3px rgba(0,0,0,0.08);
-  --dash-shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
+  --dash-bg: #F9FAFB;
+  --dash-surface: #FFFFFF;
+  --dash-text: #111827;
+  --dash-text-muted: #6B7280;
+  --dash-border: #E5E7EB;
+  --dash-accent: #4F46E5;
+  --dash-accent-bg: #EEF2FF;
+  --dash-accent-text: #4F46E5;
 }
 
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes fadeInUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes fadeInDown { from { opacity: 0; transform: translateY(-24px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-@keyframes successPop { 0% { opacity: 0; transform: scale(0.8); } 50% { transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
+body {
+  font-family: "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 
+.font-script { font-family: var(--font-script), cursive; }
+.font-heading { font-family: var(--font-heading), serif; }
+.font-body { font-family: var(--font-body), sans-serif; }
+.font-ui { font-family: var(--font-ui), sans-serif; }
+
+/* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(184, 151, 58, 0.3); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
 
-.device-browser-bar { background: #e8e8e8; border-bottom: 1px solid #d0d0d0; display: flex; align-items: center; padding: 8px 12px; gap: 6px; border-radius: 8px 8px 0 0; }
-.device-browser-dot { width: 12px; height: 12px; border-radius: 50%; }
-.device-tablet-frame { border: 14px solid #1a1a1a; border-radius: 20px; background: #1a1a1a; box-shadow: 0 8px 32px rgba(0,0,0,0.15); }
-.device-mobile-frame { border: 10px solid #1a1a1a; border-radius: 28px; background: #1a1a1a; box-shadow: 0 8px 32px rgba(0,0,0,0.15); position: relative; }
-.device-mobile-notch { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 120px; height: 24px; background: #1a1a1a; border-radius: 0 0 16px 16px; z-index: 10; }
+/* Delay utilities */
+.delay-100 { animation-delay: 0.1s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }
+.delay-600 { animation-delay: 0.6s; }
+.delay-700 { animation-delay: 0.7s; }
+
+.opacity-0 { opacity: 0; }

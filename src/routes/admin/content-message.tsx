@@ -1,102 +1,88 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Wedding, type WeddingContent } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
-import { SplitEditor } from "../../components/preview/SplitEditor";
+import { SplitEditor, type DeviceType } from "../../components/preview/SplitEditor";
 import { SendMessagePreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
 import { Textarea } from "../../components/ui/Input";
-import { Toast } from "../../components/ui/index";
+import { Card } from "../../components/ui/index";
 import { FormField } from "../../components/ui/ImageUpload";
-import { getCoverContent } from "../../lib/theme";
-import { Save, MessageCircle } from "lucide-react";
+import { Save } from "lucide-react";
 
 export function ContentMessagePage() {
-  const queryClient = useQueryClient();
+  const [device, setDevice] = useState<DeviceType>("desktop");
+  const [content, setContent] = useState<WeddingContent>({});
   const [toast, setToast] = useState<string | null>(null);
+  const qc = useQueryClient();
 
-  const { data: wedding, isLoading } = useQuery({
+  const { data: wedding } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
-      const { data, error } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).single();
-      if (error) throw error;
-      return data as Wedding;
+      const { data } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).maybeSingle();
+      if (data) {
+        const c = (data as Wedding).draft_content || (data as Wedding).content || {};
+        setContent(c);
+      }
+      return data as Wedding | null;
     },
   });
 
-  const existingContent = wedding ? getCoverContent(wedding) : ({} as WeddingContent);
-  const [content, setContent] = useState<WeddingContent>(existingContent);
-
-  useEffect(() => {
-    if (wedding && JSON.stringify(existingContent) !== JSON.stringify(content)) {
-      setContent(existingContent);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wedding]);
-
-  const saveDraft = useMutation({
-    mutationFn: async (newContent: WeddingContent) => {
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("weddings").update({ draft_content: newContent }).eq("created_by", user.user.id);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wedding"] }); setToast("Draft saved"); },
-  });
-
-  const publish = useMutation({
+  const save = useMutation({
     mutationFn: async () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("weddings").update({ content: content, draft_content: content }).eq("created_by", user.user.id);
+      const { error } = await supabase.from("weddings").update({ draft_content: content }).eq("created_by", user.user.id);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wedding"] }); setToast("Message content published successfully"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["wedding"] });
+      setToast("Draft saved");
+      setTimeout(() => setToast(null), 2000);
+    },
   });
 
-  const update = (patch: Partial<WeddingContent>) => {
-    const newContent = { ...content, ...patch };
-    setContent(newContent);
-    saveDraft.mutate(newContent);
-  };
+  const update = (patch: Partial<WeddingContent>) => setContent({ ...content, ...patch });
 
-  if (isLoading) return <AdminLayout><div className="flex items-center justify-center h-full"><div className="animate-pulse text-gray-400">Loading...</div></div></AdminLayout>;
-  if (!wedding) return <AdminLayout><div className="p-6 text-gray-500">Wedding not found</div></AdminLayout>;
-
-  const previewWedding = { ...wedding, draft_content: content } as Wedding;
+  const previewWedding: Wedding | null = wedding ? { ...wedding, draft_content: content } : null;
 
   return (
     <AdminLayout>
-      <SplitEditor title="Message Editor" preview={<SendMessagePreview wedding={previewWedding} />}>
-        <div className="space-y-6">
-          <div className="flex items-center gap-2">
-            <MessageCircle size={18} className="text-indigo-600" />
-            <h2 className="font-ui text-base font-semibold text-gray-900">Message Page Content</h2>
-          </div>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-gray-900">Message Editor</h2>
+        <Button onClick={() => save.mutate()} disabled={save.isPending}>
+          <Save className="mr-2 h-4 w-4" /> {save.isPending ? "Saving..." : "Save Draft"}
+        </Button>
+      </div>
 
-          <FormField label="Message Intro" hint="Text shown above the message form">
-            <Textarea value={content.message_intro || ""} onChange={(e) => update({ message_intro: e.target.value })} placeholder="e.g. Leave your well wishes for the happy couple..." className="!bg-white !border-gray-200 !text-gray-700" />
-          </FormField>
+      <SplitEditor device={device} onDeviceChange={setDevice} preview={(d) => <SendMessagePreview wedding={previewWedding} device={d} />}>
+        <div className="space-y-4">
+          <Card className="space-y-4">
+            <h3 className="font-semibold text-gray-900">Message Settings</h3>
+            <FormField label="Message Intro">
+              <Textarea value={content.message_intro || ""} onChange={(e) => update({ message_intro: e.target.value })} placeholder="Introduction for the guestbook / message section" />
+            </FormField>
+          </Card>
 
-          <FormField label="RSVP Intro" hint="Text shown above the RSVP form">
-            <Textarea value={content.rsvp_intro || ""} onChange={(e) => update({ rsvp_intro: e.target.value })} placeholder="e.g. Please let us know if you can make it" className="!bg-white !border-gray-200 !text-gray-700" />
-          </FormField>
-
-          <FormField label="RSVP Closing" hint="Text shown after RSVP submission">
-            <Textarea value={content.rsvp_closing || ""} onChange={(e) => update({ rsvp_closing: e.target.value })} placeholder="e.g. Thank you for your response!" className="!bg-white !border-gray-200 !text-gray-700" />
-          </FormField>
-
-          {/* Publish button */}
-          <div className="pt-4 border-t border-gray-100">
-            <Button variant="primary" size="md" className="w-full" onClick={() => publish.mutate()} disabled={publish.isPending}>
-              <Save size={14} className="mr-2" /> Publish Message Content
-            </Button>
-          </div>
+          <Card className="space-y-4">
+            <h3 className="font-semibold text-gray-900">RSVP Settings</h3>
+            <FormField label="RSVP Intro">
+              <Textarea value={content.rsvp_intro || ""} onChange={(e) => update({ rsvp_intro: e.target.value })} placeholder="Introduction text for RSVP section" />
+            </FormField>
+            <FormField label="RSVP Closing">
+              <Textarea value={content.rsvp_closing || ""} onChange={(e) => update({ rsvp_closing: e.target.value })} placeholder="Closing message after RSVP" />
+            </FormField>
+          </Card>
         </div>
       </SplitEditor>
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+
+      {toast && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-indigo-600 px-4 py-2 text-sm text-white shadow-lg">
+          {toast}
+        </div>
+      )}
     </AdminLayout>
   );
 }

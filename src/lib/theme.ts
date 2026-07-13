@@ -1,9 +1,31 @@
-import type { ThemeConfig, CoverConfig, WeddingContent, LogoConfig } from "./supabase";
+import type { ThemeConfig, CoverConfig, LogoConfig, LoginConfig, Wedding } from "./supabase";
+
+export const DEFAULT_THEME: ThemeConfig = {
+  primary: "#C9A961",
+  secondary: "#F5E6D3",
+  accent: "#8B6F47",
+  bg: "#FFFBF5",
+  surface: "#FFFFFF",
+  text: "#2D2D2D",
+  textMuted: "#8B8B8B",
+  border: "#E5DDD5",
+  buttonBg: "#C9A961",
+  buttonText: "#FFFFFF",
+  scriptFont: "Great Vibes",
+  headingFont: "Playfair Display",
+  bodyFont: "Montserrat",
+  uiFont: "Inter",
+  headingSize: "3rem",
+  bodySize: "1rem",
+  headingWeight: "600",
+  bodyWeight: "400",
+  letterSpacing: "0.02em",
+};
 
 export const DEFAULT_LOGO_CONFIG: LogoConfig = {
   url: null,
   visible: true,
-  width: "64px",
+  width: "120px",
   height: "auto",
   maintainAspectRatio: true,
   position: "top-center",
@@ -12,108 +34,286 @@ export const DEFAULT_LOGO_CONFIG: LogoConfig = {
   margin: "0px",
   padding: "0px",
   responsive: {
-    desktop: { width: "64px", height: "auto" },
-    tablet: { width: "56px", height: "auto" },
-    mobile: { width: "48px", height: "auto" },
+    desktop: { width: "120px", height: "auto" },
+    tablet: { width: "100px", height: "auto" },
+    mobile: { width: "80px", height: "auto" },
   },
-  opacity: 100,
+  opacity: 1,
   borderRadius: "0px",
-  dropShadow: { enabled: false, blur: "8px", color: "#000000", offsetX: "0px", offsetY: "4px" },
-  glow: { enabled: false, color: "#b8973a", blur: "20px" },
+  dropShadow: { enabled: false, blur: "4px", color: "rgba(0,0,0,0.15)", offsetX: "0px", offsetY: "2px" },
+  glow: { enabled: false, color: "rgba(201,169,97,0.5)", blur: "8px" },
   rotation: 0,
-  maxWidth: "none",
-  maxHeight: "none",
+  maxWidth: "300px",
+  maxHeight: "200px",
   objectFit: "contain",
-  showOnPages: "cover-only",
+  showOnPages: "all-pages",
   customPages: [],
   showInNavbar: false,
 };
 
-export const DEFAULT_THEME: ThemeConfig = {
-  colors: { primary: "#b8973a", primaryLight: "#d4b85c", primaryDark: "#8a6f28", background: "#f5edda", backgroundLight: "#faf5e8", surface: "#ffffff", text: "#2a2a2a", textMuted: "#8a8a8a", border: "#b8973a", accent: "#c9a0a0", success: "#8a9a7b", warning: "#d4b85c", error: "#c97070" },
-  typography: { scriptFont: "Playfair Display", headingFont: "Cormorant Garamond", bodyFont: "Cormorant Garamond", uiFont: "Jost", scriptSize: "3rem", headingSize: "1.5rem", bodySize: "1.0625rem", letterSpacing: "0.15em" },
-  ui: { radius: "8px", buttonRadius: "8px", buttonStyle: "outline" },
-};
-
 export const DEFAULT_COVER_CONFIG: CoverConfig = {
-  branding: { logoUrl: null, logoSize: "64px", logoPosition: "center", logoVisible: true, divider: "line", logo: { ...DEFAULT_LOGO_CONFIG } },
-  colors: { primary: "#b8973a", secondary: "#d4b85c", accent: "#c9a0a0", background: "#1a1a1a", text: "#ffffff", buttonColor: "#b8973a", buttonTextColor: "#ffffff", overlayColor: "#000000", overlayOpacity: 0.4 },
-  typography: { headingFont: "Playfair Display", bodyFont: "Cormorant Garamond", headingSize: "3rem", bodySize: "1rem", headingWeight: "400", bodyWeight: "400", letterSpacing: "0.15em" },
-  layout: { contentAlignment: "center", verticalPosition: "center", buttonStyle: "outline", borderRadius: "8px", spacing: "1.5rem" },
-  background: { type: "image", imageUrl: null, videoUrl: null, slideshowUrls: [], blur: 0, brightness: 100, overlayGradient: "" },
+  background: {
+    type: "image",
+    image_url: null,
+    video_url: null,
+    slideshow_urls: [],
+    color: "#1a1a2e",
+  },
+  overlay: { enabled: true, color: "#000000", opacity: 0.4 },
+  blur: "0px",
+  brightness: 1,
+  branding: {
+    couple_name_one: "",
+    couple_name_two: "",
+    date: "",
+    logo: { ...DEFAULT_LOGO_CONFIG },
+  },
+  typography: {
+    heading_font: "Playfair Display",
+    body_font: "Montserrat",
+    heading_size: "3.5rem",
+    body_size: "1.125rem",
+    heading_color: "#FFFFFF",
+    body_color: "#F5E6D3",
+    heading_weight: "600",
+    letter_spacing: "0.05em",
+  },
+  layout: {
+    content_alignment: "center",
+    vertical_position: "center",
+    max_width: "800px",
+    padding: "2rem",
+  },
+  button: {
+    text: "Enter Website",
+    bg_color: "#C9A961",
+    text_color: "#FFFFFF",
+    border_radius: "9999px",
+    padding_x: "2.5rem",
+    padding_y: "1rem",
+  },
+  corner_radius: "1rem",
+  show_countdown: true,
+  show_date: true,
+  enter_button_text: "Enter Website",
 };
 
-export const THEME_PRESETS: { name: string; theme: ThemeConfig; cover: CoverConfig }[] = [
-  { name: "Classic Gold", theme: DEFAULT_THEME, cover: DEFAULT_COVER_CONFIG },
-  { name: "Elegant White", theme: { colors: { ...DEFAULT_THEME.colors!, background: "#ffffff", backgroundLight: "#fafafa", surface: "#ffffff", text: "#1a1a1a", border: "#c0c0c0", primary: "#888888", primaryLight: "#aaaaaa", primaryDark: "#666666" }, typography: { ...DEFAULT_THEME.typography! }, ui: { ...DEFAULT_THEME.ui! } }, cover: { ...DEFAULT_COVER_CONFIG, colors: { ...DEFAULT_COVER_CONFIG.colors!, primary: "#888888", background: "#f5f5f5", text: "#1a1a1a" } } },
-  { name: "Champagne", theme: { colors: { ...DEFAULT_THEME.colors!, background: "#f7f0e6", backgroundLight: "#fcf7ef", primary: "#c4a878", primaryLight: "#d8be98", primaryDark: "#a48858", border: "#c4a878" }, typography: { ...DEFAULT_THEME.typography! }, ui: { ...DEFAULT_THEME.ui! } }, cover: { ...DEFAULT_COVER_CONFIG, colors: { ...DEFAULT_COVER_CONFIG.colors!, primary: "#c4a878", background: "#2a2018" } } },
-  { name: "Sage Green", theme: { colors: { ...DEFAULT_THEME.colors!, background: "#f0f4ec", backgroundLight: "#f7f9f3", primary: "#7a8b6f", primaryLight: "#9aab8e", primaryDark: "#5a6b4f", border: "#7a8b6f" }, typography: { ...DEFAULT_THEME.typography! }, ui: { ...DEFAULT_THEME.ui! } }, cover: { ...DEFAULT_COVER_CONFIG, colors: { ...DEFAULT_COVER_CONFIG.colors!, primary: "#7a8b6f", background: "#1a2a1a" } } },
-  { name: "Dusty Blue", theme: { colors: { ...DEFAULT_THEME.colors!, background: "#eef2f5", backgroundLight: "#f5f8fa", primary: "#7a9ab8", primaryLight: "#9ab4cc", primaryDark: "#5a7a98", border: "#7a9ab8" }, typography: { ...DEFAULT_THEME.typography! }, ui: { ...DEFAULT_THEME.ui! } }, cover: { ...DEFAULT_COVER_CONFIG, colors: { ...DEFAULT_COVER_CONFIG.colors!, primary: "#7a9ab8", background: "#1a2a3a" } } },
-  { name: "Blush Pink", theme: { colors: { ...DEFAULT_THEME.colors!, background: "#faf0f0", backgroundLight: "#fdf5f5", primary: "#c9a0a0", primaryLight: "#dab5b5", primaryDark: "#a98080", border: "#c9a0a0" }, typography: { ...DEFAULT_THEME.typography! }, ui: { ...DEFAULT_THEME.ui! } }, cover: { ...DEFAULT_COVER_CONFIG, colors: { ...DEFAULT_COVER_CONFIG.colors!, primary: "#c9a0a0", background: "#2a1a1a" } } },
-  { name: "Terracotta", theme: { colors: { ...DEFAULT_THEME.colors!, background: "#f5ede6", backgroundLight: "#faf5f0", primary: "#c08060", primaryLight: "#d49a7a", primaryDark: "#a06040", border: "#c08060" }, typography: { ...DEFAULT_THEME.typography! }, ui: { ...DEFAULT_THEME.ui! } }, cover: { ...DEFAULT_COVER_CONFIG, colors: { ...DEFAULT_COVER_CONFIG.colors!, primary: "#c08060", background: "#2a1a14" } } },
-  { name: "Emerald", theme: { colors: { ...DEFAULT_THEME.colors!, background: "#e8f0ec", backgroundLight: "#f0f5f2", primary: "#2d8659", primaryLight: "#4aa674", primaryDark: "#1a6640", border: "#2d8659" }, typography: { ...DEFAULT_THEME.typography! }, ui: { ...DEFAULT_THEME.ui! } }, cover: { ...DEFAULT_COVER_CONFIG, colors: { ...DEFAULT_COVER_CONFIG.colors!, primary: "#2d8659", background: "#0a1a14" } } },
-  { name: "Midnight Black", theme: { colors: { ...DEFAULT_THEME.colors!, background: "#1a1a1a", backgroundLight: "#2a2a2a", surface: "#222222", text: "#f0f0f0", textMuted: "#999999", primary: "#d4af37", primaryLight: "#e8c55c", primaryDark: "#b8973a", border: "#d4af37" }, typography: { ...DEFAULT_THEME.typography! }, ui: { ...DEFAULT_THEME.ui! } }, cover: { ...DEFAULT_COVER_CONFIG, colors: { ...DEFAULT_COVER_CONFIG.colors!, primary: "#d4af37", background: "#000000", overlayOpacity: 0.6 } } },
-  { name: "Garden Wedding", theme: { colors: { ...DEFAULT_THEME.colors!, background: "#f3f0e8", backgroundLight: "#f9f7f2", primary: "#6b8e6b", primaryLight: "#8aab8a", primaryDark: "#4b6e4b", border: "#6b8e6b" }, typography: { ...DEFAULT_THEME.typography! }, ui: { ...DEFAULT_THEME.ui! } }, cover: { ...DEFAULT_COVER_CONFIG, colors: { ...DEFAULT_COVER_CONFIG.colors!, primary: "#6b8e6b", background: "#1a2a1a" } } },
-  { name: "Modern Minimal", theme: { colors: { ...DEFAULT_THEME.colors!, background: "#fafafa", backgroundLight: "#ffffff", primary: "#1a1a1a", primaryLight: "#444444", primaryDark: "#000000", border: "#1a1a1a" }, typography: { ...DEFAULT_THEME.typography! }, ui: { ...DEFAULT_THEME.ui! } }, cover: { ...DEFAULT_COVER_CONFIG, colors: { ...DEFAULT_COVER_CONFIG.colors!, primary: "#1a1a1a", background: "#f5f5f5", text: "#1a1a1a", buttonColor: "#1a1a1a", buttonTextColor: "#ffffff" } } },
+export const DEFAULT_LOGIN_CONFIG: LoginConfig = {
+  branding: {
+    logo: { ...DEFAULT_LOGO_CONFIG, position: "top-center", width: "100px" },
+  },
+  text: {
+    title: "Welcome",
+    subtitle: "Please sign in to view the invitation",
+    welcome_message: "Enter your name to continue",
+    username_placeholder: "Enter your name",
+    button_text: "Sign In",
+    helper_text: "Use the name from your invitation",
+    footer_message: "We can't wait to celebrate with you",
+  },
+  language: {
+    enabled: true,
+    default_lang: "en",
+    labels: { en: "English", ms: "Bahasa Melayu" },
+    order: ["en", "ms"],
+  },
+  background: {
+    type: "image",
+    image_url: null,
+    video_url: null,
+    color: "#1a1a2e",
+  },
+  overlay: { enabled: true, color: "#000000", opacity: 0.5 },
+  blur: "0px",
+  brightness: 1,
+  theme: {
+    primary: "#C9A961",
+    secondary: "#F5E6D3",
+    accent: "#8B6F47",
+    text: "#FFFFFF",
+    button_bg: "#C9A961",
+    button_text: "#FFFFFF",
+    input_bg: "rgba(255,255,255,0.08)",
+    border: "rgba(255,255,255,0.15)",
+  },
+  typography: {
+    heading_font: "Playfair Display",
+    body_font: "Montserrat",
+    heading_size: "2.5rem",
+    body_size: "1rem",
+    heading_weight: "600",
+    body_weight: "400",
+    letter_spacing: "0.03em",
+  },
+  form: {
+    input: {
+      width: "100%",
+      height: "56px",
+      border_radius: "12px",
+      border_color: "rgba(255,255,255,0.2)",
+      background: "rgba(255,255,255,0.08)",
+      placeholder_color: "rgba(255,255,255,0.5)",
+      focus_border_color: "#C9A961",
+      shadow: "0 4px 12px rgba(0,0,0,0.1)",
+      text_color: "#FFFFFF",
+      font_size: "1rem",
+      padding: "0.875rem 1.25rem",
+    },
+    button: {
+      width: "100%",
+      height: "56px",
+      border_radius: "12px",
+      bg_color: "#C9A961",
+      text_color: "#FFFFFF",
+      hover_bg_color: "#B8964F",
+      shadow: "0 4px 14px rgba(201,169,97,0.3)",
+      font_size: "1rem",
+      font_weight: "600",
+      loading_text: "Signing in...",
+    },
+    username_field: {
+      show_label: false,
+      label_text: "Your Name",
+    },
+  },
+  layout: {
+    content_alignment: "center",
+    vertical_position: "center",
+    max_width: "440px",
+    spacing: "1.5rem",
+    padding: "2.5rem",
+    margin: "0 auto",
+  },
+  language_selector: {
+    style: "segmented",
+    button_radius: "10px",
+    button_padding_x: "1.5rem",
+    button_padding_y: "0.625rem",
+    active_bg: "#C9A961",
+    active_text: "#FFFFFF",
+    inactive_bg: "transparent",
+    inactive_text: "rgba(255,255,255,0.7)",
+    border_color: "rgba(255,255,255,0.15)",
+    font_size: "0.875rem",
+    font_weight: "500",
+  },
+};
+
+export interface ThemePreset {
+  name: string;
+  config: Partial<ThemeConfig>;
+}
+
+export const THEME_PRESETS: ThemePreset[] = [
+  { name: "Classic Gold", config: { primary: "#C9A961", secondary: "#F5E6D3", accent: "#8B6F47", bg: "#FFFBF5", text: "#2D2D2D", buttonBg: "#C9A961", buttonText: "#FFFFFF" } },
+  { name: "Elegant White", config: { primary: "#B0B0B0", secondary: "#F8F8F8", accent: "#8C8C8C", bg: "#FFFFFF", text: "#333333", buttonBg: "#333333", buttonText: "#FFFFFF" } },
+  { name: "Champagne", config: { primary: "#D4AF7A", secondary: "#F7EEDD", accent: "#A0826D", bg: "#FFFDF7", text: "#4A3B2A", buttonBg: "#D4AF7A", buttonText: "#FFFFFF" } },
+  { name: "Sage Green", config: { primary: "#8A9A7B", secondary: "#E8EDE3", accent: "#6B7B5A", bg: "#F5F8F2", text: "#3A4A30", buttonBg: "#8A9A7B", buttonText: "#FFFFFF" } },
+  { name: "Dusty Blue", config: { primary: "#9DB4C0", secondary: "#E5EDF1", accent: "#7A99A8", bg: "#F4F8FA", text: "#3A4B55", buttonBg: "#9DB4C0", buttonText: "#FFFFFF" } },
+  { name: "Blush Pink", config: { primary: "#D4A5A5", secondary: "#F5E6E6", accent: "#B08585", bg: "#FFF7F7", text: "#5A3D3D", buttonBg: "#D4A5A5", buttonText: "#FFFFFF" } },
+  { name: "Terracotta", config: { primary: "#C17B50", secondary: "#F0DDD0", accent: "#A0653E", bg: "#FBF3EE", text: "#4A3528", buttonBg: "#C17B50", buttonText: "#FFFFFF" } },
+  { name: "Emerald", config: { primary: "#2D6A4F", secondary: "#D8E8DE", accent: "#1B4332", bg: "#F0F7F4", text: "#1B3328", buttonBg: "#2D6A4F", buttonText: "#FFFFFF" } },
+  { name: "Midnight Black", config: { primary: "#1A1A1A", secondary: "#2A2A2A", accent: "#C9A961", bg: "#0A0A0A", text: "#F5F5F5", buttonBg: "#C9A961", buttonText: "#0A0A0A" } },
+  { name: "Garden Wedding", config: { primary: "#6B8E23", secondary: "#F0F7E6", accent: "#556B2F", bg: "#F8FBF2", text: "#3A4A20", buttonBg: "#6B8E23", buttonText: "#FFFFFF" } },
+  { name: "Modern Minimal", config: { primary: "#4A4A4A", secondary: "#EEEEEE", accent: "#2D2D2D", bg: "#FAFAFA", text: "#2D2D2D", buttonBg: "#2D2D2D", buttonText: "#FFFFFF" } },
 ];
 
-export function themeToCssVars(theme: ThemeConfig | null | undefined): Record<string, string> {
+export const FONT_OPTIONS = [
+  "Playfair Display", "Cormorant Garamond", "Cormorant", "EB Garamond", "Cinzel",
+  "Marcellus", "Great Vibes", "Dancing Script", "Tangerine", "Sacramento",
+  "Parisienne", "Rozha One", "Montserrat", "Lato", "Inter", "Spectral",
+  "Libre Baskerville", "Source Serif Pro", "Bodoni Moda", "EB Garamond", "Marcellus",
+];
+
+export function themeToCssVars(theme: ThemeConfig | null): React.CSSProperties {
   const t = theme || DEFAULT_THEME;
-  const c = t.colors || {};
-  const ty = t.typography || {};
-  const u = t.ui || {};
   return {
-    "--color-primary": c.primary || DEFAULT_THEME.colors!.primary!,
-    "--color-primary-light": c.primaryLight || DEFAULT_THEME.colors!.primaryLight!,
-    "--color-primary-dark": c.primaryDark || DEFAULT_THEME.colors!.primaryDark!,
-    "--color-bg": c.background || DEFAULT_THEME.colors!.background!,
-    "--color-bg-light": c.backgroundLight || DEFAULT_THEME.colors!.backgroundLight!,
-    "--color-surface": c.surface || DEFAULT_THEME.colors!.surface!,
-    "--color-text": c.text || DEFAULT_THEME.colors!.text!,
-    "--color-text-muted": c.textMuted || DEFAULT_THEME.colors!.textMuted!,
-    "--color-border": c.border || DEFAULT_THEME.colors!.border!,
-    "--color-accent": c.accent || DEFAULT_THEME.colors!.accent!,
-    "--color-success": c.success || DEFAULT_THEME.colors!.success!,
-    "--color-warning": c.warning || DEFAULT_THEME.colors!.warning!,
-    "--color-error": c.error || DEFAULT_THEME.colors!.error!,
-    "--font-script": `"${ty.scriptFont || "Playfair Display"}", serif`,
-    "--font-heading": `"${ty.headingFont || "Cormorant Garamond"}", serif`,
-    "--font-body": `"${ty.bodyFont || "Cormorant Garamond"}", serif`,
-    "--font-ui": `"${ty.uiFont || "Jost"}", sans-serif`,
-    "--radius": u.radius || "8px",
-    "--button-radius": u.buttonRadius || "8px",
-  };
+    "--color-primary": t.primary,
+    "--color-secondary": t.secondary,
+    "--color-accent": t.accent,
+    "--color-bg": t.bg,
+    "--color-surface": t.surface,
+    "--color-text": t.text,
+    "--color-text-muted": t.textMuted,
+    "--color-border": t.border,
+    "--color-button-bg": t.buttonBg,
+    "--color-button-text": t.buttonText,
+    "--font-script": t.scriptFont,
+    "--font-heading": t.headingFont,
+    "--font-body": t.bodyFont,
+    "--font-ui": t.uiFont,
+    "--font-heading-size": t.headingSize,
+    "--font-body-size": t.bodySize,
+    "--font-heading-weight": t.headingWeight,
+    "--font-body-weight": t.bodyWeight,
+    "--letter-spacing": t.letterSpacing,
+  } as React.CSSProperties;
 }
 
-export function coverToCssVars(cover: CoverConfig | null | undefined): Record<string, string> {
+export function coverToCssVars(cover: CoverConfig | null): React.CSSProperties {
   const c = cover || DEFAULT_COVER_CONFIG;
-  const cc = c.colors || {};
-  const ct = c.typography || {};
-  const cl = c.layout || {};
-  const cb = c.background || {};
   return {
-    "--cover-primary": cc.primary || "#b8973a",
-    "--cover-secondary": cc.secondary || "#d4b85c",
-    "--cover-accent": cc.accent || "#c9a0a0",
-    "--cover-bg": cc.background || "#1a1a1a",
-    "--cover-text": cc.text || "#ffffff",
-    "--cover-button": cc.buttonColor || "#b8973a",
-    "--cover-button-text": cc.buttonTextColor || "#ffffff",
-    "--cover-overlay": cc.overlayColor || "#000000",
-    "--cover-overlay-opacity": String(cc.overlayOpacity ?? 0.4),
-    "--cover-heading-font": `"${ct.headingFont || "Playfair Display"}", serif`,
-    "--cover-body-font": `"${ct.bodyFont || "Cormorant Garamond"}", serif`,
-    "--cover-heading-size": ct.headingSize || "3rem",
-    "--cover-body-size": ct.bodySize || "1rem",
-    "--cover-letter-spacing": ct.letterSpacing || "0.15em",
-    "--cover-radius": cl.borderRadius || "8px",
-    "--cover-spacing": cl.spacing || "1.5rem",
-    "--cover-blur": `${cb.blur || 0}px`,
-    "--cover-brightness": `${cb.brightness || 100}%`,
-  };
+    "--cover-text": c.typography.heading_color,
+    "--cover-heading-font": c.typography.heading_font,
+    "--cover-heading-size": c.typography.heading_size,
+    "--cover-body-font": c.typography.body_font,
+    "--cover-body-size": c.typography.body_size,
+    "--cover-body-color": c.typography.body_color,
+    "--cover-overlay": c.overlay.color,
+    "--cover-overlay-opacity": String(c.overlay.opacity),
+    "--cover-button": c.button.bg_color,
+    "--cover-button-text": c.button.text_color,
+    "--cover-radius": c.corner_radius,
+    "--cover-blur": c.blur,
+    "--cover-brightness": String(c.brightness),
+  } as React.CSSProperties;
 }
 
-export function getLogoConfig(wedding: { cover_config?: CoverConfig | Record<string, never>; draft_cover_config?: CoverConfig | Record<string, never> | null } | null): LogoConfig {
+export function loginToCssVars(login: LoginConfig | null): React.CSSProperties {
+  const l = login || DEFAULT_LOGIN_CONFIG;
+  return {
+    "--login-primary": l.theme.primary,
+    "--login-secondary": l.theme.secondary,
+    "--login-accent": l.theme.accent,
+    "--login-text": l.theme.text,
+    "--login-button-bg": l.theme.button_bg,
+    "--login-button-text": l.theme.button_text,
+    "--login-input-bg": l.theme.input_bg,
+    "--login-border": l.theme.border,
+    "--login-heading-font": l.typography.heading_font,
+    "--login-body-font": l.typography.body_font,
+    "--login-heading-size": l.typography.heading_size,
+    "--login-body-size": l.typography.body_size,
+    "--login-heading-weight": l.typography.heading_weight,
+    "--login-body-weight": l.typography.body_weight,
+    "--login-letter-spacing": l.typography.letter_spacing,
+    "--login-overlay": l.overlay.color,
+    "--login-overlay-opacity": String(l.overlay.opacity),
+    "--login-blur": l.blur,
+    "--login-brightness": String(l.brightness),
+  } as React.CSSProperties;
+}
+
+export function getTheme(wedding: Wedding | null): ThemeConfig {
+  if (!wedding) return DEFAULT_THEME;
+  return wedding.theme_config || wedding.theme || DEFAULT_THEME;
+}
+
+export function getCoverConfig(wedding: Wedding | null): CoverConfig {
+  if (!wedding) return DEFAULT_COVER_CONFIG;
+  return wedding.draft_cover_config || wedding.cover_config || DEFAULT_COVER_CONFIG;
+}
+
+export function getLoginConfig(wedding: Wedding | null): LoginConfig {
+  if (!wedding) return DEFAULT_LOGIN_CONFIG;
+  return wedding.draft_login_config || wedding.login_config || DEFAULT_LOGIN_CONFIG;
+}
+
+export function getCoverContent(wedding: Wedding | null): CoverConfig {
+  return getCoverConfig(wedding);
+}
+
+export function getLogoConfig(wedding: Wedding | null): LogoConfig {
   const cover = getCoverConfig(wedding);
   return cover.branding?.logo || DEFAULT_LOGO_CONFIG;
 }
@@ -129,59 +329,36 @@ export function getLogoStyle(logo: LogoConfig, device: "desktop" | "tablet" | "m
   }
   return {
     width: size.width,
-    height: logo.maintainAspectRatio ? "auto" : size.height,
-    maxWidth: logo.maxWidth === "none" ? undefined : logo.maxWidth,
-    maxHeight: logo.maxHeight === "none" ? undefined : logo.maxHeight,
-    objectFit: logo.objectFit,
-    opacity: logo.opacity / 100,
+    height: size.height,
+    opacity: logo.opacity,
     borderRadius: logo.borderRadius,
-    transform: `rotate(${logo.rotation}deg)`,
+    objectFit: logo.objectFit,
+    maxWidth: logo.maxWidth,
+    maxHeight: logo.maxHeight,
+    transform: logo.rotation ? `rotate(${logo.rotation}deg)` : undefined,
+    filter: filters.length > 0 ? filters.join(" ") : undefined,
     margin: logo.margin,
     padding: logo.padding,
-    filter: filters.length > 0 ? filters.join(" ") : undefined,
-  };
+  } as React.CSSProperties;
 }
 
-export function getLogoPositionClasses(position: LogoConfig["position"]): { container: string; item: string } {
+export function getLogoPositionClasses(position: string): { container: string; item: string } {
   const map: Record<string, { container: string; item: string }> = {
-    "top-left": { container: "items-start justify-start", item: "self-start" },
-    "top-center": { container: "items-center justify-start", item: "self-center" },
-    "top-right": { container: "items-end justify-start", item: "self-end" },
-    "center": { container: "items-center justify-center", item: "self-center" },
-    "bottom-left": { container: "items-start justify-end", item: "self-start" },
-    "bottom-center": { container: "items-center justify-end", item: "self-center" },
-    "bottom-right": { container: "items-end justify-end", item: "self-end" },
+    "top-left": { container: "items-start justify-start", item: "text-left" },
+    "top-center": { container: "items-center justify-center", item: "text-center" },
+    "top-right": { container: "items-start justify-end", item: "text-right" },
+    "center": { container: "items-center justify-center", item: "text-center" },
+    "bottom-left": { container: "items-end justify-start", item: "text-left" },
+    "bottom-center": { container: "items-end justify-center", item: "text-center" },
+    "bottom-right": { container: "items-end justify-end", item: "text-right" },
   };
   return map[position] || map["top-center"];
 }
 
-export function getTheme(wedding: { theme_config?: ThemeConfig | Record<string, never> } | null): ThemeConfig {
-  if (wedding?.theme_config && "colors" in wedding.theme_config) return wedding.theme_config as ThemeConfig;
-  return DEFAULT_THEME;
+export function shouldShowLogo(logo: LogoConfig, page: string): boolean {
+  if (!logo.visible) return false;
+  if (logo.showOnPages === "all-pages") return true;
+  if (logo.showOnPages === "cover-only") return page === "cover";
+  if (logo.showOnPages === "custom") return logo.customPages?.includes(page) || false;
+  return false;
 }
-
-export function getCoverConfig(wedding: { cover_config?: CoverConfig | Record<string, never>; draft_cover_config?: CoverConfig | Record<string, never> | null } | null): CoverConfig {
-  if (!wedding) return DEFAULT_COVER_CONFIG;
-  const draft = wedding.draft_cover_config;
-  if (draft && "colors" in draft) return draft as CoverConfig;
-  if (wedding.cover_config && "colors" in wedding.cover_config) return wedding.cover_config as CoverConfig;
-  return DEFAULT_COVER_CONFIG;
-}
-
-export function getDraftTheme(wedding: { theme_config?: ThemeConfig | Record<string, never>; draft_theme_config?: ThemeConfig | null } | null): ThemeConfig {
-  if (wedding?.draft_theme_config && "colors" in wedding.draft_theme_config) return wedding.draft_theme_config;
-  return getTheme(wedding);
-}
-
-export function getCoverContent(wedding: { content?: WeddingContent | Record<string, never>; draft_content?: WeddingContent | Record<string, never> | null } | null): WeddingContent {
-  if (!wedding) return {} as WeddingContent;
-  const pub = (wedding.content || {}) as WeddingContent;
-  const draft = (wedding.draft_content || {}) as WeddingContent;
-  return { ...pub, ...draft };
-}
-
-export const FONT_OPTIONS = [
-  "Playfair Display", "Cormorant Garamond", "Cormorant", "EB Garamond", "Lora", "Marcellus",
-  "Great Vibes", "Pinyon Script", "Allura", "Tangerine", "Sacramento", "Parisienne",
-  "Rouge Script", "Italiana", "Cinzel", "Inter", "Jost", "Outfit", "Manrope", "Karla", "Work Sans",
-];

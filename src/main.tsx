@@ -16,6 +16,7 @@ import { SendMessage } from "./routes/guest/send-message";
 import { Contact } from "./routes/guest/contact";
 import { OverviewPage } from "./routes/admin/overview";
 import { CoverEditorPage } from "./routes/admin/cover-editor";
+import { LoginEditorPage } from "./routes/admin/login-editor";
 import { ThemeEditorPage } from "./routes/admin/theme-editor";
 import { ContentPage } from "./routes/admin/content";
 import { ContentDoaPage } from "./routes/admin/content-doa";
@@ -51,6 +52,7 @@ createRoot(document.getElementById("root")!).render(
             </Route>
             <Route path="/admin" element={<OverviewPage />} />
             <Route path="/admin/cover" element={<CoverEditorPage />} />
+            <Route path="/admin/login" element={<LoginEditorPage />} />
             <Route path="/admin/theme" element={<ThemeEditorPage />} />
             <Route path="/admin/content" element={<ContentPage />} />
             <Route path="/admin/content/doa" element={<ContentDoaPage />} />

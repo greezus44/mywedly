@@ -1,37 +1,51 @@
-export function formatDate(dateStr: string | null, lang: "en" | "ms" = "en"): string {
-  if (!dateStr) return "";
-  const date = new Date(dateStr);
-  const locale = lang === "ms" ? "ms-MY" : "en-US";
-  return date.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+export function cn(...classes: (string | false | null | undefined)[]): string {
+  return classes.filter(Boolean).join(" ");
 }
 
-export function formatTime(dateStr: string | null, lang: "en" | "ms" = "en"): string {
-  if (!dateStr) return "";
-  const date = new Date(dateStr);
-  const locale = lang === "ms" ? "ms-MY" : "en-US";
-  return date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+export function formatDate(date: string | null, lang: "en" | "ms" = "en"): string {
+  if (!date) return "";
+  try {
+    const d = new Date(date);
+    const months = lang === "ms"
+      ? ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"]
+      : ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  } catch {
+    return date;
+  }
+}
+
+export function formatTime(date: string | null): string {
+  if (!date) return "";
+  try {
+    const d = new Date(date);
+    return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return date;
+  }
 }
 
 export function getCountdown(targetDate: string | null): { days: number; hours: number; minutes: number; seconds: number; isPast: boolean } {
   if (!targetDate) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
   const target = new Date(targetDate).getTime();
-  const diff = target - Date.now();
-  if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
-  return { days: Math.floor(diff / 86400000), hours: Math.floor((diff % 86400000) / 3600000), minutes: Math.floor((diff % 3600000) / 60000), seconds: Math.floor((diff % 60000) / 1000), isPast: false };
+  const now = Date.now();
+  const diff = target - now;
+  if (diff < 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+  return { days, hours, minutes, seconds, isPast: false };
 }
-
-export function cn(...classes: (string | false | null | undefined)[]): string { return classes.filter(Boolean).join(" "); }
 
 export function generateToken(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let token = "";
-  for (let i = 0; i < 32; i++) token += chars[Math.floor(Math.random() * chars.length)];
-  return token;
+  return crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
 }
 
-export function getDeviceType(): "mobile" | "tablet" | "desktop" {
-  const ua = navigator.userAgent;
-  if (/Mobile|Android|iPhone|iPod/.test(ua)) return "mobile";
-  if (/iPad|Tablet/.test(ua)) return "tablet";
+export function getDeviceType(): "desktop" | "tablet" | "mobile" {
+  if (typeof window === "undefined") return "desktop";
+  const w = window.innerWidth;
+  if (w < 768) return "mobile";
+  if (w < 1024) return "tablet";
   return "desktop";
 }
