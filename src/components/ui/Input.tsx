@@ -1,7 +1,15 @@
-import React, { forwardRef } from "react";
+import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
 import { cn } from "../../lib/utils";
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+const baseFieldClasses =
+  "w-full rounded-md border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted transition-colors focus:outline-none focus:ring-2 focus:ring-dash-primary focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50";
+
+const errorBorderClass = "border-dash-danger";
+const normalBorderClass = "border-dash-border";
+
+/* ----------------------------------- Input ----------------------------------- */
+
+export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
 }
@@ -12,28 +20,27 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-dash-text mb-1.5">
+          <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-dash-text">
             {label}
           </label>
         )}
         <input
           ref={ref}
           id={inputId}
-          className={cn(
-            "w-full rounded-lg border border-dash-border bg-dash-surface px-3.5 py-2.5 text-sm text-dash-text placeholder:text-dash-muted/50 focus:border-dash-primary focus:outline-none focus:ring-1 focus:ring-dash-primary transition-colors",
-            error && "border-dash-danger focus:border-dash-danger focus:ring-dash-danger",
-            className,
-          )}
+          className={cn(baseFieldClasses, error ? errorBorderClass : normalBorderClass, className)}
+          aria-invalid={error ? true : undefined}
           {...props}
         />
         {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
       </div>
     );
-  },
+  }
 );
 Input.displayName = "Input";
 
-interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+/* --------------------------------- Textarea ---------------------------------- */
+
+export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   error?: string;
 }
@@ -44,28 +51,27 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={textareaId} className="block text-sm font-medium text-dash-text mb-1.5">
+          <label htmlFor={textareaId} className="mb-1.5 block text-sm font-medium text-dash-text">
             {label}
           </label>
         )}
         <textarea
           ref={ref}
           id={textareaId}
-          className={cn(
-            "w-full rounded-lg border border-dash-border bg-dash-surface px-3.5 py-2.5 text-sm text-dash-text placeholder:text-dash-muted/50 focus:border-dash-primary focus:outline-none focus:ring-1 focus:ring-dash-primary transition-colors resize-y",
-            error && "border-dash-danger",
-            className,
-          )}
+          className={cn(baseFieldClasses, "min-h-[80px] resize-y", error ? errorBorderClass : normalBorderClass, className)}
+          aria-invalid={error ? true : undefined}
           {...props}
         />
         {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
       </div>
     );
-  },
+  }
 );
 Textarea.displayName = "Textarea";
 
-interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+/* ---------------------------------- Select ----------------------------------- */
+
+export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   error?: string;
 }
@@ -76,18 +82,15 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={selectId} className="block text-sm font-medium text-dash-text mb-1.5">
+          <label htmlFor={selectId} className="mb-1.5 block text-sm font-medium text-dash-text">
             {label}
           </label>
         )}
         <select
           ref={ref}
           id={selectId}
-          className={cn(
-            "w-full rounded-lg border border-dash-border bg-dash-surface px-3.5 py-2.5 text-sm text-dash-text focus:border-dash-primary focus:outline-none focus:ring-1 focus:ring-dash-primary transition-colors",
-            error && "border-dash-danger",
-            className,
-          )}
+          className={cn(baseFieldClasses, "cursor-pointer", error ? errorBorderClass : normalBorderClass, className)}
+          aria-invalid={error ? true : undefined}
           {...props}
         >
           {children}
@@ -95,6 +98,6 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
         {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
       </div>
     );
-  },
+  }
 );
 Select.displayName = "Select";

@@ -8,22 +8,12 @@ interface EventThemeContextValue {
 
 const EventThemeContext = createContext<EventThemeContextValue | null>(null);
 
-export function EventThemeProvider({
-  children,
-  initialTheme,
-}: {
-  children: ReactNode;
-  initialTheme?: ThemeConfig;
-}) {
+export function EventThemeProvider({ children, initialTheme }: { children: ReactNode; initialTheme?: ThemeConfig }) {
   const [theme, setTheme] = useState<ThemeConfig>(initialTheme || DEFAULT_THEME);
-
   const cssVars = themeToEventCssVars(theme);
-
   return (
     <EventThemeContext.Provider value={{ theme, setTheme }}>
-      <div className="event-themed" style={cssVars as React.CSSProperties}>
-        {children}
-      </div>
+      <div className="event-themed" style={cssVars as React.CSSProperties}>{children}</div>
     </EventThemeContext.Provider>
   );
 }

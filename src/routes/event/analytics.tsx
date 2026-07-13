@@ -1,172 +1,178 @@
-import React from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
-import { Card, Badge, LoadingSpinner, ErrorState, EmptyState } from "../../components/ui";
+import { LoadingSpinner, ErrorState, Card } from "../../components/ui";
+import { formatDate, formatDateTime } from "../../lib/utils";
 
 export default function Analytics() {
   const { event } = useOutletContext<{ event: UserEvent }>();
 
-  const { data: stats, isLoading, error, refetch } = useQuery({
-    queryKey: ["analytics", event.id],
+  const { data: views, isLoading: viewsLoading, error: viewsError } = useQuery({
+    queryKey: ["sharing_events", event.id],
     queryFn: async () => {
-      const [viewsRes, rsvpsRes, guestsRes] = await Promise.all([
-        supabase.from("sharing_events").select("*").eq("wedding_id", event.id),
-        supabase.from("event_rsvps").select("*").eq("event_id", event.id),
-        supabase.from("event_guests").select("*").eq("event_id", event.id),
-      ]);
-
-      if (viewsRes.error) throw viewsRes.error;
-
-      const views = viewsRes.data || [];
-      const rsvps = rsvpsRes.data || [];
-      const guests = guestsRes.data || [];
-
-      const accepted = rsvps.filter((r) => r.status === "accepted").length;
-      const declined = rsvps.filter((r) => r.status === "declined").length;
-      const pending = guests.filter((g) => g.rsvp_status === "pending" || !g.rsvp_status).length;
-
-      const bySource: Record<string, number> = {};
-      const byDevice: Record<string, number> = {};
-      views.forEach((v) => {
-        const s = v.source ?? "direct";
-        const d = v.device_type ?? "unknown";
-        bySource[s] = (bySource[s] ?? 0) + 1;
-        byDevice[d] = (byDevice[d] ?? 0) + 1;
-      });
-
-      const last7Days = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - (6 - i));
-        d.setHours(0, 0, 0, 0);
-        const next = new Date(d);
-        next.setDate(next.getDate() + 1);
-        const count = views.filter((v) => {
-          const vd = new Date(v.created_at);
-          return vd >= d && vd < next;
-        }).length;
-        return { label: d.toLocaleDateString("en-US", { weekday: "short" }), count };
-      });
-
-      return {
-        totalViews: views.length,
-        uniqueGuests: new Set(views.map((v) => v.guest_id).filter(Boolean)).size,
-        accepted,
-        declined,
-        pending,
-        totalGuests: guests.length,
-        totalRsvps: rsvps.length,
-        bySource,
-        byDevice,
-        last7Days,
-      };
+      const { data, error } = await supabase
+        .from("sharing_events")
+        .select("*")
+        .eq("wedding_id", event.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
     },
   });
 
-  if (isLoading) {
+  const { data: rsvps, isLoading: rsvpsLoading, error: rsvpsError } = useQuery({
+    queryKey: ["event_rsvps", event.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_rsvps")
+        .select("*")
+        .eq("event_id", event.id)
+        .order("submitted_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  if (viewsLoading || rsvpsLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <LoadingSpinner className="h-8 w-8" />
+      <div className="flex justify-center py-12">
+        <LoadingSpinner />
       </div>
     );
   }
 
-  if (error) {
-    return <ErrorState message="Failed to load analytics." onRetry={() => refetch()} />;
+  if (viewsError || rsvpsError) {
+    return <ErrorState message="Failed to load analytics data." />;
   }
 
-  if (!stats) return null;
+  const totalViews = views?.length ?? 0;
+  const uniqueGuestViews = new Set(views?.map((v) => v.guest_id).filter(Boolean)).size;
+  const deviceTypes = (views || []).reduce<Record<string, number>>((acc, v) => {
+    const dt = v.device_type || "unknown";
+    acc[dt] = (acc[dt] || 0) + 1;
+    return acc;
+  }, {});
 
-  const statCards = [
-    { label: "Page Views", value: stats.totalViews, color: "text-blue-600" },
-    { label: "Unique Visitors", value: stats.uniqueGuests, color: "text-purple-600" },
-    { label: "Total Guests", value: stats.totalGuests, color: "text-gray-700" },
-    { label: "RSVPs Received", value: stats.totalRsvps, color: "text-green-600" },
-  ];
+  const totalRsvps = rsvps?.length ?? 0;
+  const attending = rsvps?.filter((r) => r.status === "attending" || r.status === "yes").length ?? 0;
+  const notAttending = rsvps?.filter((r) => r.status === "not_attending" || r.status === "no").length ?? 0;
+  const maybe = rsvps?.filter((r) => r.status === "maybe").length ?? 0;
+  const pending = rsvps?.filter((r) => r.status === "pending" || !r.status).length ?? 0;
 
-  const rsvpCards = [
-    { label: "Accepted", value: stats.accepted, variant: "success" as const },
-    { label: "Declined", value: stats.declined, variant: "danger" as const },
-    { label: "Pending", value: stats.pending, variant: "warning" as const },
-  ];
-
-  const maxBar = Math.max(...stats.last7Days.map((d) => d.count), 1);
+  const recentViews = (views || []).slice(0, 10);
+  const recentRsvps = (rsvps || []).slice(0, 10);
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-dash-text">Analytics</h2>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map((card) => (
-          <Card key={card.label} className="p-4">
-            <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
-            <div className="text-sm text-dash-muted mt-1">{card.label}</div>
-          </Card>
-        ))}
+      <div>
+        <h2 className="text-xl font-bold text-dash-text">Analytics</h2>
+        <p className="mt-1 text-sm text-dash-muted">Track views and RSVP responses for your website.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold text-dash-text mb-4">RSVP Status</h3>
-          <div className="space-y-3">
-            {rsvpCards.map((r) => (
-              <div key={r.label} className="flex items-center justify-between">
-                <Badge variant={r.variant}>{r.label}</Badge>
-                <span className="text-lg font-semibold text-dash-text">{r.value}</span>
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <Card className="text-center">
+          <div className="text-3xl font-bold text-dash-primary">{totalViews}</div>
+          <div className="mt-1 text-sm text-dash-muted">Total Views</div>
+        </Card>
+        <Card className="text-center">
+          <div className="text-3xl font-bold text-dash-primary">{uniqueGuestViews}</div>
+          <div className="mt-1 text-sm text-dash-muted">Unique Guests</div>
+        </Card>
+        <Card className="text-center">
+          <div className="text-3xl font-bold text-dash-primary">{totalRsvps}</div>
+          <div className="mt-1 text-sm text-dash-muted">Total RSVPs</div>
+        </Card>
+        <Card className="text-center">
+          <div className="text-3xl font-bold text-green-600">{attending}</div>
+          <div className="mt-1 text-sm text-dash-muted">Attending</div>
+        </Card>
+      </div>
+
+      {/* RSVP breakdown */}
+      <Card>
+        <h3 className="text-lg font-semibold text-dash-text">RSVP Breakdown</h3>
+        <div className="mt-4 space-y-3">
+          {[
+            { label: "Attending", count: attending, color: "bg-green-500" },
+            { label: "Not Attending", count: notAttending, color: "bg-red-500" },
+            { label: "Maybe", count: maybe, color: "bg-amber-500" },
+            { label: "Pending", count: pending, color: "bg-slate-400" },
+          ].map((item) => {
+            const pct = totalRsvps > 0 ? (item.count / totalRsvps) * 100 : 0;
+            return (
+              <div key={item.label}>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-dash-text">{item.label}</span>
+                  <span className="text-dash-muted">{item.count} ({pct.toFixed(0)}%)</span>
+                </div>
+                <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-dash-bg">
+                  <div className={`h-full rounded-full ${item.color}`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      {/* Device breakdown */}
+      {Object.keys(deviceTypes).length > 0 && (
+        <Card>
+          <h3 className="text-lg font-semibold text-dash-text">Views by Device</h3>
+          <div className="mt-4 flex flex-wrap gap-3">
+            {Object.entries(deviceTypes).map(([device, count]) => (
+              <div key={device} className="rounded-lg border border-dash-border bg-dash-bg px-4 py-2">
+                <span className="text-sm font-medium text-dash-text capitalize">{device}</span>
+                <span className="ml-2 text-sm text-dash-muted">{count}</span>
               </div>
             ))}
           </div>
         </Card>
+      )}
 
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold text-dash-text mb-4">Views (Last 7 Days)</h3>
-          <div className="flex items-end justify-between gap-2 h-32">
-            {stats.last7Days.map((d, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className="w-full rounded-t bg-dash-primary/70 transition-all"
-                  style={{ height: `${(d.count / maxBar) * 100}%`, minHeight: d.count > 0 ? "4px" : "0" }}
-                />
-                <span className="text-xs text-dash-muted">{d.label}</span>
+      {/* Recent views */}
+      {recentViews.length > 0 && (
+        <Card>
+          <h3 className="text-lg font-semibold text-dash-text">Recent Views</h3>
+          <div className="mt-4 space-y-2">
+            {recentViews.map((view) => (
+              <div key={view.id} className="flex items-center justify-between border-b border-dash-border pb-2 last:border-0">
+                <div className="text-sm text-dash-text">
+                  <span className="font-medium">{view.event_type || "View"}</span>
+                  {view.source && <span className="ml-2 text-dash-muted">via {view.source}</span>}
+                </div>
+                <div className="text-xs text-dash-muted">{formatDateTime(view.created_at)}</div>
               </div>
             ))}
           </div>
         </Card>
-      </div>
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold text-dash-text mb-4">Traffic Sources</h3>
-          {Object.keys(stats.bySource).length === 0 ? (
-            <EmptyState title="No data yet" />
-          ) : (
-            <div className="space-y-2">
-              {Object.entries(stats.bySource).map(([source, count]) => (
-                <div key={source} className="flex items-center justify-between text-sm">
-                  <span className="text-dash-muted capitalize">{source}</span>
-                  <span className="font-medium text-dash-text">{count}</span>
+      {/* Recent RSVPs */}
+      {recentRsvps.length > 0 && (
+        <Card>
+          <h3 className="text-lg font-semibold text-dash-text">Recent RSVPs</h3>
+          <div className="mt-4 space-y-2">
+            {recentRsvps.map((rsvp) => (
+              <div key={rsvp.id} className="flex items-center justify-between border-b border-dash-border pb-2 last:border-0">
+                <div className="text-sm">
+                  <span className="font-medium text-dash-text">{rsvp.guest_name}</span>
+                  <span className="ml-2 text-dash-muted capitalize">{rsvp.status}</span>
                 </div>
-              ))}
-            </div>
-          )}
+                <div className="text-xs text-dash-muted">{formatDateTime(rsvp.submitted_at)}</div>
+              </div>
+            ))}
+          </div>
         </Card>
+      )}
 
-        <Card className="p-5">
-          <h3 className="text-sm font-semibold text-dash-text mb-4">Devices</h3>
-          {Object.keys(stats.byDevice).length === 0 ? (
-            <EmptyState title="No data yet" />
-          ) : (
-            <div className="space-y-2">
-              {Object.entries(stats.byDevice).map(([device, count]) => (
-                <div key={device} className="flex items-center justify-between text-sm">
-                  <span className="text-dash-muted capitalize">{device}</span>
-                  <span className="font-medium text-dash-text">{count}</span>
-                </div>
-              ))}
-            </div>
-          )}
+      {totalViews === 0 && totalRsvps === 0 && (
+        <Card>
+          <div className="py-8 text-center">
+            <p className="text-sm text-dash-muted">No analytics data yet. Share your website to start collecting data.</p>
+          </div>
         </Card>
-      </div>
+      )}
     </div>
   );
 }

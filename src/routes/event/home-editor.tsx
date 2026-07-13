@@ -1,83 +1,103 @@
-import React, { useEffect, useState, useRef } from "react";
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
-import { RichTextEditor } from "../../components/ui/RichTextEditor";
+import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
-import { LoadingSpinner } from "../../components/ui";
+import { RichTextEditor } from "../../components/ui/RichTextEditor";
+import { FormField } from "../../components/ui";
+import { Button } from "../../components/ui/Button";
 
-type HomeContent = { section1?: string; section2?: string; section3?: string };
-
-const SECTION_LABELS = [
-  { key: "section1" as const, label: "Welcome Message", placeholder: "Introduce your event and welcome guests..." },
-  { key: "section2" as const, label: "Details Section", placeholder: "Add additional details about your event..." },
-  { key: "section3" as const, label: "Closing Message", placeholder: "A closing note or call-to-action..." },
-];
+interface HomeContent {
+  section1?: string;
+  section2?: string;
+  section3?: string;
+  [key: string]: any;
+}
 
 export default function HomeEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const [content, setContent] = useState<HomeContent>({ section1: "", section2: "", section3: "" });
-  const [saved, setSaved] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    const c = (event.draft_content ?? event.content ?? {}) as HomeContent;
-    setContent({ section1: c.section1 ?? "", section2: c.section2 ?? "", section3: c.section3 ?? "" });
-  }, [event.id]);
+  const currentContent = (event.draft_content ?? event.content ?? {}) as HomeContent;
 
-  const saveMutation = useMutation({
-    mutationFn: async (payload: HomeContent) => {
-      const { error } = await supabase
-        .from("user_events")
-        .update({ draft_content: payload })
-        .eq("id", event.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    },
+  const [content, setContent] = useState<HomeContent>({
+    section1: currentContent.section1 || "",
+    section2: currentContent.section2 || "",
+    section3: currentContent.section3 || "",
   });
 
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      saveMutation.mutate(content);
-    }, 1200);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content]);
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase
+        .from("user_events")
+        .update({ draft_content: content as Json })
+        .eq("id", event.id)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user_events", event.id] });
+    },
+    onError: () => {},
+  });
 
   const previewEvent: Partial<UserEvent> = {
     ...event,
-    name: event.draft_name || event.name,
-    event_date: event.draft_event_date || event.event_date,
-    content,
+    content: content as Json,
+    name: event.draft_name ?? event.name,
+    event_date: event.draft_event_date ?? event.event_date,
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-dash-text">Welcome Page Editor</h2>
-        {saved && <span className="text-sm text-green-600">✓ Saved</span>}
-        {saveMutation.isPending && <LoadingSpinner className="h-4 w-4" />}
+        <div>
+          <h2 className="text-xl font-bold text-dash-text">Home Page Editor</h2>
+          <p className="mt-1 text-sm text-dash-muted">Customize the welcome message and content sections.</p>
+        </div>
+        <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+          Save Changes
+        </Button>
       </div>
+
+      {saveMutation.isError && (
+        <div className="rounded-md border border-dash-danger/30 bg-red-50 px-4 py-3 text-sm text-dash-danger">
+          Failed to save. Please try again.
+        </div>
+      )}
+      {saveMutation.isSuccess && (
+        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          Changes saved successfully.
+        </div>
+      )}
+
       <SplitEditor
         editor={
-          <div className="space-y-4">
-            {SECTION_LABELS.map((section) => (
-              <div key={section.key}>
-                <label className="block text-sm font-medium text-dash-text mb-1.5">{section.label}</label>
-                <RichTextEditor
-                  value={content[section.key] ?? ""}
-                  onChange={(html) => setContent((c) => ({ ...c, [section.key]: html }))}
-                  placeholder={section.placeholder}
-                />
-              </div>
-            ))}
+          <div className="space-y-6">
+            <FormField label="Section 1" hint="Welcome message or introduction.">
+              <RichTextEditor
+                value={content.section1 || ""}
+                onChange={(html) => setContent({ ...content, section1: html })}
+                placeholder="Write your welcome message..."
+              />
+            </FormField>
+            <FormField label="Section 2" hint="Additional content, story, or details.">
+              <RichTextEditor
+                value={content.section2 || ""}
+                onChange={(html) => setContent({ ...content, section2: html })}
+                placeholder="Write additional content..."
+              />
+            </FormField>
+            <FormField label="Section 3" hint="Closing message or additional info.">
+              <RichTextEditor
+                value={content.section3 || ""}
+                onChange={(html) => setContent({ ...content, section3: html })}
+                placeholder="Write closing content..."
+              />
+            </FormField>
           </div>
         }
         preview={<HomePreview event={previewEvent} />}

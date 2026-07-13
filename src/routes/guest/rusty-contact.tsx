@@ -1,107 +1,45 @@
-import React from "react";
 import { useOutletContext } from "react-router-dom";
-import type { UserEvent } from "../../lib/supabase";
-import { formatDate, formatTime12 } from "../../lib/utils";
+import { type UserEvent } from "../../lib/supabase";
 
 export default function RustyContact() {
   const { event } = useOutletContext<{ event: UserEvent }>();
 
-  const sharingConfig = (event.sharing_config || {}) as Record<string, any>;
-  const contactPhone = sharingConfig.contactPhone || sharingConfig.phone || null;
-  const mapsUrl = sharingConfig.mapsUrl || sharingConfig.maps_url || null;
+  const mapsLink = event.address
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${event.venue} ${event.address}`)}`
+    : null;
 
   return (
-    <div className="max-w-lg mx-auto">
-      <h2 className="text-2xl mb-6 text-center" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>
-        Contact & Venue
-      </h2>
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div className="text-center">
+        <h2 className="font-event text-2xl text-event-heading">Contact</h2>
+        <p className="mt-1 text-event-muted">Venue and contact details.</p>
+      </div>
 
-      <div className="rounded-lg p-6 space-y-5" style={{ backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}>
+      <div className="event-card border-2 border-event-border space-y-4">
         {event.venue && (
           <div>
-            <h3 className="text-sm uppercase tracking-wide mb-1" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-heading)" }}>
-              Venue
-            </h3>
-            <p className="text-base" style={{ color: "var(--event-text)" }}>
-              {event.venue}
-            </p>
+            <h3 className="text-sm font-semibold text-event-muted uppercase tracking-wide">Venue</h3>
+            <p className="mt-1 text-event-text">{event.venue}</p>
           </div>
         )}
 
         {event.address && (
           <div>
-            <h3 className="text-sm uppercase tracking-wide mb-1" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-heading)" }}>
-              Address
-            </h3>
-            <p className="text-base whitespace-pre-wrap" style={{ color: "var(--event-text)" }}>
-              {event.address}
-            </p>
+            <h3 className="text-sm font-semibold text-event-muted uppercase tracking-wide">Address</h3>
+            <p className="mt-1 text-event-text whitespace-pre-wrap">{event.address}</p>
           </div>
         )}
 
-        {contactPhone && (
-          <div>
-            <h3 className="text-sm uppercase tracking-wide mb-1" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-heading)" }}>
-              Contact
-            </h3>
-            <a href={`tel:${contactPhone}`} className="text-base underline" style={{ color: "var(--event-primary)" }}>
-              {contactPhone}
-            </a>
-          </div>
-        )}
-
-        {mapsUrl && (
-          <div>
-            <h3 className="text-sm uppercase tracking-wide mb-1" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-heading)" }}>
-              Location
-            </h3>
-            <a
-              href={mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-base underline inline-flex items-center gap-1"
-              style={{ color: "var(--event-primary)" }}
-            >
-              View on Map
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-              </svg>
-            </a>
-          </div>
-        )}
-
-        {event.event_date && (
-          <div>
-            <h3 className="text-sm uppercase tracking-wide mb-1" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-heading)" }}>
-              Date
-            </h3>
-            <p className="text-base" style={{ color: "var(--event-text)" }}>
-              {formatDate(event.event_date)}
-              {event.event_time && ` at ${formatTime12(event.event_time)}`}
-            </p>
-          </div>
+        {mapsLink && (
+          <a href={mapsLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-event-primary hover:underline">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+            </svg>
+            View on Google Maps
+          </a>
         )}
       </div>
-
-      {mapsUrl && (
-        <div className="mt-6 rounded-lg overflow-hidden" style={{ border: "1px solid var(--event-border)" }}>
-          <iframe
-            src={mapsUrl}
-            width="100%"
-            height="300"
-            style={{ border: 0 }}
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-            title="Map"
-          />
-        </div>
-      )}
-
-      {!event.venue && !event.address && !contactPhone && !mapsUrl && (
-        <p className="text-center text-sm" style={{ color: "var(--event-muted)" }}>
-          Contact information has not been provided yet.
-        </p>
-      )}
     </div>
   );
 }

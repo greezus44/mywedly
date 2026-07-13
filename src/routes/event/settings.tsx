@@ -1,20 +1,14 @@
-import React, { useEffect, useState, useRef } from "react";
+import { useState } from "react";
 import { useOutletContext, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
-import { Input, Select } from "../../components/ui/Input";
+import { Input, Select, FormField, Modal } from "../../components/ui";
 import { Button } from "../../components/ui/Button";
-import { Card, FormField, Modal, LoadingSpinner } from "../../components/ui";
 
 const EVENT_TYPES = [
   { value: "wedding", label: "Wedding" },
-  { value: "conference", label: "Conference" },
   { value: "birthday", label: "Birthday" },
-  { value: "festival", label: "Festival" },
-  { value: "corporate", label: "Corporate Event" },
-  { value: "charity", label: "Charity Event" },
-  { value: "graduation", label: "Graduation" },
-  { value: "reunion", label: "Family Reunion" },
+  { value: "corporate", label: "Corporate" },
   { value: "other", label: "Other" },
 ];
 
@@ -22,56 +16,39 @@ export default function Settings() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [name, setName] = useState("");
-  const [eventType, setEventType] = useState("other");
-  const [eventDate, setEventDate] = useState("");
-  const [eventTime, setEventTime] = useState("");
-  const [venue, setVenue] = useState("");
-  const [address, setAddress] = useState("");
-  const [saved, setSaved] = useState(false);
-  const [showDelete, setShowDelete] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState("");
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    setName(event.draft_name ?? event.name ?? "");
-    setEventType(event.draft_event_type ?? event.event_type ?? "other");
-    setEventDate(event.draft_event_date ?? event.event_date ?? "");
-    setEventTime(event.draft_event_time ?? event.event_time ?? "");
-    setVenue(event.draft_venue ?? event.venue ?? "");
-    setAddress(event.draft_address ?? event.address ?? "");
-  }, [event.id]);
+  const [name, setName] = useState(event.draft_name ?? event.name ?? "");
+  const [eventType, setEventType] = useState(event.draft_event_type ?? event.event_type ?? "wedding");
+  const [eventDate, setEventDate] = useState(event.draft_event_date ?? event.event_date ?? "");
+  const [eventTime, setEventTime] = useState(event.draft_event_time ?? event.event_time ?? "");
+  const [venue, setVenue] = useState(event.draft_venue ?? event.venue ?? "");
+  const [address, setAddress] = useState(event.draft_address ?? event.address ?? "");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
 
   const saveMutation = useMutation({
-    mutationFn: async (payload: Record<string, any>) => {
-      const { error } = await supabase
+    mutationFn: async () => {
+      const { data, error } = await supabase
         .from("user_events")
-        .update(payload)
-        .eq("id", event.id);
+        .update({
+          draft_name: name,
+          draft_event_type: eventType,
+          draft_event_date: eventDate || null,
+          draft_event_time: eventTime || null,
+          draft_venue: venue,
+          draft_address: address,
+        })
+        .eq("id", event.id)
+        .select()
+        .maybeSingle();
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      queryClient.invalidateQueries({ queryKey: ["user_events", event.id] });
     },
+    onError: () => {},
   });
-
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      saveMutation.mutate({
-        draft_name: name,
-        draft_event_type: eventType,
-        draft_event_date: eventDate || null,
-        draft_event_time: eventTime || null,
-        draft_venue: venue,
-        draft_address: address,
-      });
-    }, 800);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, eventType, eventDate, eventTime, venue, address]);
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
@@ -79,66 +56,81 @@ export default function Settings() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user-events"] });
-      navigate("/dashboard");
+      queryClient.invalidateQueries({ queryKey: ["user_events"] });
+      navigate("/dashboard", { replace: true });
     },
   });
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-dash-text">Website Settings</h2>
-        {saved && <span className="text-sm text-green-600">✓ Saved</span>}
-        {saveMutation.isPending && <LoadingSpinner className="h-4 w-4" />}
+        <div>
+          <h2 className="text-xl font-bold text-dash-text">Website Settings</h2>
+          <p className="mt-1 text-sm text-dash-muted">Update your event details and configuration.</p>
+        </div>
+        <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+          Save Changes
+        </Button>
       </div>
 
-      <Card className="p-5 space-y-4">
-        <Input label="Website Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Event name" />
-        <Select label="Event Type" value={eventType} onChange={(e) => setEventType(e.target.value)}>
-          {EVENT_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>{t.label}</option>
-          ))}
-        </Select>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {saveMutation.isError && (
+        <div className="rounded-md border border-dash-danger/30 bg-red-50 px-4 py-3 text-sm text-dash-danger">
+          Failed to save. Please try again.
+        </div>
+      )}
+      {saveMutation.isSuccess && (
+        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          Changes saved successfully.
+        </div>
+      )}
+
+      <div className="rounded-xl border border-dash-border bg-dash-surface p-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <Input label="Website Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Event name" />
+          <Select label="Event Type" value={eventType} onChange={(e) => setEventType(e.target.value)}>
+            {EVENT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </Select>
           <Input label="Event Date" type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
           <Input label="Event Time" type="time" value={eventTime} onChange={(e) => setEventTime(e.target.value)} />
+          <Input label="Venue" value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue name" />
+          <Input label="Address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Venue address" />
         </div>
-        <Input label="Venue" value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue name" />
-        <FormField label="Address">
-          <textarea
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder="Full venue address"
-            rows={2}
-            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3.5 py-2.5 text-sm text-dash-text placeholder:text-dash-muted/50 focus:border-dash-primary focus:outline-none focus:ring-1 focus:ring-dash-primary transition-colors resize-y"
-          />
-        </FormField>
-      </Card>
+      </div>
 
-      <Card className="p-5 border-red-200">
-        <h3 className="text-sm font-semibold text-red-600 mb-2">Danger Zone</h3>
-        <p className="text-sm text-dash-muted mb-4">
-          Deleting this website will permanently remove all associated data, including guests, RSVPs, and pages.
-        </p>
-        <Button variant="danger" onClick={() => setShowDelete(true)}>Delete Website</Button>
-      </Card>
+      {/* Danger zone */}
+      <div className="rounded-xl border border-dash-danger/30 bg-red-50 p-6">
+        <h3 className="text-lg font-semibold text-dash-danger">Danger Zone</h3>
+        <p className="mt-1 text-sm text-dash-muted">Permanently delete this website and all its data.</p>
+        <Button variant="danger" className="mt-4" onClick={() => setDeleteOpen(true)}>
+          Delete Website
+        </Button>
+      </div>
 
-      <Modal open={showDelete} onClose={() => setShowDelete(false)} title="Delete Website">
+      <Modal open={deleteOpen} onClose={() => { setDeleteOpen(false); setDeleteConfirm(""); }} title="Delete Website">
         <div className="space-y-4">
-          <p className="text-sm text-dash-text">
-            This action cannot be undone. Type <span className="font-mono font-semibold">{event.name}</span> to confirm.
+          <p className="text-sm text-dash-muted">
+            This will permanently delete <strong className="text-dash-text">{event.draft_name || event.name}</strong> and all associated data. This action cannot be undone.
           </p>
-          <Input
-            value={deleteConfirm}
-            onChange={(e) => setDeleteConfirm(e.target.value)}
-            placeholder={event.name}
-          />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setShowDelete(false)}>Cancel</Button>
+          <FormField label={`Type "${event.draft_name || event.name}" to confirm`}>
+            <Input
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder={event.draft_name || event.name}
+            />
+          </FormField>
+          {deleteMutation.isError && (
+            <div className="rounded-md border border-dash-danger/30 bg-red-50 px-4 py-3 text-sm text-dash-danger">
+              Failed to delete. Please try again.
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => { setDeleteOpen(false); setDeleteConfirm(""); }}>Cancel</Button>
             <Button
               variant="danger"
               loading={deleteMutation.isPending}
-              disabled={deleteConfirm !== event.name}
+              disabled={deleteConfirm !== (event.draft_name || event.name)}
               onClick={() => deleteMutation.mutate()}
             >
               Delete Permanently

@@ -1,23 +1,28 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventGuest } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME } from "../../lib/theme";
-import { formatDate, getCountdown } from "../../lib/utils";
+import { RUSTY_THEME, type ThemeConfig } from "../../lib/theme";
+import { formatDate } from "../../lib/utils";
+
+interface CoverConfig { subtitle?: string; [k: string]: any }
+interface LoginConfig { passwordMode?: string; password?: string; [k: string]: any }
 
 export default function RustyCover() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { signIn, eventId: storedEventId } = useGuestAuth();
+  const { guestName, eventId, signIn } = useGuestAuth();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const { data: event, isLoading, error: queryError } = useQuery({
-    queryKey: ["published_event", slug],
+    queryKey: ["rusty_event", slug],
+    enabled: !!slug,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
@@ -28,54 +33,48 @@ export default function RustyCover() {
       if (error) throw error;
       return data as UserEvent | null;
     },
-    enabled: !!slug,
   });
 
   useEffect(() => {
-    if (event && storedEventId === event.id) {
+    if (event && guestName && eventId === event.id) {
       navigate(`/r/${slug}/home`, { replace: true });
     }
-  }, [event, storedEventId, slug, navigate]);
-
-  const coverConfig = (event?.cover_config || {}) as Record<string, any>;
-  const loginConfig = (event?.login_config || {}) as Record<string, any>;
-  const hasPassword = loginConfig.passwordMode && loginConfig.passwordMode !== "none";
+  }, [event, guestName, eventId, slug, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
     const trimmed = username.trim();
     if (!trimmed || !event) return;
-
+    setError(null);
     setSubmitting(true);
     try {
       const { data: guest, error: guestError } = await supabase
         .from("event_guests")
         .select("*")
-        .eq("event_id", event.id)
         .ilike("username", trimmed)
+        .eq("event_id", event.id)
         .maybeSingle();
-
       if (guestError) throw guestError;
-
       if (!guest) {
         setError("Username not found");
         setSubmitting(false);
         return;
       }
-
-      const foundGuest = guest as EventGuest;
-
-      if (hasPassword) {
-        const expectedPassword = loginConfig.password || "";
-        if (password !== expectedPassword) {
-          setError("Incorrect password. Please try again.");
+      const loginConfig = (event.login_config ?? {}) as LoginConfig;
+      if (loginConfig.passwordMode && loginConfig.passwordMode !== "none") {
+        const typedGuest = guest as EventGuest;
+        if (loginConfig.passwordMode === "shared" && password !== loginConfig.password) {
+          setError("Incorrect password");
+          setSubmitting(false);
+          return;
+        }
+        if (loginConfig.passwordMode === "per_guest" && password !== typedGuest.token) {
+          setError("Incorrect password");
           setSubmitting(false);
           return;
         }
       }
-
-      signIn(foundGuest.name, event.id, foundGuest.id);
+      signIn((guest as EventGuest).name, event.id, (guest as EventGuest).id);
       navigate(`/r/${slug}/home`, { replace: true });
     } catch (err) {
       setError("Something went wrong. Please try again.");
@@ -84,168 +83,46 @@ export default function RustyCover() {
   }
 
   if (isLoading) {
+    return <div className="flex min-h-screen items-center justify-center bg-event-bg"><div className="animate-pulse text-event-muted">Loading…</div></div>;
+  }
+
+  if (queryError || !event) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: RUSTY_THEME.bg }}>
-        <div className="animate-spin h-8 w-8 border-2 rounded-full" style={{ borderColor: RUSTY_THEME.primary, borderTopColor: "transparent" }} />
+      <div className="flex min-h-screen flex-col items-center justify-center bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">This invitation website could not be found or is no longer available.</h1>
+        <Link to="/" className="mt-6 text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
 
-  if (queryError) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: RUSTY_THEME.bg }}>
-        <div className="text-center max-w-md">
-          <p className="text-lg mb-4" style={{ color: RUSTY_THEME.text, fontFamily: RUSTY_THEME.fontHeading }}>
-            Something went wrong while loading the invitation.
-          </p>
-          <Link to="/" className="underline" style={{ color: RUSTY_THEME.primary }}>Back to Home</Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (!event) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: RUSTY_THEME.bg }}>
-        <div className="text-center max-w-md">
-          <p className="text-lg mb-4" style={{ color: RUSTY_THEME.text, fontFamily: RUSTY_THEME.fontHeading }}>
-            This invitation website could not be found or is no longer available.
-          </p>
-          <Link to="/" className="underline" style={{ color: RUSTY_THEME.primary }}>Back to Home</Link>
-        </div>
-      </div>
-    );
-  }
-
-  const countdown = getCountdown(event.event_date);
-  const subtitle = coverConfig.subtitle || "";
+  const theme = (event.theme ?? RUSTY_THEME) as ThemeConfig;
+  const coverConfig = (event.cover_config ?? {}) as CoverConfig;
+  const loginConfig = (event.login_config ?? {}) as LoginConfig;
+  const hasPassword = loginConfig.passwordMode && loginConfig.passwordMode !== "none";
 
   return (
-    <EventThemeProvider initialTheme={RUSTY_THEME}>
-      <div className="relative min-h-screen flex items-center justify-center" style={{ backgroundColor: "var(--event-bg)", fontFamily: "var(--event-font-body)" }}>
+    <EventThemeProvider initialTheme={theme}>
+      <div className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
         {event.cover_image ? (
-          <div className="absolute inset-0">
-            <img src={event.cover_image} alt="" className="w-full h-full object-cover" />
-            <div className="absolute inset-0" style={{ backgroundColor: "rgba(61, 43, 28, 0.5)" }} />
-          </div>
+          <>
+            <img src={event.cover_image} alt="Cover" className="absolute inset-0 w-full h-full object-cover sepia-[0.2]" />
+            <div className="absolute inset-0 bg-black/40" />
+          </>
         ) : (
-          <div
-            className="absolute inset-0"
-            style={{ background: `linear-gradient(135deg, ${RUSTY_THEME.bg}, ${RUSTY_THEME.surface})` }}
-          />
+          <div className="absolute inset-0 bg-gradient-to-br from-event-bg to-event-surface" />
         )}
+        <div className="relative z-10 flex w-full max-w-md flex-col items-center px-6 py-12 text-center">
+          <h1 className="font-event text-3xl md:text-5xl text-white drop-shadow-lg">{event.name}</h1>
+          {coverConfig.subtitle && <p className="mt-3 font-event-body text-lg text-white/90 drop-shadow">{coverConfig.subtitle}</p>}
+          {event.event_date && <p className="mt-4 font-event-body text-sm text-white/80">{formatDate(event.event_date)}</p>}
 
-        <div className="relative z-10 w-full max-w-lg mx-auto px-6 py-16 text-center">
-          {event.cover_image && (
-            <>
-              <h1 className="text-4xl md:text-5xl mb-2" style={{ color: "#ffffff", fontFamily: "var(--event-font-heading)", textShadow: "2px 2px 8px rgba(0,0,0,0.6)" }}>
-                {event.name}
-              </h1>
-              {subtitle && (
-                <p className="text-lg mb-3" style={{ color: "rgba(255,255,255,0.9)", fontFamily: "var(--event-font-body)" }}>
-                  {subtitle}
-                </p>
-              )}
-              {event.event_date && (
-                <p className="text-sm mt-3 mb-2" style={{ color: "rgba(255,255,255,0.85)" }}>
-                  {formatDate(event.event_date)}
-                </p>
-              )}
-              {!countdown.isPast && event.event_date && (
-                <p className="text-xs mb-8" style={{ color: "rgba(255,255,255,0.75)" }}>
-                  {countdown.days} days to go
-                </p>
-              )}
-            </>
-          )}
-
-          {/* Sign-in card */}
-          <div
-            className="rounded-lg p-6 shadow-xl"
-            style={{
-              backgroundColor: "var(--event-surface)",
-              border: `1px solid var(--event-border)`,
-            }}
-          >
-            <h2 className="text-xl mb-1" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>
-              Welcome
-            </h2>
-            <p className="text-sm mb-5" style={{ color: "var(--event-muted)" }}>
-              Enter your username to view your invitation
-            </p>
-
-            <form onSubmit={handleSubmit} className="space-y-3 text-left">
-              <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: "var(--event-muted)" }}>
-                  Username
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter your username"
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                  style={{
-                    backgroundColor: "var(--event-bg)",
-                    border: "1px solid var(--event-border)",
-                    color: "var(--event-text)",
-                  }}
-                  autoComplete="username"
-                  required
-                />
-              </div>
-
-              {hasPassword && (
-                <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: "var(--event-muted)" }}>
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter password"
-                    className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                    style={{
-                      backgroundColor: "var(--event-bg)",
-                      border: "1px solid var(--event-border)",
-                      color: "var(--event-text)",
-                    }}
-                    autoComplete="current-password"
-                    required
-                  />
-                </div>
-              )}
-
-              {error && (
-                <p className="text-sm" style={{ color: "#a54434" }}>{error}</p>
-              )}
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                style={{
-                  backgroundColor: "var(--event-primary)",
-                  color: "var(--event-primary-fg)",
-                }}
-              >
-                {submitting && (
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                )}
-                {submitting ? "Signing in..." : "Enter"}
-              </button>
-            </form>
-          </div>
-
-          {!event.cover_image && event.event_date && (
-            <p className="text-sm mt-6" style={{ color: "var(--event-muted)" }}>
-              {formatDate(event.event_date)}
-            </p>
-          )}
+          <form onSubmit={handleSubmit} className="mt-8 w-full space-y-3 rounded-xl bg-event-surface/95 p-6 shadow-xl backdrop-blur border border-event-border">
+            <h2 className="font-event text-xl text-event-heading">Enter your username to continue</h2>
+            <input type="text" placeholder="Enter your username" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" autoFocus />
+            {hasPassword && <input type="password" placeholder="Enter password" value={password} onChange={(e) => setPassword(e.target.value)} className="event-input" />}
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <button type="submit" disabled={submitting} className="event-btn-primary w-full">{submitting ? "Please wait…" : "Enter"}</button>
+          </form>
         </div>
       </div>
     </EventThemeProvider>

@@ -35,9 +35,7 @@ body {
   @apply bg-dash-bg text-dash-text font-sans antialiased;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 .event-themed {
   min-height: 100vh;
@@ -46,12 +44,8 @@ body {
   font-family: var(--event-font-body);
 }
 
-.event-themed h1,
-.event-themed h2,
-.event-themed h3,
-.event-themed h4,
-.event-themed h5,
-.event-themed h6 {
+.event-themed h1, .event-themed h2, .event-themed h3,
+.event-themed h4, .event-themed h5, .event-themed h6 {
   font-family: var(--event-font-heading);
   color: var(--event-heading);
 }
@@ -66,10 +60,7 @@ body {
   cursor: pointer;
   border: none;
 }
-
-.event-themed .event-btn-primary:hover {
-  background-color: var(--event-primary-hover);
-}
+.event-themed .event-btn-primary:hover { background-color: var(--event-primary-hover); }
 
 .event-themed .event-btn-secondary {
   background-color: transparent;
@@ -81,10 +72,7 @@ body {
   transition: all 0.2s;
   cursor: pointer;
 }
-
-.event-themed .event-btn-secondary:hover {
-  background-color: var(--event-surface-alt);
-}
+.event-themed .event-btn-secondary:hover { background-color: var(--event-surface-alt); }
 
 .event-themed .event-input {
   background-color: var(--event-surface);
@@ -96,10 +84,7 @@ body {
   outline: none;
   transition: border-color 0.2s;
 }
-
-.event-themed .event-input:focus {
-  border-color: var(--event-primary);
-}
+.event-themed .event-input:focus { border-color: var(--event-primary); }
 
 .event-themed .event-card {
   background-color: var(--event-surface);
@@ -114,95 +99,25 @@ body {
   color: var(--event-text);
 }
 
-.event-themed .rich-content h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin: 0.5em 0;
-}
-
-.event-themed .rich-content h2 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  margin: 0.5em 0;
-}
-
-.event-themed .rich-content h3 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0.5em 0;
-}
-
-.event-themed .rich-content p {
-  margin: 0.5em 0;
-}
-
-.event-themed .rich-content ul,
-.event-themed .rich-content ol {
-  padding-left: 1.5em;
-  margin: 0.5em 0;
-}
-
-.event-themed .rich-content a {
-  color: var(--event-primary);
-  text-decoration: underline;
-}
-
-.event-themed .rich-content img {
-  max-width: 100%;
-  border-radius: 0.5rem;
-  margin: 0.5em 0;
-}
-
+.event-themed .rich-content h1 { font-size: 1.75rem; font-weight: 700; margin: 0.5em 0; }
+.event-themed .rich-content h2 { font-size: 1.5rem; font-weight: 600; margin: 0.5em 0; }
+.event-themed .rich-content h3 { font-size: 1.25rem; font-weight: 600; margin: 0.5em 0; }
+.event-themed .rich-content p { margin: 0.5em 0; }
+.event-themed .rich-content ul, .event-themed .rich-content ol { padding-left: 1.5em; margin: 0.5em 0; }
+.event-themed .rich-content a { color: var(--event-primary); text-decoration: underline; }
+.event-themed .rich-content img { max-width: 100%; border-radius: 0.5rem; margin: 0.5em 0; }
 .event-themed .rich-content blockquote {
   border-left: 3px solid var(--event-border);
-  padding-left: 1em;
-  margin: 0.5em 0;
-  font-style: italic;
-  color: var(--event-muted);
+  padding-left: 1em; margin: 0.5em 0; font-style: italic; color: var(--event-muted);
 }
 
-.scrollbar-thin::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
+.scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: var(--dash-border); border-radius: 3px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: var(--dash-muted); }
 
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: transparent;
-}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.animate-fadeIn { animation: fadeIn 0.3s ease-in; }
 
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background: var(--dash-border);
-  border-radius: 3px;
-}
-
-.scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: var(--dash-muted);
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.animate-fadeIn {
-  animation: fadeIn 0.3s ease-in;
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-slideUp {
-  animation: slideUp 0.3s ease-out;
-}
+@keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.animate-slideUp { animation: slideUp 0.3s ease-out; }

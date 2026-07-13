@@ -1,21 +1,19 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type GuestGroup } from "../../lib/supabase";
-import { Input } from "../../components/ui/Input";
+import { Input, Modal, LoadingSpinner, ErrorState, EmptyState, Card } from "../../components/ui";
 import { Button } from "../../components/ui/Button";
-import { Card, Modal, EmptyState, LoadingSpinner, ErrorState } from "../../components/ui";
-import { cn } from "../../lib/utils";
 
 export default function Groups() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState<GuestGroup | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [sortOrder, setSortOrder] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
-  const { data: groups, isLoading, error, refetch } = useQuery({
+  const { data: groups, isLoading, error: queryError } = useQuery({
     queryKey: ["guest_groups", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -30,22 +28,26 @@ export default function Groups() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (editing) {
-        const { error } = await supabase
-          .from("guest_groups")
-          .update({ name, sort_order: sortOrder })
-          .eq("id", editing.id);
+      if (editingId) {
+        const { error } = await supabase.from("guest_groups").update({ name }).eq("id", editingId).select().maybeSingle();
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from("guest_groups")
-          .insert({ name, sort_order: sortOrder, event_id: event.id });
+        const maxOrder = groups?.reduce((max, g) => Math.max(max, g.sort_order), -1) ?? -1;
+        const { error } = await supabase.from("guest_groups").insert({
+          event_id: event.id, name, sort_order: maxOrder + 1,
+        });
         if (error) throw error;
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guest_groups", event.id] });
-      setShowModal(false);
+      setModalOpen(false);
+      setName("");
+      setEditingId(null);
+      setError(null);
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : "Failed to save group.");
     },
   });
 
@@ -54,77 +56,53 @@ export default function Groups() {
       const { error } = await supabase.from("guest_groups").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["guest_groups", event.id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guest_groups", event.id] });
+    },
   });
 
-  function openNew() {
-    setEditing(null);
-    setName("");
-    setSortOrder(groups?.length ?? 0);
-    setShowModal(true);
-  }
+  function openAdd() { setName(""); setEditingId(null); setError(null); setModalOpen(true); }
+  function openEdit(group: GuestGroup) { setName(group.name); setEditingId(group.id); setError(null); setModalOpen(true); }
 
-  function openEdit(group: GuestGroup) {
-    setEditing(group);
-    setName(group.name);
-    setSortOrder(group.sort_order);
-    setShowModal(true);
-  }
-
-  if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner className="h-8 w-8" /></div>;
-  if (error) return <ErrorState message="Failed to load guest groups." onRetry={() => refetch()} />;
+  if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
+  if (queryError) return <ErrorState message="Failed to load guest groups." />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-dash-text">Guest Groups</h2>
-        <Button onClick={openNew}>+ Add Group</Button>
+        <div>
+          <h2 className="text-xl font-bold text-dash-text">Guest Groups</h2>
+          <p className="mt-1 text-sm text-dash-muted">Organize guests into groups for easier management.</p>
+        </div>
+        <Button onClick={openAdd}>Add Group</Button>
       </div>
 
       {!groups || groups.length === 0 ? (
-        <EmptyState
-          title="No guest groups yet"
-          description="Create groups to organize your guests (e.g., Family, Friends, Colleagues)."
-          action={<Button onClick={openNew}>+ Add Group</Button>}
-        />
+        <EmptyState title="No groups yet" description="Create guest groups to organize your invitees." action={<Button onClick={openAdd}>Add Group</Button>} />
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {groups.map((group) => (
-            <Card key={group.id} className="p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-semibold text-dash-text">{group.name}</h3>
-                  <p className="text-xs text-dash-muted">Order: {group.sort_order}</p>
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(group)}>Edit</Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-red-600"
-                    onClick={() => deleteMutation.mutate(group.id)}
-                  >Delete</Button>
-                </div>
+            <Card key={group.id} className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-dash-text">{group.name}</h3>
+                <p className="mt-1 text-xs text-dash-muted">Order: {group.sort_order}</p>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" onClick={() => openEdit(group)}>Edit</Button>
+                <Button size="sm" variant="danger" loading={deleteMutation.isPending} onClick={() => deleteMutation.mutate(group.id)}>Delete</Button>
               </div>
             </Card>
           ))}
         </div>
       )}
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Group" : "Add Group"}>
+      <Modal open={modalOpen} onClose={() => { setModalOpen(false); setError(null); }} title={editingId ? "Edit Group" : "Add Group"}>
         <div className="space-y-4">
-          <Input label="Group Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., Family" autoFocus />
-          <Input
-            label="Sort Order"
-            type="number"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(Number(e.target.value))}
-          />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
-            <Button loading={saveMutation.isPending} disabled={!name.trim()} onClick={() => saveMutation.mutate()}>
-              {editing ? "Save" : "Add"}
-            </Button>
+          <Input label="Group Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Family, Friends, Colleagues" autoFocus />
+          {error && <div className="rounded-md border border-dash-danger/30 bg-red-50 px-4 py-3 text-sm text-dash-danger">{error}</div>}
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => { setModalOpen(false); setError(null); }}>Cancel</Button>
+            <Button loading={saveMutation.isPending} disabled={!name.trim()} onClick={() => saveMutation.mutate()}>{editingId ? "Save" : "Add"}</Button>
           </div>
         </div>
       </Modal>

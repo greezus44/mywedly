@@ -9,23 +9,14 @@ export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  return d.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 }
 
 export function formatDateShort(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 export function formatTime12(timeStr: string | null | undefined): string {
@@ -37,23 +28,19 @@ export function formatTime12(timeStr: string | null | undefined): string {
   return `${hour12}:${String(m || 0).padStart(2, "0")} ${period}`;
 }
 
-export function getCountdown(targetDate: string | null | undefined): {
-  days: number;
-  hours: number;
-  minutes: number;
-  seconds: number;
-  isPast: boolean;
-} {
+export function getCountdown(targetDate: string | null | undefined) {
   if (!targetDate) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false };
   const target = new Date(targetDate);
   const now = new Date();
   const diff = target.getTime() - now.getTime();
   if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-  return { days, hours, minutes, seconds, isPast: false };
+  return {
+    days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+    hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+    minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+    seconds: Math.floor((diff % (1000 * 60)) / 1000),
+    isPast: false,
+  };
 }
 
 export function to12Hour(hour: number, minute: number): string {
@@ -62,7 +49,7 @@ export function to12Hour(hour: number, minute: number): string {
   return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
 }
 
-export function to24Hour(time12: string): { hour: number; minute: number } {
+export function to24Hour(time12: string) {
   const match = time12.match(/(\d+):(\d+)\s*(AM|PM)/i);
   if (!match) return { hour: 0, minute: 0 };
   let hour = parseInt(match[1]);
@@ -108,11 +95,5 @@ export function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return "";
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }

@@ -1,128 +1,154 @@
-import React, { useEffect, useState, useRef } from "react";
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
-import { Select } from "../../components/ui/Input";
-import { ColorInput, FormField, LoadingSpinner, Card } from "../../components/ui";
+import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import {
-  THEME_PRESETS,
-  DEFAULT_THEME,
-  HEADING_FONT_OPTIONS,
-  RICH_FONT_OPTIONS,
-  themeToEventCssVars,
-  type ThemeConfig,
+  THEME_PRESETS, DEFAULT_THEME, HEADING_FONT_OPTIONS, RICH_FONT_OPTIONS,
+  type ThemeConfig, themeToEventCssVars,
 } from "../../lib/theme";
+import { ColorInput, Select } from "../../components/ui";
+import { Button } from "../../components/ui/Button";
+import { CoverPreview } from "../../components/preview/PreviewRenderers";
+import { cn } from "../../lib/utils";
 
 const COLOR_FIELDS: { key: keyof ThemeConfig; label: string }[] = [
   { key: "bg", label: "Background" },
   { key: "surface", label: "Surface" },
   { key: "border", label: "Border" },
-  { key: "text", label: "Body Text" },
-  { key: "heading", label: "Heading Text" },
+  { key: "text", label: "Text" },
+  { key: "heading", label: "Heading" },
   { key: "muted", label: "Muted Text" },
   { key: "primary", label: "Primary" },
   { key: "primaryHover", label: "Primary Hover" },
-  { key: "primaryFg", label: "Primary Foreground" },
+  { key: "primaryFg", label: "Primary Text" },
   { key: "accent", label: "Accent" },
 ];
 
 export default function ThemeEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
-  const [saved, setSaved] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    const t = (event.draft_theme ?? event.theme ?? DEFAULT_THEME) as ThemeConfig;
-    setTheme({ ...DEFAULT_THEME, ...t });
-  }, [event.id]);
+  const currentTheme = (event.draft_theme ?? event.theme ?? DEFAULT_THEME) as ThemeConfig;
+
+  const [theme, setTheme] = useState<ThemeConfig>({ ...DEFAULT_THEME, ...currentTheme });
+  const [activePreset, setActivePreset] = useState<string | null>(
+    Object.entries(THEME_PRESETS).find(([, p]) => JSON.stringify(p.theme) === JSON.stringify(currentTheme))?.[0] ?? null
+  );
 
   const saveMutation = useMutation({
-    mutationFn: async (payload: ThemeConfig) => {
-      const { error } = await supabase
+    mutationFn: async () => {
+      const { data, error } = await supabase
         .from("user_events")
-        .update({ draft_theme: payload })
-        .eq("id", event.id);
+        .update({ draft_theme: theme as unknown as Json })
+        .eq("id", event.id)
+        .select()
+        .maybeSingle();
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      queryClient.invalidateQueries({ queryKey: ["user_events", event.id] });
     },
+    onError: () => {},
   });
 
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      saveMutation.mutate(theme);
-    }, 800);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme]);
-
-  function applyPreset(presetKey: string) {
-    const preset = THEME_PRESETS[presetKey];
-    if (preset) setTheme({ ...preset.theme });
+  function applyPreset(key: string) {
+    const preset = THEME_PRESETS[key];
+    if (!preset) return;
+    setTheme({ ...preset.theme });
+    setActivePreset(key);
   }
+
+  function updateColor(key: keyof ThemeConfig, value: string) {
+    setTheme((prev) => ({ ...prev, [key]: value }));
+    setActivePreset(null);
+  }
+
+  const previewEvent: Partial<UserEvent> = {
+    ...event,
+    theme: theme as unknown as Json,
+    cover_config: event.draft_cover_config ?? event.cover_config,
+    cover_image: event.draft_cover_image ?? event.cover_image,
+    name: event.draft_name ?? event.name,
+    event_date: event.draft_event_date ?? event.event_date,
+  };
 
   const cssVars = themeToEventCssVars(theme);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-dash-text">Website Theme</h2>
-        {saved && <span className="text-sm text-green-600">✓ Saved</span>}
-        {saveMutation.isPending && <LoadingSpinner className="h-4 w-4" />}
+        <div>
+          <h2 className="text-xl font-bold text-dash-text">Theme Editor</h2>
+          <p className="mt-1 text-sm text-dash-muted">Customize colors and fonts for your website.</p>
+        </div>
+        <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+          Save Changes
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <FormField label="Theme Presets">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      {saveMutation.isError && (
+        <div className="rounded-md border border-dash-danger/30 bg-red-50 px-4 py-3 text-sm text-dash-danger">
+          Failed to save. Please try again.
+        </div>
+      )}
+      {saveMutation.isSuccess && (
+        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          Changes saved successfully.
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Editor */}
+        <div className="space-y-6">
+          {/* Presets */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-dash-text">Theme Presets</label>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {Object.entries(THEME_PRESETS).map(([key, preset]) => (
                 <button
                   key={key}
-                  type="button"
                   onClick={() => applyPreset(key)}
-                  className="rounded-lg border border-dash-border p-3 text-left hover:border-dash-primary/50 transition-colors"
+                  className={cn(
+                    "rounded-lg border-2 p-3 text-left transition-colors",
+                    activePreset === key
+                      ? "border-dash-primary ring-2 ring-dash-primary/20"
+                      : "border-dash-border hover:border-dash-primary"
+                  )}
                 >
-                  <div className="flex gap-1 mb-2">
-                    {[
-                      preset.theme.primary,
-                      preset.theme.bg,
-                      preset.theme.surface,
-                      preset.theme.accent,
-                    ].map((c, i) => (
-                      <div key={i} className="h-4 w-4 rounded-full border border-dash-border" style={{ background: c }} />
-                    ))}
+                  <div className="flex gap-1">
+                    <div className="h-6 w-6 rounded" style={{ background: preset.theme.primary }} />
+                    <div className="h-6 w-6 rounded" style={{ background: preset.theme.bg }} />
+                    <div className="h-6 w-6 rounded" style={{ background: preset.theme.accent }} />
                   </div>
-                  <div className="text-xs font-medium text-dash-text">{preset.name}</div>
+                  <div className="mt-2 text-xs font-medium text-dash-text">{preset.name}</div>
                 </button>
               ))}
             </div>
-          </FormField>
+          </div>
 
-          <Card className="p-4 space-y-3">
-            <h3 className="text-sm font-semibold text-dash-text">Colors</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Colors */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-dash-text">Colors</label>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {COLOR_FIELDS.map((field) => (
                 <ColorInput
                   key={field.key}
                   label={field.label}
                   value={theme[field.key] as string}
-                  onChange={(v) => setTheme((t) => ({ ...t, [field.key]: v }))}
+                  onChange={(v) => updateColor(field.key, v)}
                 />
               ))}
             </div>
-          </Card>
+          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Fonts */}
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-dash-text">Fonts</label>
             <Select
               label="Heading Font"
               value={theme.fontHeading}
-              onChange={(e) => setTheme((t) => ({ ...t, fontHeading: e.target.value }))}
+              onChange={(e) => { setTheme({ ...theme, fontHeading: e.target.value }); setActivePreset(null); }}
             >
               {HEADING_FONT_OPTIONS.map((f) => (
                 <option key={f.value} value={f.value}>{f.label}</option>
@@ -131,16 +157,16 @@ export default function ThemeEditor() {
             <Select
               label="Body Font"
               value={theme.fontBody}
-              onChange={(e) => setTheme((t) => ({ ...t, fontBody: e.target.value }))}
+              onChange={(e) => { setTheme({ ...theme, fontBody: e.target.value }); setActivePreset(null); }}
             >
-              {HEADING_FONT_OPTIONS.map((f) => (
+              {RICH_FONT_OPTIONS.map((f) => (
                 <option key={f.value} value={f.value}>{f.label}</option>
               ))}
             </Select>
             <Select
               label="Rich Text Font"
               value={theme.fontRich}
-              onChange={(e) => setTheme((t) => ({ ...t, fontRich: e.target.value }))}
+              onChange={(e) => { setTheme({ ...theme, fontRich: e.target.value }); setActivePreset(null); }}
             >
               {RICH_FONT_OPTIONS.map((f) => (
                 <option key={f.value} value={f.value}>{f.label}</option>
@@ -150,44 +176,11 @@ export default function ThemeEditor() {
         </div>
 
         {/* Live Preview */}
-        <div className="rounded-xl border border-dash-border overflow-hidden">
-          <div className="border-b border-dash-border px-4 py-2 bg-dash-surface">
-            <span className="text-sm font-medium text-dash-text">Live Preview</span>
-          </div>
-          <div
-            className="p-8 min-h-[400px]"
-            style={{
-              background: "var(--event-bg)",
-              color: "var(--event-text)",
-              fontFamily: "var(--event-font-body)",
-              ...cssVars,
-            } as React.CSSProperties}
-          >
-            <h1
-              className="text-3xl mb-4"
-              style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}
-            >
-              {event.draft_name || event.name || "Your Event Title"}
-            </h1>
-            <p className="mb-3" style={{ color: "var(--event-muted)" }}>
-              A preview of your theme colors and typography.
-            </p>
-            <button
-              className="px-4 py-2 rounded-lg font-medium"
-              style={{ background: "var(--event-primary)", color: "var(--event-primary-fg)" }}
-            >
-              Primary Button
-            </button>
-            <div className="mt-6 p-4 rounded-lg" style={{ background: "var(--event-surface)", border: "1px solid var(--event-border)" }}>
-              <h2
-                className="text-xl mb-2"
-                style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}
-              >
-                Surface Card
-              </h2>
-              <p className="text-sm" style={{ color: "var(--event-text)" }}>
-                This card uses the surface and border colors from your theme.
-              </p>
+        <div className="sticky top-32 self-start">
+          <label className="mb-2 block text-sm font-medium text-dash-text">Live Preview</label>
+          <div className="overflow-hidden rounded-xl border border-dash-border" style={cssVars as React.CSSProperties}>
+            <div className="event-themed">
+              <CoverPreview event={previewEvent} />
             </div>
           </div>
         </div>

@@ -1,117 +1,226 @@
-import React, { useState, useMemo } from "react";
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  supabase,
-  type UserEvent,
-  type SubEvent,
-  type GuestGroup,
-  type EventGuest,
-  type GuestGroupMember,
-  type SubEventGroupAssignment,
-  type GuestInvitationOverride,
+  supabase, type UserEvent, type SubEvent, type GuestGroup,
+  type EventGuest, type SubEventGroupAssignment, type GuestInvitationOverride,
 } from "../../lib/supabase";
-import { Input, Textarea, Select } from "../../components/ui/Input";
+import { Input, Textarea, Select, Modal, LoadingSpinner, ErrorState, EmptyState, Card, Badge, Toggle } from "../../components/ui";
 import { Button } from "../../components/ui/Button";
-import {
-  Card,
-  Badge,
-  Modal,
-  EmptyState,
-  Toggle,
-  FormField,
-  LoadingSpinner,
-  ErrorState,
-} from "../../components/ui";
-import { DatePicker } from "../../components/ui/DatePicker";
-import { TimePicker } from "../../components/ui/TimePicker";
-import { cn, formatDate, formatTime12 } from "../../lib/utils";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import { formatDate, formatTime12, cn } from "../../lib/utils";
 
 interface SubEventForm {
-  name: string;
-  date: string | null;
-  start_time: string | null;
-  end_time: string | null;
-  venue: string;
-  address: string;
-  description: string;
-  dress_code: string;
-  rsvp_deadline: string | null;
+  name: string; date: string; start_time: string; end_time: string;
+  venue: string; address: string; description: string; dress_code: string;
 }
 
 const EMPTY_FORM: SubEventForm = {
-  name: "",
-  date: null,
-  start_time: null,
-  end_time: null,
-  venue: "",
-  address: "",
-  description: "",
-  dress_code: "",
-  rsvp_deadline: null,
+  name: "", date: "", start_time: "", end_time: "", venue: "", address: "", description: "", dress_code: "",
 };
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
+/* --------------------------- InvitationManager --------------------------- */
+
+function InvitationManager({ subEvent, groups, guests }: { subEvent: SubEvent; groups: GuestGroup[]; guests: EventGuest[] }) {
+  const queryClient = useQueryClient();
+  const [expanded, setExpanded] = useState(false);
+  const [manualGuestId, setManualGuestId] = useState("");
+
+  const { data: assignments } = useQuery({
+    queryKey: ["sub_event_group_assignments", subEvent.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("sub_event_group_assignments").select("*").eq("sub_event_id", subEvent.id);
+      if (error) throw error;
+      return data as SubEventGroupAssignment[];
+    },
+  });
+
+  const { data: overrides } = useQuery({
+    queryKey: ["guest_invitation_overrides", subEvent.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("guest_invitation_overrides").select("*").eq("sub_event_id", subEvent.id);
+      if (error) throw error;
+      return data as GuestInvitationOverride[];
+    },
+  });
+
+  const toggleGroupMutation = useMutation({
+    mutationFn: async ({ groupId, enable }: { groupId: string; enable: boolean }) => {
+      if (enable) {
+        const { error } = await supabase.from("sub_event_group_assignments").insert({ sub_event_id: subEvent.id, group_id: groupId });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("sub_event_group_assignments").delete()
+          .eq("sub_event_id", subEvent.id).eq("group_id", groupId);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sub_event_group_assignments", subEvent.id] });
+    },
+  });
+
+  const overrideMutation = useMutation({
+    mutationFn: async ({ guestId, isInvited }: { guestId: string; isInvited: boolean }) => {
+      const { error } = await supabase.from("guest_invitation_overrides")
+        .upsert({ sub_event_id: subEvent.id, guest_id: guestId, is_invited: isInvited }, {
+          onConflict: "sub_event_id,guest_id",
+        });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guest_invitation_overrides", subEvent.id] });
+      setManualGuestId("");
+    },
+  });
+
+  const assignedGroupIds = new Set(assignments?.map((a) => a.group_id));
+  const invitedOverrides = new Set(overrides?.filter((o) => o.is_invited).map((o) => o.guest_id));
+  const removedOverrides = new Set(overrides?.filter((o) => !o.is_invited).map((o) => o.guest_id));
+
+  // Calculate total invited count
+  const groupGuestCount = guests.filter((g) => assignedGroupIds.has(g.group_id || "") && !removedOverrides.has(g.id)).length;
+  const manualAddCount = guests.filter((g) => invitedOverrides.has(g.id)).length;
+  const totalInvited = groupGuestCount + manualAddCount;
+
+  return (
+    <div className="border-t border-dash-border pt-4">
+      <button onClick={() => setExpanded(!expanded)} className="flex w-full items-center justify-between text-sm font-medium text-dash-text">
+        <span>Invitations ({totalInvited} invited)</span>
+        <span>{expanded ? "▲" : "▼"}</span>
+      </button>
+
+      {expanded && (
+        <div className="mt-4 space-y-4">
+          {/* Group toggles */}
+          <div>
+            <h4 className="mb-2 text-sm font-medium text-dash-text">Guest Groups</h4>
+            <div className="flex flex-wrap gap-2">
+              {groups.length === 0 && <p className="text-xs text-dash-muted">No groups created yet.</p>}
+              {groups.map((group) => {
+                const isAssigned = assignedGroupIds.has(group.id);
+                return (
+                  <button
+                    key={group.id}
+                    onClick={() => toggleGroupMutation.mutate({ groupId: group.id, enable: !isAssigned })}
+                    className={cn(
+                      "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+                      isAssigned
+                        ? "border-dash-primary bg-dash-primary text-dash-primary-fg"
+                        : "border-dash-border bg-dash-surface text-dash-text hover:bg-dash-bg"
+                    )}
+                  >
+                    {group.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Manual guest additions */}
+          <div>
+            <h4 className="mb-2 text-sm font-medium text-dash-text">Manual Guest Additions</h4>
+            <div className="flex gap-2">
+              <Select value={manualGuestId} onChange={(e) => setManualGuestId(e.target.value)} className="flex-1">
+                <option value="">Select a guest to add...</option>
+                {guests.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name} {g.email ? `(${g.email})` : ""}</option>
+                ))}
+              </Select>
+              <Button
+                size="sm"
+                disabled={!manualGuestId}
+                loading={overrideMutation.isPending}
+                onClick={() => overrideMutation.mutate({ guestId: manualGuestId, isInvited: true })}
+              >
+                Add
+              </Button>
+            </div>
+          </div>
+
+          {/* Manual removals */}
+          <div>
+            <h4 className="mb-2 text-sm font-medium text-dash-text">Manual Removals</h4>
+            <div className="flex gap-2">
+              <Select value="" onChange={(e) => { if (e.target.value) overrideMutation.mutate({ guestId: e.target.value, isInvited: false }); }} className="flex-1">
+                <option value="">Select a guest to remove...</option>
+                {guests.filter((g) => !removedOverrides.has(g.id)).map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </Select>
+            </div>
+          </div>
+
+          {/* Summary */}
+          <div className="rounded-lg bg-dash-bg p-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-dash-muted">Total Invited:</span>
+              <span className="font-bold text-dash-text">{totalInvited}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------ Main Page ------------------------------ */
 
 export default function Events() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState<SubEvent | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SubEventForm>(EMPTY_FORM);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const subEventsKey = ["sub_events", event.id];
-
-  const { data: subEvents, isLoading, error, refetch } = useQuery({
-    queryKey: subEventsKey,
+  const { data: subEvents, isLoading, error: queryError } = useQuery({
+    queryKey: ["sub_events", event.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sub_events")
-        .select("*")
-        .eq("parent_event_id", event.id)
-        .order("display_order", { ascending: true })
-        .order("order_index", { ascending: true });
+      const { data, error } = await supabase.from("sub_events").select("*").eq("parent_event_id", event.id).order("display_order", { ascending: true });
       if (error) throw error;
       return data as SubEvent[];
+    },
+  });
+
+  const { data: groups } = useQuery({
+    queryKey: ["guest_groups", event.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("guest_groups").select("*").eq("event_id", event.id).order("sort_order", { ascending: true });
+      if (error) throw error;
+      return data as GuestGroup[];
+    },
+  });
+
+  const { data: guests } = useQuery({
+    queryKey: ["event_guests", event.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", event.id);
+      if (error) throw error;
+      return data as EventGuest[];
     },
   });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = {
-        parent_event_id: event.id,
-        name: form.name.trim(),
-        date: form.date,
-        start_time: form.start_time,
-        end_time: form.end_time,
-        venue: form.venue.trim(),
-        address: form.address.trim(),
-        description: form.description.trim() || null,
-        dress_code: form.dress_code.trim() || null,
-        rsvp_deadline: form.rsvp_deadline,
-        display_order: editing?.display_order ?? (subEvents?.length ?? 0),
-        order_index: editing?.order_index ?? (subEvents?.length ?? 0),
+        parent_event_id: event.id, name: form.name,
+        date: form.date || null, start_time: form.start_time || null, end_time: form.end_time || null,
+        venue: form.venue, address: form.address, description: form.description, dress_code: form.dress_code,
       };
-      if (editing) {
-        const { error } = await supabase.from("sub_events").update(payload).eq("id", editing.id);
+      if (editingId) {
+        const { error } = await supabase.from("sub_events").update(payload).eq("id", editingId).select().maybeSingle();
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("sub_events").insert(payload);
+        const maxOrder = subEvents?.reduce((max, s) => Math.max(max, s.display_order), -1) ?? -1;
+        const { error } = await supabase.from("sub_events").insert({ ...payload, display_order: maxOrder + 1, order_index: maxOrder + 1 });
         if (error) throw error;
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: subEventsKey });
-      setShowModal(false);
+      queryClient.invalidateQueries({ queryKey: ["sub_events", event.id] });
+      setModalOpen(false); setForm(EMPTY_FORM); setEditingId(null); setError(null);
     },
+    onError: (err) => setError(err instanceof Error ? err.message : "Failed to save."),
   });
 
   const deleteMutation = useMutation({
@@ -119,584 +228,76 @@ export default function Events() {
       const { error } = await supabase.from("sub_events").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: subEventsKey }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sub_events", event.id] }),
   });
 
-  function openNew() {
-    setEditing(null);
-    setForm(EMPTY_FORM);
-    setShowModal(true);
-  }
-
+  function openAdd() { setForm(EMPTY_FORM); setEditingId(null); setError(null); setModalOpen(true); }
   function openEdit(se: SubEvent) {
-    setEditing(se);
-    setForm({
-      name: se.name,
-      date: se.date,
-      start_time: se.start_time,
-      end_time: se.end_time,
-      venue: se.venue ?? "",
-      address: se.address ?? "",
-      description: se.description ?? "",
-      dress_code: se.dress_code ?? "",
-      rsvp_deadline: se.rsvp_deadline,
-    });
-    setShowModal(true);
+    setForm({ name: se.name, date: se.date || "", start_time: se.start_time || "", end_time: se.end_time || "", venue: se.venue, address: se.address, description: se.description || "", dress_code: se.dress_code || "" });
+    setEditingId(se.id); setError(null); setModalOpen(true);
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <LoadingSpinner className="h-8 w-8" />
-      </div>
-    );
-  }
-  if (error) return <ErrorState message="Failed to load events." onRetry={() => refetch()} />;
+  if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
+  if (queryError) return <ErrorState message="Failed to load events." />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-dash-text">Events</h2>
-        <Button onClick={openNew}>+ Add Event</Button>
+        <div>
+          <h2 className="text-xl font-bold text-dash-text">Events</h2>
+          <p className="mt-1 text-sm text-dash-muted">Manage individual events within your website and their guest invitations.</p>
+        </div>
+        <Button onClick={openAdd}>Add Event</Button>
       </div>
 
       {!subEvents || subEvents.length === 0 ? (
-        <EmptyState
-          title="No events yet"
-          description="Add individual events like Ceremony, Reception, or Mehndi to organize your celebration schedule."
-          action={<Button onClick={openNew}>+ Add Event</Button>}
-        />
+        <EmptyState title="No events yet" description="Add events to create a schedule for your website." action={<Button onClick={openAdd}>Add Event</Button>} />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {subEvents.map((se) => (
-            <SubEventCard
-              key={se.id}
-              subEvent={se}
-              eventId={event.id}
-              expanded={expandedId === se.id}
-              onToggleExpand={() => setExpandedId(expandedId === se.id ? null : se.id)}
-              onEdit={() => openEdit(se)}
-              onDelete={() => deleteMutation.mutate(se.id)}
-            />
+            <Card key={se.id} className="space-y-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-semibold text-dash-text">{se.name}</h3>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-4 text-xs text-dash-muted">
+                    {se.date && <span>{formatDate(se.date)}</span>}
+                    {se.start_time && <span>{formatTime12(se.start_time)}{se.end_time ? ` – ${formatTime12(se.end_time)}` : ""}</span>}
+                    {se.venue && <span>{se.venue}</span>}
+                    {se.address && <span>{se.address}</span>}
+                    {se.dress_code && <Badge variant="info">{se.dress_code}</Badge>}
+                  </div>
+                  {se.description && <p className="mt-2 text-sm text-dash-muted">{se.description}</p>}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => openEdit(se)}>Edit</Button>
+                  <Button size="sm" variant="danger" loading={deleteMutation.isPending} onClick={() => deleteMutation.mutate(se.id)}>Delete</Button>
+                </div>
+              </div>
+              <InvitationManager subEvent={se} groups={groups || []} guests={guests || []} />
+            </Card>
           ))}
         </div>
       )}
 
-      <Modal
-        open={showModal}
-        onClose={() => setShowModal(false)}
-        title={editing ? "Edit Event" : "Add Event"}
-        size="xl"
-      >
+      <Modal open={modalOpen} onClose={() => { setModalOpen(false); setError(null); }} title={editingId ? "Edit Event" : "Add Event"} size="lg">
         <div className="space-y-4">
-          <FormField label="Event Name">
-            <Input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g., Ceremony"
-              autoFocus
-            />
-          </FormField>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <FormField label="Date">
-              <DatePicker value={form.date} onChange={(v) => setForm({ ...form, date: v })} />
-            </FormField>
-            <FormField label="Start Time">
-              <TimePicker
-                value={form.start_time}
-                onChange={(v) => setForm({ ...form, start_time: v })}
-              />
-            </FormField>
-            <FormField label="End Time">
-              <TimePicker
-                value={form.end_time}
-                onChange={(v) => setForm({ ...form, end_time: v })}
-              />
-            </FormField>
+          <Input label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ceremony" autoFocus />
+          <Textarea label="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="Date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+            <Input label="Start Time" type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} />
+            <Input label="End Time" type="time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} />
+            <Input label="Venue" value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} />
+            <Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            <Input label="Dress Code" value={form.dress_code} onChange={(e) => setForm({ ...form, dress_code: e.target.value })} />
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Venue">
-              <Input
-                value={form.venue}
-                onChange={(e) => setForm({ ...form, venue: e.target.value })}
-                placeholder="e.g., Grand Ballroom"
-              />
-            </FormField>
-            <FormField label="Address">
-              <Input
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-                placeholder="Street address"
-              />
-            </FormField>
+          {error && <div className="rounded-md border border-dash-danger/30 bg-red-50 px-4 py-3 text-sm text-dash-danger">{error}</div>}
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => { setModalOpen(false); setError(null); }}>Cancel</Button>
+            <Button loading={saveMutation.isPending} disabled={!form.name.trim()} onClick={() => saveMutation.mutate()}>{editingId ? "Save" : "Add"}</Button>
           </div>
-
-          <FormField label="Description">
-            <Textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Details about this event..."
-              rows={3}
-            />
-          </FormField>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FormField label="Dress Code">
-              <Input
-                value={form.dress_code}
-                onChange={(e) => setForm({ ...form, dress_code: e.target.value })}
-                placeholder="e.g., Black Tie"
-              />
-            </FormField>
-            <FormField label="RSVP Deadline">
-              <DatePicker
-                value={form.rsvp_deadline}
-                onChange={(v) => setForm({ ...form, rsvp_deadline: v })}
-              />
-            </FormField>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setShowModal(false)}>
-              Cancel
-            </Button>
-            <Button
-              loading={saveMutation.isPending}
-              disabled={!form.name.trim()}
-              onClick={() => saveMutation.mutate()}
-            >
-              {editing ? "Save Changes" : "Add Event"}
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// SubEventCard
-// ---------------------------------------------------------------------------
-
-function SubEventCard({
-  subEvent,
-  eventId,
-  expanded,
-  onToggleExpand,
-  onEdit,
-  onDelete,
-}: {
-  subEvent: SubEvent;
-  eventId: string;
-  expanded: boolean;
-  onToggleExpand: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <Card className="overflow-hidden">
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base font-semibold text-dash-text">{subEvent.name}</h3>
-              {subEvent.date && <Badge variant="info">{formatDate(subEvent.date)}</Badge>}
-              {subEvent.start_time && (
-                <Badge variant="default">{formatTime12(subEvent.start_time)}</Badge>
-              )}
-              {subEvent.end_time && (
-                <span className="text-xs text-dash-muted">– {formatTime12(subEvent.end_time)}</span>
-              )}
-            </div>
-            {subEvent.venue && (
-              <p className="mt-1 text-sm text-dash-muted">
-                {subEvent.venue}
-                {subEvent.address ? ` • ${subEvent.address}` : ""}
-              </p>
-            )}
-            {subEvent.description && (
-              <p className="mt-1.5 text-sm text-dash-text/80 line-clamp-2">{subEvent.description}</p>
-            )}
-            {subEvent.dress_code && (
-              <p className="mt-1 text-xs text-dash-muted">Dress code: {subEvent.dress_code}</p>
-            )}
-          </div>
-          <div className="flex gap-1 shrink-0">
-            <Button size="sm" variant="ghost" onClick={onToggleExpand}>
-              {expanded ? "Hide Invitations" : "Invitations"}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={onEdit}>
-              Edit
-            </Button>
-            <Button size="sm" variant="ghost" className="text-red-600" onClick={onDelete}>
-              Delete
-            </Button>
-          </div>
-        </div>
-      </div>
-      {expanded && (
-        <div className="border-t border-dash-border bg-dash-bg/50 p-4">
-          <InvitationManager subEvent={subEvent} eventId={eventId} />
-        </div>
-      )}
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// InvitationManager
-// ---------------------------------------------------------------------------
-
-function InvitationManager({ subEvent, eventId }: { subEvent: SubEvent; eventId: string }) {
-  const queryClient = useQueryClient();
-  const [showGuestPicker, setShowGuestPicker] = useState(false);
-
-  const assignmentsKey = ["sub_event_group_assignments", subEvent.id];
-  const overridesKey = ["guest_invitation_overrides", subEvent.id];
-
-  // Guest groups for this event
-  const { data: groups } = useQuery({
-    queryKey: ["guest_groups", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("guest_groups")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("sort_order", { ascending: true });
-      if (error) throw error;
-      return data as GuestGroup[];
-    },
-  });
-
-  // All guests for this event
-  const { data: guests } = useQuery({
-    queryKey: ["event_guests", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_guests")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("name", { ascending: true });
-      if (error) throw error;
-      return data as EventGuest[];
-    },
-  });
-
-  // Group memberships
-  const { data: memberships } = useQuery({
-    queryKey: ["guest_group_members", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("guest_group_members")
-        .select("guest_id, group_id")
-        .in(
-          "group_id",
-          (groups ?? []).map((g) => g.id),
-        );
-      if (error) throw error;
-      return data as GuestGroupMember[];
-    },
-    enabled: !!(groups && groups.length > 0),
-  });
-
-  // Assigned group IDs for this sub-event
-  const { data: assignments } = useQuery({
-    queryKey: assignmentsKey,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sub_event_group_assignments")
-        .select("*")
-        .eq("sub_event_id", subEvent.id);
-      if (error) throw error;
-      return data as SubEventGroupAssignment[];
-    },
-  });
-
-  // Manual overrides for this sub-event
-  const { data: overrides } = useQuery({
-    queryKey: overridesKey,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("guest_invitation_overrides")
-        .select("*")
-        .eq("sub_event_id", subEvent.id);
-      if (error) throw error;
-      return data as GuestInvitationOverride[];
-    },
-  });
-
-  const assignedGroupIds = useMemo(
-    () => new Set((assignments ?? []).map((a) => a.group_id)),
-    [assignments],
-  );
-
-  const overrideMap = useMemo(() => {
-    const m = new Map<string, boolean>();
-    (overrides ?? []).forEach((o) => m.set(o.guest_id, o.is_invited));
-    return m;
-  }, [overrides]);
-
-  // Guests per group
-  const guestsByGroup = useMemo(() => {
-    const m = new Map<string, string[]>();
-    (memberships ?? []).forEach((mem) => {
-      const arr = m.get(mem.group_id) ?? [];
-      arr.push(mem.guest_id);
-      m.set(mem.group_id, arr);
-    });
-    return m;
-  }, [memberships]);
-
-  // Guests in assigned groups (unique)
-  const groupGuestIds = useMemo(() => {
-    const ids = new Set<string>();
-    assignedGroupIds.forEach((gid) => {
-      (guestsByGroup.get(gid) ?? []).forEach((id) => ids.add(id));
-    });
-    return ids;
-  }, [assignedGroupIds, guestsByGroup]);
-
-  // Manual additions: override is_invited=true AND not in any assigned group
-  const manualAdditions = useMemo(() => {
-    return (overrides ?? [])
-      .filter((o) => o.is_invited && !groupGuestIds.has(o.guest_id))
-      .map((o) => guests?.find((g) => g.id === o.guest_id))
-      .filter((g): g is EventGuest => !!g);
-  }, [overrides, groupGuestIds, guests]);
-
-  // Manual removals: override is_invited=false AND in an assigned group
-  const manualRemovals = useMemo(() => {
-    return (overrides ?? [])
-      .filter((o) => !o.is_invited && groupGuestIds.has(o.guest_id))
-      .map((o) => guests?.find((g) => g.id === o.guest_id))
-      .filter((g): g is EventGuest => !!g);
-  }, [overrides, groupGuestIds, guests]);
-
-  // Total invited = group guests - removals + additions
-  const totalInvited = groupGuestIds.size - manualRemovals.length + manualAdditions.length;
-  const viaGroups = groupGuestIds.size - manualRemovals.length;
-
-  // Guests available for manual add (not already in an assigned group, not already manually added)
-  const availableGuests = useMemo(() => {
-    const alreadyAdded = new Set(manualAdditions.map((g) => g.id));
-    return (guests ?? []).filter((g) => !groupGuestIds.has(g.id) && !alreadyAdded.has(g.id));
-  }, [guests, groupGuestIds, manualAdditions]);
-
-  // ---- Mutations ----
-
-  const toggleGroupMutation = useMutation({
-    mutationFn: async ({ groupId, assign }: { groupId: string; assign: boolean }) => {
-      if (assign) {
-        const { error } = await supabase
-          .from("sub_event_group_assignments")
-          .insert({ sub_event_id: subEvent.id, group_id: groupId });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("sub_event_group_assignments")
-          .delete()
-          .eq("sub_event_id", subEvent.id)
-          .eq("group_id", groupId);
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: assignmentsKey });
-      queryClient.invalidateQueries({ queryKey: overridesKey });
-    },
-  });
-
-  const addOverrideMutation = useMutation({
-    mutationFn: async ({ guestId, isInvited }: { guestId: string; isInvited: boolean }) => {
-      // Upsert: delete existing then insert (simplest cross-version approach)
-      await supabase
-        .from("guest_invitation_overrides")
-        .delete()
-        .eq("sub_event_id", subEvent.id)
-        .eq("guest_id", guestId);
-      const { error } = await supabase
-        .from("guest_invitation_overrides")
-        .insert({ sub_event_id: subEvent.id, guest_id: guestId, is_invited: isInvited });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: overridesKey });
-      setShowGuestPicker(false);
-    },
-  });
-
-  const restoreMutation = useMutation({
-    mutationFn: async (guestId: string) => {
-      const { error } = await supabase
-        .from("guest_invitation_overrides")
-        .delete()
-        .eq("sub_event_id", subEvent.id)
-        .eq("guest_id", guestId);
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: overridesKey }),
-  });
-
-  return (
-    <div className="space-y-4">
-      {/* Summary */}
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Badge variant="info">Total: {totalInvited} invited</Badge>
-        <span className="text-dash-muted">|</span>
-        <span className="text-dash-muted">{viaGroups} via groups</span>
-        <span className="text-dash-muted">|</span>
-        <span className="text-dash-muted">{manualAdditions.length} manual additions</span>
-        <span className="text-dash-muted">|</span>
-        <span className="text-dash-muted">{manualRemovals.length} manual removals</span>
-      </div>
-
-      {/* Assigned Guest Groups */}
-      <div>
-        <h4 className="text-sm font-semibold text-dash-text mb-2">Assigned Guest Groups</h4>
-        {!groups || groups.length === 0 ? (
-          <p className="text-xs text-dash-muted">No guest groups created yet.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {groups.map((group) => {
-              const assigned = assignedGroupIds.has(group.id);
-              const count = guestsByGroup.get(group.id)?.length ?? 0;
-              return (
-                <button
-                  key={group.id}
-                  type="button"
-                  onClick={() =>
-                    toggleGroupMutation.mutate({ groupId: group.id, assign: !assigned })
-                  }
-                  disabled={toggleGroupMutation.isPending}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
-                    assigned
-                      ? "border-dash-primary bg-dash-primary text-dash-primary-fg"
-                      : "border-dash-border bg-dash-surface text-dash-text hover:bg-dash-bg",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "flex h-4 w-4 items-center justify-center rounded-full border-2 text-[10px]",
-                      assigned ? "border-dash-primary-fg" : "border-dash-border",
-                    )}
-                  >
-                    {assigned && "✓"}
-                  </span>
-                  {group.name}
-                  <span className="text-xs opacity-70">({count})</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Manual Additions */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold text-dash-text">Manual Additions</h4>
-          <Button size="sm" variant="secondary" onClick={() => setShowGuestPicker(true)}>
-            + Add Guest
-          </Button>
-        </div>
-        {manualAdditions.length === 0 ? (
-          <p className="text-xs text-dash-muted">No manually added guests.</p>
-        ) : (
-          <div className="space-y-1">
-            {manualAdditions.map((g) => (
-              <div
-                key={g.id}
-                className="flex items-center justify-between rounded-lg border border-dash-border bg-dash-surface px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-dash-text">{g.name}</p>
-                  <p className="text-xs text-dash-muted">{g.email || g.phone || g.username}</p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-red-600"
-                  onClick={() => addOverrideMutation.mutate({ guestId: g.id, isInvited: false })}
-                >
-                  Remove
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Manual Removals */}
-      {manualRemovals.length > 0 && (
-        <div>
-          <h4 className="text-sm font-semibold text-dash-text mb-2">Manual Removals</h4>
-          <div className="space-y-1">
-            {manualRemovals.map((g) => (
-              <div
-                key={g.id}
-                className="flex items-center justify-between rounded-lg border border-dash-border bg-dash-surface px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-dash-text line-through opacity-60">
-                    {g.name}
-                  </p>
-                  <p className="text-xs text-dash-muted">{g.email || g.phone || g.username}</p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => restoreMutation.mutate(g.id)}
-                  loading={restoreMutation.isPending}
-                >
-                  Restore
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Guest Picker Modal */}
-      <Modal
-        open={showGuestPicker}
-        onClose={() => setShowGuestPicker(false)}
-        title="Add Guest to Event"
-        size="md"
-      >
-        <div className="space-y-3">
-          <p className="text-sm text-dash-muted">
-            Select a guest to invite. Only guests not already in an assigned group are shown.
-          </p>
-          {availableGuests.length === 0 ? (
-            <p className="text-sm text-dash-muted py-4 text-center">
-              No available guests to add.
-            </p>
-          ) : (
-            <div className="max-h-64 space-y-1 overflow-y-auto">
-              {availableGuests.map((g) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  onClick={() =>
-                    addOverrideMutation.mutate({ guestId: g.id, isInvited: true })
-                  }
-                  disabled={addOverrideMutation.isPending}
-                  className="flex w-full items-center justify-between rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-left hover:border-dash-primary hover:bg-dash-bg transition-colors"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-dash-text">{g.name}</p>
-                    <p className="text-xs text-dash-muted truncate">
-                      {g.email || g.phone || g.username}
-                    </p>
-                  </div>
-                  <span className="text-sm text-dash-primary shrink-0">+ Invite</span>
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </Modal>
     </div>

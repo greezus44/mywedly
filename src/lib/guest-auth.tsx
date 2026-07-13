@@ -9,14 +9,9 @@ interface GuestAuthContextValue {
 }
 
 const GuestAuthContext = createContext<GuestAuthContextValue | null>(null);
-
 const STORAGE_KEY = "mywedly-guest-auth";
 
-interface StoredAuth {
-  guestName: string;
-  guestId?: string;
-  eventId: string;
-}
+interface StoredAuth { guestName: string; guestId?: string; eventId: string; }
 
 export function GuestAuthProvider({ children }: { children: ReactNode }) {
   const [guestName, setGuestName] = useState<string | null>(null);
@@ -32,23 +27,17 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
         setEventId(parsed.eventId);
         setGuestId(parsed.guestId || null);
       }
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }, []);
 
   function signIn(name: string, evId: string, gId?: string) {
-    setGuestName(name);
-    setEventId(evId);
-    setGuestId(gId || null);
+    setGuestName(name); setEventId(evId); setGuestId(gId || null);
     const data: StoredAuth = { guestName: name, eventId: evId, guestId: gId };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   }
 
   function signOut() {
-    setGuestName(null);
-    setEventId(null);
-    setGuestId(null);
+    setGuestName(null); setEventId(null); setGuestId(null);
     localStorage.removeItem(STORAGE_KEY);
   }
 

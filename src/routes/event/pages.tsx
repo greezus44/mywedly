@@ -1,21 +1,22 @@
-import React from "react";
-import { useOutletContext, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Link, useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
-import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { Card, Badge, Modal, EmptyState, LoadingSpinner, ErrorState } from "../../components/ui";
 import { slugify } from "../../lib/theme";
+import { Input, Modal, LoadingSpinner, ErrorState, EmptyState, Card, Badge } from "../../components/ui";
+import { Button } from "../../components/ui/Button";
+import { formatDate } from "../../lib/utils";
 
 export default function Pages() {
   const { event } = useOutletContext<{ event: UserEvent }>();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showCreate, setShowCreate] = React.useState(false);
-  const [newTitle, setNewTitle] = React.useState("");
-  const [deleteTarget, setDeleteTarget] = React.useState<CustomPage | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [navLabel, setNavLabel] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  const { data: pages, isLoading, error, refetch } = useQuery({
+  const { data: pages, isLoading, error: queryError } = useQuery({
     queryKey: ["custom_pages", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -28,34 +29,31 @@ export default function Pages() {
     },
   });
 
-  const createMutation = useMutation({
+  const saveMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase
-        .from("custom_pages")
-        .insert({
-          title: newTitle,
-          slug: slugify(newTitle),
-          event_id: event.id,
-          wedding_id: event.id,
-          body: "",
-          sort_order: pages?.length ?? 0,
-          is_published: false,
-          show_in_nav: true,
-          nav_label: newTitle,
+      const slug = slugify(title);
+      if (editingId) {
+        const { error } = await supabase.from("custom_pages").update({
+          title, nav_label: navLabel || title, slug,
+        }).eq("id", editingId).select().maybeSingle();
+        if (error) throw error;
+      } else {
+        const maxOrder = pages?.reduce((max, p) => Math.max(max, p.sort_order), -1) ?? -1;
+        const { error } = await supabase.from("custom_pages").insert({
+          event_id: event.id, wedding_id: event.id,
+          title, nav_label: navLabel || title, slug,
+          sort_order: maxOrder + 1, is_published: false, show_in_nav: true,
           blocks: [],
-          is_footer: false,
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      return data as CustomPage;
+        });
+        if (error) throw error;
+      }
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom_pages", event.id] });
-      setShowCreate(false);
-      setNewTitle("");
-      navigate(`/event/${event.id}/page-builder/${data.id}`);
+      setModalOpen(false);
+      setTitle(""); setNavLabel(""); setEditingId(null); setError(null);
     },
+    onError: (err) => setError(err instanceof Error ? err.message : "Failed to save page."),
   });
 
   const deleteMutation = useMutation({
@@ -63,107 +61,63 @@ export default function Pages() {
       const { error } = await supabase.from("custom_pages").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["custom_pages", event.id] });
-      setDeleteTarget(null);
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["custom_pages", event.id] }),
   });
 
-  if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner className="h-8 w-8" /></div>;
-  if (error) return <ErrorState message="Failed to load pages." onRetry={() => refetch()} />;
+  function openAdd() { setTitle(""); setNavLabel(""); setEditingId(null); setError(null); setModalOpen(true); }
+  function openEdit(page: CustomPage) { setTitle(page.title); setNavLabel(page.nav_label || ""); setEditingId(page.id); setError(null); setModalOpen(true); }
+
+  if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
+  if (queryError) return <ErrorState message="Failed to load pages." />;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-dash-text">Custom Pages</h2>
-        <Button onClick={() => setShowCreate(true)}>+ Create Page</Button>
+        <div>
+          <h2 className="text-xl font-bold text-dash-text">Pages</h2>
+          <p className="mt-1 text-sm text-dash-muted">Create and manage custom pages for your website.</p>
+        </div>
+        <Button onClick={openAdd}>Add Page</Button>
       </div>
 
       {!pages || pages.length === 0 ? (
-        <EmptyState
-          title="No custom pages yet"
-          description="Create custom pages to add additional content like FAQ, Travel Info, or Registry."
-          action={<Button onClick={() => setShowCreate(true)}>+ Create Page</Button>}
-        />
+        <EmptyState title="No pages yet" description="Create custom pages to add more content to your website." action={<Button onClick={openAdd}>Add Page</Button>} />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="space-y-3">
           {pages.map((page) => (
-            <Card key={page.id} className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-semibold text-dash-text">{page.title}</h3>
-                  <p className="text-xs text-dash-muted font-mono mt-0.5">/{page.slug}</p>
-                  <div className="flex gap-1.5 mt-2 flex-wrap">
-                    {page.is_published ? (
-                      <Badge variant="success">Published</Badge>
-                    ) : (
-                      <Badge variant="default">Draft</Badge>
-                    )}
-                    {page.show_in_nav && <Badge variant="info">In Nav</Badge>}
-                  </div>
+            <Card key={page.id} className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <h3 className="font-semibold text-dash-text">{page.title}</h3>
+                  {page.is_published ? <Badge variant="success">Published</Badge> : <Badge variant="warning">Draft</Badge>}
+                  {page.show_in_nav && <Badge variant="info">In Nav</Badge>}
                 </div>
-                <div className="flex gap-1 shrink-0">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => navigate(`/event/${event.id}/page-builder/${page.id}`)}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-red-600"
-                    onClick={() => setDeleteTarget(page)}
-                  >
-                    Delete
-                  </Button>
+                <div className="mt-1 flex gap-4 text-xs text-dash-muted">
+                  <span>Slug: /{page.slug}</span>
+                  {page.nav_label && <span>Nav: {page.nav_label}</span>}
+                  <span>Updated: {formatDate(page.updated_at)}</span>
                 </div>
+              </div>
+              <div className="flex gap-2">
+                <Link to={`../page-builder/${page.id}`} relative="path">
+                  <Button size="sm" variant="secondary">Edit Blocks</Button>
+                </Link>
+                <Button size="sm" variant="secondary" onClick={() => openEdit(page)}>Settings</Button>
+                <Button size="sm" variant="danger" loading={deleteMutation.isPending} onClick={() => deleteMutation.mutate(page.id)}>Delete</Button>
               </div>
             </Card>
           ))}
         </div>
       )}
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Page">
+      <Modal open={modalOpen} onClose={() => { setModalOpen(false); setError(null); }} title={editingId ? "Edit Page" : "Add Page"}>
         <div className="space-y-4">
-          <Input
-            label="Page Title"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="e.g., Travel & Accommodation"
-            autoFocus
-          />
-          <p className="text-xs text-dash-muted">
-            URL slug: <span className="font-mono">/{newTitle ? slugify(newTitle) : "page-url"}</span>
-          </p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button
-              loading={createMutation.isPending}
-              disabled={!newTitle.trim()}
-              onClick={() => createMutation.mutate()}
-            >
-              Create & Edit
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Page">
-        <div className="space-y-4">
-          <p className="text-sm text-dash-text">
-            Are you sure you want to delete <span className="font-semibold">{deleteTarget?.title}</span>? This cannot be undone.
-          </p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button
-              variant="danger"
-              loading={deleteMutation.isPending}
-              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-            >
-              Delete
-            </Button>
+          <Input label="Page Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Travel Guide" autoFocus />
+          <Input label="Navigation Label" value={navLabel} onChange={(e) => setNavLabel(e.target.value)} placeholder="Short label for navigation (optional)" />
+          {error && <div className="rounded-md border border-dash-danger/30 bg-red-50 px-4 py-3 text-sm text-dash-danger">{error}</div>}
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => { setModalOpen(false); setError(null); }}>Cancel</Button>
+            <Button loading={saveMutation.isPending} disabled={!title.trim()} onClick={() => saveMutation.mutate()}>{editingId ? "Save" : "Add"}</Button>
           </div>
         </div>
       </Modal>

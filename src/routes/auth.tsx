@@ -1,89 +1,128 @@
-import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui/Input";
+import { Input } from "../components/ui";
+import { LoadingSpinner } from "../components/ui";
 
-export default function AuthPage() {
+export default function Auth() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate("/dashboard");
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (mounted && session) navigate("/dashboard", { replace: true });
+      } catch {
+        /* ignore */
+      } finally {
+        if (mounted) setCheckingSession(false);
+      }
+    })();
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted && session) navigate("/dashboard", { replace: true });
     });
+    return () => { mounted = false; sub.subscription.unsubscribe(); };
   }, [navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    if (!email.trim() || !password.trim()) {
+      setError("Please enter your email and password.");
+      return;
+    }
     setError(null);
+    setLoading(true);
     try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .insert({ id: (await supabase.auth.getUser()).data.user?.id, display_name: email.split("@")[0] });
-        if (profileData) navigate("/dashboard");
-        else navigate("/dashboard");
-      } else {
+      if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate("/dashboard");
+      } else {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
       }
-    } catch (err: any) {
-      setError(err.message || "Authentication failed");
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Authentication failed. Please try again.");
     } finally {
       setLoading(false);
     }
   }
 
+  if (checkingSession) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-dash-bg p-4">
-      <div className="max-w-md w-full rounded-xl border border-dash-border bg-dash-surface p-8 shadow-sm">
-        <div className="text-center mb-6">
-          <Link to="/" className="text-2xl font-bold text-dash-text">MyWedly</Link>
-          <p className="text-sm text-dash-muted mt-1">
-            {mode === "signin" ? "Sign in to your account" : "Create a new account"}
+    <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
+      <div className="w-full max-w-md">
+        <div className="rounded-xl border border-dash-border bg-dash-surface p-8 shadow-lg">
+          <h1 className="text-2xl font-bold text-dash-text">
+            {mode === "signin" ? "Sign in" : "Create account"}
+          </h1>
+          <p className="mt-1 text-sm text-dash-muted">
+            {mode === "signin"
+              ? "Sign in to manage your invitation websites."
+              : "Create an account to get started."}
           </p>
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <Input
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+            />
+            <Input
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              minLength={6}
+              required
+            />
+            {error && (
+              <div className="rounded-md border border-dash-danger/30 bg-red-50 px-4 py-3 text-sm text-dash-danger">
+                {error}
+              </div>
+            )}
+            <Button type="submit" loading={loading} className="w-full" size="lg">
+              {mode === "signin" ? "Sign in" : "Sign up"}
+            </Button>
+          </form>
+
+          <div className="mt-6 text-center text-sm text-dash-muted">
+            {mode === "signin" ? (
+              <>Don't have an account?{" "}
+                <button onClick={() => { setMode("signup"); setError(null); }} className="font-medium text-dash-primary hover:text-dash-primary-hover">
+                  Sign up
+                </button>
+              </>
+            ) : (
+              <>Already have an account?{" "}
+                <button onClick={() => { setMode("signin"); setError(null); }} className="font-medium text-dash-primary hover:text-dash-primary-hover">
+                  Sign in
+                </button>
+              </>
+            )}
+          </div>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            placeholder="you@example.com"
-          />
-          <Input
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            placeholder="••••••••"
-            minLength={6}
-          />
-          {error && <p className="text-sm text-dash-danger">{error}</p>}
-          <Button type="submit" loading={loading} className="w-full">
-            {mode === "signin" ? "Sign in" : "Sign up"}
-          </Button>
-        </form>
-        <p className="text-center text-sm text-dash-muted mt-4">
-          {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
-          <button
-            onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); }}
-            className="font-medium text-dash-primary hover:underline"
-          >
-            {mode === "signin" ? "Sign up" : "Sign in"}
-          </button>
-        </p>
       </div>
     </div>
   );
