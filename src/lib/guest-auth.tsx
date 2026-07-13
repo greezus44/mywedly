@@ -1,36 +1,55 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-import type { GuestSession } from "./supabase";
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { supabase } from "./supabase";
 
-interface GuestAuthContextValue { session: GuestSession | null; loading: boolean; signIn: (username: string, slug: string) => Promise<{ error: string | null }>; signOut: () => void; }
-const GuestAuthContext = createContext<GuestAuthContextValue | null>(null);
+interface GuestAuthState {
+  token: string | null;
+  guestId: string | null;
+  weddingId: string | null;
+  guestName: string | null;
+}
+
+interface GuestAuthContextValue extends GuestAuthState {
+  signIn: (name: string, weddingId: string) => Promise<{ success: boolean; error?: string }>;
+  signInWithToken: (token: string) => Promise<{ success: boolean; error?: string }>;
+  signOut: () => void;
+}
+
+const GuestAuthContext = createContext<GuestAuthContextValue | undefined>(undefined);
+const STORAGE_KEY = "wedding_guest_auth";
 
 export function GuestAuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<GuestSession | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<GuestAuthState>({ token: null, guestId: null, weddingId: null, guestName: null });
 
   useEffect(() => {
-    const stored = sessionStorage.getItem("guest-session");
-    if (stored) { try { setSession(JSON.parse(stored)); } catch { sessionStorage.removeItem("guest-session"); } }
-    setLoading(false);
+    const stored = sessionStorage.getItem(STORAGE_KEY);
+    if (stored) { try { setState(JSON.parse(stored)); } catch { sessionStorage.removeItem(STORAGE_KEY); } }
   }, []);
 
-  const signIn = async (username: string, slug: string) => {
-    try {
-      const { data: wedding, error: wErr } = await supabase.from("weddings").select("*").eq("slug", slug).eq("is_published", true).single();
-      if (wErr || !wedding) return { error: "Wedding not found" };
-      const { data: guest, error: gErr } = await supabase.from("guests").select("*").eq("wedding_id", wedding.id).eq("username", username.trim()).maybeSingle();
-      if (gErr || !guest) return { error: "Invalid username. Please check your invitation." };
-      const newSession: GuestSession = { guest, wedding };
-      setSession(newSession);
-      sessionStorage.setItem("guest-session", JSON.stringify(newSession));
-      return { error: null };
-    } catch { return { error: "Sign in failed. Please try again." }; }
+  const persist = (s: GuestAuthState) => {
+    setState(s);
+    if (s.token) sessionStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+    else sessionStorage.removeItem(STORAGE_KEY);
   };
 
-  const signOut = () => { setSession(null); sessionStorage.removeItem("guest-session"); };
+  const signIn = useCallback(async (name: string, weddingId: string) => {
+    const { data, error } = await supabase.from("guests").select("id, token, name").eq("wedding_id", weddingId).ilike("name", name.trim()).limit(1).maybeSingle();
+    if (error) return { success: false, error: error.message };
+    if (!data) return { success: false, error: "Name not found in guest list" };
+    persist({ token: data.token, guestId: data.id, weddingId, guestName: data.name });
+    return { success: true };
+  }, []);
 
-  return <GuestAuthContext.Provider value={{ session, loading, signIn, signOut }}>{children}</GuestAuthContext.Provider>;
+  const signInWithToken = useCallback(async (token: string) => {
+    const { data, error } = await supabase.from("guests").select("id, wedding_id, name, token").eq("token", token).limit(1).maybeSingle();
+    if (error) return { success: false, error: error.message };
+    if (!data) return { success: false, error: "Invalid invitation token" };
+    persist({ token: data.token, guestId: data.id, weddingId: data.wedding_id, guestName: data.name });
+    return { success: true };
+  }, []);
+
+  const signOut = useCallback(() => persist({ token: null, guestId: null, weddingId: null, guestName: null }), []);
+
+  return <GuestAuthContext.Provider value={{ ...state, signIn, signInWithToken, signOut }}>{children}</GuestAuthContext.Provider>;
 }
 
 export function useGuestAuth() {

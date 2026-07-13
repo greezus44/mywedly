@@ -1,262 +1,205 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { supabase, type Wedding } from "../../lib/supabase";
-import { useGuestAuth } from "../../lib/guest-auth";
-import {
-  themeToCssVars,
-  coverToCssVars,
-  getTheme,
-  getCoverConfig,
-  getLogoStyle,
-  getLogoPositionClasses,
-} from "../../lib/theme";
-import { getCountdown, formatDate, getDeviceType } from "../../lib/utils";
-import { ArrowRight } from "lucide-react";
+import { useState, useEffect, CSSProperties } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { supabase, Wedding } from "../../lib/supabase";
+import { useLang } from "../../lib/lang-context";
+import { coverToCssVars, DEFAULT_COVER_CONFIG } from "../../lib/theme";
+import { cn, formatDate, getCountdown } from "../../lib/utils";
+import { Button } from "../../components/ui/Button";
+import { ErrorState } from "../../components/ui/index";
 
-export function Cover() {
-  const { slug } = useParams<{ slug: string }>();
+/**
+ * GuestCover — the full-screen cover page shown at `/:weddingId`.
+ *
+ * Displays the couple's names, wedding date, and a live countdown timer.
+ * The "Open Invitation" button navigates to the guest login page.
+ */
+export default function GuestCover() {
+  const { weddingId } = useParams<{ weddingId: string }>();
   const navigate = useNavigate();
-  const { signInWithToken } = useGuestAuth();
+  const { t } = useLang();
+
   const [wedding, setWedding] = useState<Wedding | null>(null);
   const [loading, setLoading] = useState(true);
-  const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false });
-  const [slideIndex, setSlideIndex] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(() => getCountdown(null));
 
   useEffect(() => {
-    if (!slug) return;
-    supabase
-      .from("weddings")
-      .select("*")
-      .eq("slug", slug)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setWedding(data as Wedding);
-        setLoading(false);
-      });
-  }, [slug]);
+    if (!weddingId) {
+      setError("No wedding specified");
+      setLoading(false);
+      return;
+    }
 
-  // Track visit
-  useEffect(() => {
-    if (!wedding) return;
-    supabase.from("sharing_events").insert({
-      wedding_id: wedding.id,
-      event_type: "visit",
-      device_type: getDeviceType(),
-    }).then(() => {});
-  }, [wedding]);
+    let cancelled = false;
 
-  // Handle QR token login via ?t=token
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("t");
-    if (!token || !wedding) return;
-    signInWithToken(token).then(({ error }) => {
-      if (!error) {
-        navigate(`/w/${slug}/home`, { replace: true });
+    (async () => {
+      try {
+        const { data, error: fetchError } = await supabase
+          .from("weddings")
+          .select("*")
+          .eq("id", weddingId)
+          .limit(1)
+          .maybeSingle();
+
+        if (cancelled) return;
+        if (fetchError) throw fetchError;
+        if (!data) throw new Error("Wedding not found");
+
+        setWedding(data as Wedding);
+      } catch (err: any) {
+        if (!cancelled) setError(err.message || "Failed to load wedding");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    });
-  }, [wedding, slug, signInWithToken, navigate]);
+    })();
 
-  // Countdown
+    return () => {
+      cancelled = true;
+    };
+  }, [weddingId]);
+
+  // Live countdown ticker
   useEffect(() => {
     if (!wedding?.wedding_date) return;
-    const tick = () => setCountdown(getCountdown(wedding.wedding_date));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
+    setCountdown(getCountdown(wedding.wedding_date));
+    const interval = setInterval(() => {
+      setCountdown(getCountdown(wedding.wedding_date));
+    }, 1000);
+    return () => clearInterval(interval);
   }, [wedding?.wedding_date]);
-
-  // Slideshow
-  const cover = getCoverConfig(wedding);
-  useEffect(() => {
-    if (cover.background.type !== "slideshow" || !cover.background.slideshow_urls?.length) return;
-    const id = setInterval(() => {
-      setSlideIndex((prev) => (prev + 1) % cover.background.slideshow_urls.length);
-    }, 5000);
-    return () => clearInterval(id);
-  }, [cover.background.type, cover.background.slideshow_urls]);
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <div className="animate-pulse text-gray-600">Loading...</div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
+        <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  const theme = getTheme(wedding);
-  const bg = cover.background;
-  const logo = cover.branding.logo;
-  const logoPos = getLogoPositionClasses(logo.position);
-  const device = getDeviceType();
-
-  const bgStyle: React.CSSProperties = {};
-  if (bg.type === "image" && bg.image_url) {
-    bgStyle.backgroundImage = `url(${bg.image_url})`;
-    bgStyle.backgroundSize = "cover";
-    bgStyle.backgroundPosition = "center";
-  } else if (bg.type === "color") {
-    bgStyle.background = bg.color;
-  } else if (bg.type === "slideshow" && bg.slideshow_urls?.length) {
-    bgStyle.backgroundImage = `url(${bg.slideshow_urls[slideIndex]})`;
-    bgStyle.backgroundSize = "cover";
-    bgStyle.backgroundPosition = "center";
-    bgStyle.transition = "background-image 1s ease-in-out";
+  if (error || !wedding) {
+    return (
+      <div className="flex items-center justify-center min-h-screen px-4 bg-gray-50">
+        <ErrorState message={error || "Wedding not found"} onRetry={() => window.location.reload()} />
+      </div>
+    );
   }
 
-  const alignmentClass =
-    cover.layout.content_alignment === "left"
-      ? "items-start text-left"
-      : cover.layout.content_alignment === "right"
-      ? "items-end text-right"
-      : "items-center text-center";
+  const cover = wedding.cover_config || DEFAULT_COVER_CONFIG;
+  const coverVars = coverToCssVars(cover) as CSSProperties;
 
-  const vPosClass =
-    cover.layout.vertical_position === "top"
-      ? "justify-start"
-      : cover.layout.vertical_position === "bottom"
-      ? "justify-end"
-      : "justify-center";
+  const showDate = cover.showDate && wedding.wedding_date;
+  const showCountdown = cover.showCountdown && wedding.wedding_date && !countdown.expired;
 
-  const enterUrl = slug ? `/w/${slug}/login` : "/";
+  const handleOpen = () => {
+    if (weddingId) navigate(`/${weddingId}/login`);
+  };
 
   return (
     <div
-      className="relative flex min-h-screen flex-col overflow-hidden"
+      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden"
       style={{
-        ...themeToCssVars(theme),
-        ...coverToCssVars(cover),
-        ...bgStyle,
-        filter: `brightness(${cover.brightness}) blur(${cover.blur})`,
-      } as React.CSSProperties}
+        ...coverVars,
+        background: cover.bgImage ? `linear-gradient(rgba(0,0,0,${cover.overlayOpacity}), rgba(0,0,0,${cover.overlayOpacity})), var(--wed-cover-image)` : cover.bgColor,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        color: "var(--wed-cover-text)",
+      }}
     >
-      {/* Video background */}
-      {bg.type === "video" && bg.video_url && (
-        <video
-          src={bg.video_url}
-          autoPlay
-          loop
-          muted
-          playsInline
-          className="absolute inset-0 h-full w-full object-cover"
-        />
+      {/* Optional custom text above names */}
+      {cover.customText && (
+        <p
+          className="mb-6 text-sm uppercase tracking-[0.3em] opacity-80 animate-fade-in"
+          style={{ fontFamily: "var(--wed-cover-font)" }}
+        >
+          {cover.customText}
+        </p>
       )}
 
-      {/* Overlay */}
-      {cover.overlay.enabled && (
-        <div
-          className="absolute inset-0"
-          style={{
-            background: cover.overlay.color,
-            opacity: cover.overlay.opacity,
-          }}
-        />
-      )}
+      {/* Couple names */}
+      <div className="text-center px-6 animate-fade-in animation-delay-200">
+        <p className="text-xs uppercase tracking-[0.4em] mb-6 opacity-70" style={{ fontFamily: "var(--wed-cover-font)" }}>
+          {t("saveTheDate")}
+        </p>
+        <h1
+          className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl leading-tight"
+          style={{ fontFamily: "var(--wed-cover-script-font)", fontWeight: 400 }}
+        >
+          {wedding.groom_name}
+        </h1>
+        <p className="my-2 text-lg opacity-60" style={{ fontFamily: "var(--wed-cover-font)" }}>&</p>
+        <h1
+          className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl leading-tight"
+          style={{ fontFamily: "var(--wed-cover-script-font)", fontWeight: 400 }}
+        >
+          {wedding.bride_name}
+        </h1>
+      </div>
 
-      {/* Content */}
-      <div
-        className={`relative z-10 flex min-h-screen flex-col p-6 md:p-10 ${vPosClass} ${alignmentClass}`}
-        style={{ maxWidth: cover.layout.max_width, margin: "0 auto", width: "100%" }}
-      >
-        {/* Logo */}
-        {logo.url && logo.visible && (
-          <div className={`flex w-full ${logoPos.container} animate-fade-in`} style={{ padding: logo.padding }}>
-            <div className={logoPos.item} style={{ transform: `translate(${logo.offsetX}, ${logo.offsetY})` }}>
-              <img src={logo.url} alt="logo" style={getLogoStyle(logo, device)} />
-            </div>
-          </div>
-        )}
-
-        {/* Couple names */}
-        <div className="animate-fade-in-up" style={{ animationDelay: "0.2s", opacity: 0 }}>
-          <h1
-            className="font-heading"
-            style={{
-              color: "var(--cover-text)",
-              fontSize: cover.typography.heading_size,
-              fontWeight: cover.typography.heading_weight,
-              letterSpacing: cover.typography.letter_spacing,
-            }}
-          >
-            {cover.branding.couple_name_one || wedding?.couple_name_one || ""}
-          </h1>
-          <p className="my-2 font-script text-3xl md:text-4xl" style={{ color: "var(--cover-body-color)" }}>
-            &
+      {/* Date */}
+      {showDate && (
+        <div className="mt-10 text-center animate-fade-in animation-delay-500">
+          <p className="text-base sm:text-lg opacity-90" style={{ fontFamily: "var(--wed-cover-font)" }}>
+            {formatDate(wedding.wedding_date)}
           </p>
-          <h1
-            className="font-heading"
-            style={{
-              color: "var(--cover-text)",
-              fontSize: cover.typography.heading_size,
-              fontWeight: cover.typography.heading_weight,
-              letterSpacing: cover.typography.letter_spacing,
-            }}
-          >
-            {cover.branding.couple_name_two || wedding?.couple_name_two || ""}
-          </h1>
+          {wedding.wedding_time && (
+            <p className="text-sm mt-1 opacity-70" style={{ fontFamily: "var(--wed-cover-font)" }}>
+              {wedding.venue}
+            </p>
+          )}
         </div>
+      )}
 
-        {/* Date */}
-        {cover.show_date && (cover.branding.date || wedding?.wedding_date) && (
-          <p
-            className="mt-4 animate-fade-in-up font-body"
-            style={{
-              color: "var(--cover-body-color)",
-              fontSize: cover.typography.body_size,
-              animationDelay: "0.4s",
-              opacity: 0,
-            }}
-          >
-            {cover.branding.date || formatDate(wedding?.wedding_date || null)}
-          </p>
-        )}
+      {/* Countdown */}
+      {showCountdown && (
+        <div className="mt-10 flex items-center justify-center gap-4 sm:gap-8 animate-fade-in animation-delay-700">
+          <CountdownUnit value={countdown.days} label={t("days")} />
+          <CountdownSep />
+          <CountdownUnit value={countdown.hours} label={t("hours")} />
+          <CountdownSep />
+          <CountdownUnit value={countdown.minutes} label={t("minutes")} />
+          <CountdownSep />
+          <CountdownUnit value={countdown.seconds} label={t("seconds")} />
+        </div>
+      )}
 
-        {/* Countdown */}
-        {cover.show_countdown && !countdown.isPast && (
-          <div
-            className="mt-8 flex animate-fade-in-up gap-6 md:gap-10"
-            style={{ animationDelay: "0.6s", opacity: 0 }}
-          >
-            {(["days", "hours", "minutes", "seconds"] as const).map((k) => (
-              <div key={k} className="text-center">
-                <div
-                  className="font-heading text-3xl md:text-4xl"
-                  style={{ color: "var(--cover-text)" }}
-                >
-                  {countdown[k]}
-                </div>
-                <div
-                  className="mt-1 text-xs uppercase tracking-widest"
-                  style={{ color: "var(--cover-body-color)" }}
-                >
-                  {k}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Enter button */}
-        <button
-          onClick={() => navigate(enterUrl)}
-          className="mt-10 animate-fade-in-up font-body transition-transform hover:scale-105"
+      {/* Open Invitation button */}
+      <div className="mt-12 animate-fade-in animation-delay-1000">
+        <Button
+          onClick={handleOpen}
+          size="lg"
+          className="px-8 py-3 text-sm uppercase tracking-[0.2em] font-medium border-0"
           style={{
-            background: cover.button.bg_color,
-            color: cover.button.text_color,
-            borderRadius: cover.button.border_radius,
-            padding: `${cover.button.padding_y} ${cover.button.padding_x}`,
-            animationDelay: "0.8s",
-            opacity: 0,
+            background: cover.buttonColor,
+            color: cover.textColor,
+            borderRadius: "2px",
           }}
         >
-          <span className="inline-flex items-center gap-2">
-            {cover.enter_button_text || "Enter Website"}
-            <ArrowRight className="h-4 w-4" />
-          </span>
-        </button>
+          {cover.buttonText || t("enterInvitation")}
+        </Button>
       </div>
+
+      {/* Parents */}
+      {(wedding.groom_parents || wedding.bride_parents) && (
+        <div className="mt-16 text-center text-xs opacity-50 animate-fade-in animation-delay-1200" style={{ fontFamily: "var(--wed-cover-font)" }}>
+          {wedding.groom_parents && <p>{wedding.groom_parents}</p>}
+          {wedding.bride_parents && <p>{wedding.bride_parents}</p>}
+        </div>
+      )}
     </div>
   );
 }
 
-export default Cover;
+function CountdownUnit({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="text-center">
+      <div className="text-2xl sm:text-3xl font-light tabular-nums" style={{ fontFamily: "var(--wed-cover-font)" }}>
+        {String(value).padStart(2, "0")}
+      </div>
+      <div className="text-[10px] uppercase tracking-[0.2em] opacity-60 mt-1">{label}</div>
+    </div>
+  );
+}
+
+function CountdownSep() {
+  return <div className="text-2xl opacity-30 -mt-4">:</div>;
+}

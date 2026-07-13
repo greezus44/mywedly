@@ -1,304 +1,412 @@
-import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
-import {
-  supabase,
-  type Wedding,
-  type WeddingEvent,
-  type WeddingContent,
-  type Rsvp,
-  type RsvpStatus,
-} from "../../lib/supabase";
+import { useState, CSSProperties } from "react";
+import { useOutletContext, useNavigate, useParams } from "react-router-dom";
+import { supabase, Wedding, Rsvp, RsvpQuestion } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { useLang } from "../../lib/lang-context";
-import {
-  themeToCssVars,
-  getTheme,
-  getLogoConfig,
-  getLogoStyle,
-  shouldShowLogo,
-} from "../../lib/theme";
-import { formatDate, formatTime, getDeviceType } from "../../lib/utils";
-import { Check, X, Calendar, MapPin, Clock } from "lucide-react";
+import { themeToCssVars, DEFAULT_THEME } from "../../lib/theme";
+import { cn } from "../../lib/utils";
+import { Button } from "../../components/ui/Button";
+import { Input, Textarea } from "../../components/ui/Input";
+import { Toast, ErrorState } from "../../components/ui/index";
 
-export function Rsvp() {
-  const { slug } = useParams<{ slug: string }>();
-  const { session } = useGuestAuth();
-  const { lang, t } = useLang();
-  const [wedding, setWedding] = useState<Wedding | null>(null);
-  const [events, setEvents] = useState<WeddingEvent[]>([]);
-  const [rsvps, setRsvps] = useState<Record<string, RsvpStatus>>({});
-  const [submitting, setSubmitting] = useState<string | null>(null);
-  const [submittedEvents, setSubmittedEvents] = useState<Set<string>>(new Set());
-  const [loading, setLoading] = useState(true);
+interface OutletContext {
+  wedding: Wedding;
+}
 
-  useEffect(() => {
-    if (!slug) return;
-    supabase
-      .from("weddings")
-      .select("*")
-      .eq("slug", slug)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setWedding(data as Wedding);
-      });
-  }, [slug]);
+type RsvpStatus = "attending" | "not_attending" | "maybe";
 
-  useEffect(() => {
-    if (!wedding) return;
-    supabase
-      .from("events")
-      .select("*")
-      .eq("wedding_id", wedding.id)
-      .order("sort_order", { ascending: true })
-      .then(({ data }) => {
-        if (data) setEvents(data as WeddingEvent[]);
-        setLoading(false);
-      });
-  }, [wedding]);
+/**
+ * GuestRsvp — the RSVP form page.
+ *
+ * Renders the RSVP questions defined in the wedding content (plus a status
+ * selector, plus_ones, dietary, and message field). On submit it inserts a
+ * row into the `rsvps` table and updates the guest's `rsvp_status`.
+ */
+export default function GuestRsvp() {
+  const { wedding } = useOutletContext<OutletContext>();
+  const { guestId, guestName, weddingId: authWeddingId } = useGuestAuth();
+  const { weddingId: paramWeddingId } = useParams<{ weddingId: string }>();
+  const navigate = useNavigate();
+  const { t } = useLang();
 
-  // Fetch existing RSVPs
-  useEffect(() => {
-    if (!wedding || !session) return;
-    supabase
-      .from("rsvps")
-      .select("*")
-      .eq("wedding_id", wedding.id)
-      .eq("guest_id", session.guest_id)
-      .then(({ data }) => {
-        if (data) {
-          const map: Record<string, RsvpStatus> = {};
-          (data as Rsvp[]).forEach((r) => {
-            map[r.event_id] = r.status;
-          });
-          setRsvps(map);
-        }
-      });
-  }, [wedding, session]);
+  const weddingId = authWeddingId || paramWeddingId || wedding.id;
+  const themeVars = themeToCssVars(wedding.theme || DEFAULT_THEME) as CSSProperties;
+  const content = wedding.content;
 
-  const theme = getTheme(wedding);
-  const content = (wedding?.content || {}) as WeddingContent;
-  const logo = getLogoConfig(wedding);
-  const device = getDeviceType();
-  const showLogo = shouldShowLogo(logo, "rsvp") && logo.url;
+  const questions: RsvpQuestion[] = content?.rsvp_questions || [];
 
-  const handleRsvp = async (event: WeddingEvent, status: RsvpStatus) => {
-    if (!wedding || !session) return;
-    setSubmitting(event.id);
+  const [status, setStatus] = useState<RsvpStatus>("attending");
+  const [plusOnes, setPlusOnes] = useState(0);
+  const [dietary, setDietary] = useState("");
+  const [message, setMessage] = useState("");
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
-    // Check if RSVP already exists
-    const { data: existing } = await supabase
-      .from("rsvps")
-      .select("id")
-      .eq("wedding_id", wedding.id)
-      .eq("guest_id", session.guest_id)
-      .eq("event_id", event.id)
-      .maybeSingle();
-
-    if (existing) {
-      // Update
-      await supabase
-        .from("rsvps")
-        .update({
-          status,
-          number_of_guests: status === "attending" ? 1 : 0,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id);
-    } else {
-      // Insert
-      await supabase.from("rsvps").insert({
-        wedding_id: wedding.id,
-        guest_id: session.guest_id,
-        event_id: event.id,
-        status,
-        number_of_guests: status === "attending" ? 1 : 0,
-        message: null,
-      });
-    }
-
-    setRsvps((prev) => ({ ...prev, [event.id]: status }));
-    setSubmittedEvents((prev) => new Set(prev).add(event.id));
-    setSubmitting(null);
+  const handleAnswerChange = (id: string, value: string) => {
+    setAnswers((prev) => ({ ...prev, [id]: value }));
   };
 
-  if (loading) {
+  const validate = (): string | null => {
+    for (const q of questions) {
+      if (q.required && !answers[q.id]?.trim()) {
+        return `Please answer: ${q.text}`;
+      }
+    }
+    return null;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!guestId) {
+      setError("You must be signed in to submit an RSVP");
+      return;
+    }
+
+    const validationError = validate();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      // Insert into rsvps table
+      const rsvpRecord: Omit<Rsvp, "id" | "submitted_at"> = {
+        wedding_id: weddingId,
+        guest_id: guestId,
+        guest_name: guestName || "",
+        status,
+        plus_ones: status === "attending" ? plusOnes : 0,
+        dietary,
+        message,
+        answers,
+      };
+
+      const { error: insertError } = await supabase.from("rsvps").insert(rsvpRecord);
+      if (insertError) throw insertError;
+
+      // Update guest rsvp_status
+      const { error: updateError } = await supabase
+        .from("guests")
+        .update({
+          rsvp_status: status,
+          rsvp_submitted_at: new Date().toISOString(),
+          plus_ones: status === "attending" ? plusOnes : 0,
+          dietary,
+          message,
+        })
+        .eq("id", guestId);
+
+      if (updateError) throw updateError;
+
+      setToast(t("rsvpSubmitted"));
+      setTimeout(() => {
+        navigate(`/${weddingId}/home`);
+      }, 2000);
+    } catch (err: any) {
+      setError(err.message || "Failed to submit RSVP");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!guestId) {
     return (
-      <div
-        className="flex min-h-[60vh] items-center justify-center"
-        style={{ ...themeToCssVars(theme), background: "var(--color-bg)" } as React.CSSProperties}
-      >
-        <p className="font-body text-sm text-gray-400">{t.loading}</p>
+      <div style={themeVars} className="min-h-[60vh] flex items-center justify-center px-4">
+        <ErrorState
+          message="You must be signed in to view this page"
+          onRetry={() => navigate(`/${weddingId}`)}
+        />
       </div>
     );
   }
 
   return (
-    <div
-      className="min-h-screen"
-      style={{
-        ...themeToCssVars(theme),
-        background: "var(--color-bg)",
-        color: "var(--color-text)",
-        fontFamily: "var(--font-body)",
-      } as React.CSSProperties}
-    >
-      {/* Header */}
-      <section className="px-6 py-16 md:py-20">
-        {/* Logo */}
-        {showLogo && (
-          <div className="mb-10 flex justify-center animate-fade-in" style={{ animationDelay: "0.1s", opacity: 0 }}>
-            <img src={logo.url!} alt="logo" style={getLogoStyle(logo, device)} />
+    <div style={themeVars} className="pb-12">
+      <section className="py-12 px-4" style={{ paddingBlock: "var(--wed-section-padding)" }}>
+        <div className="max-w-xl mx-auto">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1
+              className="text-3xl sm:text-4xl mb-3"
+              style={{ fontFamily: "var(--wed-heading-font)", color: "var(--wed-heading-color)" }}
+            >
+              {content?.rsvp_title || t("rsvp")}
+            </h1>
+            {content?.rsvp_description && (
+              <p className="text-sm opacity-70" style={{ color: "var(--wed-body-color)" }}>
+                {content.rsvp_description}
+              </p>
+            )}
           </div>
-        )}
 
-        <p
-          className="mb-4 text-center font-body text-xs uppercase tracking-[0.3em] text-gray-400 animate-fade-in-up"
-          style={{ animationDelay: "0.2s", opacity: 0 }}
-        >
-          {lang === "ms" ? "Tetapan Kehadiran" : "Attendance"}
-        </p>
-        <h1
-          className="text-center font-heading text-3xl font-light md:text-5xl animate-fade-in-up"
-          style={{ animationDelay: "0.3s", opacity: 0, color: "var(--color-text)", fontFamily: "var(--font-heading)" }}
-        >
-          RSVP
-        </h1>
-
-        {/* RSVP intro — using Boolean(content.rsvp_intro) and String(content.rsvp_intro) */}
-        {Boolean(content.rsvp_intro) && (
-          <p
-            className="mx-auto mt-6 max-w-lg text-center font-body text-sm leading-relaxed text-gray-500 md:text-base animate-fade-in-up"
-            style={{ animationDelay: "0.4s", opacity: 0 }}
-          >
-            {String(content.rsvp_intro)}
-          </p>
-        )}
-      </section>
-
-      {/* Event cards */}
-      <section className="px-6 pb-16">
-        <div className="mx-auto max-w-2xl space-y-6">
-          {events.length === 0 && !loading && (
-            <p className="text-center font-body text-sm text-gray-400">
-              {lang === "ms" ? "Tiada acara dijumpati." : "No events found."}
-            </p>
+          {/* Error */}
+          {error && (
+            <div className="mb-6 px-4 py-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">
+              {error}
+            </div>
           )}
-          {events.map((event, i) => {
-            const currentStatus = rsvps[event.id];
-            const isSubmitted = submittedEvents.has(event.id);
-            return (
-              <div
-                key={event.id}
-                className="animate-fade-in-up border border-gray-200 bg-white p-6 md:p-8"
-                style={{
-                  animationDelay: `${0.2 + i * 0.1}s`,
-                  opacity: 0,
-                  borderRadius: "0px",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-                }}
-              >
-                {/* Event kind badge */}
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="font-body text-[0.6rem] uppercase tracking-[0.2em] text-gray-400">
-                    {event.kind}
-                  </span>
-                  {isSubmitted && (
-                    <span className="font-body text-[0.6rem] uppercase tracking-[0.2em] text-gray-300">
-                      {lang === "ms" ? "Dihantar" : "Submitted"}
-                    </span>
-                  )}
+
+          <div
+            className="bg-white rounded-xl border shadow-sm p-6 sm:p-8"
+            style={{
+              background: "var(--wed-bg)",
+              border: "1px solid color-mix(in srgb, var(--wed-primary) 25%, transparent)",
+              borderRadius: "12px",
+            }}
+          >
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Status selector */}
+              <div>
+                <label
+                  className="block text-sm font-medium mb-3"
+                  style={{ color: "var(--wed-heading-color)" }}
+                >
+                  Will you be attending?
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["attending", "maybe", "not_attending"] as RsvpStatus[]).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setStatus(s)}
+                      className={cn(
+                        "py-2.5 px-3 rounded-lg text-sm font-medium transition-all border",
+                        status === s ? "border-transparent text-white" : "border-gray-200"
+                      )}
+                      style={
+                        status === s
+                          ? { background: "var(--wed-primary)", color: "var(--wed-button-text)" }
+                          : { color: "var(--wed-body-color)" }
+                      }
+                    >
+                      {t(s as any)}
+                    </button>
+                  ))}
                 </div>
-
-                {/* Event name */}
-                <h2 className="font-heading text-xl font-light text-gray-800 md:text-2xl">
-                  {event.name}
-                </h2>
-
-                {/* Event details */}
-                <div className="mt-4 space-y-2">
-                  {event.starts_at && (
-                    <div className="flex items-center gap-2 font-body text-sm text-gray-500">
-                      <Calendar className="h-3.5 w-3.5 text-gray-400" />
-                      <span>{formatDate(event.starts_at, lang)}</span>
-                      <span className="text-gray-300">·</span>
-                      <Clock className="h-3.5 w-3.5 text-gray-400" />
-                      <span>{formatTime(event.starts_at)}</span>
-                    </div>
-                  )}
-                  {event.venue_name && (
-                    <div className="flex items-center gap-2 font-body text-sm text-gray-500">
-                      <MapPin className="h-3.5 w-3.5 text-gray-400" />
-                      <span>{event.venue_name}</span>
-                    </div>
-                  )}
-                  {event.venue_address && (
-                    <p className="pl-5 font-body text-xs text-gray-400">{event.venue_address}</p>
-                  )}
-                </div>
-
-                {/* Description */}
-                {event.description && (
-                  <p className="mt-4 font-body text-sm leading-relaxed text-gray-500">
-                    {event.description}
-                  </p>
-                )}
-
-                {/* RSVP buttons */}
-                <div className="mt-6 flex gap-3">
-                  <button
-                    onClick={() => handleRsvp(event, "attending")}
-                    disabled={submitting === event.id}
-                    className="flex flex-1 items-center justify-center gap-2 border px-4 py-3 font-body text-sm font-medium transition-all disabled:opacity-50"
-                    style={{
-                      background:
-                        currentStatus === "attending" ? "var(--color-text)" : "transparent",
-                      color:
-                        currentStatus === "attending" ? "var(--color-bg)" : "var(--color-text)",
-                      borderColor:
-                        currentStatus === "attending" ? "var(--color-text)" : "var(--color-border)",
-                    } as React.CSSProperties}
-                  >
-                    <Check className="h-4 w-4" />
-                    {t.attending}
-                  </button>
-                  <button
-                    onClick={() => handleRsvp(event, "declined")}
-                    disabled={submitting === event.id}
-                    className="flex flex-1 items-center justify-center gap-2 border px-4 py-3 font-body text-sm font-medium transition-all disabled:opacity-50"
-                    style={{
-                      background:
-                        currentStatus === "declined" ? "var(--color-text)" : "transparent",
-                      color:
-                        currentStatus === "declined" ? "var(--color-bg)" : "var(--color-text-muted)",
-                      borderColor:
-                        currentStatus === "declined" ? "var(--color-text)" : "var(--color-border)",
-                    } as React.CSSProperties}
-                  >
-                    <X className="h-4 w-4" />
-                    {t.declined}
-                  </button>
-                </div>
-
-                {/* Status confirmation */}
-                {isSubmitted && currentStatus && (
-                  <p className="mt-3 text-center font-body text-xs text-gray-400">
-                    {t.rsvpSubmitted}
-                  </p>
-                )}
               </div>
-            );
-          })}
-        </div>
 
-        {/* RSVP closing */}
-        {content.rsvp_closing && (
-          <p className="mx-auto mt-10 max-w-lg text-center font-script text-lg text-gray-400">
-            {content.rsvp_closing}
-          </p>
-        )}
+              {/* Plus ones (only if attending) */}
+              {status === "attending" && (
+                <div>
+                  <label
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: "var(--wed-heading-color)" }}
+                  >
+                    Number of guests (including yourself)
+                  </label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={plusOnes + 1}
+                    onChange={(e) => setPlusOnes(Math.max(0, parseInt(e.target.value, 10) - 1))}
+                    style={{
+                      borderColor: "color-mix(in srgb, var(--wed-primary) 30%, transparent)",
+                      borderRadius: "8px",
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Dietary requirements */}
+              {status === "attending" && (
+                <div>
+                  <label
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: "var(--wed-heading-color)" }}
+                  >
+                    Dietary requirements
+                  </label>
+                  <Input
+                    type="text"
+                    value={dietary}
+                    onChange={(e) => setDietary(e.target.value)}
+                    placeholder="Any allergies or preferences?"
+                    style={{
+                      borderColor: "color-mix(in srgb, var(--wed-primary) 30%, transparent)",
+                      borderRadius: "8px",
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Custom questions */}
+              {questions.map((q) => (
+                <div key={q.id}>
+                  <label
+                    className="block text-sm font-medium mb-2"
+                    style={{ color: "var(--wed-heading-color)" }}
+                  >
+                    {q.text}
+                    {q.required && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                  {renderQuestion(q, answers[q.id] || "", (val) => handleAnswerChange(q.id, val))}
+                </div>
+              ))}
+
+              {/* Message */}
+              <div>
+                <label
+                  className="block text-sm font-medium mb-2"
+                  style={{ color: "var(--wed-heading-color)" }}
+                >
+                  {t("yourMessage")}
+                </label>
+                <Textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Leave a message for the couple..."
+                  rows={4}
+                  style={{
+                    borderColor: "color-mix(in srgb, var(--wed-primary) 30%, transparent)",
+                    borderRadius: "8px",
+                  }}
+                />
+              </div>
+
+              {/* Submit */}
+              <div className="flex items-center gap-3">
+                <Button
+                  type="submit"
+                  size="lg"
+                  loading={submitting}
+                  className="flex-1"
+                  style={{
+                    background: "var(--wed-button-bg)",
+                    color: "var(--wed-button-text)",
+                    borderRadius: "var(--wed-button-radius)",
+                    border: "none",
+                  }}
+                >
+                  {t("submit")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="lg"
+                  onClick={() => navigate(`/${weddingId}/home`)}
+                  style={{
+                    borderColor: "color-mix(in srgb, var(--wed-primary) 30%, transparent)",
+                    color: "var(--wed-body-color)",
+                  }}
+                >
+                  {t("backToHome")}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
       </section>
+
+      {toast && <Toast message={toast} type="success" onClose={() => setToast(null)} />}
     </div>
   );
 }
 
-export default Rsvp;
+function renderQuestion(
+  q: RsvpQuestion,
+  value: string,
+  onChange: (val: string) => void
+): React.ReactNode {
+  const inputStyle: CSSProperties = {
+    borderColor: "color-mix(in srgb, var(--wed-primary) 30%, transparent)",
+    borderRadius: "8px",
+  };
+
+  switch (q.type) {
+    case "text":
+      return (
+        <Input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          required={q.required}
+          style={inputStyle}
+        />
+      );
+
+    case "radio":
+      return (
+        <div className="flex flex-col gap-2">
+          {q.options.map((opt) => (
+            <label key={opt} className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name={q.id}
+                value={opt}
+                checked={value === opt}
+                onChange={(e) => onChange(e.target.value)}
+                required={q.required}
+                className="text-gray-900"
+              />
+              <span className="text-sm" style={{ color: "var(--wed-body-color)" }}>{opt}</span>
+            </label>
+          ))}
+        </div>
+      );
+
+    case "checkbox":
+      return (
+        <div className="flex flex-col gap-2">
+          {q.options.map((opt) => {
+            const selected = value ? value.split(", ").includes(opt) : false;
+            return (
+              <label key={opt} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  value={opt}
+                  checked={selected}
+                  onChange={(e) => {
+                    const current = value ? value.split(", ") : [];
+                    const next = e.target.checked
+                      ? [...current, opt]
+                      : current.filter((v) => v !== opt);
+                    onChange(next.join(", "));
+                  }}
+                  className="rounded text-gray-900"
+                />
+                <span className="text-sm" style={{ color: "var(--wed-body-color)" }}>{opt}</span>
+              </label>
+            );
+          })}
+        </div>
+      );
+
+    case "select":
+      return (
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          required={q.required}
+          className="w-full px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2"
+          style={{
+            ...inputStyle,
+            background: "var(--wed-bg)",
+            color: "var(--wed-body-color)",
+          }}
+        >
+          <option value="">Select an option...</option>
+          {q.options.map((opt) => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
+      );
+
+    default:
+      return (
+        <Input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          required={q.required}
+          style={inputStyle}
+        />
+      );
+  }
+}

@@ -1,96 +1,259 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "placeholder";
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: { persistSession: true, autoRefreshToken: true },
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 });
 
-export interface ThemeConfig {
-  primary: string; secondary: string; accent: string; bg: string; surface: string;
-  text: string; textMuted: string; border: string; buttonBg: string; buttonText: string;
-  scriptFont: string; headingFont: string; bodyFont: string; uiFont: string;
-  headingSize: string; bodySize: string; headingWeight: string; bodyWeight: string; letterSpacing: string;
+export interface Wedding {
+  id: string;
+  creator_id: string;
+  title: string;
+  groom_name: string;
+  bride_name: string;
+  groom_parents: string;
+  bride_parents: string;
+  wedding_date: string | null;
+  wedding_time: string | null;
+  venue: string;
+  address: string;
+  map_lat: number | null;
+  map_lng: number | null;
+  cover_image: string | null;
+  cover_config: CoverConfig;
+  login_config: LoginConfig;
+  theme: ThemeConfig;
+  logo_config: LogoConfig;
+  content: WeddingContent;
+  sharing_config: SharingConfig;
+  draft_title: string | null;
+  draft_groom_name: string | null;
+  draft_bride_name: string | null;
+  draft_groom_parents: string | null;
+  draft_bride_parents: string | null;
+  draft_wedding_date: string | null;
+  draft_wedding_time: string | null;
+  draft_venue: string | null;
+  draft_address: string | null;
+  draft_cover_image: string | null;
+  draft_cover_config: CoverConfig | null;
+  draft_login_config: LoginConfig | null;
+  draft_theme: ThemeConfig | null;
+  draft_logo_config: LogoConfig | null;
+  draft_content: WeddingContent | null;
+  draft_sharing_config: SharingConfig | null;
+  is_published: boolean;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface LogoConfig {
-  url: string | null; visible: boolean; width: string; height: string; maintainAspectRatio: boolean;
-  position: "top-left" | "top-center" | "top-right" | "center" | "bottom-left" | "bottom-center" | "bottom-right";
-  offsetX: string; offsetY: string; margin: string; padding: string;
-  responsive: { desktop: { width: string; height: string }; tablet: { width: string; height: string }; mobile: { width: string; height: string } };
-  opacity: number; borderRadius: string;
-  dropShadow: { enabled: boolean; blur: string; color: string; offsetX: string; offsetY: string };
-  glow: { enabled: boolean; color: string; blur: string };
-  rotation: number; maxWidth: string; maxHeight: string; objectFit: "contain" | "cover" | "fill";
-  showOnPages: "cover-only" | "all-pages" | "custom"; customPages: string[]; showInNavbar: boolean;
+export interface ThemeConfig {
+  bgColor: string;
+  textColor: string;
+  primaryColor: string;
+  accentColor: string;
+  headingFont: string;
+  bodyFont: string;
+  scriptFont: string;
+  headingColor: string;
+  bodyColor: string;
+  buttonBgColor: string;
+  buttonTextColor: string;
+  buttonRadius: number;
+  sectionPadding: number;
+  maxWidth: number;
+  preset: string;
 }
 
 export interface CoverConfig {
-  background: { type: "image" | "video" | "slideshow" | "color"; image_url: string | null; video_url: string | null; slideshow_urls: string[]; color: string };
-  overlay: { enabled: boolean; color: string; opacity: number };
-  blur: string; brightness: number;
-  branding: { couple_name_one: string; couple_name_two: string; date: string; logo: LogoConfig };
-  typography: { heading_font: string; body_font: string; heading_size: string; body_size: string; heading_color: string; body_color: string; heading_weight: string; letter_spacing: string };
-  layout: { content_alignment: "left" | "center" | "right"; vertical_position: "top" | "center" | "bottom"; max_width: string; padding: string };
-  button: { text: string; bg_color: string; text_color: string; border_radius: string; padding_x: string; padding_y: string };
-  corner_radius: string; show_countdown: boolean; show_date: boolean; enter_button_text: string;
+  bgColor: string;
+  textColor: string;
+  overlayColor: string;
+  overlayOpacity: number;
+  bgImage: string;
+  font: string;
+  scriptFont: string;
+  showDate: boolean;
+  showCountdown: boolean;
+  customText: string;
+  buttonText: string;
+  buttonColor: string;
 }
 
 export interface LoginConfig {
-  branding: { logo: LogoConfig };
-  text: { title: string; subtitle: string; welcome_message: string; username_placeholder: string; button_text: string; helper_text: string; footer_message: string };
-  language: { enabled: boolean; default_lang: "en" | "ms"; labels: { en: string; ms: string }; order: ("en" | "ms")[] };
-  background: { type: "image" | "video" | "color"; image_url: string | null; video_url: string | null; color: string };
-  overlay: { enabled: boolean; color: string; opacity: number };
-  blur: string; brightness: number;
-  theme: { primary: string; secondary: string; accent: string; text: string; button_bg: string; button_text: string; input_bg: string; border: string };
-  typography: { heading_font: string; body_font: string; heading_size: string; body_size: string; heading_weight: string; body_weight: string; letter_spacing: string };
-  form: {
-    input: { width: string; height: string; border_radius: string; border_color: string; background: string; placeholder_color: string; focus_border_color: string; shadow: string; text_color: string; font_size: string; padding: string };
-    button: { width: string; height: string; border_radius: string; bg_color: string; text_color: string; hover_bg_color: string; shadow: string; font_size: string; font_weight: string; loading_text: string };
-    username_field: { show_label: boolean; label_text: string };
-  };
-  layout: { content_alignment: "left" | "center" | "right"; vertical_position: "top" | "center" | "bottom"; max_width: string; spacing: string; padding: string; margin: string };
-  language_selector: { style: "segmented" | "dropdown"; button_radius: string; button_padding_x: string; button_padding_y: string; active_bg: string; active_text: string; inactive_bg: string; inactive_text: string; border_color: string; font_size: string; font_weight: string };
+  bgColor: string;
+  cardBgColor: string;
+  textColor: string;
+  accentColor: string;
+  font: string;
+  headingFont: string;
+  title: string;
+  subtitle: string;
+  welcomeMessage: string;
+  buttonText: string;
+  inputPlaceholder: string;
+  showLogo: boolean;
+  logoSize: number;
+  bgImage: string;
+  overlayOpacity: number;
+  inputBgColor: string;
+  buttonColor: string;
+  borderColor: string;
+  headingFontSize: number;
+  bodyFontSize: number;
+  headingWeight: string;
+  bodyWeight: string;
+}
+
+export interface LogoConfig {
+  enabled: boolean;
+  text: string;
+  image: string;
+  fontSize: number;
+  color: string;
+  fontFamily: string;
+  fontWeight: string;
 }
 
 export interface WeddingContent {
-  home_title?: string; home_subtitle?: string; home_body?: string; home_image_url?: string; home_closing_text?: string;
-  quran_verse?: string; quran_translation?: string; quran_reference?: string;
-  doa_title?: string; doa_body?: string; doa_image_url?: string;
-  contact_phone?: string; contact_email?: string; contact_address?: string;
-  message_intro?: string; rsvp_intro?: string; rsvp_closing?: string;
+  story: string;
+  story_image: string;
+  gallery: string[];
+  gallery_titles: string[];
+  extra_pages: ExtraPage[];
+  rsvp_title: string;
+  rsvp_description: string;
+  rsvp_fields: string[];
+  rsvp_questions: RsvpQuestion[];
+  doa_title: string;
+  doa_description: string;
+  doa_enabled: boolean;
+  message_enabled: boolean;
+  contact_enabled: boolean;
+  contact_phone: string;
+  contact_email: string;
+  contact_address: string;
+  navigation: NavItem[];
+  footer_text: string;
+  footer_enabled: boolean;
 }
 
-export interface SharingConfig { enabled: boolean; share_url: string | null; og_title: string; og_description: string; og_image_url: string | null; twitter_card: string; allow_qr_bypass: boolean }
+export interface ExtraPage {
+  id: string;
+  title: string;
+  content: string;
+  slug: string;
+}
 
-export type EventKind = "akad" | "resepsi" | "majlis" | "other";
-export type EventVisibility = "public" | "private";
-export type RsvpStatus = "attending" | "declined" | "pending";
-export type GuestbookStatus = "pending" | "approved" | "rejected";
+export interface NavItem {
+  id: string;
+  label: string;
+  url: string;
+  enabled: boolean;
+}
 
-export interface Wedding {
-  id: string; slug: string; couple_name_one: string; couple_name_two: string; wedding_date: string | null; location: string | null;
-  hero_image_url: string | null; story: string | null; hashtag: string | null; theme: ThemeConfig; is_published: boolean;
-  created_by: string; created_at: string; updated_at: string;
-  content: WeddingContent | null; draft_content: WeddingContent | null;
-  theme_config: ThemeConfig | null; draft_theme_config: ThemeConfig | null;
-  cover_config: CoverConfig | null; draft_cover_config: CoverConfig | null;
-  login_config: LoginConfig | null; draft_login_config: LoginConfig | null;
-  sharing_config: SharingConfig | null; qr_token: string | null; signin_helper: string | null; rsvp_deadline: string | null;
+export interface RsvpQuestion {
+  id: string;
+  text: string;
+  type: "text" | "radio" | "checkbox" | "select";
+  options: string[];
+  required: boolean;
+}
+
+export interface SharingConfig {
+  enabled: boolean;
+  message: string;
+  whatsappText: string;
+  facebookText: string;
+  instagramText: string;
+  emailSubject: string;
+  emailBody: string;
+  customUrl: string;
+  qrColor: string;
+  qrBgColor: string;
 }
 
 export interface WeddingEvent {
-  id: string; wedding_id: string; name: string; kind: EventKind; starts_at: string | null;
-  venue_name: string | null; venue_address: string | null; dress_code: string | null; notes: string | null;
-  visibility: EventVisibility; sort_order: number; created_at: string;
-  description: string | null; maps_url: string | null; image_url: string | null; rsvp_deadline: string | null; capacity: number | null; programme: string | null;
+  id: string;
+  wedding_id: string;
+  title: string;
+  description: string;
+  event_date: string;
+  end_date: string | null;
+  start_time: string;
+  end_time: string;
+  venue: string;
+  address: string;
+  dress_code: string;
+  category: string;
+  cover_image: string;
+  order_index: number;
+  created_at: string;
 }
 
-export interface Guest { id: string; wedding_id: string; name: string; username: string; email: string | null; phone: string | null; group_id: string | null; created_at: string }
-export interface Rsvp { id: string; wedding_id: string; guest_id: string; event_id: string; status: RsvpStatus; number_of_guests: number; message: string | null; created_at: string; updated_at: string }
-export interface GuestbookEntry { id: string; wedding_id: string; guest_id: string | null; author_name: string; message: string; status: GuestbookStatus; created_at: string }
-export interface GuestToken { id: string; wedding_id: string; guest_id: string | null; token: string; expires_at: string | null; created_at: string }
-export interface SharingEvent { id: string; wedding_id: string; event_type: "visit" | "qr_scan" | "link_click" | "rsvp"; device_type: string | null; created_at: string }
-export interface SavedTheme { id: string; wedding_id: string; name: string; config: ThemeConfig; created_at: string }
+export interface Guest {
+  id: string;
+  wedding_id: string;
+  name: string;
+  email: string;
+  phone: string;
+  group_name: string;
+  side: string;
+  token: string;
+  rsvp_status: "pending" | "attending" | "not_attending" | "maybe";
+  rsvp_submitted_at: string | null;
+  plus_ones: number;
+  actual_attendance: number;
+  dietary: string;
+  message: string;
+  created_at: string;
+}
+
+export interface Rsvp {
+  id: string;
+  wedding_id: string;
+  guest_id: string;
+  guest_name: string;
+  status: "attending" | "not_attending" | "maybe";
+  plus_ones: number;
+  dietary: string;
+  message: string;
+  answers: Record<string, string>;
+  submitted_at: string;
+}
+
+export interface GuestbookEntry {
+  id: string;
+  wedding_id: string;
+  guest_name: string;
+  message: string;
+  created_at: string;
+}
+
+export interface GuestToken {
+  token: string;
+  guest_id: string;
+  wedding_id: string;
+  guest_name: string;
+  expires_at: string;
+}
+
+export interface SharingEvent {
+  id: string;
+  wedding_id: string;
+  platform: string;
+  guest_id: string;
+  guest_name: string;
+  created_at: string;
+}
+
+export interface SavedTheme {
+  id: string;
+  wedding_id: string;
+  name: string;
+  config: ThemeConfig;
+  created_at: string;
+}

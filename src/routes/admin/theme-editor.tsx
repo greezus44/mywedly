@@ -1,244 +1,123 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Wedding, type ThemeConfig, type SavedTheme } from "../../lib/supabase";
-import { AdminLayout } from "./admin-layout";
-import { SplitEditor, type DeviceType } from "../../components/preview/SplitEditor";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useOutletContext, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase, Wedding, ThemeConfig, WeddingContent } from "../../lib/supabase";
+import { DEFAULT_THEME, DEFAULT_CONTENT, THEME_PRESETS, FONT_OPTIONS, FONT_WEIGHTS } from "../../lib/theme";
+import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { ColorInput, Select, Label } from "../../components/ui/Input";
-import { Card } from "../../components/ui/index";
-import { THEME_PRESETS, DEFAULT_THEME, FONT_OPTIONS, themeToCssVars } from "../../lib/theme";
-import { cn } from "../../lib/utils";
-import { Save, Upload, Palette, Check } from "lucide-react";
+import { Select } from "../../components/ui/Input";
+import { FormField, ColorInput, RangeInput, Toast, ErrorState } from "../../components/ui/index";
+import { debounce, cn } from "../../lib/utils";
 
-export function ThemeEditorPage() {
+type OutletContext = { wedding: Wedding | null };
+
+export default function ThemeEditor() {
+  const { wedding } = useOutletContext<OutletContext>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
+
+  const [config, setConfig] = useState<ThemeConfig>(wedding?.draft_theme || wedding?.theme || DEFAULT_THEME);
+  const [content, setContent] = useState<WeddingContent>(wedding?.draft_content || wedding?.content || DEFAULT_CONTENT);
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-
-  const { data: user } = useQuery({
-    queryKey: ["auth-user"],
-    queryFn: async () => {
-      const { data } = await supabase.auth.getUser();
-      return data.user;
-    },
-  });
-
-  const { data: wedding } = useQuery({
-    queryKey: ["wedding", user?.id],
-    queryFn: async () => {
-      if (!user) return null;
-      const { data } = await supabase.from("weddings").select("*").eq("created_by", user.id).maybeSingle();
-      return data as Wedding | null;
-    },
-    enabled: !!user,
-  });
-
-  const { data: savedThemes } = useQuery({
-    queryKey: ["saved-themes", wedding?.id],
-    queryFn: async () => {
-      if (!wedding) return [];
-      const { data } = await supabase.from("saved_themes").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false });
-      return (data || []) as SavedTheme[];
-    },
-    enabled: !!wedding,
-  });
+  const [previewKey, setPreviewKey] = useState("0");
 
   useEffect(() => {
     if (wedding) {
-      const t = wedding.draft_theme_config || wedding.theme_config || wedding.theme || DEFAULT_THEME;
-      setTheme(t);
+      setConfig(wedding.draft_theme || wedding.theme || DEFAULT_THEME);
+      setContent(wedding.draft_content || wedding.content || DEFAULT_CONTENT);
     }
-  }, [wedding]);
+  }, [wedding?.id]);
 
-  const saveDraftMutation = useMutation({
-    mutationFn: async () => {
-      if (!wedding) throw new Error("No wedding");
-      const { error } = await supabase.from("weddings").update({ draft_theme_config: theme }).eq("id", wedding.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["wedding", user?.id] });
-      setToast("Draft saved");
-      setTimeout(() => setToast(null), 2000);
-    },
-  });
+  const debouncedPreviewUpdate = useMemo(() => debounce(() => setPreviewKey(k => String(Number(k) + 1)), 150), []);
+  const updateConfig = useCallback((patch: Partial<ThemeConfig>) => { setConfig(prev => ({ ...prev, ...patch })); debouncedPreviewUpdate(); }, [debouncedPreviewUpdate]);
 
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      if (!wedding) throw new Error("No wedding");
-      const { error } = await supabase.from("weddings").update({ draft_theme_config: theme, theme_config: theme }).eq("id", wedding.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["wedding", user?.id] });
-      setToast("Theme published!");
-      setTimeout(() => setToast(null), 2000);
-    },
-  });
-
-  const saveThemeMutation = useMutation({
-    mutationFn: async (name: string) => {
-      if (!wedding) throw new Error("No wedding");
-      const { error } = await supabase.from("saved_themes").insert({ wedding_id: wedding.id, name, config: theme });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["saved-themes", wedding?.id] });
-      setToast("Theme saved to presets");
-      setTimeout(() => setToast(null), 2000);
-    },
-  });
-
-  const applyPreset = (preset: typeof THEME_PRESETS[0]) => {
-    setTheme((prev) => ({
-      ...prev,
-      primary: preset.config.primary,
-      secondary: preset.config.secondary,
-      accent: preset.config.accent,
-      bg: preset.config.bg,
-      text: preset.config.text,
-      buttonBg: preset.config.buttonBg,
-      buttonText: preset.config.buttonText,
-    }));
+  const applyPreset = (presetId: string) => {
+    const preset = THEME_PRESETS.find(p => p.id === presetId);
+    if (preset) { setConfig(prev => ({ ...prev, ...preset.config, preset: presetId } as ThemeConfig)); debouncedPreviewUpdate(); }
   };
 
-  const updateField = <K extends keyof ThemeConfig>(key: K, value: ThemeConfig[K]) => {
-    setTheme((prev) => ({ ...prev, [key]: value }));
-  };
+  const handleSave = useCallback(async () => {
+    if (!wedding) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("weddings").update({ draft_theme: config }).eq("id", wedding.id);
+      if (error) throw error;
+      queryClient.setQueryData(["wedding"], (old: Wedding | null) => old ? { ...old, draft_theme: config } : old);
+      setToast("Theme saved!");
+      setTimeout(() => setToast(null), 3000);
+    } catch (err: any) {
+      setToast("Failed: " + err.message);
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setSaving(false);
+    }
+  }, [wedding, config, queryClient]);
 
-  if (!wedding) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center py-20">
-          <div className="text-gray-500">Loading theme editor...</div>
-        </div>
-      </AdminLayout>
-    );
-  }
+  if (!wedding) return <ErrorState message="Could not load wedding data" onRetry={() => navigate("/admin")} />;
+  const previewWedding = { ...wedding, draft_theme: config, draft_content: content };
 
   return (
-    <AdminLayout>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Theme Editor</h1>
-            <p className="mt-1 text-sm text-gray-500">Customize colors and fonts for your wedding invitation.</p>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Theme</h1>
+          <p className="text-sm text-gray-500">Customise colours and typography</p>
+        </div>
+        <Button onClick={handleSave} loading={saving}>Save Changes</Button>
+      </div>
+
+      <SplitEditor title="Theme Settings" previewKey={previewKey} preview={<HomePreview wedding={previewWedding} theme={config} content={content} />} children={
+        <div className="space-y-5">
+          {/* Presets */}
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-gray-900">Colour Presets</h3>
+            <div className="grid grid-cols-5 gap-2">
+              {THEME_PRESETS.map(preset => (
+                <button key={preset.id} onClick={() => applyPreset(preset.id)} className={cn("flex flex-col items-center gap-1 p-2 rounded-lg border transition-colors", config.preset === preset.id ? "border-gray-900 bg-gray-50" : "border-gray-200 hover:bg-gray-50")}>
+                  <div className="flex gap-0.5">
+                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: preset.config.bgColor }} />
+                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: preset.config.primaryColor }} />
+                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: preset.config.accentColor }} />
+                  </div>
+                  <span className="text-[10px] text-gray-600">{preset.name}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => saveDraftMutation.mutate()} disabled={saveDraftMutation.isPending}>
-              <Save className="mr-1.5 h-4 w-4" /> Save Draft
-            </Button>
-            <Button onClick={() => publishMutation.mutate()} disabled={publishMutation.isPending}>
-              <Upload className="mr-1.5 h-4 w-4" /> Publish
-            </Button>
+
+          {/* Colours */}
+          <div className="space-y-3 border-t border-gray-200 pt-4">
+            <h3 className="text-sm font-semibold text-gray-900">Colours</h3>
+            <FormField label="Background Colour"><ColorInput value={config.bgColor} onChange={(v) => updateConfig({ bgColor: v })} /></FormField>
+            <FormField label="Primary Colour"><ColorInput value={config.primaryColor} onChange={(v) => updateConfig({ primaryColor: v })} /></FormField>
+            <FormField label="Accent Colour"><ColorInput value={config.accentColor} onChange={(v) => updateConfig({ accentColor: v })} /></FormField>
+            <FormField label="Heading Colour"><ColorInput value={config.headingColor} onChange={(v) => updateConfig({ headingColor: v })} /></FormField>
+            <FormField label="Body Text Colour"><ColorInput value={config.bodyColor} onChange={(v) => updateConfig({ bodyColor: v })} /></FormField>
+            <FormField label="Button Background"><ColorInput value={config.buttonBgColor} onChange={(v) => updateConfig({ buttonBgColor: v })} /></FormField>
+            <FormField label="Button Text Colour"><ColorInput value={config.buttonTextColor} onChange={(v) => updateConfig({ buttonTextColor: v })} /></FormField>
+          </div>
+
+          {/* Typography - merged into single section */}
+          <div className="space-y-3 border-t border-gray-200 pt-4">
+            <h3 className="text-sm font-semibold text-gray-900">Typography</h3>
+            <FormField label="Heading Font"><Select value={config.headingFont} onChange={(e) => updateConfig({ headingFont: e.target.value })}>{FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}</Select></FormField>
+            <FormField label="Body Font"><Select value={config.bodyFont} onChange={(e) => updateConfig({ bodyFont: e.target.value })}>{FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}</Select></FormField>
+            <FormField label="Script Font"><Select value={config.scriptFont} onChange={(e) => updateConfig({ scriptFont: e.target.value })}>{FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}</Select></FormField>
+          </div>
+
+          {/* Layout - simplified */}
+          <div className="space-y-3 border-t border-gray-200 pt-4">
+            <h3 className="text-sm font-semibold text-gray-900">Layout</h3>
+            <FormField label="Button Roundness"><RangeInput value={config.buttonRadius} min={0} max={24} onChange={(v) => updateConfig({ buttonRadius: v })} /></FormField>
+            <FormField label="Section Spacing"><RangeInput value={config.sectionPadding} min={32} max={128} onChange={(v) => updateConfig({ sectionPadding: v })} /></FormField>
+            <FormField label="Content Width"><RangeInput value={config.maxWidth} min={600} max={1200} step={50} onChange={(v) => updateConfig({ maxWidth: v })} /></FormField>
           </div>
         </div>
+      } />
 
-        <SplitEditor
-          preview={(device: DeviceType) => <HomePreview wedding={{ ...wedding, draft_theme_config: theme } as Wedding} device={device} />}
-        >
-          <div className="space-y-6">
-            {/* Presets */}
-            <div>
-              <Label className="mb-3">Theme Presets</Label>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {THEME_PRESETS.map((preset) => (
-                  <button
-                    key={preset.name}
-                    onClick={() => applyPreset(preset)}
-                    className={cn(
-                      "rounded-lg border-2 p-3 text-left transition hover:border-gray-900",
-                      theme.primary === preset.config.primary ? "border-gray-900" : "border-gray-200"
-                    )}
-                  >
-                    <div className="mb-2 flex gap-1">
-                      <div className="h-6 w-6 rounded-full" style={{ background: preset.config.primary }} />
-                      <div className="h-6 w-6 rounded-full" style={{ background: preset.config.accent }} />
-                      <div className="h-6 w-6 rounded-full border border-gray-200" style={{ background: preset.config.bg }} />
-                    </div>
-                    <p className="text-xs font-medium text-gray-900">{preset.name}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Saved Themes */}
-            {savedThemes && savedThemes.length > 0 && (
-              <div>
-                <Label className="mb-3">Saved Themes</Label>
-                <div className="space-y-2">
-                  {savedThemes.map((st) => (
-                    <button
-                      key={st.id}
-                      onClick={() => setTheme(st.config)}
-                      className="flex w-full items-center justify-between rounded-lg border border-gray-200 p-3 hover:bg-gray-50 transition"
-                    >
-                      <span className="text-sm font-medium text-gray-900">{st.name}</span>
-                      <div className="flex gap-1">
-                        <div className="h-4 w-4 rounded-full" style={{ background: st.config.primary }} />
-                        <div className="h-4 w-4 rounded-full" style={{ background: st.config.accent }} />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Colors */}
-            <div>
-              <Label className="mb-3">Custom Colors</Label>
-              <div className="space-y-3">
-                <ColorInput label="Primary Color" value={theme.primary} onChange={(v) => updateField("primary", v)} />
-                <ColorInput label="Secondary Color" value={theme.secondary} onChange={(v) => updateField("secondary", v)} />
-                <ColorInput label="Accent Color" value={theme.accent} onChange={(v) => updateField("accent", v)} />
-                <ColorInput label="Background Color" value={theme.bg} onChange={(v) => updateField("bg", v)} />
-                <ColorInput label="Surface Color" value={theme.surface} onChange={(v) => updateField("surface", v)} />
-                <ColorInput label="Text Color" value={theme.text} onChange={(v) => updateField("text", v)} />
-                <ColorInput label="Muted Text Color" value={theme.textMuted} onChange={(v) => updateField("textMuted", v)} />
-                <ColorInput label="Border Color" value={theme.border} onChange={(v) => updateField("border", v)} />
-                <ColorInput label="Button Background" value={theme.buttonBg} onChange={(v) => updateField("buttonBg", v)} />
-                <ColorInput label="Button Text" value={theme.buttonText} onChange={(v) => updateField("buttonText", v)} />
-              </div>
-            </div>
-
-            {/* Fonts */}
-            <div>
-              <Label className="mb-3">Typography</Label>
-              <div className="space-y-3">
-                <Select label="Script Font" value={theme.scriptFont} onChange={(e) => updateField("scriptFont", e.target.value)}>
-                  {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-                </Select>
-                <Select label="Heading Font" value={theme.headingFont} onChange={(e) => updateField("headingFont", e.target.value)}>
-                  {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-                </Select>
-                <Select label="Body Font" value={theme.bodyFont} onChange={(e) => updateField("bodyFont", e.target.value)}>
-                  {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-                </Select>
-                <Select label="UI Font" value={theme.uiFont} onChange={(e) => updateField("uiFont", e.target.value)}>
-                  {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-                </Select>
-              </div>
-            </div>
-
-            {/* Save Current as Preset */}
-            <div>
-              <Button variant="outline" onClick={() => {
-                const name = prompt("Name this theme:");
-                if (name) saveThemeMutation.mutate(name);
-              }}>
-                <Palette className="mr-1.5 h-4 w-4" /> Save Current as Preset
-              </Button>
-            </div>
-          </div>
-        </SplitEditor>
-
-        {toast && (
-          <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">
-            {toast}
-          </div>
-        )}
-      </div>
-    </AdminLayout>
+      {toast && <Toast message={toast} type={toast.includes("Failed") ? "error" : "success"} onClose={() => setToast(null)} />}
+    </div>
   );
 }

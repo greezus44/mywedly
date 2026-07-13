@@ -1,26 +1,98 @@
-import { type ReactNode, useState } from "react";
-import { Monitor, Tablet, Smartphone } from "lucide-react";
+import { useState, useEffect, useRef, useCallback, ReactNode, useMemo } from "react";
+import { Monitor, Tablet, Smartphone, RotateCw } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 export type DeviceType = "desktop" | "tablet" | "mobile";
+export type Orientation = "portrait" | "landscape";
 
-export function SplitEditor({ children, preview, device: deviceProp, onDeviceChange }: { children: ReactNode; preview: (device: DeviceType) => ReactNode; device?: DeviceType; onDeviceChange?: (d: DeviceType) => void }) {
+interface DeviceConfig { width: number; height: number; label: string; icon: ReactNode; }
+
+const DEVICE_CONFIGS: Record<DeviceType, Record<Orientation, DeviceConfig>> = {
+  desktop: {
+    landscape: { width: 1280, height: 800, label: "Desktop", icon: <Monitor className="w-4 h-4" /> },
+    portrait: { width: 1280, height: 800, label: "Desktop", icon: <Monitor className="w-4 h-4" /> },
+  },
+  tablet: {
+    portrait: { width: 768, height: 1024, label: "Tablet", icon: <Tablet className="w-4 h-4" /> },
+    landscape: { width: 1024, height: 768, label: "Tablet", icon: <Tablet className="w-4 h-4" /> },
+  },
+  mobile: {
+    portrait: { width: 375, height: 667, label: "Mobile", icon: <Smartphone className="w-4 h-4" /> },
+    landscape: { width: 667, height: 375, label: "Mobile", icon: <Smartphone className="w-4 h-4" /> },
+  },
+};
+
+interface SplitEditorProps {
+  children: ReactNode;
+  preview: ReactNode;
+  title?: string;
+  device?: DeviceType;
+  onDeviceChange?: (device: DeviceType) => void;
+  previewKey?: string;
+}
+
+export function SplitEditor({ children, preview, title, device: deviceProp, onDeviceChange, previewKey }: SplitEditorProps) {
   const [internalDevice, setInternalDevice] = useState<DeviceType>("desktop");
+  const [orientation, setOrientation] = useState<Orientation>("portrait");
+  const [scale, setScale] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const previewScrollRef = useRef<HTMLDivElement>(null);
+  const scrollPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
   const device = deviceProp || internalDevice;
-  const setDevice = (d: DeviceType) => { if (onDeviceChange) onDeviceChange(d); else setInternalDevice(d); };
-  const widths: Record<DeviceType, string> = { desktop: "100%", tablet: "768px", mobile: "375px" };
+  const setDevice = onDeviceChange || setInternalDevice;
+  const config = DEVICE_CONFIGS[device][device === "desktop" ? "landscape" : orientation];
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const containerWidth = container.clientWidth - 48;
+    const containerHeight = container.clientHeight - 48;
+    setScale(Math.min(containerWidth / config.width, containerHeight / config.height, 1));
+  }, [device, orientation, config.width, config.height]);
+
+  const handleScroll = useCallback(() => {
+    if (previewScrollRef.current) scrollPosRef.current = { x: previewScrollRef.current.scrollLeft, y: previewScrollRef.current.scrollTop };
+  }, []);
+
+  useEffect(() => {
+    if (previewScrollRef.current) {
+      previewScrollRef.current.scrollLeft = scrollPosRef.current.x;
+      previewScrollRef.current.scrollTop = scrollPosRef.current.y;
+    }
+  }, [previewKey]);
+
+  const devices: DeviceType[] = ["desktop", "tablet", "mobile"];
+
   return (
-    <div className="flex flex-col lg:flex-row gap-4 h-full">
-      <div className="flex-1 lg:max-w-md overflow-y-auto lg:pr-4" style={{ maxHeight: "calc(100vh - 200px)" }}>{children}</div>
-      <div className="flex-1 flex flex-col">
-        <div className="flex items-center gap-2 mb-3">
-          {([["desktop", Monitor], ["tablet", Tablet], ["mobile", Smartphone]] as const).map(([d, Icon]) => (
-            <button key={d} type="button" onClick={() => setDevice(d)} className={cn("flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition", device === d ? "border-gray-900 bg-gray-100 text-gray-900" : "border-gray-300 text-gray-600 hover:bg-gray-50")}><Icon className="h-4 w-4" /> {d}</button>
-          ))}
+    <div className="flex flex-col lg:flex-row gap-4 h-full min-h-[600px]">
+      <div className="lg:w-[400px] lg:flex-shrink-0 lg:overflow-y-auto bg-white rounded-xl border border-gray-200 p-5 lg:max-h-[calc(100vh-200px)]">
+        {title && <h2 className="text-lg font-semibold text-gray-900 mb-4">{title}</h2>}
+        {children}
+      </div>
+      <div ref={containerRef} className="flex-1 bg-gray-100 rounded-xl border border-gray-200 flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200 bg-white">
+          <div className="flex items-center gap-1">
+            {devices.map((d) => {
+              const cfg = DEVICE_CONFIGS[d][d === "desktop" ? "landscape" : orientation];
+              return (
+                <button key={d} onClick={() => setDevice(d)} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors", device === d ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100")} title={cfg.label}>
+                  {cfg.icon}
+                  <span className="hidden sm:inline">{cfg.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {device !== "desktop" && (
+            <button onClick={() => setOrientation(orientation === "portrait" ? "landscape" : "portrait")} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:bg-gray-100 transition-colors" title={`Switch to ${orientation === "portrait" ? "landscape" : "portrait"}`}>
+              <RotateCw className="w-4 h-4" />
+              <span className="hidden sm:inline capitalize">{orientation}</span>
+            </button>
+          )}
         </div>
-        <div className="flex-1 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-4" style={{ maxHeight: "calc(100vh - 200px)" }}>
-          <div className="mx-auto transition-all duration-300" style={{ maxWidth: widths[device] }}>
-            <div className="rounded-lg overflow-hidden border border-gray-200 shadow-sm bg-white" style={{ minHeight: "500px" }}>{preview(device)}</div>
+        <div ref={previewScrollRef} onScroll={handleScroll} className="flex-1 overflow-auto flex items-start justify-center p-6 scrollbar-thin">
+          <div className="preview-frame bg-white shadow-lg transition-all duration-300 flex-shrink-0" style={{ width: `${config.width}px`, height: `${config.height}px`, transform: `scale(${scale})`, transformOrigin: "top center" }}>
+            <div key={previewKey} className="w-full h-full overflow-y-auto">{preview}</div>
           </div>
         </div>
       </div>

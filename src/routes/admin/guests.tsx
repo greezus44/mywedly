@@ -1,95 +1,79 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Wedding, type Guest } from "../../lib/supabase";
-import { AdminLayout } from "./admin-layout";
+import { useState, useCallback, useMemo } from "react";
+import { useOutletContext, useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { Plus, Search, Users, Pencil, Trash2, Mail, Phone } from "lucide-react";
+import { supabase, Wedding, Guest } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input, Label } from "../../components/ui/Input";
-import { Card, Badge, Modal, EmptyState } from "../../components/ui/index";
-import { generateToken } from "../../lib/utils";
-import { Plus, Pencil, Trash2, Search, Users, Mail, Phone } from "lucide-react";
+import { Input, Textarea, Select } from "../../components/ui/Input";
+import { Card, Badge, FormField, Modal, EmptyState, Toast, ErrorState, Skeleton } from "../../components/ui/index";
+import { generateToken, formatDate } from "../../lib/utils";
 
-export function GuestsPage() {
+type OutletContext = { wedding: Wedding | null };
+
+const EMPTY_GUEST: Omit<Guest, "id" | "wedding_id" | "created_at" | "rsvp_submitted_at"> = {
+  name: "",
+  email: "",
+  phone: "",
+  group_name: "",
+  side: "",
+  token: "",
+  rsvp_status: "pending",
+  plus_ones: 0,
+  actual_attendance: 0,
+  dietary: "",
+  message: "",
+};
+
+const RSVP_STATUS_COLORS: Record<string, "gray" | "green" | "red" | "yellow"> = {
+  pending: "gray",
+  attending: "green",
+  not_attending: "red",
+  maybe: "yellow",
+};
+
+export default function GuestsPage() {
+  const { wedding } = useOutletContext<OutletContext>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
-  const [form, setForm] = useState<{ name: string; username: string; email: string; phone: string }>({ name: "", username: "", email: "", phone: "" });
-  const [toast, setToast] = useState<string | null>(null);
+  const [formData, setFormData] = useState<typeof EMPTY_GUEST>(EMPTY_GUEST);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
-  const { data: user } = useQuery({
-    queryKey: ["auth-user"],
-    queryFn: async () => {
-      const { data } = await supabase.auth.getUser();
-      return data.user;
-    },
-  });
-
-  const { data: wedding } = useQuery({
-    queryKey: ["wedding", user?.id],
-    queryFn: async () => {
-      if (!user) return null;
-      const { data } = await supabase.from("weddings").select("*").eq("created_by", user.id).maybeSingle();
-      return data as Wedding | null;
-    },
-    enabled: !!user,
-  });
-
-  const { data: guests, isLoading } = useQuery({
+  const { data: guests, isLoading, isError, refetch } = useQuery<Guest[]>({
     queryKey: ["guests", wedding?.id],
     queryFn: async () => {
       if (!wedding) return [];
-      const { data } = await supabase.from("guests").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false });
-      return (data || []) as Guest[];
+      const { data, error } = await supabase.from("guests").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as Guest[];
     },
     enabled: !!wedding,
   });
 
-  useEffect(() => {
-    if (editingGuest) {
-      setForm({ name: editingGuest.name, username: editingGuest.username, email: editingGuest.email || "", phone: editingGuest.phone || "" });
-    } else {
-      setForm({ name: "", username: generateToken().slice(0, 8), email: "", phone: "" });
-    }
-  }, [editingGuest]);
-
-  const createMutation = useMutation({
-    mutationFn: async () => {
+  const saveMutation = useMutation({
+    mutationFn: async (data: { guest: typeof formData; id?: string }) => {
       if (!wedding) throw new Error("No wedding");
-      const { error } = await supabase.from("guests").insert({
-        wedding_id: wedding.id,
-        name: form.name,
-        username: form.username,
-        email: form.email || null,
-        phone: form.phone || null,
-      });
-      if (error) throw error;
+      if (data.id) {
+        const { error } = await supabase.from("guests").update(data.guest).eq("id", data.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("guests").insert({ ...data.guest, wedding_id: wedding.id, token: generateToken() });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guests", wedding?.id] });
       setModalOpen(false);
-      setEditingGuest(null);
-      setToast("Guest added");
-      setTimeout(() => setToast(null), 2000);
+      setToast({ msg: "Guest saved successfully!", type: "success" });
+      setTimeout(() => setToast(null), 3000);
     },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async () => {
-      if (!editingGuest) throw new Error("No guest");
-      const { error } = await supabase.from("guests").update({
-        name: form.name,
-        username: form.username,
-        email: form.email || null,
-        phone: form.phone || null,
-      }).eq("id", editingGuest.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guests", wedding?.id] });
-      setModalOpen(false);
-      setEditingGuest(null);
-      setToast("Guest updated");
-      setTimeout(() => setToast(null), 2000);
+    onError: (err: any) => {
+      setToast({ msg: "Failed: " + err.message, type: "error" });
+      setTimeout(() => setToast(null), 3000);
     },
   });
 
@@ -100,148 +84,165 @@ export function GuestsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guests", wedding?.id] });
-      setToast("Guest removed");
-      setTimeout(() => setToast(null), 2000);
+      setToast({ msg: "Guest deleted", type: "success" });
+      setTimeout(() => setToast(null), 3000);
+    },
+    onError: (err: any) => {
+      setToast({ msg: "Failed: " + err.message, type: "error" });
+      setTimeout(() => setToast(null), 3000);
     },
   });
 
-  const handleSubmit = () => {
-    if (editingGuest) updateMutation.mutate();
-    else createMutation.mutate();
-  };
+  const filteredGuests = useMemo(() => {
+    if (!guests) return [];
+    return guests.filter((g) => {
+      const matchesSearch = !search || g.name.toLowerCase().includes(search.toLowerCase()) || g.email.toLowerCase().includes(search.toLowerCase());
+      const matchesStatus = statusFilter === "all" || g.rsvp_status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [guests, search, statusFilter]);
 
-  const filteredGuests = (guests || []).filter((g) => {
-    const q = search.toLowerCase();
-    return g.name.toLowerCase().includes(q) || g.username.toLowerCase().includes(q) || (g.email || "").toLowerCase().includes(q);
-  });
+  const openAdd = useCallback(() => {
+    setEditingGuest(null);
+    setFormData(EMPTY_GUEST);
+    setModalOpen(true);
+  }, []);
 
-  if (!wedding) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center py-20">
-          <div className="text-gray-500">Loading guests...</div>
-        </div>
-      </AdminLayout>
-    );
-  }
+  const openEdit = useCallback((guest: Guest) => {
+    setEditingGuest(guest);
+    const { id, wedding_id, created_at, rsvp_submitted_at, ...rest } = guest;
+    setFormData(rest);
+    setModalOpen(true);
+  }, []);
+
+  const handleSave = useCallback(() => {
+    if (!formData.name.trim()) {
+      setToast({ msg: "Name is required", type: "error" });
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+    saveMutation.mutate({ guest: formData, id: editingGuest?.id });
+  }, [formData, editingGuest, saveMutation]);
+
+  const handleDelete = useCallback((id: string) => {
+    if (confirm("Delete this guest?")) deleteMutation.mutate(id);
+  }, [deleteMutation]);
+
+  const update = useCallback((patch: Partial<typeof formData>) => {
+    setFormData((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  if (!wedding) return <ErrorState message="Could not load wedding data" onRetry={() => navigate("/admin")} />;
+  if (isError) return <ErrorState message="Failed to load guests" onRetry={() => refetch()} />;
 
   return (
-    <AdminLayout>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Guests</h1>
-            <p className="mt-1 text-sm text-gray-500">Manage your guest list and invitation access.</p>
-          </div>
-          <Button onClick={() => { setEditingGuest(null); setModalOpen(true); }}>
-            <Plus className="mr-1.5 h-4 w-4" /> Add Guest
-          </Button>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Guest List</h1>
+          <p className="text-sm text-gray-500">{guests?.length ?? 0} total guests</p>
         </div>
-
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, username, or email..."
-            className="pl-10"
-          />
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Card>
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-gray-100 p-2">
-                <Users className="h-5 w-5 text-gray-900" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Total Guests</p>
-                <p className="text-xl font-bold text-gray-900">{guests?.length || 0}</p>
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {/* Guest List */}
-        {isLoading ? (
-          <div className="text-gray-500">Loading guests...</div>
-        ) : filteredGuests.length === 0 ? (
-          <Card>
-            <EmptyState icon={<Users className="h-8 w-8" />} title={search ? "No guests found" : "No guests yet"} description={search ? "Try a different search." : "Add your first guest to get started."} />
-          </Card>
-        ) : (
-          <div className="space-y-2">
-            {filteredGuests.map((guest) => (
-              <Card key={guest.id}>
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-gray-900">{guest.name}</h3>
-                      <Badge variant="default">@{guest.username}</Badge>
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-3 text-sm text-gray-500">
-                      {guest.email && <span className="flex items-center gap-1"><Mail className="h-3.5 w-3.5" /> {guest.email}</span>}
-                      {guest.phone && <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> {guest.phone}</span>}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => { setEditingGuest(guest); setModalOpen(true); }}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(guest.id)}>
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingGuest ? "Edit Guest" : "Add Guest"}>
-          <div className="space-y-4">
-            <Input
-              label="Guest Name"
-              value={form.name}
-              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-              placeholder="Ahmad bin Ali"
-            />
-            <Input
-              label="Username (for sign-in)"
-              value={form.username}
-              onChange={(e) => setForm((p) => ({ ...p, username: e.target.value }))}
-              placeholder="ahmad"
-            />
-            <Input
-              label="Email"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
-              placeholder="ahmad@example.com"
-            />
-            <Input
-              label="Phone"
-              value={form.phone}
-              onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
-              placeholder="+60 12 345 6789"
-            />
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
-              <Button onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
-                {editingGuest ? "Update" : "Add"}
-              </Button>
-            </div>
-          </div>
-        </Modal>
-
-        {toast && (
-          <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">
-            {toast}
-          </div>
-        )}
+        <Button onClick={openAdd}><Plus className="w-4 h-4" /> Add Guest</Button>
       </div>
-    </AdminLayout>
+
+      <Card className="p-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name or email..." className="pl-9" />
+          </div>
+          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="sm:w-40">
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="attending">Attending</option>
+            <option value="not_attending">Not Attending</option>
+            <option value="maybe">Maybe</option>
+          </Select>
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        {isLoading ? (
+          <div className="p-4 space-y-3"><Skeleton className="h-12" /><Skeleton className="h-12" /><Skeleton className="h-12" /><Skeleton className="h-12" /></div>
+        ) : filteredGuests.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden md:table-cell">Contact</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden lg:table-cell">Group</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">RSVP</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredGuests.map((guest) => (
+                  <tr key={guest.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-gray-900">{guest.name}</p>
+                      {guest.side && <p className="text-xs text-gray-400">{guest.side}</p>}
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      {guest.email && <p className="text-xs text-gray-500 flex items-center gap-1"><Mail className="w-3 h-3" /> {guest.email}</p>}
+                      {guest.phone && <p className="text-xs text-gray-500 flex items-center gap-1"><Phone className="w-3 h-3" /> {guest.phone}</p>}
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      {guest.group_name ? <Badge>{guest.group_name}</Badge> : <span className="text-xs text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge color={RSVP_STATUS_COLORS[guest.rsvp_status] || "gray"}>{guest.rsvp_status}</Badge>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(guest)}><Pencil className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(guest.id)}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState icon={<Users className="w-10 h-10" />} title={search || statusFilter !== "all" ? "No guests found" : "No guests yet"} description={search || statusFilter !== "all" ? "Try adjusting your filters" : "Add your first guest to get started"} action={!search && statusFilter === "all" ? <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4" /> Add Guest</Button> : undefined} />
+        )}
+      </Card>
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingGuest ? "Edit Guest" : "Add Guest"} size="lg">
+        <div className="space-y-4">
+          <FormField label="Full Name"><Input value={formData.name} onChange={(e) => update({ name: e.target.value })} placeholder="Guest name" /></FormField>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Email"><Input type="email" value={formData.email} onChange={(e) => update({ email: e.target.value })} placeholder="email@example.com" /></FormField>
+            <FormField label="Phone"><Input value={formData.phone} onChange={(e) => update({ phone: e.target.value })} placeholder="Phone number" /></FormField>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Group"><Input value={formData.group_name} onChange={(e) => update({ group_name: e.target.value })} placeholder="e.g. Family, Friends" /></FormField>
+            <FormField label="Side"><Select value={formData.side} onChange={(e) => update({ side: e.target.value })}>
+              <option value="">Select side</option>
+              <option value="groom">Groom's side</option>
+              <option value="bride">Bride's side</option>
+              <option value="both">Both</option>
+            </Select></FormField>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Plus Ones"><Input type="number" min={0} value={formData.plus_ones} onChange={(e) => update({ plus_ones: Number(e.target.value) })} /></FormField>
+            <FormField label="RSVP Status"><Select value={formData.rsvp_status} onChange={(e) => update({ rsvp_status: e.target.value as Guest["rsvp_status"] })}>
+              <option value="pending">Pending</option>
+              <option value="attending">Attending</option>
+              <option value="not_attending">Not Attending</option>
+              <option value="maybe">Maybe</option>
+            </Select></FormField>
+          </div>
+          <FormField label="Dietary Requirements"><Input value={formData.dietary} onChange={(e) => update({ dietary: e.target.value })} placeholder="e.g. Vegetarian, Halal" /></FormField>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleSave} loading={saveMutation.isPending}>{editingGuest ? "Save Changes" : "Add Guest"}</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+    </div>
   );
 }

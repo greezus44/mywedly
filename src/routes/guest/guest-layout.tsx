@@ -1,194 +1,151 @@
-import { useState, useEffect, type ReactNode } from "react";
-import { NavLink, useNavigate, useParams, Outlet } from "react-router-dom";
-import { supabase, type Wedding } from "../../lib/supabase";
+import { useState, useEffect, CSSProperties } from "react";
+import { Outlet, useNavigate, useParams } from "react-router-dom";
+import { supabase, Wedding } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { useLang } from "../../lib/lang-context";
-import { themeToCssVars, getTheme, getLogoConfig, getLogoStyle, shouldShowLogo } from "../../lib/theme";
-import { cn, getDeviceType } from "../../lib/utils";
-import { Menu, X, Globe, Heart } from "lucide-react";
+import { themeToCssVars, DEFAULT_THEME } from "../../lib/theme";
+import { ErrorState } from "../../components/ui/index";
 
-const navItems = [
-  { to: "", labelKey: "home" as const, end: true },
-  { to: "rsvp", labelKey: "rsvp" as const, end: false },
-  { to: "doa", labelKey: "doa" as const, end: false },
-  { to: "contact", labelKey: "contact" as const, end: false },
-  { to: "send-message", labelKey: "sendMessage" as const, end: false },
-];
-
-export function GuestLayout({ children }: { children?: ReactNode }) {
-  const { slug } = useParams<{ slug: string }>();
+/**
+ * GuestLayout — layout wrapper for all authenticated guest pages.
+ *
+ * It fetches the wedding by the `weddingId` available from guest auth (or the
+ * `:weddingId` URL param as a fallback), applies the wedding's theme CSS vars
+ * to a wrapper div, and renders the nested route via <Outlet /> with the
+ * wedding object passed as route context.
+ *
+ * If the guest is not authenticated, it redirects to the cover page so they
+ * can "open" the invitation and sign in.
+ */
+export default function GuestLayout() {
+  const { weddingId: authWeddingId } = useGuestAuth();
+  const { weddingId: paramWeddingId } = useParams<{ weddingId: string }>();
   const navigate = useNavigate();
-  const { session, loading } = useGuestAuth();
-  const { lang, setLang, t } = useLang();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const { t } = useLang();
+
+  const weddingId = authWeddingId || paramWeddingId;
+
   const [wedding, setWedding] = useState<Wedding | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!slug) return;
-    supabase
-      .from("weddings")
-      .select("*")
-      .eq("slug", slug)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) setWedding(data as Wedding);
-      });
-  }, [slug]);
-
-  useEffect(() => {
-    if (!loading && !session && slug) {
-      navigate(`/w/${slug}/login`, { replace: true });
+    // No auth and no param — send to cover page for this wedding
+    if (!weddingId) {
+      if (paramWeddingId) navigate(`/${paramWeddingId}`, { replace: true });
+      else navigate("/", { replace: true });
+      return;
     }
-  }, [loading, session, slug, navigate]);
+
+    // If guest auth exists but is for a different wedding, redirect to cover
+    if (authWeddingId && paramWeddingId && authWeddingId !== paramWeddingId) {
+      navigate(`/${paramWeddingId}`, { replace: true });
+      return;
+    }
+
+    // Require guest auth for the layout's nested pages
+    if (!authWeddingId) {
+      navigate(`/${weddingId}`, { replace: true });
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    (async () => {
+      try {
+        const { data, error: fetchError } = await supabase
+          .from("weddings")
+          .select("*")
+          .eq("id", weddingId)
+          .limit(1)
+          .maybeSingle();
+
+        if (cancelled) return;
+        if (fetchError) throw fetchError;
+        if (!data) throw new Error("Wedding not found");
+
+        setWedding(data as Wedding);
+      } catch (err: any) {
+        if (!cancelled) setError(err.message || "Failed to load wedding");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [weddingId, authWeddingId, paramWeddingId, navigate]);
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="animate-pulse text-gray-400">
-          <Heart className="h-8 w-8 animate-pulse" />
-        </div>
+      <div className="flex items-center justify-center min-h-screen" style={{ background: "var(--wed-bg, #faf8f5)" }}>
+        <div className="w-8 h-8 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  if (!session) return null;
+  if (error || !wedding) {
+    return (
+      <div className="flex items-center justify-center min-h-screen px-4" style={{ background: "var(--wed-bg, #faf8f5)" }}>
+        <ErrorState message={error || "Wedding not found"} onRetry={() => navigate(`/${weddingId}`, { replace: true })} />
+      </div>
+    );
+  }
 
-  const theme = getTheme(wedding);
-  const logo = getLogoConfig(wedding);
-  const device = getDeviceType();
-  const showNavbarLogo = shouldShowLogo(logo, "home") && logo.url;
-
-  const baseNavPath = `/w/${slug}`;
+  const themeVars = themeToCssVars(wedding.theme || DEFAULT_THEME) as CSSProperties;
 
   return (
     <div
       className="min-h-screen"
-      style={{ ...themeToCssVars(theme), background: "var(--color-bg)", color: "var(--color-text)", fontFamily: "var(--font-body)" } as React.CSSProperties}
+      style={{
+        ...themeVars,
+        background: "var(--wed-bg)",
+        color: "var(--wed-text)",
+        fontFamily: "var(--wed-body-font)",
+      }}
     >
-      {/* Top nav bar */}
-      <header
-        className="sticky top-0 z-40 border-b backdrop-blur-md"
-        style={{
-          borderColor: "var(--color-border)",
-          background: "color-mix(in srgb, var(--color-bg) 85%, transparent)",
-        } as React.CSSProperties}
-      >
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
-          {/* Left: hamburger + logo */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setMenuOpen(true)}
-              className="p-1.5 transition-opacity hover:opacity-70"
-              style={{ color: "var(--color-text)" }}
-              aria-label="Open menu"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-            {showNavbarLogo && (
-              <img
-                src={logo.url!}
-                alt="logo"
-                style={getLogoStyle(logo, device)}
-                className="max-h-8"
-              />
-            )}
-          </div>
-
-          {/* Right: language toggle */}
-          <div className="flex items-center gap-2">
-            <Globe className="h-4 w-4" style={{ color: "var(--color-text-muted)" }} />
-            <div
-              className="inline-flex overflow-hidden rounded-full border"
-              style={{ borderColor: "var(--color-border)" }}
-            >
-              {(["en", "ms"] as const).map((l) => (
-                <button
-                  key={l}
-                  onClick={() => setLang(l)}
-                  className="px-3 py-1 text-xs font-medium transition-all"
-                  style={{
-                    background: lang === l ? "var(--color-primary)" : "transparent",
-                    color: lang === l ? "var(--color-button-text)" : "var(--color-text-muted)",
-                  } as React.CSSProperties}
-                >
-                  {l === "en" ? "EN" : "MS"}
-                </button>
-              ))}
-            </div>
+      {/* Guest navigation bar */}
+      <nav className="sticky top-0 z-30 backdrop-blur-sm" style={{ background: "color-mix(in srgb, var(--wed-bg) 90%, transparent)", borderBottom: "1px solid color-mix(in srgb, var(--wed-primary) 25%, transparent)" }}>
+        <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+          <button
+            onClick={() => navigate(`/${weddingId}/home`)}
+            className="font-semibold text-sm truncate"
+            style={{ fontFamily: "var(--wed-heading-font)", color: "var(--wed-heading-color)" }}
+          >
+            {wedding.groom_name} & {wedding.bride_name}
+          </button>
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+            <NavLink label={t("home")} onClick={() => navigate(`/${weddingId}/home`)} />
+            <NavLink label={t("rsvp")} onClick={() => navigate(`/${weddingId}/rsvp`)} />
+            {wedding.content?.doa_enabled && <NavLink label={t("doa")} onClick={() => navigate(`/${weddingId}/doa`)} />}
+            {wedding.content?.message_enabled && <NavLink label={t("sendMessage")} onClick={() => navigate(`/${weddingId}/send-message`)} />}
+            {wedding.content?.contact_enabled && <NavLink label={t("contact")} onClick={() => navigate(`/${weddingId}/contact`)} />}
           </div>
         </div>
-      </header>
+      </nav>
 
-      {/* Slide-out menu */}
-      {menuOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-40 bg-black/30"
-            onClick={() => setMenuOpen(false)}
-          />
-          <aside
-            className={cn(
-              "fixed inset-y-0 left-0 z-50 w-72 transform border-r transition-transform duration-300",
-              menuOpen ? "translate-x-0" : "-translate-x-full"
-            )}
-            style={{
-              background: "var(--color-bg)",
-              borderColor: "var(--color-border)",
-            } as React.CSSProperties}
-          >
-            <div
-              className="flex h-16 items-center justify-between border-b px-4"
-              style={{ borderColor: "var(--color-border)" }}
-            >
-              <span
-                className="font-heading text-lg"
-                style={{ color: "var(--color-primary)" }}
-              >
-                {wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "Menu"}
-              </span>
-              <button
-                onClick={() => setMenuOpen(false)}
-                className="transition-opacity hover:opacity-70"
-                style={{ color: "var(--color-text)" }}
-                aria-label="Close menu"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <nav className="flex-1 overflow-y-auto p-3">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={`${baseNavPath}/${item.to}`.replace(/\/$/, "")}
-                  end={item.end}
-                  onClick={() => setMenuOpen(false)}
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium transition",
-                      isActive ? "text-white" : "hover:opacity-80"
-                    )
-                  }
-                  style={({ isActive }) =>
-                    ({
-                      background: isActive ? "var(--color-primary)" : "transparent",
-                      color: isActive ? "var(--color-button-text)" : "var(--color-text)",
-                    }) as React.CSSProperties
-                  }
-                >
-                  {t[item.labelKey]}
-                </NavLink>
-              ))}
-            </nav>
-          </aside>
-        </>
+      <Outlet context={{ wedding }} />
+
+      {wedding.content?.footer_enabled && wedding.content?.footer_text && (
+        <footer className="py-8 px-4 text-center text-sm" style={{ color: "var(--wed-body-color)", opacity: 0.7 }}>
+          {wedding.content.footer_text}
+        </footer>
       )}
-
-      {/* Page content */}
-      <main className="mx-auto max-w-5xl px-4 py-6 md:py-10">
-        {children || <Outlet />}
-      </main>
     </div>
   );
 }
 
-export default GuestLayout;
+function NavLink({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-3 py-1.5 text-xs font-medium whitespace-nowrap rounded-md transition-colors hover:opacity-80"
+      style={{ color: "var(--wed-body-color)" }}
+    >
+      {label}
+    </button>
+  );
+}

@@ -3,60 +3,91 @@
 @tailwind utilities;
 
 :root {
-  --color-primary: #1A1A1A;
-  --color-secondary: #F5F5F5;
-  --color-accent: #8B8B8B;
-  --color-bg: #FFFFFF;
-  --color-surface: #FAFAFA;
-  --color-text: #1A1A1A;
-  --color-text-muted: #8B8B8B;
-  --color-border: #E5E5E5;
-  --color-button-bg: #1A1A1A;
-  --color-button-text: #FFFFFF;
-  --font-script: "Great Vibes", cursive;
-  --font-heading: "Playfair Display", serif;
-  --font-body: "Montserrat", sans-serif;
-  --font-ui: "Inter", sans-serif;
-  --font-heading-size: 3rem;
-  --font-body-size: 1rem;
-  --font-heading-weight: 600;
-  --font-body-weight: 400;
-  --letter-spacing: 0.02em;
+  --wed-bg: #faf8f5;
+  --wed-text: #2a2a2a;
+  --wed-primary: #b8a589;
+  --wed-accent: #8b7355;
+  --wed-heading-font: "Playfair Display", serif;
+  --wed-body-font: "Montserrat", sans-serif;
+  --wed-script-font: "Great Vibes", cursive;
+  --wed-heading-color: #2a2a2a;
+  --wed-body-color: #4a4a4a;
+  --wed-button-bg: #b8a589;
+  --wed-button-text: #ffffff;
+  --wed-button-radius: 4px;
+  --wed-section-padding: 4rem;
+  --wed-max-width: 800px;
+  --wed-cover-bg: #1a1a1a;
+  --wed-cover-text: #ffffff;
+  --wed-cover-overlay: 0.4;
+  --wed-cover-image: "";
+  --wed-cover-font: "Playfair Display", serif;
+  --wed-cover-script-font: "Great Vibes", cursive;
+  --wed-login-bg: #faf8f5;
+  --wed-login-card-bg: #ffffff;
+  --wed-login-text: #2a2a2a;
+  --wed-login-accent: #b8a589;
+  --wed-login-font: "Montserrat", sans-serif;
+  --wed-login-heading-font: "Playfair Display", serif;
 }
 
-.dash-root {
-  --dash-bg: #F9FAFB;
-  --dash-surface: #FFFFFF;
-  --dash-text: #111827;
-  --dash-text-muted: #6B7280;
-  --dash-border: #E5E7EB;
-  --dash-accent: #1A1A1A;
-  --dash-accent-bg: #F3F4F6;
-  --dash-accent-text: #1A1A1A;
+@layer base {
+  body {
+    @apply antialiased;
+    margin: 0;
+    font-family: var(--wed-body-font);
+    color: var(--wed-body-color);
+    background: var(--wed-bg);
+  }
+  * { box-sizing: border-box; }
 }
 
-body {
-  font-family: "Inter", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer utilities {
+  .animation-delay-100 { animation-delay: 100ms; }
+  .animation-delay-200 { animation-delay: 200ms; }
+  .animation-delay-300 { animation-delay: 300ms; }
+  .animation-delay-400 { animation-delay: 400ms; }
+  .animation-delay-500 { animation-delay: 500ms; }
+  .animation-delay-600 { animation-delay: 600ms; }
+  .animation-delay-700 { animation-delay: 700ms; }
+  .animation-delay-800 { animation-delay: 800ms; }
+  .animation-delay-1000 { animation-delay: 1000ms; }
+  .animation-delay-1200 { animation-delay: 1200ms; }
+  .animation-delay-1500 { animation-delay: 1500ms; }
+  .animation-delay-2000 { animation-delay: 2000ms; }
+
+  .dash-root {
+    --dash-bg: #ffffff;
+    --dash-surface: #ffffff;
+    --dash-border: #e5e7eb;
+    --dash-text: #111827;
+    --dash-muted: #6b7280;
+    --dash-primary: #111827;
+    --dash-primary-hover: #374151;
+    --dash-accent: #6366f1;
+    --dash-radius: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
-.font-script { font-family: var(--font-script), cursive; }
-.font-heading { font-family: var(--font-heading), serif; }
-.font-body { font-family: var(--font-body), sans-serif; }
-.font-ui { font-family: var(--font-ui), sans-serif; }
+.preview-frame {
+  transition: width 0.3s ease, height 0.3s ease;
+}
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
 
-.delay-100 { animation-delay: 0.1s; }
-.delay-200 { animation-delay: 0.2s; }
-.delay-300 { animation-delay: 0.3s; }
-.delay-400 { animation-delay: 0.4s; }
-.delay-500 { animation-delay: 0.5s; }
-.delay-600 { animation-delay: 0.6s; }
-.delay-700 { animation-delay: 0.7s; }
-
-.opacity-0 { opacity: 0; }
+.skeleton {
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite linear;
+}

@@ -1,36 +1,26 @@
 export type Language = "en" | "ms";
 
-export interface Translation {
-  home: string; rsvp: string; doa: string; contact: string; sendMessage: string;
-  enter: string; signOut: string; welcome: string;
-  days: string; hours: string; minutes: string; seconds: string;
-  attending: string; declined: string; pending: string;
-  submit: string; cancel: string;
-  messagePlaceholder: string; namePlaceholder: string;
-  thankYou: string; rsvpSubmitted: string; messageSent: string; loading: string; invalidName: string;
-}
-
-export const translations: Record<Language, Translation> = {
+export const translations = {
   en: {
-    home: "Home", rsvp: "RSVP", doa: "Doa", contact: "Contact", sendMessage: "Send Message",
-    enter: "Enter", signOut: "Sign Out", welcome: "Welcome",
-    days: "Days", hours: "Hours", minutes: "Minutes", seconds: "Seconds",
-    attending: "Attending", declined: "Declined", pending: "Pending",
-    submit: "Submit", cancel: "Cancel",
-    messagePlaceholder: "Write your message...", namePlaceholder: "Enter your name",
-    thankYou: "Thank You!", rsvpSubmitted: "Your RSVP has been submitted.",
-    messageSent: "Your message has been sent!", loading: "Loading...",
-    invalidName: "Invalid name. Please check your invitation.",
+    enterInvitation: "Enter Invitation", pleaseEnterName: "Please enter your name to continue",
+    yourFullName: "Your full name", continue: "Continue", nameNotFound: "Name not found in guest list",
+    ourWedding: "Our Wedding", home: "Home", rsvp: "RSVP", guestbook: "Guestbook", doa: "Doa",
+    contact: "Contact", sendMessage: "Send Message", attending: "Attending", notAttending: "Not Attending",
+    maybe: "Maybe", submit: "Submit", days: "Days", hours: "Hours", minutes: "Minutes", seconds: "Seconds",
+    saveTheDate: "Save the Date", ourStory: "Our Story", gallery: "Gallery", backToHome: "Back to Home",
+    yourMessage: "Your Message", messageSent: "Message sent successfully!", rsvpSubmitted: "RSVP submitted successfully!",
+    phone: "Phone", email: "Email", address: "Address", getDirections: "Get Directions",
   },
   ms: {
-    home: "Utama", rsvp: "RSVP", doa: "Doa", contact: "Hubungi", sendMessage: "Hantar Mesej",
-    enter: "Masuk", signOut: "Log Keluar", welcome: "Selamat Datang",
-    days: "Hari", hours: "Jam", minutes: "Minit", seconds: "Saat",
-    attending: "Hadir", declined: "Tidak Hadir", pending: "Menunggu",
-    submit: "Hantar", cancel: "Batal",
-    messagePlaceholder: "Tulis mesej anda...", namePlaceholder: "Masukkan nama anda",
-    thankYou: "Terima Kasih!", rsvpSubmitted: "RSVP anda telah dihantar.",
-    messageSent: "Mesej anda telah dihantar!", loading: "Memuatkan...",
-    invalidName: "Nama tidak sah. Sila semak jemputan anda.",
+    enterInvitation: "Masuk Jemputan", pleaseEnterName: "Sila masukkan nama anda untuk meneruskan",
+    yourFullName: "Nama penuh anda", continue: "Teruskan", nameNotFound: "Nama tidak dijumpai dalam senarai tetamu",
+    ourWedding: "Perkahwinan Kami", home: "Utama", rsvp: "RSVP", guestbook: "Buku Tetamu", doa: "Doa",
+    contact: "Hubungi", sendMessage: "Hantar Mesej", attending: "Hadir", notAttending: "Tidak Hadir",
+    maybe: "Mungkin", submit: "Hantar", days: "Hari", hours: "Jam", minutes: "Minit", seconds: "Saat",
+    saveTheDate: "Simpan Tarikh", ourStory: "Kisah Kami", gallery: "Galeri", backToHome: "Kembali ke Utama",
+    yourMessage: "Mesej Anda", messageSent: "Mesej berjaya dihantar!", rsvpSubmitted: "RSVP berjaya dihantar!",
+    phone: "Telefon", email: "E-mel", address: "Alamat", getDirections: "Dapatkan Arah",
   },
 };
+
+export type TranslationKey = keyof typeof translations.en;
