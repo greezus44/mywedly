@@ -5,18 +5,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./styles.css";
 import { AuthGate } from "@/lib/auth";
 import { DashboardLayout } from "@/routes/dashboard";
-import { ManagePage } from "@/routes/_authenticated/manage.$slug";
-import { GuestCover } from "@/routes/w.$slug.index";
-import { GuestInvitation } from "@/routes/w.$slug.invitation";
-import { GuestInfo } from "@/routes/w.$slug.info";
-import { GuestEvents } from "@/routes/w.$slug.events";
-import { GuestSignin } from "@/routes/w.$slug.signin";
-import { GuestCustomPage } from "@/routes/w.$slug.p.$pageSlug";
+import { ManagePage } from "@/routes/manage";
+import { GuestCover } from "@/routes/guest-cover";
+import { GuestInvitation } from "@/routes/guest-invitation";
+import { GuestInfo } from "@/routes/guest-info";
+import { GuestEvents } from "@/routes/guest-events";
+import { GuestSignin } from "@/routes/guest-signin";
+import { GuestCustomPage } from "@/routes/guest-custom-page";
 import { Landing } from "@/routes/landing";
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 1000 * 30, retry: 1 } },
-});
+const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 1000 * 30, retry: 1 } } });
 
 export default function App() {
   return (
@@ -38,8 +36,4 @@ export default function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><App /></React.StrictMode>);

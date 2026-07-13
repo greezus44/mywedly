@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { TextStyle, WeddingContent } from "./supabase";
+import type { TextStyle } from "./supabase";
 
 export function getStyle(content: Record<string, unknown>, key: string): TextStyle {
   const styles = (content.text_styles ?? {}) as Record<string, TextStyle>;
@@ -22,24 +22,10 @@ export function styleFor(ts: TextStyle): CSSProperties {
 }
 
 export const FONT_OPTIONS = [
-  "Imperial Script",
-  "Cormorant Garamond",
-  "Playfair Display",
-  "Lora",
-  "Montserrat",
-  "Inter",
-  "Dancing Script",
-  "Great Vibes",
-  "Sacramento",
-  "Parisienne",
-  "EB Garamond",
-  "Caveat",
-  "Allura",
-  "Tangerine",
-  "Marcellus",
-  "Cinzel",
-  "Cardo",
-  "Libre Baskerville",
+  "Imperial Script", "Cormorant Garamond", "Playfair Display", "Lora",
+  "Montserrat", "Inter", "Dancing Script", "Great Vibes", "Sacramento",
+  "Parisienne", "EB Garamond", "Caveat", "Allura", "Tangerine",
+  "Marcellus", "Cinzel", "Cardo", "Libre Baskerville",
 ];
 
 export const THEME_PRESETS = [

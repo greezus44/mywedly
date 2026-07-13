@@ -23,12 +23,7 @@ export function DashboardLayout() {
     if (!user.user) return;
     const slug = `wedding-${Date.now().toString(36)}`;
     const { data, error } = await supabase.from("weddings").insert({
-      slug,
-      couple_name_one: "First",
-      couple_name_two: "Second",
-      created_by: user.user.id,
-      content: {},
-      signin_helper: {},
+      slug, couple_name_one: "First", couple_name_two: "Second", created_by: user.user.id, content: {}, signin_helper: {},
     }).select().single();
     if (!error && data) navigate(`/manage/${(data as Wedding).slug}`);
   };
@@ -44,11 +39,7 @@ export function DashboardLayout() {
           <h2 className="text-2xl font-serif text-onyx">Your Weddings</h2>
           <button onClick={createWedding} className="bg-onyx text-parchment px-4 py-2 text-xs uppercase tracking-widest hover:bg-ink">New Wedding</button>
         </div>
-        {loading ? (
-          <p className="text-sepia">Loading…</p>
-        ) : weddings.length === 0 ? (
-          <p className="text-sepia/60 italic">No weddings yet. Create one to get started.</p>
-        ) : (
+        {loading ? <p className="text-sepia">Loading…</p> : weddings.length === 0 ? <p className="text-sepia/60 italic">No weddings yet. Create one to get started.</p> : (
           <div className="grid gap-4">
             {weddings.map((w) => (
               <Link key={w.id} to={`/manage/${w.slug}`} className="block border border-onyx/10 bg-card p-6 rounded-md hover:border-sepia/40 transition-colors">

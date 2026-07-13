@@ -26,28 +26,6 @@ export type Wedding = {
   signin_helper: Record<string, unknown>;
 };
 
-export type WeddingContent = {
-  cover_heading?: string;
-  cover_subtitle?: string;
-  cover_welcome?: string;
-  cover_background_url?: string;
-  cover_logo_url?: string;
-  cover_music_url?: string;
-  invitation_text?: string;
-  closing_text?: string;
-  parents?: string;
-  info_heading?: string;
-  info_body?: string;
-  info_image_url?: string;
-  text_styles?: Record<string, TextStyle>;
-  theme_preset?: string;
-  button_radius?: number;
-  button_style?: string;
-  nav_style?: string;
-  layout_width?: string;
-  [key: string]: unknown;
-};
-
 export type TextStyle = {
   fontFamily?: string;
   size?: string;
@@ -59,6 +37,23 @@ export type TextStyle = {
   align?: string;
   italic?: boolean;
   bold?: boolean;
+};
+
+export type WeddingContent = {
+  cover_heading?: string;
+  cover_subtitle?: string;
+  cover_welcome?: string;
+  cover_background_url?: string;
+  cover_logo_url?: string;
+  invitation_text?: string;
+  closing_text?: string;
+  parents?: string;
+  info_heading?: string;
+  info_body?: string;
+  info_image_url?: string;
+  text_styles?: Record<string, TextStyle>;
+  theme_preset?: string;
+  [key: string]: unknown;
 };
 
 export type GuestEvent = {
