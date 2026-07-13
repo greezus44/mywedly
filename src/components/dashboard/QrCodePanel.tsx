@@ -1,105 +1,59 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { toast } from "sonner";
+import { Download, Printer, Copy, Share2 } from "lucide-react";
 
 type Props = {
   url: string;
-  size?: number;
-  filename?: string;
+  title: string;
 };
 
-export function QrCodePanel({ url, size = 200, filename = "qr-code" }: Props) {
+export function QrCodePanel({ url, title }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [origin, setOrigin] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setOrigin(window.location.origin);
-  }, []);
+    if (canvasRef.current) {
+      QRCode.toCanvas(canvasRef.current, url, { width: 200, margin: 2 }, (err) => {
+        if (err) console.error(err);
+      });
+    }
+  }, [url]);
 
-  const fullUrl = url.startsWith("http") ? url : `${origin}${url}`;
-
-  useEffect(() => {
+  const download = () => {
     if (!canvasRef.current) return;
-    QRCode.toCanvas(canvasRef.current, fullUrl, {
-      width: size,
-      margin: 1,
-      color: { dark: "#1a1a1a", light: "#ffffff" },
-    }).catch(() => {});
-  }, [fullUrl, size]);
-
-  const downloadPng = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
     const link = document.createElement("a");
-    link.download = `${filename}.png`;
-    link.href = canvas.toDataURL("image/png");
+    link.download = `${title.replace(/\s+/g, "-").toLowerCase()}-qr.png`;
+    link.href = canvasRef.current.toDataURL();
     link.click();
-    toast.success("QR code downloaded");
   };
 
-  const printQr = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const dataUrl = canvas.toDataURL("image/png");
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(`
-      <html><head><title>QR Code</title></head>
-      <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif">
-        <img src="${dataUrl}" style="width:400px;height:400px" />
-        <p style="margin-top:16px;font-size:14px;color:#666">${fullUrl}</p>
-      </body></html>
-    `);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 250);
-  };
-
-  const copyLink = () => {
-    navigator.clipboard.writeText(fullUrl);
-    toast.success("Link copied to clipboard");
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const share = async () => {
     if (navigator.share) {
-      try {
-        await navigator.share({ title: "Wedding Website", url: fullUrl });
-      } catch {}
-    } else {
-      copyLink();
+      try { await navigator.share({ title, url }); } catch {}
     }
   };
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      <canvas ref={canvasRef} className="border border-onyx/10 rounded-lg" />
-      <div className="flex flex-wrap gap-2 justify-center">
-        <button
-          onClick={downloadPng}
-          className="text-xs uppercase tracking-widest border border-onyx px-3 py-2 hover:bg-onyx hover:text-parchment transition-colors"
-        >
-          Download PNG
-        </button>
-        <button
-          onClick={printQr}
-          className="text-xs uppercase tracking-widest border border-onyx px-3 py-2 hover:bg-onyx hover:text-parchment transition-colors"
-        >
-          Print
-        </button>
-        <button
-          onClick={copyLink}
-          className="text-xs uppercase tracking-widest border border-onyx px-3 py-2 hover:bg-onyx hover:text-parchment transition-colors"
-        >
-          Copy Link
-        </button>
-        <button
-          onClick={share}
-          className="text-xs uppercase tracking-widest border border-onyx px-3 py-2 hover:bg-onyx hover:text-parchment transition-colors"
-        >
-          Share
-        </button>
+    <div className="border border-onyx/10 bg-card p-6 rounded-md">
+      <h3 className="text-sm uppercase tracking-widest text-sepia mb-4">{title}</h3>
+      <div className="flex flex-col items-center">
+        <canvas ref={canvasRef} className="mb-4" />
+        <p className="text-sepia text-sm mb-4 break-all text-center">{url}</p>
+        <div className="flex gap-2 flex-wrap justify-center">
+          <button onClick={download} className="flex items-center gap-1 text-sepia text-sm hover:text-onyx"><Download className="w-4 h-4" /> PNG</button>
+          <button onClick={() => window.print()} className="flex items-center gap-1 text-sepia text-sm hover:text-onyx"><Printer className="w-4 h-4" /> Print</button>
+          <button onClick={copyLink} className="flex items-center gap-1 text-sepia text-sm hover:text-onyx"><Copy className="w-4 h-4" /> {copied ? "Copied!" : "Copy"}</button>
+          {typeof navigator !== "undefined" && "share" in navigator && (
+            <button onClick={share} className="flex items-center gap-1 text-sepia text-sm hover:text-onyx"><Share2 className="w-4 h-4" /> Share</button>
+          )}
+        </div>
       </div>
-      <code className="text-xs text-onyx/50 break-all max-w-xs text-center">{fullUrl}</code>
     </div>
   );
 }

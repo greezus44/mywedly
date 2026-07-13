@@ -1,226 +1,48 @@
-import { createFileRoute, notFound } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { motion } from "motion/react";
-import { Clock } from "lucide-react";
-import { GuestLayout } from "@/components/guest/GuestChrome";
-import {
-  getGuestSession,
-  useLang,
-  formatEventDate,
-  formatEventTime,
-  type GuestSession,
-} from "@/lib/wedding-guest";
-import { getWeddingBySlug, type Wedding } from "@/lib/wedding-queries";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { Link } from "react-router-dom";
+import { useWedding } from "@/lib/use-wedding";
+import { supabase, type GuestEvent, type Rsvp } from "@/lib/supabase";
+import { formatEventDate, formatEventTime } from "@/lib/wedding-guest";
 
-export const Route = createFileRoute("/w/$slug/events")({
-  head: () => ({ meta: [{ title: "Events & RSVP" }] }),
-  loader: async ({ params }) => {
-    const wedding = await getWeddingBySlug(params.slug);
-    if (!wedding) throw notFound();
-    return { wedding };
-  },
-  component: EventsPage,
-});
+export function GuestEvents() {
+  const slug = location.pathname.split("/")[2];
+  const { wedding, loading, error } = useWedding(slug);
+  const [events, setEvents] = useState<GuestEvent[]>([]);
+  const [rsvps, setRsvps] = useState<Record<string, Rsvp | null>>({});
+  const [showRsvpForm, setShowRsvpForm] = useState<string | null>(null);
 
-type EventRow = {
-  id: string;
-  name: string;
-  starts_at: string | null;
-  venue_name: string | null;
-  venue_address: string | null;
-  dress_code: string | null;
-  notes: string | null;
-  rsvp_status: string | null;
-};
-
-function EventsPage() {
-  const { wedding } = Route.useLoaderData();
-  return (
-    <GuestLayout
-      requireSignIn
-      slug={wedding.slug}
-      weddingId={wedding.id}
-      theme={wedding.theme}
-      couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}
-    >
-      <Inner wedding={wedding} />
-    </GuestLayout>
-  );
-}
-
-function Inner({ wedding }: { wedding: Wedding }) {
-  const { t, lang } = useLang();
-  const [session, setSession] = useState<GuestSession | null>(null);
   useEffect(() => {
-    setSession(getGuestSession(wedding.slug));
-  }, [wedding.slug]);
+    if (!wedding) return;
+    supabase.from("events").select("*").eq("wedding_id", wedding.id).order("sort_order", { ascending: true }).then(({ data }) => {
+      setEvents((data as GuestEvent[]) ?? []);
+    });
+  }, [wedding]);
 
-  const { data: events } = useQuery({
-    queryKey: ["guest-events", session?.guestId],
-    enabled: !!session,
-    queryFn: async (): Promise<EventRow[]> => {
-      const { data, error } = await supabase.rpc("guest_events", {
-        p_guest_id: session!.guestId,
-      });
-      if (error) throw error;
-      return (data ?? []) as EventRow[];
-    },
-  });
-
-  const rsvpDeadline = (wedding.content as any)?.rsvp_deadline as string | undefined;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-sepia">Loading…</div>;
+  if (error || !wedding) return <div className="min-h-screen flex items-center justify-center text-red-600">{error ?? "Not found"}</div>;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 md:px-10 pt-4 pb-24 text-sepia">
-      <div className="text-center mb-4">
-        <h1 className="text-sepia text-3xl md:text-4xl tracking-[0.2em] font-medium mb-2">RSVP</h1>
-        {rsvpDeadline && (
-          <p className="text-sepia text-[11px] tracking-[0.22em] font-medium">
-            {t("BEFORE", "SEBELUM")}{" "}
-            {new Date(rsvpDeadline + "T00:00:00")
-              .toLocaleDateString(lang === "ms" ? "ms-MY" : "en-GB", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric",
-              })
-              .toUpperCase()}
-          </p>
-        )}
-      </div>
-
-      {session?.name && (
-        <p className="text-center text-sepia text-lg tracking-[0.35em] font-medium mb-10 mt-8">
-          {session.name.toUpperCase()}
-        </p>
-      )}
-
-      <div>
-        {(events ?? []).map((ev, idx) => (
-          <motion.div
-            key={ev.id}
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-60px" }}
-            transition={{ duration: 0.5, delay: idx * 0.05 }}
-          >
-            <EventCard event={ev} session={session} />
-            <div className="border-t border-sepia/25 my-6" />
-          </motion.div>
-        ))}
-        {events && events.length === 0 && (
-          <p
-            className="text-center text-sepia/60 italic py-16"
-            style={{ fontFamily: "var(--font-serif)" }}
-          >
-            {t("You have no events to RSVP to yet.", "Tiada majlis untuk anda pada masa ini.")}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function EventCard({ event, session }: { event: EventRow; session: GuestSession | null }) {
-  const { t, lang } = useLang();
-  const qc = useQueryClient();
-  const date = formatEventDate(event.starts_at, lang);
-  const time = formatEventTime(event.starts_at);
-
-  const mut = useMutation({
-    mutationFn: async (status: "accepted" | "declined") => {
-      if (!session) throw new Error("Sign in first");
-      const { error } = await supabase.rpc("guest_rsvp", {
-        p_guest_id: session.guestId,
-        p_event_id: event.id,
-        p_status: status,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["guest-events", session?.guestId] });
-      toast.success(t("Response saved.", "Jawapan disimpan."));
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const accepted = event.rsvp_status === "accepted";
-  const declined = event.rsvp_status === "declined";
-
-  return (
-    <article className="grid grid-cols-[80px_minmax(0,1fr)] md:grid-cols-[110px_minmax(0,1fr)] gap-4 md:gap-8">
-      <div className="text-center text-sepia text-[11px] md:text-xs tracking-[0.22em] leading-loose font-medium pt-1">
-        <div>{date.dow}</div>
-        <div className="text-3xl md:text-4xl my-1 font-normal tracking-normal">{date.day}</div>
-        <div>{date.mon}</div>
-        <div>{date.year}</div>
-      </div>
-
-      <div className="min-w-0">
-        <h3 className="text-sepia text-base md:text-xl tracking-[0.2em] font-medium mb-4 leading-snug">
-          {event.name.toUpperCase()}
-        </h3>
-
-        {time && (
-          <p className="text-sepia text-sm tracking-[0.2em] font-medium mb-4 flex items-center gap-2">
-            <Clock className="w-4 h-4" strokeWidth={2} />
-            {time}
-          </p>
-        )}
-
-        {(event.venue_name || event.venue_address) && (
-          <div className="text-sepia text-[11px] md:text-xs tracking-[0.18em] leading-[2] font-medium mb-4 whitespace-pre-line">
-            {event.venue_name && <div>{event.venue_name.toUpperCase()}</div>}
-            {event.venue_address && <div>{event.venue_address.toUpperCase()}</div>}
-          </div>
-        )}
-
-        {event.dress_code && (
-          <div className="mb-4">
-            <p className="text-sepia text-sm tracking-[0.22em] font-medium mb-2">
-              {t("ATTIRE", "PAKAIAN")}
-            </p>
-            <p className="text-sepia text-[11px] tracking-[0.18em] font-medium">
-              {event.dress_code.toUpperCase()}
-            </p>
-          </div>
-        )}
-
-        {event.notes && (
-          <p
-            className="text-sepia/80 text-xs italic leading-relaxed mb-4"
-            style={{ fontFamily: "var(--font-serif)" }}
-          >
-            {event.notes}
-          </p>
-        )}
-
-        <div className="flex gap-3 mt-4">
-          <button
-            onClick={() => mut.mutate("accepted")}
-            disabled={mut.isPending}
-            className={`px-6 h-11 rounded-md border-2 text-xs tracking-[0.22em] font-medium transition-colors ${
-              accepted
-                ? "bg-[color-mix(in_oklab,var(--success)_25%,var(--parchment))] border-[color-mix(in_oklab,var(--success)_60%,var(--sepia))] text-sepia"
-                : "border-sepia/70 text-sepia hover:bg-sepia/5"
-            }`}
-          >
-            {t("ACCEPT", "TERIMA")}
-          </button>
-          <button
-            onClick={() => mut.mutate("declined")}
-            disabled={mut.isPending}
-            className={`px-6 h-11 rounded-md border-2 text-xs tracking-[0.22em] font-medium transition-colors ${
-              declined
-                ? "bg-[color-mix(in_oklab,var(--destructive)_20%,var(--parchment))] border-[color-mix(in_oklab,var(--destructive)_50%,var(--sepia))] text-sepia"
-                : "border-sepia/70 text-sepia hover:bg-sepia/5"
-            }`}
-          >
-            {t("DECLINE", "TOLAK")}
-          </button>
+    <div className="min-h-screen flex flex-col items-center px-6 py-16 bg-parchment">
+      <div className="max-w-2xl w-full">
+        <h1 className="text-2xl md:text-3xl tracking-[0.35em] font-medium mb-12 uppercase text-sepia text-center">Events</h1>
+        <div className="space-y-8">
+          {events.map((ev) => (
+            <div key={ev.id} className="border border-sepia/20 p-6 rounded-md bg-white/50">
+              <h2 className="text-xl font-serif text-onyx mb-1">{ev.name}</h2>
+              <p className="text-sepia text-sm mb-1">{formatEventDate(ev.starts_at, "en")}</p>
+              <p className="text-sepia text-sm mb-3">{formatEventTime(ev.starts_at)}</p>
+              {ev.venue_name && <p className="text-onyx/70 text-sm">{ev.venue_name}</p>}
+              {ev.venue_address && <p className="text-onyx/50 text-sm">{ev.venue_address}</p>}
+              {ev.dress_code && <p className="text-sepia/70 text-xs mt-2 uppercase tracking-widest">Dress: {ev.dress_code}</p>}
+              {ev.notes && <p className="text-onyx/50 text-sm mt-2 italic">{ev.notes}</p>}
+            </div>
+          ))}
+          {events.length === 0 && <p className="text-center text-sepia/60 italic">No events listed yet.</p>}
+        </div>
+        <div className="text-center mt-12">
+          <Link to={`/w/${slug}`} className="text-sepia text-xs uppercase tracking-widest hover:text-onyx">Back to Home</Link>
         </div>
       </div>
-    </article>
+    </div>
   );
 }

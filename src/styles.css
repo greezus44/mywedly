@@ -1,197 +1,35 @@
-@import "tailwindcss" source(none);
-@source "../src";
-@import "tw-animate-css";
-
-@import "@fontsource/cormorant-garamond/400.css";
-@import "@fontsource/cormorant-garamond/400-italic.css";
-@import "@fontsource/cormorant-garamond/500.css";
-@import "@fontsource/cormorant-garamond/600.css";
-@import "@fontsource/cormorant-garamond/600-italic.css";
-@import "@fontsource/outfit/300.css";
-@import "@fontsource/outfit/400.css";
-@import "@fontsource/outfit/500.css";
-@import "@fontsource/outfit/600.css";
-@import "@fontsource/outfit/700.css";
-
-/* Google Fonts for typography selector */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Imperial+Script&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Lora:ital,wght@0,400;0,500;1,400&family=Montserrat:wght@300;400;500;600&family=Roboto:wght@300;400;500&family=Open+Sans:wght@300;400;500;600&family=Dancing+Script:wght@400;600&family=Great+Vibes&family=Sacramento&family=Parisienne&display=swap");
-
-@custom-variant dark (&:is(.dark *));
-
-/*
- * Aethel — Editorial Monochrome
- * The design tokens are the source of truth. Never hardcode colors in components.
- */
-
-@theme inline {
-  --font-serif: "Cormorant Garamond", ui-serif, Georgia, serif;
-  --font-sans: "Inter", "Outfit", ui-sans-serif, system-ui, sans-serif;
-
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
-  --radius-xl: 6px;
-
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-ring-offset-background: var(--background);
-
-  --color-onyx: var(--onyx);
-  --color-parchment: var(--parchment);
-  --color-sepia: var(--sepia);
-  --color-mist: var(--mist);
-  --color-ink: var(--ink);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-
-  --shadow-editorial: 0 30px 80px -20px oklch(0.15 0.02 60 / 0.18);
-  --shadow-soft: 0 8px 30px -8px oklch(0.15 0.02 60 / 0.08);
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --radius: 3px;
-
-  /* Brand primitives */
-  --onyx: oklch(0.15 0.005 60); /* #121212-ish deep charcoal */
-  --parchment: oklch(0.985 0.006 85); /* #FDFCF9 warm paper */
-  --sepia: oklch(0.58 0.03 70); /* #8C7E6A muted sepia */
-  --mist: oklch(0.94 0.005 80); /* soft warm gray */
-  --ink: oklch(0.28 0.008 60); /* rich dark ink */
-
-  --background: var(--parchment);
-  --foreground: var(--onyx);
-  --card: oklch(1 0 0);
-  --card-foreground: var(--onyx);
-  --popover: oklch(1 0 0);
-  --popover-foreground: var(--onyx);
-
-  --primary: var(--onyx);
-  --primary-foreground: var(--parchment);
-  --secondary: var(--mist);
-  --secondary-foreground: var(--onyx);
-  --muted: oklch(0.96 0.005 80);
-  --muted-foreground: oklch(0.45 0.01 60);
-  --accent: var(--sepia);
-  --accent-foreground: var(--parchment);
-  --destructive: oklch(0.55 0.19 25);
-  --destructive-foreground: var(--parchment);
-
-  --border: oklch(0.15 0.005 60 / 0.1);
-  --input: oklch(0.15 0.005 60 / 0.15);
-  --ring: var(--sepia);
-
-  --success: oklch(0.62 0.13 155);
-  --warning: oklch(0.72 0.13 75);
-
-  --chart-1: var(--onyx);
-  --chart-2: var(--sepia);
-  --chart-3: oklch(0.55 0.05 75);
-  --chart-4: oklch(0.75 0.03 80);
-  --chart-5: oklch(0.35 0.01 60);
-
-  --sidebar: var(--parchment);
-  --sidebar-foreground: var(--onyx);
-  --sidebar-primary: var(--onyx);
-  --sidebar-primary-foreground: var(--parchment);
-  --sidebar-accent: var(--mist);
-  --sidebar-accent-foreground: var(--onyx);
-  --sidebar-border: oklch(0.15 0.005 60 / 0.08);
-  --sidebar-ring: var(--sepia);
+  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-script: "Imperial Script", cursive;
 }
 
-.dark {
-  --background: oklch(0.13 0.005 60);
-  --foreground: var(--parchment);
-  --card: oklch(0.18 0.005 60);
-  --card-foreground: var(--parchment);
-  --popover: oklch(0.18 0.005 60);
-  --popover-foreground: var(--parchment);
-  --primary: var(--parchment);
-  --primary-foreground: var(--onyx);
-  --secondary: oklch(0.22 0.005 60);
-  --secondary-foreground: var(--parchment);
-  --muted: oklch(0.22 0.005 60);
-  --muted-foreground: oklch(0.68 0.01 60);
-  --accent: var(--sepia);
-  --accent-foreground: var(--parchment);
-  --border: oklch(1 0 0 / 0.1);
-  --input: oklch(1 0 0 / 0.15);
-  --ring: var(--sepia);
+body {
+  font-family: var(--font-sans);
+  background-color: #fdfcf9;
+  color: #1a1a1a;
 }
 
-@layer base {
-  * {
-    border-color: var(--color-border);
-  }
-  html,
-  body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
-    font-family: var(--font-sans);
-    font-feature-settings: "ss01", "ss02";
-    -webkit-font-smoothing: antialiased;
-  }
-  h1,
-  h2,
-  h3,
-  h4,
-  h5 {
-    font-family: var(--font-serif);
-    letter-spacing: -0.01em;
-  }
-  ::selection {
-    background: var(--onyx);
-    color: var(--parchment);
-  }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-@utility eyebrow {
-  font-size: 0.6875rem;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  font-weight: 600;
-  color: color-mix(in oklab, var(--foreground) 60%, transparent);
+.animate-fade-in {
+  animation: fadeIn 0.8s ease-out forwards;
 }
 
-@utility serif-italic {
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-weight: 500;
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
-@utility hairline {
-  height: 1px;
-  background: color-mix(in oklab, var(--foreground) 10%, transparent);
+.shimmer {
+  background: linear-gradient(90deg, #f5f2ee 25%, #e8e4de 50%, #f5f2ee 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
 }

@@ -1,171 +1,56 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { motion } from "motion/react";
-import { GuestLayout } from "@/components/guest/GuestChrome";
-import type { Wedding } from "@/lib/wedding-queries";
-import { getWeddingBySlug } from "@/lib/wedding-queries";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { useWedding } from "@/lib/use-wedding";
 import { styleFor, getStyle } from "@/lib/text-styles";
+import { PreserveText } from "@/components/guest/PreserveText";
+import type { WeddingContent } from "@/lib/supabase";
 
-export const Route = createFileRoute("/w/$slug/")({
-  head: ({ loaderData }) => {
-    const w = (loaderData as { wedding: Wedding } | undefined)?.wedding;
-    if (!w) return { meta: [{ title: "Wedding" }, { name: "robots", content: "noindex" }] };
-    const title = `${w.couple_name_one} & ${w.couple_name_two}`;
-    return {
-      meta: [
-        { title },
-        {
-          name: "description",
-          content: `The wedding of ${w.couple_name_one} & ${w.couple_name_two}.`,
-        },
-        { property: "og:title", content: title },
-        ...(w.hero_image_url ? [{ property: "og:image", content: w.hero_image_url }] : []),
-      ],
-    };
-  },
-  loader: async ({ params }) => {
-    const wedding = await getWeddingBySlug(params.slug);
-    if (!wedding) throw notFound();
-    return { wedding };
-  },
-  component: CoverPage,
-});
+export function GuestCover() {
+  const slug = location.pathname.split("/")[2];
+  const { wedding, loading, error } = useWedding(slug);
+  const [bgUrl, setBgUrl] = useState<string | null>(null);
 
-function CoverPage() {
-  const { wedding } = Route.useLoaderData();
-  return (
-    <GuestLayout
-      slug={wedding.slug}
-      weddingId={wedding.id}
-      theme={wedding.theme}
-      couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}
-    >
-      <Cover wedding={wedding} />
-    </GuestLayout>
-  );
-}
+  useEffect(() => {
+    if (!wedding) return;
+    const content = (wedding.content ?? {}) as WeddingContent;
+    setBgUrl(content.cover_background_url ?? wedding.hero_image_url ?? null);
+  }, [wedding]);
 
-function Cover({ wedding }: { wedding: Wedding }) {
-  const content = (wedding.content ?? {}) as Record<string, any>;
-  const bg = content.cover_background_url as string | undefined;
-  const logo = content.cover_logo_url as string | undefined;
-  const heading =
-    (content.cover_heading as string | undefined) ||
-    `${wedding.couple_name_one} & ${wedding.couple_name_two}`;
-  const subtitle = content.cover_subtitle as string | undefined;
-  const welcome = content.cover_welcome as string | undefined;
-  const ctaLabel = (content.cover_cta_label as string | undefined) || "OPEN INVITATION";
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-sepia">Loading…</div>;
+  if (error || !wedding) return <div className="min-h-screen flex items-center justify-center text-red-600">{error ?? "Not found"}</div>;
 
-  const date = wedding.wedding_date ? new Date(wedding.wedding_date + "T00:00:00") : null;
-  const monthYear = date
-    ? date.toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase()
-    : subtitle
-      ? subtitle.toUpperCase()
-      : "COMING SOON";
-  const [month, year] = monthYear.split(" ");
-
-  const headingStyle = getStyle(content, "cover_heading");
-  const subtitleStyle = getStyle(content, "cover_subtitle");
-  const welcomeStyle = getStyle(content, "cover_welcome");
-  const ctaStyle = getStyle(content, "cover_cta");
-
-  const initialsStyle = {
-    fontFamily: "var(--font-serif)",
-    fontStyle: "italic",
-    fontWeight: 500,
-  } as React.CSSProperties;
+  const content = (wedding.content ?? {}) as WeddingContent;
+  const heading = content.cover_heading || `${wedding.couple_name_one} & ${wedding.couple_name_two}`;
+  const subtitle = content.cover_subtitle;
+  const welcome = content.cover_welcome;
+  const logo = content.cover_logo_url;
+  const d = wedding.wedding_date ? new Date(wedding.wedding_date) : null;
+  const month = d?.toLocaleDateString("en-US", { month: "long" }) ?? "";
+  const year = d?.getFullYear().toString() ?? "";
 
   return (
-    <div
-      className="min-h-[80vh] flex flex-col items-center justify-center px-6 py-16 text-sepia relative"
-      style={
-        bg
-          ? { backgroundImage: `url(${bg})`, backgroundSize: "cover", backgroundPosition: "center" }
-          : undefined
-      }
-    >
-      {bg && <div className="absolute inset-0 bg-parchment/70" aria-hidden />}
-      <div className="relative">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 1.4, ease: [0.2, 0.65, 0.3, 0.95] }}
-          className="mb-4 flex justify-center"
-        >
-          {logo ? (
-            <img src={logo} alt="" className="max-h-40 md:max-h-56 object-contain" />
-          ) : (
-            <div
-              className="text-[140px] md:text-[180px] leading-none tracking-tight text-sepia relative"
-              style={initialsStyle}
-            >
-              <span className="relative inline-block">
-                {wedding.couple_name_one[0]}
-                <span className="absolute left-1/2 top-1/2 -translate-x-[35%] -translate-y-[45%] opacity-95">
-                  {wedding.couple_name_two[0]}
-                </span>
-              </span>
-            </div>
-          )}
-        </motion.div>
-
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
-          className="text-sepia text-5xl md:text-6xl mb-8 text-center px-4"
-          style={{ ...initialsStyle, ...styleFor(headingStyle) }}
-        >
-          {heading}
-        </motion.h1>
-
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 1 }}
-          className="text-center mb-8"
-        >
-          <p
-            className="text-sepia text-sm tracking-[0.35em] leading-loose font-medium"
-            style={styleFor(subtitleStyle)}
-          >
-            {month}
-            {year ? (
-              <>
-                <br />
-                {year}
-              </>
-            ) : null}
-          </p>
-        </motion.div>
-
+    <div className="min-h-screen flex flex-col items-center justify-center text-center px-6" style={{ background: bgUrl ? undefined : "#fdfcf9" }}>
+      {bgUrl && (
+        <div className="fixed inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${bgUrl})`, opacity: 0.25 }} />
+      )}
+      <div className="relative z-10 max-w-2xl">
+        <p className="text-sepia text-sm tracking-[0.35em] uppercase mb-6" style={styleFor(getStyle(content, "cover_subtitle"))}>
+          <PreserveText>{subtitle || `${month}${year ? `\n${year}` : ""}`}</PreserveText>
+        </p>
+        <h1 className="text-5xl md:text-7xl font-script text-onyx mb-8" style={styleFor(getStyle(content, "cover_heading"))}>
+          <PreserveText>{heading}</PreserveText>
+        </h1>
         {welcome && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8, delay: 1.2 }}
-            className="text-center max-w-md mx-auto italic text-sepia/80 mb-10"
-            style={{ fontFamily: "var(--font-serif)", ...styleFor(welcomeStyle) }}
-          >
-            {welcome}
-          </motion.p>
+          <p className="text-sepia text-base italic max-w-md mx-auto mb-10" style={styleFor(getStyle(content, "cover_welcome"))}>
+            <PreserveText>{welcome}</PreserveText>
+          </p>
         )}
-
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 1.4 }}
-          className="flex justify-center"
+        <Link
+          to={`/w/${slug}/invitation`}
+          className="inline-block border-2 border-sepia/70 rounded-md px-8 py-3 text-sepia text-xs uppercase tracking-widest hover:bg-sepia hover:text-parchment transition-colors"
         >
-          <Link
-            to="/w/$slug/signin"
-            params={{ slug: wedding.slug }}
-            aria-label="Enter invitation"
-            className="inline-flex items-center justify-center border-2 border-sepia/70 rounded-md px-8 h-14 text-sepia text-sm tracking-[0.25em] font-medium hover:bg-sepia hover:text-parchment transition-colors"
-            style={styleFor(ctaStyle)}
-          >
-            {ctaLabel}
-          </Link>
-        </motion.div>
+          View Invitation
+        </Link>
       </div>
     </div>
   );
