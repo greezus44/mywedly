@@ -2,32 +2,44 @@ import { useState, useMemo } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventRsvp } from "../../lib/supabase";
+import { getRsvpStatus, formatDeadline, formatDate, formatTime } from "../../lib/utils";
+import { Card, Badge, EmptyState, ErrorState, Skeleton, Toast, Modal, FormField } from "../../components/ui";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/Input";
-import { Card, Badge, FormField, Toast, Skeleton, ErrorState, EmptyState } from "../../components/ui";
-import { Download, Mail, Check, X, Clock, CalendarClock } from "lucide-react";
-import { getRsvpStatus, formatDeadline } from "../../lib/utils";
+import { Mail, Download, Clock, Calendar, CheckCircle, XCircle, HelpCircle } from "lucide-react";
 
-type StatusFilter = "all" | "attending" | "declined" | "pending";
+type StatusFilter = "all" | EventRsvp["status"];
+
+function downloadCsv(filename: string, rows: EventRsvp[]) {
+  const headers = ["Guest Name", "Status", "Plus Ones", "Dietary", "Message", "Submitted At"];
+  const csv = [headers, ...rows.map((r) => [r.guest_name, r.status, String(r.plus_ones), r.dietary, r.message, new Date(r.submitted_at).toISOString()])]
+    .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function RsvpPage() {
   const { event } = useOutletContext<{ event: UserEvent | null }>();
   const { eventId } = useParams<{ eventId: string }>();
   const queryClient = useQueryClient();
+
   const [filter, setFilter] = useState<StatusFilter>("all");
+  const [editRsvp, setEditRsvp] = useState<EventRsvp | null>(null);
+  const [editStatus, setEditStatus] = useState<EventRsvp["status"]>("pending");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const { data: rsvps, isLoading, isError, refetch } = useQuery<EventRsvp[]>({
+  const { data: rsvps, isLoading, isError, refetch } = useQuery({
     queryKey: ["rsvps", eventId],
     queryFn: async () => {
       if (!eventId) return [];
-      const { data, error } = await supabase
-        .from("event_rsvps")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("submitted_at", { ascending: false });
+      const { data, error } = await supabase.from("event_rsvps").select("*").eq("event_id", eventId).order("submitted_at", { ascending: false });
       if (error) throw error;
-      return (data || []) as EventRsvp[];
+      return data as EventRsvp[];
     },
     enabled: !!eventId,
   });
@@ -39,12 +51,13 @@ export default function RsvpPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["rsvps", eventId] });
-      setToast({ message: "Status updated", type: "success" });
+      setEditRsvp(null);
+      setToast({ message: "RSVP status updated", type: "success" });
     },
-    onError: () => setToast({ message: "Failed to update status", type: "error" }),
+    onError: (err) => setToast({ message: err.message, type: "error" }),
   });
 
-  const counts = useMemo(() => {
+  const summary = useMemo(() => {
     if (!rsvps) return { total: 0, attending: 0, declined: 0, pending: 0 };
     return {
       total: rsvps.length,
@@ -60,109 +73,143 @@ export default function RsvpPage() {
     return rsvps.filter((r) => r.status === filter);
   }, [rsvps, filter]);
 
-  const deadlineStatus = getRsvpStatus(event?.draft_rsvp_deadline || event?.rsvp_deadline || null);
+  const rsvpDeadlineStatus = getRsvpStatus(event?.draft_rsvp_deadline || event?.rsvp_deadline || null);
 
-  const handleExport = () => {
-    if (!rsvps || rsvps.length === 0) return;
-    const headers = ["guest_name", "status", "plus_ones", "dietary", "message", "submitted_at"];
-    const rows = rsvps.map((r) =>
-      [r.guest_name, r.status, r.plus_ones, r.dietary || "", r.message || "", r.submitted_at]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-        .join(",")
-    );
-    const csv = [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `rsvps-${eventId}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const openEdit = (rsvp: EventRsvp) => {
+    setEditRsvp(rsvp);
+    setEditStatus(rsvp.status);
   };
 
-  if (!event) return <div className="p-6"><Skeleton className="h-8 w-48 mb-4" /><Skeleton className="h-96 w-full" /></div>;
+  const handleUpdateStatus = () => {
+    if (editRsvp) updateStatusMutation.mutate({ id: editRsvp.id, status: editStatus });
+  };
+
+  if (!event) {
+    return (
+      <div className="p-6">
+        <Skeleton className="h-8 w-48 mb-4" />
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}
+        </div>
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
+
+  const statusIcon = (status: string) => {
+    if (status === "attending") return <CheckCircle className="w-4 h-4 text-green-600" />;
+    if (status === "declined") return <XCircle className="w-4 h-4 text-red-600" />;
+    return <HelpCircle className="w-4 h-4 text-amber-600" />;
+  };
+
+  const statusBadge = (status: string) => {
+    const variant = status === "attending" ? "success" : status === "declined" ? "error" : "warning";
+    return <Badge variant={variant as "success" | "error" | "warning"}>{status}</Badge>;
+  };
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-slate-900">RSVPs</h1>
-        <Button variant="secondary" size="sm" onClick={handleExport} disabled={!rsvps || rsvps.length === 0}>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">RSVP Management</h1>
+          <p className="text-sm text-slate-500">View and manage RSVP responses</p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={() => rsvps && downloadCsv(`rsvps-${event.draft_name || event.name}.csv`, rsvps)} disabled={!rsvps || rsvps.length === 0}>
           <Download className="w-4 h-4" /> Export
         </Button>
       </div>
 
-      <Card className="p-4 mb-6">
-        <div className="flex items-center gap-3">
-          <CalendarClock className="w-5 h-5 text-slate-400" />
-          <div>
-            <div className="text-sm font-medium text-slate-900">RSVP Deadline</div>
-            <div className="text-xs text-slate-500">{formatDeadline(event?.draft_rsvp_deadline || event?.rsvp_deadline || null) || "No deadline set"}</div>
+      {rsvpDeadlineStatus !== "no-deadline" && (
+        <Card className="p-4 mb-4">
+          <div className="flex items-center gap-3">
+            <Clock className={`w-5 h-5 ${rsvpDeadlineStatus === "closed" ? "text-red-600" : rsvpDeadlineStatus === "closing-soon" ? "text-amber-600" : "text-green-600"}`} />
+            <div>
+              <p className="text-sm font-medium text-slate-900">
+                RSVP {rsvpDeadlineStatus === "closed" ? "Closed" : rsvpDeadlineStatus === "closing-soon" ? "Closing Soon" : "Open"}
+              </p>
+              <p className="text-xs text-slate-500">
+                Deadline: {formatDeadline(event.draft_rsvp_deadline || event.rsvp_deadline || null)}
+              </p>
+            </div>
           </div>
-          <span className={`ml-auto inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${deadlineStatus === "open" ? "bg-green-100 text-green-700" : deadlineStatus === "closing-soon" ? "bg-amber-100 text-amber-700" : deadlineStatus === "closed" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-700"}`}>
-            {deadlineStatus.replace("-", " ")}
-          </span>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <SummaryCard icon={<Mail className="w-5 h-5" />} label="Total" value={counts.total} color="text-slate-900" bg="bg-slate-50" />
-        <SummaryCard icon={<Check className="w-5 h-5" />} label="Attending" value={counts.attending} color="text-green-700" bg="bg-green-50" />
-        <SummaryCard icon={<X className="w-5 h-5" />} label="Declined" value={counts.declined} color="text-red-700" bg="bg-red-50" />
-        <SummaryCard icon={<Clock className="w-5 h-5" />} label="Pending" value={counts.pending} color="text-amber-700" bg="bg-amber-50" />
+        <Card className="p-4">
+          <p className="text-xs font-medium text-slate-500 mb-1">Total RSVPs</p>
+          <p className="text-2xl font-bold text-slate-900">{summary.total}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium text-green-600 mb-1">Attending</p>
+          <p className="text-2xl font-bold text-green-600">{summary.attending}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium text-red-600 mb-1">Declined</p>
+          <p className="text-2xl font-bold text-red-600">{summary.declined}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs font-medium text-amber-600 mb-1">Pending</p>
+          <p className="text-2xl font-bold text-amber-600">{summary.pending}</p>
+        </Card>
       </div>
 
       <Card className="p-4 mb-4">
         <FormField label="Filter by Status">
           <Select value={filter} onChange={(e) => setFilter(e.target.value as StatusFilter)}>
-            <option value="all">All ({counts.total})</option>
-            <option value="attending">Attending ({counts.attending})</option>
-            <option value="declined">Declined ({counts.declined})</option>
-            <option value="pending">Pending ({counts.pending})</option>
+            <option value="all">All ({summary.total})</option>
+            <option value="attending">Attending ({summary.attending})</option>
+            <option value="declined">Declined ({summary.declined})</option>
+            <option value="pending">Pending ({summary.pending})</option>
           </Select>
         </FormField>
       </Card>
 
-      <Card className="overflow-hidden">
+      <Card>
         {isLoading ? (
-          <div className="p-6 space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+          <div className="p-4 space-y-3">
+            {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
           </div>
         ) : isError ? (
           <ErrorState message="Failed to load RSVPs" onRetry={() => refetch()} />
         ) : filtered.length === 0 ? (
-          <EmptyState icon={<Mail className="w-12 h-12" />} title="No RSVPs yet" description="RSVP submissions will appear here." />
+          <EmptyState icon={<Mail className="w-12 h-12" />} title={filter !== "all" ? `No ${filter} RSVPs` : "No RSVPs yet"} description="RSVP responses will appear here once guests submit them" />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50">
-                  <th className="text-left px-4 py-3 font-medium text-slate-600">Guest</th>
-                  <th className="text-left px-4 py-3 font-medium text-slate-600">Status</th>
-                  <th className="text-left px-4 py-3 font-medium text-slate-600">Plus Ones</th>
-                  <th className="text-left px-4 py-3 font-medium text-slate-600">Dietary</th>
-                  <th className="text-left px-4 py-3 font-medium text-slate-600">Message</th>
-                  <th className="text-left px-4 py-3 font-medium text-slate-600">Submitted</th>
+                <tr className="border-b border-slate-100">
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500">Guest</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500">Status</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500">Plus Ones</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500">Dietary</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500">Message</th>
+                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500">Submitted</th>
+                  <th className="text-right px-4 py-3 text-xs font-medium text-slate-500">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((r) => (
-                  <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                    <td className="px-4 py-3 font-medium text-slate-900">{r.guest_name}</td>
+                  <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50">
+                    <td className="px-4 py-3 text-sm font-medium text-slate-900">{r.guest_name}</td>
                     <td className="px-4 py-3">
-                      <Select
-                        value={r.status}
-                        onChange={(e) => updateStatusMutation.mutate({ id: r.id, status: e.target.value as EventRsvp["status"] })}
-                        className="w-32"
-                      >
-                        <option value="attending">Attending</option>
-                        <option value="declined">Declined</option>
-                        <option value="pending">Pending</option>
-                      </Select>
+                      <div className="flex items-center gap-1.5">
+                        {statusIcon(r.status)}
+                        {statusBadge(r.status)}
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{r.plus_ones}</td>
-                    <td className="px-4 py-3 text-slate-600 max-w-[150px] truncate">{r.dietary || "—"}</td>
-                    <td className="px-4 py-3 text-slate-600 max-w-[200px] truncate">{r.message || "—"}</td>
-                    <td className="px-4 py-3 text-slate-500 text-xs">{new Date(r.submitted_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{r.plus_ones}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600 max-w-[150px] truncate" title={r.dietary}>{r.dietary || "—"}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600 max-w-[200px] truncate" title={r.message}>{r.message || "—"}</td>
+                    <td className="px-4 py-3 text-xs text-slate-500">
+                      <div className="flex flex-col">
+                        <span>{formatDate(r.submitted_at)}</span>
+                        <span>{formatTime(r.submitted_at.split("T")[1] || null)}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>Edit</Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -171,21 +218,29 @@ export default function RsvpPage() {
         )}
       </Card>
 
+      <Modal open={!!editRsvp} onClose={() => setEditRsvp(null)} title="Edit RSVP Status">
+        {editRsvp && (
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-slate-500">Guest</p>
+              <p className="text-sm font-medium text-slate-900">{editRsvp.guest_name}</p>
+            </div>
+            <FormField label="Status">
+              <Select value={editStatus} onChange={(e) => setEditStatus(e.target.value as EventRsvp["status"])}>
+                <option value="attending">Attending</option>
+                <option value="declined">Declined</option>
+                <option value="pending">Pending</option>
+              </Select>
+            </FormField>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" onClick={() => setEditRsvp(null)}>Cancel</Button>
+              <Button onClick={handleUpdateStatus} loading={updateStatusMutation.isPending}>Save</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
-  );
-}
-
-function SummaryCard({ icon, label, value, color, bg }: { icon: React.ReactNode; label: string; value: number; color: string; bg: string }) {
-  return (
-    <Card className="p-4">
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-lg ${bg} ${color}`}>{icon}</div>
-        <div>
-          <div className="text-2xl font-bold text-slate-900">{value}</div>
-          <div className="text-xs text-slate-500">{label}</div>
-        </div>
-      </div>
-    </Card>
   );
 }

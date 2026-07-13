@@ -28,25 +28,24 @@ export function formatTime(time: string | null): string {
   return `${hour12}:${m} ${ampm}`;
 }
 
-export function getCountdown(targetDate: string | null): { days: number; hours: number; minutes: number; seconds: number; isPast: boolean } {
+export function getCountdown(targetDate: string | null) {
   if (!targetDate) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
   const target = new Date(targetDate).getTime();
   const now = Date.now();
   const diff = target - now;
   if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-  return { days, hours, minutes, seconds, isPast: false };
+  return {
+    days: Math.floor(diff / 86400000),
+    hours: Math.floor((diff % 86400000) / 3600000),
+    minutes: Math.floor((diff % 3600000) / 60000),
+    seconds: Math.floor((diff % 60000) / 1000),
+    isPast: false,
+  };
 }
 
-export function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): (...args: Parameters<T>) => void {
+export function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
   let timer: ReturnType<typeof setTimeout>;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
+  return (...args: Parameters<T>) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
 }
 
 export function isRsvpClosed(deadline: string | null): boolean {
@@ -62,7 +61,7 @@ export function getRsvpStatus(deadline: string | null): "open" | "closing-soon" 
   if (isNaN(d.getTime())) return "no-deadline";
   const diff = d.getTime() - Date.now();
   if (diff <= 0) return "closed";
-  if (diff <= 1000 * 60 * 60 * 24) return "closing-soon";
+  if (diff <= 86400000) return "closing-soon";
   return "open";
 }
 

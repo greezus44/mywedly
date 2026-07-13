@@ -1,227 +1,135 @@
-import { useState, type FormEvent } from "react";
-import { useOutletContext } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Send } from "lucide-react";
-import { supabase, type EventMessage } from "../../lib/supabase";
+import { useState } from "react";
+import type { CSSProperties } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useParams, useOutletContext } from "react-router-dom";
+import { MessageSquareHeart, Send } from "lucide-react";
 import type { GuestLayoutContext } from "./guest-layout";
+import { supabase, type EventMessage, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { formatDate } from "../../lib/utils";
+import { DEFAULT_THEME, themeToCssVars } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
+import { Textarea } from "../../components/ui/Input";
+import { EmptyState, ErrorState } from "../../components/ui";
 
-const MAX_MESSAGE_LENGTH = 500;
-
-export default function Wishes() {
+export default function GuestWishes() {
   const { event } = useOutletContext<GuestLayoutContext>();
+  const { eventId } = useParams<{ eventId: string }>();
   const { guestName } = useGuestAuth();
   const queryClient = useQueryClient();
-
   const [message, setMessage] = useState("");
-  const [sent, setSent] = useState(false);
 
-  const { data: messages, isLoading } = useQuery<EventMessage[], Error>({
-    queryKey: ["event-messages", event.id],
+  const theme = event.theme || DEFAULT_THEME;
+  const cssVars = themeToCssVars(theme) as CSSProperties;
+
+  const { data: messages, isLoading, isError, refetch } = useQuery<EventMessage[]>({
+    queryKey: ["event-messages", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_messages")
         .select("*")
-        .eq("event_id", event.id)
+        .eq("event_id", eventId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data || []) as EventMessage[];
     },
+    enabled: !!eventId,
   });
 
   const submitMutation = useMutation<void, Error>({
     mutationFn: async () => {
+      if (!guestName) throw new Error("Please sign in to leave a wish");
       const { error } = await supabase.from("event_messages").insert({
-        event_id: event.id,
-        guest_name: guestName!,
+        event_id: eventId!,
+        guest_name: guestName,
         message: message.trim(),
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      setSent(true);
+      queryClient.invalidateQueries({ queryKey: ["event-messages", eventId] });
       setMessage("");
-      queryClient.invalidateQueries({ queryKey: ["event-messages", event.id] });
-      setTimeout(() => setSent(false), 4000);
     },
   });
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || !guestName) return;
+    if (!message.trim()) return;
     submitMutation.mutate();
   };
 
   return (
-    <div className="animate-fade-in py-6">
-      <div className="text-center mb-8">
-        <h1
-          className="text-3xl mb-1"
-          style={{ color: "var(--color-primary)", fontFamily: "var(--font-heading)" }}
-        >
-          Wishes
-        </h1>
-        <p
-          className="text-sm italic"
-          style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-script)" }}
-        >
-          Share your wishes with us
-        </p>
-      </div>
-
-      {sent && (
-        <div
-          className="mb-6 p-4 rounded-lg border flex items-center gap-2.5 animate-fade-in-up"
-          style={{
-            backgroundColor: "var(--color-bg-subtle)",
-            borderColor: "var(--color-border)",
-          }}
-        >
-          <Check
-            className="w-4 h-4 flex-shrink-0"
-            style={{ color: "var(--color-accent)" }}
-          />
-          <p
-            className="text-xs"
-            style={{ color: "var(--color-text)" }}
-          >
-            Thank you for your message!
-          </p>
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-4 mb-10">
-        <div>
-          <label
-            className="block text-xs tracking-[0.15em] uppercase mb-2"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            Your Name
-          </label>
-          <Input
-            type="text"
-            value={guestName || ""}
-            disabled
-            className="cursor-not-allowed"
-          />
+    <div
+      style={{ ...cssVars, backgroundColor: "var(--color-bg)", color: "var(--color-text)", fontFamily: "var(--font-body)" }}
+      className="min-h-screen px-4 py-8"
+    >
+      <div className="max-w-2xl mx-auto">
+        <div className="text-center mb-8">
+          <MessageSquareHeart className="w-10 h-10 mx-auto mb-3" style={{ color: "var(--color-accent)" }} />
+          <h1 className="text-2xl md:text-3xl font-medium mb-2" style={{ fontFamily: "var(--font-heading)" }}>
+            Wishes
+          </h1>
+          <p className="text-sm opacity-70">Share your wishes and messages</p>
         </div>
 
-        <div>
-          <label
-            className="block text-xs tracking-[0.15em] uppercase mb-2"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            Message
-          </label>
-          <Textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
-            placeholder="Write your heartfelt message..."
-            rows={4}
-            required
-          />
-          <div className="flex justify-end mt-1">
-            <span
-              className="text-[10px]"
-              style={{
-                color:
-                  message.length >= MAX_MESSAGE_LENGTH
-                    ? "var(--color-accent)"
-                    : "var(--color-text-muted)",
-              }}
-            >
-              {message.length} / {MAX_MESSAGE_LENGTH}
-            </span>
+        <form onSubmit={handleSubmit} className="mb-10">
+          <div className="mb-3">
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Write your wish..."
+              rows={3}
+            />
           </div>
-        </div>
-
-        {(submitMutation as any).error && (
-          <p className="text-xs text-red-600 text-center">
-            {(submitMutation as any).error.message}
-          </p>
-        )}
-
-        <Button
-          type="submit"
-          size="lg"
-          loading={submitMutation.isPending}
-          disabled={!message.trim()}
-          className="w-full"
-          style={{
-            backgroundColor: "var(--color-primary)",
-            color: "#ffffff",
-            borderRadius: "var(--radius)",
-          }}
-        >
-          <Send className="w-3.5 h-3.5" />
-          Send
-        </Button>
-      </form>
-
-      <div
-        className="border-t pt-6"
-        style={{ borderColor: "var(--color-border)" }}
-      >
-        <h2
-          className="text-lg text-center mb-4"
-          style={{ color: "var(--color-primary)", fontFamily: "var(--font-heading)" }}
-        >
-          Recent Messages
-        </h2>
+          {(submitMutation as any).error && (
+            <p className="text-sm text-red-600 mb-3">{(submitMutation as any).error.message}</p>
+          )}
+          <Button
+            type="submit"
+            loading={submitMutation.isPending}
+            disabled={!message.trim() || submitMutation.isPending}
+            style={{ backgroundColor: "var(--color-primary)", color: "#ffffff" }}
+          >
+            <Send className="w-4 h-4" />
+            Send wish
+          </Button>
+        </form>
 
         {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2].map((i) => (
-              <div
-                key={i}
-                className="h-16 rounded-lg animate-pulse"
-                style={{ backgroundColor: "var(--color-bg-subtle)" }}
-              />
+          <div className="space-y-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="p-5 rounded-xl animate-pulse" style={{ backgroundColor: "var(--color-bg-subtle)" }}>
+                <div className="h-4 w-24 bg-current opacity-10 rounded mb-3" />
+                <div className="h-3 w-full bg-current opacity-10 rounded mb-1.5" />
+                <div className="h-3 w-2/3 bg-current opacity-10 rounded" />
+              </div>
             ))}
           </div>
+        ) : isError ? (
+          <ErrorState message="Failed to load wishes" onRetry={() => refetch()} />
         ) : !messages || messages.length === 0 ? (
-          <div className="py-8 text-center">
-            <p
-              className="text-xs italic"
-              style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-script)" }}
-            >
-              No messages yet. Be the first to share your wishes.
-            </p>
-          </div>
+          <EmptyState
+            title="No wishes yet"
+            description="Be the first to leave a wish"
+          />
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className="rounded-lg border p-4 animate-fade-in"
-                style={{
-                  backgroundColor: "var(--color-bg-subtle)",
-                  borderColor: "var(--color-border)",
-                }}
+                className="p-5 rounded-xl"
+                style={{ backgroundColor: "var(--color-bg-subtle)", border: "1px solid var(--color-border)" }}
               >
-                <p
-                  className="text-sm leading-relaxed mb-2"
-                  style={{ color: "var(--color-text)" }}
-                >
-                  {msg.message}
-                </p>
-                <div className="flex items-center justify-between">
-                  <p
-                    className="text-xs font-medium"
-                    style={{ color: "var(--color-accent)" }}
-                  >
-                    From {msg.guest_name}
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium" style={{ color: "var(--color-primary)" }}>
+                    {msg.guest_name}
                   </p>
-                  <p
-                    className="text-[10px]"
-                    style={{ color: "var(--color-text-muted)" }}
-                  >
-                    {formatDate(msg.created_at)}
+                  <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+                    {new Date(msg.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                   </p>
                 </div>
+                <p className="text-base leading-relaxed whitespace-pre-wrap" style={{ fontFamily: "var(--font-body)" }}>
+                  {msg.message}
+                </p>
               </div>
             ))}
           </div>

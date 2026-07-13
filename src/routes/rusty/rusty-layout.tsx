@@ -1,126 +1,131 @@
-import { useEffect, type ReactNode, type CSSProperties } from "react";
-import { Outlet, useNavigate, useParams, useLocation, Link } from "react-router-dom";
+import { Outlet, useNavigate, useParams, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import type { CSSProperties } from "react";
 import { Home, CalendarCheck, Info, MessageSquare } from "lucide-react";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { themeToCssVars, RUSTY_THEME } from "../../lib/theme";
+import { RUSTY_THEME, themeToCssVars } from "../../lib/theme";
 import { cn } from "../../lib/utils";
 
 export type Lang = "en" | "bm";
+
+const CREAM = "#F5ECD7";
+const GOLD = "#B8962E";
+const GOLD_LIGHT = "#C4A44A";
+const TEXT = "#3D3528";
+const TEXT_MUTED = "#8B7355";
+const BORDER = "#D4C695";
 
 const NAV_ITEMS = [
   { key: "home", labelEn: "Home", labelBm: "Utama", icon: Home, path: "" },
   { key: "rsvp", labelEn: "RSVP", labelBm: "RSVP", icon: CalendarCheck, path: "/rsvp" },
   { key: "info", labelEn: "Info", labelBm: "Maklumat", icon: Info, path: "/info" },
   { key: "message", labelEn: "Message", labelBm: "Mesej", icon: MessageSquare, path: "/message" },
-] as const;
+];
 
-export async function fetchPublicEvent(eventId: string): Promise<UserEvent | null> {
-  const { data, error } = await supabase
-    .from("events")
-    .select("*")
-    .eq("id", eventId)
-    .eq("is_published", true)
-    .maybeSingle();
-  if (error) throw error;
-  return data as UserEvent | null;
-}
-
-export function RustyLayout({ lang }: { lang: Lang }) {
-  return <Outlet context={{ lang }} />;
-}
-
-export function RustyLayoutShell({ children, lang }: { children: ReactNode; lang: Lang }) {
+export function RustyLayout() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { isAuthenticated } = useGuestAuth();
+  const { isAuthenticated, eventId: authEventId } = useGuestAuth();
 
-  const { data: event, isLoading, error } = useQuery<UserEvent | null, Error>({
+  const { data: event, isLoading, isError } = useQuery<UserEvent>({
     queryKey: ["public-event", eventId],
-    queryFn: () => fetchPublicEvent(eventId!),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("events")
+        .select("*")
+        .eq("id", eventId!)
+        .single();
+      if (error) throw error;
+      return data as UserEvent;
+    },
     enabled: !!eventId,
   });
 
+  const theme = event?.theme || RUSTY_THEME;
+  const cssVars = themeToCssVars(theme) as CSSProperties;
+
   useEffect(() => {
-    if (!isAuthenticated && eventId) {
+    if (!isAuthenticated || (authEventId && eventId && authEventId !== eventId)) {
       navigate(`/${eventId}/login`, { replace: true });
     }
-  }, [isAuthenticated, eventId, navigate]);
+  }, [isAuthenticated, authEventId, eventId, navigate]);
 
-  if (!eventId) return null;
+  if (!eventId) return <Navigate to="/" replace />;
+  if (!isAuthenticated) return <Navigate to={`/${eventId}/login`} replace />;
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-rusty-bg">
-        <div className="text-center animate-fade-in">
-          <div className="w-12 h-12 mx-auto mb-4 rounded-full border-2 border-rusty-gold-dark border-t-transparent animate-spin" />
-          <p className="font-serif text-lg text-rusty-text-light">Loading...</p>
+      <div style={{ backgroundColor: CREAM }} className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-lg" style={{ fontFamily: '"Cormorant Garamond", serif', color: GOLD }}>
+          Loading...
         </div>
       </div>
     );
   }
 
-  if (error || !event) {
+  if (isError || !event) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-rusty-bg px-6">
-        <div className="text-center max-w-sm animate-fade-in-up">
-          <p className="font-serif text-2xl text-rusty-text mb-2">Invitation Not Found</p>
-          <p className="text-sm text-rusty-text-light">The invitation you are looking for may no longer be available.</p>
+      <div style={{ backgroundColor: CREAM }} className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-lg" style={{ fontFamily: '"Cormorant Garamond", serif', color: TEXT }}>
+            Event not found
+          </p>
         </div>
       </div>
     );
   }
 
-  const theme = event.theme || RUSTY_THEME;
-  const cssVars = themeToCssVars(theme) as CSSProperties;
-
-  const currentPath = location.pathname.replace(`/${eventId}`, "").replace(/^\//, "");
-  const activeKey = currentPath === "" ? "home" : currentPath.split("/")[0];
+  const currentPath = window.location.pathname;
+  const basePath = `/${eventId}`;
 
   return (
     <div
-      style={cssVars}
-      className="min-h-screen bg-rusty-bg pb-20"
+      style={{ ...cssVars, backgroundColor: CREAM, color: TEXT, fontFamily: '"Cormorant Garamond", serif' }}
+      className="min-h-screen pb-20"
     >
-      <header className="text-center pt-8 pb-4 px-6 animate-fade-in-down">
-        <p className="font-serif text-xs tracking-[0.3em] uppercase text-rusty-gold-dark mb-1">
-          {event.event_type}
-        </p>
-        <h1 className="font-serif text-2xl md:text-3xl text-rusty-text">
-          {event.name}
-        </h1>
-        <div className="flex items-center justify-center gap-2 mt-3">
-          <span className="h-px w-12 bg-rusty-gold-dark/40" />
-          <span className="w-1.5 h-1.5 rounded-full bg-rusty-gold-dark" />
-          <span className="h-px w-12 bg-rusty-gold-dark/40" />
+      <header className="text-center pt-8 pb-4 px-4">
+        <div className="inline-block">
+          <div className="flex items-center justify-center gap-3">
+            <span className="block h-px w-8" style={{ backgroundColor: GOLD }} />
+            <span className="text-xs tracking-[0.3em] uppercase" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+              {event.event_type}
+            </span>
+            <span className="block h-px w-8" style={{ backgroundColor: GOLD }} />
+          </div>
+          <h1 className="mt-2 text-2xl md:text-3xl" style={{ fontFamily: '"Cormorant Garamond", serif', color: TEXT }}>
+            {event.name}
+          </h1>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-6">
-        {children}
+      <main className="px-4">
+        <Outlet context={{ event, eventId: eventId! }} />
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-rusty-cream/95 backdrop-blur-sm border-t border-rusty-border">
-        <div className="max-w-2xl mx-auto flex items-center justify-around px-2 py-2">
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50"
+        style={{ backgroundColor: CREAM, borderTop: `1px solid ${BORDER}` }}
+      >
+        <div className="mx-auto max-w-md flex items-stretch justify-around">
           {NAV_ITEMS.map((item) => {
-            const isActive = activeKey === item.key;
+            const fullPath = `${basePath}${item.path}`;
+            const isActive = currentPath === fullPath || (item.path === "" && currentPath === basePath);
             const Icon = item.icon;
             return (
-              <Link
+              <button
                 key={item.key}
-                to={`/${eventId}${item.path}`}
-                className={cn(
-                  "flex flex-col items-center gap-1 px-3 py-1.5 rounded-lg transition-colors",
-                  isActive ? "text-rusty-gold-dark" : "text-rusty-text-light hover:text-rusty-text"
-                )}
+                onClick={() => navigate(fullPath)}
+                className={cn("flex flex-col items-center gap-1 py-3 px-2 flex-1 transition-colors")}
+                style={{ color: isActive ? GOLD : TEXT_MUTED }}
               >
-                <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 1.75} />
-                <span className="text-[10px] font-medium tracking-wide">
-                  {lang === "bm" ? item.labelBm : item.labelEn}
+                <Icon className="w-5 h-5" style={{ color: isActive ? GOLD : TEXT_MUTED }} />
+                <span className="text-xs" style={{ fontFamily: '"Inter", sans-serif', color: isActive ? GOLD : TEXT_MUTED }}>
+                  {item.labelEn}
                 </span>
-              </Link>
+                {isActive && <span className="block h-0.5 w-6 rounded-full" style={{ backgroundColor: GOLD }} />}
+              </button>
             );
           })}
         </div>

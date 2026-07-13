@@ -9,13 +9,7 @@ interface GuestAuthState {
 }
 
 const GuestAuthContext = createContext<GuestAuthState | null>(null);
-
 const STORAGE_KEY = "guest-auth";
-
-interface StoredAuth {
-  guestName: string;
-  eventId: string;
-}
 
 export function GuestAuthProvider({ children }: { children: ReactNode }) {
   const [guestName, setGuestName] = useState<string | null>(null);
@@ -25,24 +19,20 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed: StoredAuth = JSON.parse(raw);
+        const parsed = JSON.parse(raw);
         setGuestName(parsed.guestName);
         setEventId(parsed.eventId);
       }
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }, []);
 
   const signIn = (name: string, evId: string) => {
-    setGuestName(name);
-    setEventId(evId);
+    setGuestName(name); setEventId(evId);
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ guestName: name, eventId: evId }));
   };
 
   const signOut = () => {
-    setGuestName(null);
-    setEventId(null);
+    setGuestName(null); setEventId(null);
     localStorage.removeItem(STORAGE_KEY);
   };
 

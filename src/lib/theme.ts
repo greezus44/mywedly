@@ -63,41 +63,16 @@ export const RUSTY_CONTENT = {
   invitation_title: "You're Invited",
   invitation_subtitle: "We would be honoured by your presence",
   invitation_body: "As we celebrate this sacred union, we invite you to join us for a day filled with love, joy, and cherished moments.",
-  invitation_text: "Your presence is the greatest gift we could ask for.",
   rsvp_button_text: "RSVP",
-  story: "Our journey began with a simple hello, and through every season, our love has grown deeper and stronger. We are excited to begin this new chapter together, surrounded by the people we love most.",
+  story: "Our journey began with a simple hello, and through every season, our love has grown deeper and stronger.",
 };
 
 export const THEME_PRESETS: Record<string, ThemeConfig> = {
   classic: DEFAULT_THEME,
   rusty: RUSTY_THEME,
-  ocean: {
-    ...DEFAULT_THEME,
-    preset: "ocean",
-    primaryColor: "#0c4a6e",
-    secondaryColor: "#075985",
-    accentColor: "#0ea5e9",
-    bgColor: "#f0f9ff",
-    bgSubtleColor: "#e0f2fe",
-  },
-  forest: {
-    ...DEFAULT_THEME,
-    preset: "forest",
-    primaryColor: "#14532d",
-    secondaryColor: "#166534",
-    accentColor: "#16a34a",
-    bgColor: "#f0fdf4",
-    bgSubtleColor: "#dcfce7",
-  },
-  rose: {
-    ...DEFAULT_THEME,
-    preset: "rose",
-    primaryColor: "#881337",
-    secondaryColor: "#9f1239",
-    accentColor: "#e11d48",
-    bgColor: "#fff1f2",
-    bgSubtleColor: "#ffe4e6",
-  },
+  ocean: { ...DEFAULT_THEME, preset: "ocean", primaryColor: "#0c4a6e", secondaryColor: "#075985", accentColor: "#0ea5e9", bgColor: "#f0f9ff", bgSubtleColor: "#e0f2fe" },
+  forest: { ...DEFAULT_THEME, preset: "forest", primaryColor: "#14532d", secondaryColor: "#166534", accentColor: "#16a34a", bgColor: "#f0fdf4", bgSubtleColor: "#dcfce7" },
+  rose: { ...DEFAULT_THEME, preset: "rose", primaryColor: "#881337", secondaryColor: "#9f1239", accentColor: "#e11d48", bgColor: "#fff1f2", bgSubtleColor: "#ffe4e6" },
 };
 
 export const FONT_OPTIONS = [
@@ -125,13 +100,7 @@ export function themeToCssVars(theme: ThemeConfig | null): Record<string, string
 }
 
 export function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+  return text.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 
 export function isValidSlug(slug: string): boolean {

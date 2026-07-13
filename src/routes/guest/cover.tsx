@@ -1,189 +1,133 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import type { CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight } from "lucide-react";
-import type { UserEvent, CoverConfig } from "../../lib/supabase";
-import { DEFAULT_THEME } from "../../lib/theme";
+import { Calendar } from "lucide-react";
+import { supabase, type UserEvent } from "../../lib/supabase";
+import { DEFAULT_THEME, themeToCssVars } from "../../lib/theme";
 import { formatDate, getCountdown } from "../../lib/utils";
-import { fetchPublicEvent } from "./guest-layout";
 
-const DEFAULT_COVER_CONFIG: CoverConfig = {
-  bgColor: "#0f172a",
-  textColor: "#ffffff",
-  buttonColor: "#0ea5e9",
-  buttonText: "Enter",
-  showDate: true,
-  showCountdown: true,
-  overlayOpacity: 0.4,
-};
-
-export default function Cover() {
+export default function GuestCover() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  const [mounted, setMounted] = useState(false);
-  const [countdown, setCountdown] = useState(getCountdown(null));
 
-  useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 100);
-    return () => clearTimeout(t);
-  }, []);
-
-  const { data: event, isLoading, error } = useQuery<UserEvent | null, Error>({
+  const { data: event, isLoading, isError } = useQuery<UserEvent>({
     queryKey: ["public-event", eventId],
-    queryFn: () => fetchPublicEvent(eventId!),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("id", eventId!)
+        .single();
+      if (error) throw error;
+      return data as UserEvent;
+    },
     enabled: !!eventId,
   });
 
+  const [countdown, setCountdown] = useState(getCountdown(event?.event_date ?? null));
+
   useEffect(() => {
     if (!event?.event_date) return;
-    const interval = setInterval(() => {
-      setCountdown(getCountdown(event.event_date));
-    }, 1000);
-    return () => clearInterval(interval);
+    const timer = setInterval(() => setCountdown(getCountdown(event.event_date)), 1000);
+    return () => clearInterval(timer);
   }, [event?.event_date]);
-
-  if (!eventId) return null;
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900">
-        <div className="w-12 h-12 rounded-full border-2 border-slate-600 border-t-white animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-pulse text-lg text-slate-400">Loading...</div>
       </div>
     );
   }
 
-  if (error || !event) {
+  if (isError || !event) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 px-6">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
-          <p className="text-2xl font-semibold text-white mb-2">Event Not Found</p>
-          <p className="text-sm text-slate-400">The event you are looking for may no longer be available.</p>
+          <p className="text-lg text-slate-700">Event not found</p>
+          <button onClick={() => navigate("/")} className="mt-3 text-sm text-slate-500 underline">Go home</button>
         </div>
       </div>
     );
   }
 
-  const config = { ...DEFAULT_COVER_CONFIG, ...(event.cover_config || {}) };
+  const config = event.cover_config || {};
   const theme = event.theme || DEFAULT_THEME;
-  const bgImage = config.bgImage || event.cover_image;
-  const bgColor = config.bgColor || theme.bgColor || DEFAULT_COVER_CONFIG.bgColor!;
-  const overlayColor = config.overlayColor || "#000000";
-  const overlayOpacity = config.overlayOpacity ?? DEFAULT_COVER_CONFIG.overlayOpacity!;
-  const textColor = config.textColor || "#ffffff";
-  const buttonColor = config.buttonColor || theme.accentColor || DEFAULT_COVER_CONFIG.buttonColor!;
-  const buttonText = config.buttonText || DEFAULT_COVER_CONFIG.buttonText!;
-  const headingFont = theme.headingFont || "Inter";
-  const scriptFont = config.scriptFont || theme.scriptFont || "Inter";
+  const cssVars = themeToCssVars(theme) as CSSProperties;
 
-  const handleEnter = () => {
-    navigate(`/${eventId}/login`);
+  const bgImage = config.bgImage || event.cover_image;
+  const bgColor = config.bgColor || "#0f172a";
+  const overlayColor = config.overlayColor || "#000000";
+  const overlayOpacity = config.overlayOpacity ?? 0.4;
+  const textColor = config.textColor || "#ffffff";
+  const buttonColor = config.buttonColor || theme.primaryColor || "#0ea5e9";
+  const buttonText = config.buttonText || "Enter";
+  const scriptFont = config.scriptFont || theme.scriptFont || "Cormorant Garamond";
+  const showDate = config.showDate !== false;
+  const showCountdown = config.showCountdown === true;
+
+  const heroStyle: CSSProperties = {
+    ...cssVars,
+    backgroundColor: bgColor,
+    backgroundImage: bgImage ? `url(${bgImage})` : undefined,
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    color: textColor,
+    fontFamily: `"${scriptFont}", serif`,
   };
 
   return (
-    <div
-      className="min-h-screen relative flex flex-col items-center justify-center overflow-hidden"
-      style={{ backgroundColor: bgColor }}
-    >
-      {bgImage && (
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${bgImage})` }}
-        />
-      )}
-
+    <div style={heroStyle} className="min-h-screen flex flex-col items-center justify-center relative px-4 text-center">
       {bgImage && (
         <div
           className="absolute inset-0"
           style={{ backgroundColor: overlayColor, opacity: overlayOpacity }}
         />
       )}
-
-      <div
-        className={`relative z-10 text-center px-8 max-w-lg transition-all duration-1000 ${
-          mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-        }`}
-      >
+      <div className="relative z-10 max-w-2xl mx-auto">
         {config.customText && (
-          <p
-            className="text-base md:text-lg italic mb-6"
-            style={{ color: textColor, fontFamily: `"${scriptFont}", serif` }}
-          >
+          <p className="text-base md:text-lg mb-4 opacity-90" style={{ fontFamily: `"${scriptFont}", serif` }}>
             {config.customText}
           </p>
         )}
-
-        <h1
-          className="text-4xl md:text-6xl font-medium leading-tight mb-2"
-          style={{ color: textColor, fontFamily: `"${headingFont}", sans-serif` }}
-        >
+        <h1 className="text-4xl md:text-6xl font-medium mb-4" style={{ fontFamily: `"${scriptFont}", serif` }}>
           {event.name}
         </h1>
-
-        {config.showDate && event.event_date && (
-          <p
-            className="text-sm md:text-base tracking-[0.2em] uppercase mt-4 mb-8"
-            style={{ color: textColor, opacity: 0.85 }}
-          >
-            {formatDate(event.event_date)}
-          </p>
+        {showDate && event.event_date && (
+          <div className="flex items-center justify-center gap-2 mb-6 opacity-90">
+            <Calendar className="w-5 h-5" />
+            <span className="text-base md:text-lg" style={{ fontFamily: `"${theme.bodyFont || "Inter"}", sans-serif` }}>
+              {formatDate(event.event_date)}
+            </span>
+          </div>
         )}
-
-        {config.showCountdown && event.event_date && !countdown.isPast && (
-          <div className="flex items-center justify-center gap-6 mb-10">
+        {showCountdown && !countdown.isPast && (
+          <div className="flex items-center justify-center gap-6 mb-8">
             {[
               { label: "Days", value: countdown.days },
               { label: "Hours", value: countdown.hours },
               { label: "Minutes", value: countdown.minutes },
               { label: "Seconds", value: countdown.seconds },
             ].map((unit) => (
-              <div key={unit.label} className="text-center">
-                <div
-                  className="text-2xl md:text-3xl font-semibold tabular-nums"
-                  style={{ color: textColor }}
-                >
+              <div key={unit.label} className="flex flex-col items-center">
+                <span className="text-2xl md:text-3xl font-semibold" style={{ fontFamily: `"${theme.bodyFont || "Inter"}", sans-serif` }}>
                   {String(unit.value).padStart(2, "0")}
-                </div>
-                <div
-                  className="text-[10px] tracking-[0.15em] uppercase mt-1"
-                  style={{ color: textColor, opacity: 0.7 }}
-                >
+                </span>
+                <span className="text-xs uppercase tracking-wider opacity-70" style={{ fontFamily: `"${theme.bodyFont || "Inter"}", sans-serif` }}>
                   {unit.label}
-                </div>
+                </span>
               </div>
             ))}
           </div>
         )}
-
-        {event.venue && (
-          <p
-            className="text-sm italic mb-10"
-            style={{ color: textColor, opacity: 0.75, fontFamily: `"${scriptFont}", serif` }}
-          >
-            {event.venue}
-          </p>
-        )}
-
         <button
-          onClick={handleEnter}
-          className="group inline-flex items-center gap-2 px-10 py-3 text-sm tracking-[0.2em] uppercase font-medium transition-all duration-300 hover:gap-4"
-          style={{
-            backgroundColor: buttonColor,
-            color: "#ffffff",
-            borderRadius: "var(--radius, 8px)",
-          }}
+          onClick={() => navigate(`/${eventId}/login`)}
+          className="px-8 py-3 rounded-lg text-base font-medium transition-transform hover:scale-105"
+          style={{ backgroundColor: buttonColor, color: "#ffffff", borderRadius: "var(--radius)" }}
         >
           {buttonText}
-          <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
         </button>
-      </div>
-
-      <div className="absolute bottom-6 left-0 right-0 text-center z-10">
-        <p
-          className="text-[10px] tracking-[0.3em] uppercase opacity-50"
-          style={{ color: textColor }}
-        >
-          {event.event_type} Invitation
-        </p>
       </div>
     </div>
   );

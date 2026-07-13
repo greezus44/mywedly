@@ -1,58 +1,62 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calendar, Clock, MapPin, Check, X, Minus, Plus, AlertCircle } from "lucide-react";
-import { supabase, type UserEvent, type ScheduleItem, type EventRsvp } from "../../lib/supabase";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import type { CSSProperties, FormEvent } from "react";
+import { supabase, type UserEvent, type EventRsvp, type ScheduleItem } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { RUSTY_THEME } from "../../lib/theme";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
 import { formatDate, formatTime, isRsvpClosed, formatDeadline } from "../../lib/utils";
 import type { Lang } from "./rusty-layout";
 
-const LANG_STORAGE_KEY = "guest-lang";
+const CREAM = "#F5ECD7";
+const CREAM_LIGHT = "#FAF3E0";
+const GOLD = "#B8962E";
+const TEXT = "#3D3528";
+const TEXT_MUTED = "#8B7355";
+const BORDER = "#D4C695";
 
 interface OutletContext {
   event: UserEvent;
-  lang: Lang;
+  eventId: string;
 }
 
-export default function RustyRsvp() {
-  const { event } = useOutletContext<OutletContext>();
+export function RustyRsvp() {
+  const { event, eventId } = useOutletContext<OutletContext>();
   const { guestName } = useGuestAuth();
-  const queryClient = useQueryClient();
-
   const [lang, setLang] = useState<Lang>("en");
-  const [status, setStatus] = useState<"attending" | "declined" | null>(null);
+  const [status, setStatus] = useState<"attending" | "declined">("attending");
   const [plusOnes, setPlusOnes] = useState(0);
   const [dietary, setDietary] = useState("");
   const [message, setMessage] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
-  useEffect(() => {
-    const saved = localStorage.getItem(LANG_STORAGE_KEY);
-    if (saved === "en" || saved === "bm") setLang(saved);
-  }, []);
+  const rsvpClosed = isRsvpClosed(event.rsvp_deadline);
 
-  const { data: schedule, isLoading: scheduleLoading } = useQuery<ScheduleItem[], Error>({
-    queryKey: ["event-schedule", event.id],
+  const { data: schedules } = useQuery<ScheduleItem[]>({
+    queryKey: ["event-schedules", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("event_schedule")
+        .from("event_schedules")
         .select("*")
-        .eq("event_id", event.id)
+        .eq("event_id", eventId)
         .order("order_index", { ascending: true });
       if (error) throw error;
       return (data || []) as ScheduleItem[];
     },
   });
 
-  const { data: existingRsvp } = useQuery<EventRsvp | null, Error>({
-    queryKey: ["existing-rsvp", event.id, guestName],
+  const { data: existingRsvp } = useQuery<EventRsvp | null>({
+    queryKey: ["event-rsvp", eventId, guestName],
     queryFn: async () => {
+      if (!guestName) return null;
       const { data, error } = await supabase
         .from("event_rsvps")
         .select("*")
-        .eq("event_id", event.id)
-        .eq("guest_name", guestName!)
+        .eq("event_id", eventId)
+        .eq("guest_name", guestName)
+        .order("submitted_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (error) throw error;
       return data as EventRsvp | null;
@@ -60,327 +64,358 @@ export default function RustyRsvp() {
     enabled: !!guestName,
   });
 
+  const { data: existingGuest } = useQuery<{
+    rsvp_status: string;
+    plus_ones: number;
+    dietary: string;
+    message: string;
+  } | null>({
+    queryKey: ["event-guest", eventId, guestName],
+    queryFn: async () => {
+      if (!guestName) return null;
+      const { data, error } = await supabase
+        .from("event_guests")
+        .select("rsvp_status, plus_ones, dietary, message")
+        .eq("event_id", eventId)
+        .eq("name", guestName)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!guestName,
+  });
+
   useEffect(() => {
     if (existingRsvp) {
-      setStatus(existingRsvp.status === "pending" ? null : existingRsvp.status);
+      setStatus(existingRsvp.status === "declined" ? "declined" : "attending");
       setPlusOnes(existingRsvp.plus_ones || 0);
       setDietary(existingRsvp.dietary || "");
       setMessage(existingRsvp.message || "");
+    } else if (existingGuest && existingGuest.rsvp_status !== "pending") {
+      setStatus(existingGuest.rsvp_status === "declined" ? "declined" : "attending");
+      setPlusOnes(existingGuest.plus_ones || 0);
+      setDietary(existingGuest.dietary || "");
+      setMessage(existingGuest.message || "");
     }
-  }, [existingRsvp]);
+  }, [existingRsvp, existingGuest]);
 
-  const rsvpClosed = isRsvpClosed(event.rsvp_deadline);
-
-  const t = {
-    en: {
-      title: "RSVP",
-      subtitle: "Will you join us?",
-      schedule: "Event Schedule",
-      attending: "Accept with Joy",
-      decline: "Sadly Decline",
-      plusOnes: "Plus Ones",
-      dietary: "Dietary Requirements",
-      dietaryPlaceholder: "Any allergies or dietary preferences?",
-      message: "Message to the Couple",
-      messagePlaceholder: "Leave a note for the hosts...",
-      submit: "Submit RSVP",
-      thankYou: "Thank You!",
-      thankYouMsg: "Your response has been received. We look forward to celebrating with you.",
-      closed: "RSVPs closed on",
-      guest: "Guest",
-    },
-    bm: {
-      title: "RSVP",
-      subtitle: "Adakah anda akan hadir?",
-      schedule: "Jadual Acara",
-      attending: "Terima dengan Gembira",
-      decline: "Harap Maaf Tidak Hadir",
-      plusOnes: "Tetamu Tambahan",
-      dietary: "Keperluan Diet",
-      dietaryPlaceholder: "Sebarang alahan atau keutamaan diet?",
-      message: "Mesej kepada Pasangan",
-      messagePlaceholder: "Tinggalkan nota untuk tuan rumah...",
-      submit: "Hantar RSVP",
-      thankYou: "Terima Kasih!",
-      thankYouMsg: "Jawapan anda telah diterima. Kami menantikan untuk meraikan bersama anda.",
-      closed: "RSVP ditutup pada",
-      guest: "Tetamu",
-    },
-  }[lang];
-
-  const submitMutation = useMutation<void, Error>({
+  const mutation = useMutation<void, Error>({
     mutationFn: async () => {
-      const rsvpPayload = {
-        event_id: event.id,
-        guest_name: guestName!,
-        status: status || "pending",
-        plus_ones: plusOnes,
+      const { error: rsvpError } = await supabase.from("event_rsvps").insert({
+        event_id: eventId,
+        guest_name: guestName,
+        status,
+        plus_ones: status === "attending" ? plusOnes : 0,
         dietary,
         message,
-      };
+      });
+      if (rsvpError) throw rsvpError;
 
-      const { data: existing } = await supabase
-        .from("event_rsvps")
-        .select("id")
-        .eq("event_id", event.id)
-        .eq("guest_name", guestName!)
-        .maybeSingle();
-
-      if (existing) {
-        const { error } = await supabase
-          .from("event_rsvps")
-          .update({ ...rsvpPayload, submitted_at: new Date().toISOString() })
-          .eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("event_rsvps")
-          .insert({ ...rsvpPayload, submitted_at: new Date().toISOString() });
-        if (error) throw error;
-      }
-
-      const { data: guest } = await supabase
+      const { error: guestError } = await supabase
         .from("event_guests")
-        .select("id")
-        .eq("event_id", event.id)
-        .eq("name", guestName!)
-        .maybeSingle();
-
-      if (guest) {
-        await supabase
-          .from("event_guests")
-          .update({
-            rsvp_status: status || "pending",
-            rsvp_submitted_at: new Date().toISOString(),
-            plus_ones: plusOnes,
-            dietary,
-            message,
-          })
-          .eq("id", guest.id);
-      }
+        .update({
+          rsvp_status: status,
+          plus_ones: status === "attending" ? plusOnes : 0,
+          dietary,
+          message,
+          rsvp_submitted_at: new Date().toISOString(),
+        })
+        .eq("event_id", eventId)
+        .eq("name", guestName);
+      if (guestError) throw guestError;
     },
     onSuccess: () => {
       setSubmitted(true);
-      queryClient.invalidateQueries({ queryKey: ["existing-rsvp", event.id, guestName] });
     },
   });
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!status || !guestName) return;
-    submitMutation.mutate();
+    if (rsvpClosed) return;
+    mutation.mutate();
   };
 
-  const theme = event.theme || RUSTY_THEME;
-  const headingFont = theme.headingFont || "Cormorant Garamond";
-  const scriptFont = theme.scriptFont || "Cormorant Garamond";
+  const t = {
+    en: {
+      title: "RSVP",
+      schedule: "Schedule",
+      attending: "Accept with pleasure",
+      declined: "Decline with regret",
+      plusOnes: "Plus Ones",
+      dietary: "Dietary Requirements",
+      dietaryPlaceholder: "Any allergies or dietary restrictions",
+      message: "Message",
+      messagePlaceholder: "Leave a message for the couple",
+      submit: "Submit RSVP",
+      submitted: "Thank you for your response",
+      closed: (date: string) => `RSVPs closed on ${date}`,
+    },
+    bm: {
+      title: "RSVP",
+      schedule: "Jadual",
+      attending: "Terima dengan gembira",
+      declined: "Tolak dengan sesal",
+      plusOnes: "Tetamu Tambahan",
+      dietary: "Keperluan Diet",
+      dietaryPlaceholder: "Sebarang alahan atau sekatan diet",
+      message: "Mesej",
+      messagePlaceholder: "Tinggalkan mesej untuk pasangan",
+      submit: "Hantar RSVP",
+      submitted: "Terima kasih atas jawapan anda",
+      closed: (date: string) => `RSVP ditutup pada ${date}`,
+    },
+  }[lang];
+
+  const dividerStyle: CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "0.75rem",
+  };
 
   if (submitted) {
     return (
-      <div className="py-16 text-center animate-fade-in-up">
-        <div className="w-16 h-16 mx-auto mb-6 rounded-full border-2 border-rusty-gold-dark flex items-center justify-center">
-          <Check className="w-8 h-8 text-rusty-gold-dark" />
+      <div className="max-w-2xl mx-auto py-16 text-center" style={{ fontFamily: '"Cormorant Garamond", serif', color: TEXT }}>
+        <div style={dividerStyle} className="mb-6">
+          <span className="block h-px w-12" style={{ backgroundColor: GOLD }} />
+          <span className="text-xs tracking-[0.3em] uppercase" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+            Thank You
+          </span>
+          <span className="block h-px w-12" style={{ backgroundColor: GOLD }} />
         </div>
-        <h2 className="font-serif text-3xl text-rusty-text mb-3" style={{ fontFamily: `"${headingFont}", serif` }}>
-          {t.thankYou}
-        </h2>
-        <p className="text-sm text-rusty-text-light max-w-xs mx-auto leading-relaxed">
-          {t.thankYouMsg}
+        <p className="text-2xl md:text-3xl" style={{ color: TEXT }}>
+          {t.submitted}
         </p>
       </div>
     );
   }
 
   return (
-    <div className="animate-fade-in py-6">
-      <div className="text-center mb-8">
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <span className="h-px w-10 bg-rusty-gold-dark/40" />
-          <span className="w-1.5 h-1.5 rounded-full bg-rusty-gold-dark" />
-          <span className="h-px w-10 bg-rusty-gold-dark/40" />
+    <div className="max-w-2xl mx-auto py-6" style={{ fontFamily: '"Cormorant Garamond", serif', color: TEXT }}>
+      <div className="flex justify-end mb-4">
+        <div className="flex gap-2">
+          {(["en", "bm"] as Lang[]).map((l) => (
+            <button
+              key={l}
+              onClick={() => setLang(l)}
+              className="px-3 py-1 text-xs tracking-wider uppercase transition-all"
+              style={{
+                fontFamily: '"Inter", sans-serif',
+                color: lang === l ? CREAM : GOLD,
+                backgroundColor: lang === l ? GOLD : "transparent",
+                border: `1px solid ${GOLD}`,
+              }}
+            >
+              {l}
+            </button>
+          ))}
         </div>
-        <h1 className="font-serif text-3xl text-rusty-text mb-1" style={{ fontFamily: `"${headingFont}", serif` }}>
-          {t.title}
-        </h1>
-        <p className="text-sm italic text-rusty-text-light" style={{ fontFamily: `"${scriptFont}", serif` }}>
-          {t.subtitle}
-        </p>
       </div>
 
+      <section className="text-center mb-8">
+        <div style={dividerStyle} className="mb-4">
+          <span className="block h-px w-12" style={{ backgroundColor: GOLD }} />
+          <span className="text-xs tracking-[0.3em] uppercase" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+            {t.title}
+          </span>
+          <span className="block h-px w-12" style={{ backgroundColor: GOLD }} />
+        </div>
+      </section>
+
       {rsvpClosed && (
-        <div className="mb-6 p-4 rounded-lg bg-rusty-cream border border-rusty-gold-dark/30 flex items-start gap-2.5">
-          <AlertCircle className="w-4 h-4 text-rusty-gold-dark flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-rusty-text-light">
-            {t.closed} {formatDeadline(event.rsvp_deadline)}
+        <div
+          className="text-center py-4 px-6 mb-8 rounded-sm"
+          style={{ backgroundColor: CREAM_LIGHT, border: `1px solid ${BORDER}` }}
+        >
+          <p className="text-base" style={{ color: TEXT_MUTED, fontFamily: '"Cormorant Garamond", serif' }}>
+            {t.closed(formatDeadline(event.rsvp_deadline))}
           </p>
         </div>
       )}
 
-      {schedule && schedule.length > 0 && (
-        <div className="mb-8">
-          <h2 className="font-serif text-lg text-rusty-text text-center mb-4" style={{ fontFamily: `"${headingFont}", serif` }}>
-            {t.schedule}
-          </h2>
-          <div className="space-y-3">
-            {scheduleLoading ? (
-              [1, 2].map((i) => (
-                <div key={i} className="h-20 rounded-lg bg-rusty-cream/50 animate-pulse" />
-              ))
-            ) : (
-              schedule.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-lg border border-rusty-border bg-rusty-cream/50 p-4"
-                >
-                  <h3 className="font-serif text-base text-rusty-text mb-1" style={{ fontFamily: `"${headingFont}", serif` }}>
-                    {item.title}
-                  </h3>
-                  {item.description && (
-                    <p className="text-xs text-rusty-text-light mb-2">{item.description}</p>
+      {schedules && schedules.length > 0 && (
+        <section className="mb-8">
+          <div style={dividerStyle} className="mb-4">
+            <span className="block h-px w-8" style={{ backgroundColor: GOLD }} />
+            <span className="text-xs tracking-[0.3em] uppercase" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+              {t.schedule}
+            </span>
+            <span className="block h-px w-8" style={{ backgroundColor: GOLD }} />
+          </div>
+          <div className="space-y-4">
+            {schedules.map((item) => (
+              <div
+                key={item.id}
+                className="p-5 rounded-sm"
+                style={{ backgroundColor: CREAM_LIGHT, border: `1px solid ${BORDER}` }}
+              >
+                <h3 className="text-xl mb-1" style={{ fontFamily: '"Cormorant Garamond", serif', color: TEXT }}>
+                  {item.title}
+                </h3>
+                {item.description && (
+                  <p className="text-sm mb-2" style={{ color: TEXT_MUTED }}>
+                    {item.description}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-4 text-sm" style={{ color: TEXT_MUTED }}>
+                  {item.schedule_date && (
+                    <span>{formatDate(item.schedule_date)}</span>
                   )}
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-rusty-text-light">
-                    {item.schedule_date && (
-                      <span className="inline-flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        {formatDate(item.schedule_date)}
-                      </span>
-                    )}
-                    {item.start_time && (
-                      <span className="inline-flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatTime(item.start_time)}
-                        {item.end_time && ` – ${formatTime(item.end_time)}`}
-                      </span>
-                    )}
-                    {item.venue && (
-                      <span className="inline-flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {item.venue}
-                      </span>
-                    )}
-                  </div>
+                  {item.start_time && (
+                    <span>{formatTime(item.start_time)}</span>
+                  )}
+                  {item.venue && (
+                    <span>{item.venue}</span>
+                  )}
                   {item.dress_code && (
-                    <p className="text-[10px] tracking-[0.15em] uppercase text-rusty-gold-dark mt-2">
-                      Dress Code: {item.dress_code}
-                    </p>
+                    <span style={{ color: GOLD }}>{item.dress_code}</span>
                   )}
                 </div>
-              ))
-            )}
+              </div>
+            ))}
           </div>
-        </div>
+        </section>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <div className="grid grid-cols-2 gap-3">
+        <section>
+          <div className="grid grid-cols-1 gap-3">
             <button
               type="button"
               onClick={() => !rsvpClosed && setStatus("attending")}
               disabled={rsvpClosed}
-              className={`flex items-center justify-center gap-2 py-3.5 rounded-md border-2 text-sm font-medium tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                status === "attending"
-                  ? "border-rusty-gold-dark bg-rusty-gold-dark text-rusty-cream"
-                  : "border-rusty-border text-rusty-text hover:border-rusty-gold-dark/50"
-              }`}
+              className="py-4 text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: status === "attending" ? GOLD : "transparent",
+                color: status === "attending" ? CREAM : TEXT,
+                border: `1px solid ${status === "attending" ? GOLD : BORDER}`,
+                fontFamily: '"Cormorant Garamond", serif',
+              }}
             >
-              <Check className="w-4 h-4" />
               {t.attending}
             </button>
             <button
               type="button"
               onClick={() => !rsvpClosed && setStatus("declined")}
               disabled={rsvpClosed}
-              className={`flex items-center justify-center gap-2 py-3.5 rounded-md border-2 text-sm font-medium tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                status === "declined"
-                  ? "border-rusty-gold-dark bg-rusty-gold-dark text-rusty-cream"
-                  : "border-rusty-border text-rusty-text hover:border-rusty-gold-dark/50"
-              }`}
+              className="py-4 text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: status === "declined" ? GOLD : "transparent",
+                color: status === "declined" ? CREAM : TEXT,
+                border: `1px solid ${status === "declined" ? GOLD : BORDER}`,
+                fontFamily: '"Cormorant Garamond", serif',
+              }}
             >
-              <X className="w-4 h-4" />
-              {t.decline}
+              {t.declined}
             </button>
           </div>
-        </div>
+        </section>
 
         {status === "attending" && (
-          <>
-            <div className="animate-fade-in">
-              <label className="block text-xs tracking-[0.15em] uppercase text-rusty-text-light mb-2">
-                {t.plusOnes}
-              </label>
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => setPlusOnes(Math.max(0, plusOnes - 1))}
-                  disabled={rsvpClosed || plusOnes === 0}
-                  className="w-9 h-9 rounded-full border border-rusty-border flex items-center justify-center text-rusty-text hover:border-rusty-gold-dark transition-colors disabled:opacity-40"
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <span className="font-serif text-2xl text-rusty-text w-8 text-center" style={{ fontFamily: `"${headingFont}", serif` }}>
-                  {plusOnes}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPlusOnes(Math.min(10, plusOnes + 1))}
-                  disabled={rsvpClosed}
-                  className="w-9 h-9 rounded-full border border-rusty-border flex items-center justify-center text-rusty-text hover:border-rusty-gold-dark transition-colors disabled:opacity-40"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="animate-fade-in">
-              <label className="block text-xs tracking-[0.15em] uppercase text-rusty-text-light mb-2">
-                {t.dietary}
-              </label>
-              <input
-                type="text"
-                value={dietary}
-                onChange={(e) => setDietary(e.target.value)}
-                placeholder={t.dietaryPlaceholder}
+          <section>
+            <label className="block text-sm tracking-[0.2em] uppercase mb-3" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+              {t.plusOnes}
+            </label>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => setPlusOnes(Math.max(0, plusOnes - 1))}
                 disabled={rsvpClosed}
-                className="w-full px-4 py-2.5 text-sm rounded-md border border-rusty-border bg-white/60 focus:outline-none focus:ring-2 focus:ring-rusty-gold-dark/20 focus:border-rusty-gold-dark transition-colors text-rusty-text"
-              />
+                className="w-10 h-10 flex items-center justify-center text-xl transition-all disabled:opacity-50"
+                style={{ border: `1px solid ${BORDER}`, color: GOLD, backgroundColor: CREAM_LIGHT }}
+              >
+                −
+              </button>
+              <span className="text-2xl min-w-[2rem] text-center" style={{ fontFamily: '"Cormorant Garamond", serif', color: TEXT }}>
+                {plusOnes}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPlusOnes(Math.min(10, plusOnes + 1))}
+                disabled={rsvpClosed}
+                className="w-10 h-10 flex items-center justify-center text-xl transition-all disabled:opacity-50"
+                style={{ border: `1px solid ${BORDER}`, color: GOLD, backgroundColor: CREAM_LIGHT }}
+              >
+                +
+              </button>
             </div>
-          </>
+          </section>
         )}
 
-        <div>
-          <label className="block text-xs tracking-[0.15em] uppercase text-rusty-text-light mb-2">
+        {status === "attending" && (
+          <section>
+            <label className="block text-sm tracking-[0.2em] uppercase mb-2" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+              {t.dietary}
+            </label>
+            <Input
+              type="text"
+              value={dietary}
+              onChange={(e) => setDietary(e.target.value)}
+              placeholder={t.dietaryPlaceholder}
+              disabled={rsvpClosed}
+              style={{
+                fontFamily: '"Cormorant Garamond", serif',
+                fontSize: "1rem",
+                backgroundColor: CREAM_LIGHT,
+                borderColor: BORDER,
+                color: TEXT,
+              }}
+            />
+          </section>
+        )}
+
+        <section>
+          <label className="block text-sm tracking-[0.2em] uppercase mb-2" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
             {t.message}
           </label>
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder={t.messagePlaceholder}
-            rows={3}
             disabled={rsvpClosed}
-            className="w-full px-4 py-2.5 text-sm rounded-md border border-rusty-border bg-white/60 focus:outline-none focus:ring-2 focus:ring-rusty-gold-dark/20 focus:border-rusty-gold-dark transition-colors resize-none text-rusty-text"
+            rows={4}
+            className="w-full px-3 py-2 text-sm rounded-lg border bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-colors resize-y min-h-[80px] disabled:opacity-50"
+            style={{
+              fontFamily: '"Cormorant Garamond", serif',
+              fontSize: "1rem",
+              backgroundColor: CREAM_LIGHT,
+              borderColor: BORDER,
+              color: TEXT,
+            }}
           />
-        </div>
+        </section>
 
-        {(submitMutation as any).error && (
-          <p className="text-xs text-red-600 text-center">
-            {(submitMutation as any).error.message}
+        {(mutation as any).error && (
+          <p className="text-sm text-center" style={{ color: "#dc2626" }}>
+            {(mutation as any).error.message}
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={!status || rsvpClosed || submitMutation.isPending}
-          className="w-full py-3 text-sm tracking-[0.2em] uppercase font-medium transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            backgroundColor: theme.primaryColor || "#B8962E",
-            color: "#FAF3E0",
-            borderRadius: "4px",
-          }}
-        >
-          {submitMutation.isPending ? "..." : t.submit}
-        </button>
+        <div className="text-center pb-8">
+          <Button
+            type="submit"
+            loading={mutation.isPending}
+            disabled={rsvpClosed}
+            className="px-12"
+            style={{
+              backgroundColor: GOLD,
+              color: CREAM,
+              fontFamily: '"Inter", sans-serif',
+              letterSpacing: "0.2em",
+              textTransform: "uppercase",
+              fontSize: "0.8rem",
+              padding: "0.75rem 3rem",
+              border: `1px solid ${GOLD}`,
+            }}
+          >
+            {t.submit}
+          </Button>
+        </div>
       </form>
     </div>
   );
 }
+
+export default RustyRsvp;

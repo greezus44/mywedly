@@ -25,24 +25,16 @@ const sizes: Record<Size, string> = {
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = "primary", size = "md", loading = false, className, children, disabled, ...props }, ref) => {
-    return (
-      <button
-        ref={ref}
-        className={cn(
-          "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-          variants[variant],
-          sizes[size],
-          className
-        )}
-        disabled={disabled || loading}
-        {...props}
-      >
-        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-        {children}
-      </button>
-    );
-  }
+  ({ variant = "primary", size = "md", loading = false, className, children, disabled, ...props }, ref) => (
+    <button
+      ref={ref}
+      className={cn("inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed", variants[variant], sizes[size], className)}
+      disabled={disabled || loading}
+      {...props}
+    >
+      {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+      {children}
+    </button>
+  )
 );
-
 Button.displayName = "Button";

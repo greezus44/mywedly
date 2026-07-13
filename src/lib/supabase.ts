@@ -1,15 +1,21 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+export const supabase: SupabaseClient = createClient(
+  supabaseUrl || "http://localhost:54321",
+  supabaseAnonKey || "placeholder",
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  }
+);
+
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 export interface UserEvent {
   id: string;
@@ -196,13 +202,7 @@ export interface SlugRedirect {
 }
 
 export const EVENT_TYPES = [
-  "Wedding",
-  "Birthday",
-  "Corporate",
-  "Anniversary",
-  "Graduation",
-  "Baby Shower",
-  "Other",
+  "Wedding", "Birthday", "Corporate", "Anniversary", "Graduation", "Baby Shower", "Other",
 ] as const;
 
 export const EVENT_TEMPLATES = [

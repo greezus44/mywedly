@@ -1,161 +1,176 @@
-import { useState, useEffect } from "react";
-import { useOutletContext, useNavigate, useParams } from "react-router-dom";
-import { Calendar, Clock, MapPin, Globe } from "lucide-react";
-import { useGuestAuth } from "../../lib/guest-auth";
-import { RUSTY_CONTENT, RUSTY_THEME } from "../../lib/theme";
+import { useState } from "react";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import type { CSSProperties } from "react";
+import type { UserEvent } from "../../lib/supabase";
 import { formatDate, formatTime } from "../../lib/utils";
 import type { Lang } from "./rusty-layout";
-import type { UserEvent } from "../../lib/supabase";
 
-const LANG_STORAGE_KEY = "guest-lang";
+const CREAM = "#F5ECD7";
+const GOLD = "#B8962E";
+const TEXT = "#3D3528";
+const TEXT_MUTED = "#8B7355";
+const BORDER = "#D4C695";
 
 interface OutletContext {
   event: UserEvent;
-  lang: Lang;
+  eventId: string;
 }
 
-export default function RustyHome() {
-  const { event, lang } = useOutletContext<OutletContext>();
-  const { eventId } = useParams<{ eventId: string }>();
+export function RustyHome() {
+  const { event, eventId } = useOutletContext<OutletContext>();
   const navigate = useNavigate();
-  const { guestName } = useGuestAuth();
-  const [currentLang, setCurrentLang] = useState<Lang>(lang);
+  const [lang, setLang] = useState<Lang>("en");
 
-  useEffect(() => {
-    const saved = localStorage.getItem(LANG_STORAGE_KEY);
-    if (saved === "en" || saved === "bm") setCurrentLang(saved);
-  }, []);
-
-  const toggleLang = () => {
-    const next = currentLang === "en" ? "bm" : "en";
-    setCurrentLang(next);
-    localStorage.setItem(LANG_STORAGE_KEY, next);
-  };
-
-  const content = event.content;
-  const theme = event.theme || RUSTY_THEME;
-  const headingFont = theme.headingFont || "Cormorant Garamond";
-  const scriptFont = theme.scriptFont || "Cormorant Garamond";
-
-  const invitationTitle = content?.invitation_title || RUSTY_CONTENT.invitation_title!;
-  const invitationSubtitle = content?.invitation_subtitle || RUSTY_CONTENT.invitation_subtitle!;
-  const invitationBody = content?.invitation_body || RUSTY_CONTENT.invitation_body!;
-  const story = content?.story || RUSTY_CONTENT.story!;
-  const storyImage = content?.story_image;
-  const rsvpButtonText = content?.rsvp_button_text || RUSTY_CONTENT.rsvp_button_text!;
+  const content = event.content || {};
+  const invitationTitle = content.invitation_title || "You're Invited";
+  const invitationSubtitle = content.invitation_subtitle || "We would be honoured by your presence";
+  const invitationBody = content.invitation_body || content.invitation_text || "";
+  const story = content.story || "";
+  const storyImage = content.story_image;
+  const rsvpButtonText = content.rsvp_button_text || "RSVP";
 
   const t = {
-    en: { dear: "Dear", storyTitle: "Our Story", when: "When", time: "Time", where: "Where", rsvp: "RSVP" },
-    bm: { dear: "Kepada", storyTitle: "Kisah Kami", when: "Bila", time: "Masa", where: "Di Mana", rsvp: "RSVP" },
-  }[currentLang];
+    en: {
+      when: "When",
+      time: "Time",
+      where: "Where",
+      ourStory: "Our Story",
+      rsvp: rsvpButtonText,
+    },
+    bm: {
+      when: "Bila",
+      time: "Masa",
+      where: "Di Mana",
+      ourStory: "Kisah Kami",
+      rsvp: rsvpButtonText,
+    },
+  }[lang];
+
+  const dividerStyle: CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "0.75rem",
+  };
 
   return (
-    <div className="animate-fade-in">
-      <div className="text-center py-8">
-        <p className="font-serif text-sm italic text-rusty-gold-dark mb-3" style={{ fontFamily: `"${scriptFont}", serif` }}>
-          {t.dear} {guestName || "Guest"},
-        </p>
+    <div className="max-w-2xl mx-auto py-6" style={{ fontFamily: '"Cormorant Garamond", serif', color: TEXT }}>
+      <div className="flex justify-end mb-4">
+        <div className="flex gap-2">
+          {(["en", "bm"] as Lang[]).map((l) => (
+            <button
+              key={l}
+              onClick={() => setLang(l)}
+              className="px-3 py-1 text-xs tracking-wider uppercase transition-all"
+              style={{
+                fontFamily: '"Inter", sans-serif',
+                color: lang === l ? CREAM : GOLD,
+                backgroundColor: lang === l ? GOLD : "transparent",
+                border: `1px solid ${GOLD}`,
+              }}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+      </div>
 
-        <div className="flex items-center justify-center gap-2 mb-4">
-          <span className="h-px w-10 bg-rusty-gold-dark/40" />
-          <span className="w-1.5 h-1.5 rounded-full bg-rusty-gold-dark" />
-          <span className="h-px w-10 bg-rusty-gold-dark/40" />
+      <section className="text-center mb-12">
+        <div style={dividerStyle} className="mb-4">
+          <span className="block h-px w-12" style={{ backgroundColor: GOLD }} />
+          <span className="text-xs tracking-[0.3em] uppercase" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+            {event.event_type}
+          </span>
+          <span className="block h-px w-12" style={{ backgroundColor: GOLD }} />
         </div>
 
-        <h1
-          className="font-serif text-4xl md:text-5xl text-rusty-text mb-3"
-          style={{ fontFamily: `"${headingFont}", serif` }}
-        >
+        <h1 className="text-4xl md:text-5xl mb-3" style={{ fontFamily: '"Cormorant Garamond", serif', color: TEXT }}>
           {invitationTitle}
         </h1>
-
-        <p
-          className="font-serif text-lg italic text-rusty-text-light"
-          style={{ fontFamily: `"${scriptFont}", serif` }}
-        >
+        <p className="text-lg md:text-xl italic" style={{ color: TEXT_MUTED }}>
           {invitationSubtitle}
         </p>
-      </div>
 
-      <div className="text-center py-6 border-y border-rusty-border/50">
-        <p className="text-sm leading-relaxed text-rusty-text max-w-md mx-auto">
-          {invitationBody}
-        </p>
-      </div>
+        {invitationBody && (
+          <p className="mt-6 text-base md:text-lg leading-relaxed max-w-md mx-auto" style={{ color: TEXT }}>
+            {invitationBody}
+          </p>
+        )}
+      </section>
 
-      <div className="py-8 space-y-5">
-        <div className="flex items-center gap-3">
-          <Calendar className="w-4 h-4 text-rusty-gold-dark flex-shrink-0" />
-          <div>
-            <p className="text-[10px] tracking-[0.2em] uppercase text-rusty-text-light">{t.when}</p>
-            <p className="text-sm font-medium text-rusty-text">{formatDate(event.event_date) || "TBD"}</p>
+      <section className="mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+          <div className="py-4" style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
+            <div className="text-xs tracking-[0.2em] uppercase mb-2" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+              {t.when}
+            </div>
+            <div className="text-base" style={{ color: TEXT }}>
+              {formatDate(event.event_date) || "TBD"}
+            </div>
+          </div>
+          <div className="py-4" style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
+            <div className="text-xs tracking-[0.2em] uppercase mb-2" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+              {t.time}
+            </div>
+            <div className="text-base" style={{ color: TEXT }}>
+              {formatTime(event.event_time) || "TBD"}
+            </div>
+          </div>
+          <div className="py-4" style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
+            <div className="text-xs tracking-[0.2em] uppercase mb-2" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+              {t.where}
+            </div>
+            <div className="text-base" style={{ color: TEXT }}>
+              {event.venue || "TBD"}
+            </div>
+            {event.address && (
+              <div className="text-sm mt-1" style={{ color: TEXT_MUTED }}>
+                {event.address}
+              </div>
+            )}
           </div>
         </div>
-
-        <div className="flex items-center gap-3">
-          <Clock className="w-4 h-4 text-rusty-gold-dark flex-shrink-0" />
-          <div>
-            <p className="text-[10px] tracking-[0.2em] uppercase text-rusty-text-light">{t.time}</p>
-            <p className="text-sm font-medium text-rusty-text">{formatTime(event.event_time) || "TBD"}</p>
-          </div>
-        </div>
-
-        <div className="flex items-start gap-3">
-          <MapPin className="w-4 h-4 text-rusty-gold-dark flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[10px] tracking-[0.2em] uppercase text-rusty-text-light">{t.where}</p>
-            <p className="text-sm font-medium text-rusty-text">{event.venue || "TBD"}</p>
-            {event.address && <p className="text-xs text-rusty-text-light mt-0.5">{event.address}</p>}
-          </div>
-        </div>
-      </div>
+      </section>
 
       {story && (
-        <div className="py-8 border-t border-rusty-border/50">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <span className="h-px w-8 bg-rusty-gold-dark/40" />
-            <h2 className="font-serif text-xl text-rusty-text" style={{ fontFamily: `"${headingFont}", serif` }}>
-              {t.storyTitle}
-            </h2>
-            <span className="h-px w-8 bg-rusty-gold-dark/40" />
+        <section className="mb-12 text-center">
+          <div style={dividerStyle} className="mb-6">
+            <span className="block h-px w-8" style={{ backgroundColor: GOLD }} />
+            <span className="text-xs tracking-[0.3em] uppercase" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+              {t.ourStory}
+            </span>
+            <span className="block h-px w-8" style={{ backgroundColor: GOLD }} />
           </div>
           {storyImage && (
             <img
               src={storyImage}
               alt="Our Story"
-              className="w-full rounded-lg mb-5 object-cover"
-              style={{ maxHeight: 240 }}
+              className="w-full rounded-sm mb-6 max-h-80 object-cover"
+              style={{ border: `1px solid ${BORDER}` }}
             />
           )}
-          <p className="text-sm leading-relaxed text-rusty-text text-center italic" style={{ fontFamily: `"${scriptFont}", serif` }}>
+          <p className="text-base md:text-lg leading-relaxed italic max-w-md mx-auto" style={{ color: TEXT }}>
             {story}
           </p>
-        </div>
+        </section>
       )}
 
-      <div className="py-8 text-center">
+      <section className="text-center pb-8">
         <button
           onClick={() => navigate(`/${eventId}/rsvp`)}
-          className="px-12 py-3 text-sm tracking-[0.2em] uppercase font-medium transition-all duration-300 hover:opacity-90"
+          className="px-12 py-3 text-sm tracking-[0.2em] uppercase transition-all hover:opacity-80"
           style={{
-            backgroundColor: theme.primaryColor || "#B8962E",
-            color: "#FAF3E0",
-            borderRadius: "4px",
+            backgroundColor: GOLD,
+            color: CREAM,
+            fontFamily: '"Inter", sans-serif',
+            border: `1px solid ${GOLD}`,
           }}
         >
-          {rsvpButtonText}
+          {t.rsvp}
         </button>
-      </div>
-
-      <div className="flex justify-center py-4">
-        <button
-          onClick={toggleLang}
-          className="inline-flex items-center gap-1.5 text-xs text-rusty-text-light hover:text-rusty-text transition-colors"
-        >
-          <Globe className="w-3.5 h-3.5" />
-          {currentLang === "en" ? "Bahasa Melayu" : "English"}
-        </button>
-      </div>
+      </section>
     </div>
   );
 }
+
+export default RustyHome;

@@ -1,303 +1,310 @@
-import { useState, useEffect, type FormEvent } from "react";
-import { useOutletContext } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, X, Minus, Plus, AlertCircle } from "lucide-react";
-import { supabase, type EventRsvp } from "../../lib/supabase";
+import { useState, useEffect } from "react";
+import type { CSSProperties } from "react";
+import { useNavigate, useParams, useOutletContext } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import type { GuestLayoutContext } from "./guest-layout";
+import { supabase, type EventRsvp, type EventGuest, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { DEFAULT_THEME, themeToCssVars } from "../../lib/theme";
 import { isRsvpClosed, formatDeadline } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
+import { Input, Textarea, Select } from "../../components/ui/Input";
+import { Card } from "../../components/ui";
 
-export default function Rsvp() {
-  const { event } = useOutletContext<GuestLayoutContext>();
+type RsvpStatus = "attending" | "declined";
+
+export default function GuestRsvp() {
+  const outletCtx = useOutletContext<GuestLayoutContext | null>();
+  const { eventId } = useParams<{ eventId: string }>();
+  const navigate = useNavigate();
   const { guestName } = useGuestAuth();
   const queryClient = useQueryClient();
 
-  const [status, setStatus] = useState<"attending" | "declined" | null>(null);
+  const { data: queriedEvent } = useQuery<UserEvent>({
+    queryKey: ["public-event", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("id", eventId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as UserEvent;
+    },
+    enabled: !!eventId && !outletCtx?.event,
+  });
+  const event = outletCtx?.event || queriedEvent;
+
+  const [status, setStatus] = useState<RsvpStatus>("attending");
   const [plusOnes, setPlusOnes] = useState(0);
   const [dietary, setDietary] = useState("");
   const [message, setMessage] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
-  const { data: existingRsvp } = useQuery<EventRsvp | null, Error>({
-    queryKey: ["existing-rsvp", event.id, guestName],
+  if (!event) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-pulse text-lg text-slate-400">Loading...</div>
+      </div>
+    );
+  }
+
+  const theme = event.theme || DEFAULT_THEME;
+  const cssVars = themeToCssVars(theme) as CSSProperties;
+  const rsvpClosed = isRsvpClosed(event.rsvp_deadline);
+
+  const { data: existingRsvp } = useQuery<EventRsvp | null>({
+    queryKey: ["guest-rsvp", eventId, guestName],
     queryFn: async () => {
+      if (!guestName) return null;
       const { data, error } = await supabase
         .from("event_rsvps")
         .select("*")
-        .eq("event_id", event.id)
-        .eq("guest_name", guestName!)
+        .eq("event_id", eventId!)
+        .eq("guest_name", guestName)
         .maybeSingle();
       if (error) throw error;
       return data as EventRsvp | null;
     },
-    enabled: !!guestName,
+    enabled: !!eventId && !!guestName,
+  });
+
+  const { data: existingGuest } = useQuery<EventGuest | null>({
+    queryKey: ["guest-record", eventId, guestName],
+    queryFn: async () => {
+      if (!guestName) return null;
+      const { data, error } = await supabase
+        .from("event_guests")
+        .select("*")
+        .eq("event_id", eventId!)
+        .eq("name", guestName)
+        .maybeSingle();
+      if (error) throw error;
+      return data as EventGuest | null;
+    },
+    enabled: !!eventId && !!guestName,
   });
 
   useEffect(() => {
     if (existingRsvp) {
-      setStatus(existingRsvp.status === "pending" ? null : existingRsvp.status);
+      setStatus(existingRsvp.status === "declined" ? "declined" : "attending");
       setPlusOnes(existingRsvp.plus_ones || 0);
       setDietary(existingRsvp.dietary || "");
       setMessage(existingRsvp.message || "");
     }
   }, [existingRsvp]);
 
-  const rsvpClosed = isRsvpClosed(event.rsvp_deadline);
-
-  const submitMutation = useMutation<void, Error>({
-    mutationFn: async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!eventId || !guestName) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
       const rsvpPayload = {
-        event_id: event.id,
-        guest_name: guestName!,
-        status: status || "pending",
-        plus_ones: plusOnes,
-        dietary,
+        event_id: eventId,
+        guest_name: guestName,
+        guest_id: existingGuest?.id || null,
+        status: status as "attending" | "declined",
+        plus_ones: status === "attending" ? plusOnes : 0,
+        dietary: status === "attending" ? dietary : "",
         message,
+        submitted_at: new Date().toISOString(),
       };
 
-      const { data: existing } = await supabase
-        .from("event_rsvps")
-        .select("id")
-        .eq("event_id", event.id)
-        .eq("guest_name", guestName!)
-        .maybeSingle();
-
-      if (existing) {
-        const { error } = await supabase
+      let rsvpError;
+      if (existingRsvp) {
+        const res = await supabase
           .from("event_rsvps")
-          .update({ ...rsvpPayload, submitted_at: new Date().toISOString() })
-          .eq("id", existing.id);
-        if (error) throw error;
+          .update({
+            status: rsvpPayload.status,
+            plus_ones: rsvpPayload.plus_ones,
+            dietary: rsvpPayload.dietary,
+            message: rsvpPayload.message,
+            submitted_at: rsvpPayload.submitted_at,
+          })
+          .eq("id", existingRsvp.id);
+        rsvpError = res.error;
       } else {
-        const { error } = await supabase
-          .from("event_rsvps")
-          .insert({ ...rsvpPayload, submitted_at: new Date().toISOString() });
-        if (error) throw error;
+        const res = await supabase.from("event_rsvps").insert(rsvpPayload);
+        rsvpError = res.error;
       }
+      if (rsvpError) throw rsvpError;
 
-      const { data: guest } = await supabase
-        .from("event_guests")
-        .select("id")
-        .eq("event_id", event.id)
-        .eq("name", guestName!)
-        .maybeSingle();
-
-      if (guest) {
-        await supabase
+      if (existingGuest) {
+        const { error: guestErr } = await supabase
           .from("event_guests")
           .update({
-            rsvp_status: status || "pending",
+            rsvp_status: status,
             rsvp_submitted_at: new Date().toISOString(),
-            plus_ones: plusOnes,
-            dietary,
-            message,
           })
-          .eq("id", guest.id);
+          .eq("id", existingGuest.id);
+        if (guestErr) throw guestErr;
       }
-    },
-    onSuccess: () => {
-      setSubmitted(true);
-      queryClient.invalidateQueries({ queryKey: ["existing-rsvp", event.id, guestName] });
-    },
-  });
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!status || !guestName) return;
-    submitMutation.mutate();
+      queryClient.invalidateQueries({ queryKey: ["guest-rsvp", eventId, guestName] });
+      queryClient.invalidateQueries({ queryKey: ["guest-record", eventId, guestName] });
+      setSuccess(true);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to submit RSVP");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  if (submitted) {
+  if (rsvpClosed) {
     return (
-      <div className="py-16 text-center animate-fade-in-up">
-        <div
-          className="w-16 h-16 mx-auto mb-6 rounded-full border-2 flex items-center justify-center"
-          style={{ borderColor: "var(--color-accent)" }}
-        >
-          <Check className="w-8 h-8" style={{ color: "var(--color-accent)" }} />
+      <div
+        style={{ ...cssVars, backgroundColor: "var(--color-bg)", color: "var(--color-text)", fontFamily: "var(--font-body)" }}
+        className="min-h-screen px-4 py-8"
+      >
+        <div className="max-w-lg mx-auto text-center">
+          <div className="mb-6">
+            <AlertCircle className="w-12 h-12 mx-auto mb-3" style={{ color: "var(--color-text-muted)" }} />
+            <h1 className="text-2xl font-medium mb-2" style={{ fontFamily: "var(--font-heading)" }}>
+              RSVP Closed
+            </h1>
+            <p className="text-base opacity-70" style={{ color: "var(--color-text-muted)" }}>
+              The RSVP deadline has passed
+            </p>
+          </div>
+          {event.rsvp_deadline && (
+            <Card className="p-4 mb-6">
+              <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
+                Deadline was {formatDeadline(event.rsvp_deadline)}
+              </p>
+            </Card>
+          )}
+          <Button onClick={() => navigate(`/${eventId}/home`)} variant="secondary">
+            Back to home
+          </Button>
         </div>
-        <h2
-          className="text-3xl mb-3"
-          style={{ color: "var(--color-primary)", fontFamily: "var(--font-heading)" }}
-        >
-          Thank You!
-        </h2>
-        <p
-          className="text-sm max-w-xs mx-auto leading-relaxed"
-          style={{ color: "var(--color-text-muted)" }}
-        >
-          Your response has been received. We look forward to celebrating with you.
-        </p>
+      </div>
+    );
+  }
+
+  if (success) {
+    return (
+      <div
+        style={{ ...cssVars, backgroundColor: "var(--color-bg)", color: "var(--color-text)", fontFamily: "var(--font-body)" }}
+        className="min-h-screen px-4 py-8 flex items-center justify-center"
+      >
+        <div className="max-w-lg w-full text-center">
+          <CheckCircle2 className="w-16 h-16 mx-auto mb-4" style={{ color: "var(--color-accent)" }} />
+          <h1 className="text-2xl font-medium mb-2" style={{ fontFamily: "var(--font-heading)" }}>
+            Thank you!
+          </h1>
+          <p className="text-base opacity-70 mb-6">
+            Your RSVP has been submitted successfully.
+          </p>
+          <div className="flex flex-col gap-2 items-center">
+            <Button onClick={() => navigate(`/${eventId}/home`)}>Back to home</Button>
+            <button onClick={() => setSuccess(false)} className="text-sm underline mt-2" style={{ color: "var(--color-accent)" }}>
+              Edit my response
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="animate-fade-in py-6">
-      <div className="text-center mb-8">
-        <h1
-          className="text-3xl mb-1"
-          style={{ color: "var(--color-primary)", fontFamily: "var(--font-heading)" }}
-        >
-          RSVP
-        </h1>
-        <p
-          className="text-sm italic"
-          style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-script)" }}
-        >
-          Will you join us?
-        </p>
-      </div>
-
-      {rsvpClosed && (
-        <div
-          className="mb-6 p-4 rounded-lg border flex items-start gap-2.5"
-          style={{
-            backgroundColor: "var(--color-bg-subtle)",
-            borderColor: "var(--color-border)",
-          }}
-        >
-          <AlertCircle
-            className="w-4 h-4 flex-shrink-0 mt-0.5"
-            style={{ color: "var(--color-accent)" }}
-          />
-          <p
-            className="text-xs"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            RSVPs closed on {formatDeadline(event.rsvp_deadline)}
-          </p>
+    <div
+      style={{ ...cssVars, backgroundColor: "var(--color-bg)", color: "var(--color-text)", fontFamily: "var(--font-body)" }}
+      className="min-h-screen px-4 py-8"
+    >
+      <div className="max-w-lg mx-auto">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl md:text-3xl font-medium mb-2" style={{ fontFamily: "var(--font-heading)" }}>
+            RSVP
+          </h1>
+          <p className="text-sm opacity-70">Let us know if you can make it</p>
         </div>
-      )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={() => !rsvpClosed && setStatus("attending")}
-              disabled={rsvpClosed}
-              className="flex items-center justify-center gap-2 py-3.5 rounded-lg border-2 text-sm font-medium tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={() => setStatus("attending")}
+              className="flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-colors"
               style={{
-                borderColor: status === "attending" ? "var(--color-accent)" : "var(--color-border)",
-                backgroundColor: status === "attending" ? "var(--color-accent)" : "transparent",
-                color: status === "attending" ? "#ffffff" : "var(--color-text)",
+                borderColor: status === "attending" ? "var(--color-primary)" : "var(--color-border)",
+                backgroundColor: status === "attending" ? "var(--color-bg-subtle)" : "transparent",
               }}
             >
-              <Check className="w-4 h-4" />
-              Attending
+              <CheckCircle2 className="w-6 h-6" style={{ color: status === "attending" ? "var(--color-primary)" : "var(--color-text-muted)" }} />
+              <span className="text-sm font-medium">Attending</span>
             </button>
             <button
               type="button"
-              onClick={() => !rsvpClosed && setStatus("declined")}
-              disabled={rsvpClosed}
-              className="flex items-center justify-center gap-2 py-3.5 rounded-lg border-2 text-sm font-medium tracking-wide transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={() => setStatus("declined")}
+              className="flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-colors"
               style={{
-                borderColor: status === "declined" ? "var(--color-accent)" : "var(--color-border)",
-                backgroundColor: status === "declined" ? "var(--color-accent)" : "transparent",
-                color: status === "declined" ? "#ffffff" : "var(--color-text)",
+                borderColor: status === "declined" ? "var(--color-primary)" : "var(--color-border)",
+                backgroundColor: status === "declined" ? "var(--color-bg-subtle)" : "transparent",
               }}
             >
-              <X className="w-4 h-4" />
-              Decline
+              <XCircle className="w-6 h-6" style={{ color: status === "declined" ? "var(--color-primary)" : "var(--color-text-muted)" }} />
+              <span className="text-sm font-medium">Declined</span>
             </button>
           </div>
-        </div>
 
-        {status === "attending" && (
-          <>
-            <div className="animate-fade-in">
-              <label
-                className="block text-xs tracking-[0.15em] uppercase mb-2"
-                style={{ color: "var(--color-text-muted)" }}
-              >
-                Plus Ones
-              </label>
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => setPlusOnes(Math.max(0, plusOnes - 1))}
-                  disabled={rsvpClosed || plusOnes === 0}
-                  className="w-9 h-9 rounded-full border flex items-center justify-center transition-colors disabled:opacity-40"
-                  style={{ borderColor: "var(--color-border)", color: "var(--color-text)" }}
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <span
-                  className="text-2xl w-8 text-center"
-                  style={{ color: "var(--color-primary)", fontFamily: "var(--font-heading)" }}
-                >
-                  {plusOnes}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPlusOnes(Math.min(10, plusOnes + 1))}
-                  disabled={rsvpClosed}
-                  className="w-9 h-9 rounded-full border flex items-center justify-center transition-colors disabled:opacity-40"
-                  style={{ borderColor: "var(--color-border)", color: "var(--color-text)" }}
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
+          {status === "attending" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Plus ones</label>
+                <Select value={String(plusOnes)} onChange={(e) => setPlusOnes(Number(e.target.value))}>
+                  {[0, 1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </Select>
               </div>
-            </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Dietary requirements</label>
+                <Input
+                  type="text"
+                  value={dietary}
+                  onChange={(e) => setDietary(e.target.value)}
+                  placeholder="Any allergies or preferences"
+                />
+              </div>
+            </>
+          )}
 
-            <div className="animate-fade-in">
-              <label
-                className="block text-xs tracking-[0.15em] uppercase mb-2"
-                style={{ color: "var(--color-text-muted)" }}
-              >
-                Dietary Requirements
-              </label>
-              <Input
-                type="text"
-                value={dietary}
-                onChange={(e) => setDietary(e.target.value)}
-                placeholder="Any allergies or dietary preferences?"
-                disabled={rsvpClosed}
-              />
-            </div>
-          </>
-        )}
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Message</label>
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Leave a message for the host"
+              rows={4}
+            />
+          </div>
 
-        <div>
-          <label
-            className="block text-xs tracking-[0.15em] uppercase mb-2"
-            style={{ color: "var(--color-text-muted)" }}
+          {event.rsvp_deadline && (
+            <p className="text-xs text-center" style={{ color: "var(--color-text-muted)" }}>
+              RSVP by {formatDeadline(event.rsvp_deadline)}
+            </p>
+          )}
+
+          {submitError && (
+            <p className="text-sm text-red-600 text-center">{submitError}</p>
+          )}
+
+          <Button
+            type="submit"
+            loading={submitting}
+            disabled={submitting}
+            className="w-full"
+            size="lg"
+            style={{ backgroundColor: "var(--color-primary)", color: "#ffffff" }}
           >
-            Message
-          </label>
-          <Textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Leave a note for the hosts..."
-            rows={3}
-            disabled={rsvpClosed}
-          />
-        </div>
-
-        {(submitMutation as any).error && (
-          <p className="text-xs text-red-600 text-center">
-            {(submitMutation as any).error.message}
-          </p>
-        )}
-
-        <Button
-          type="submit"
-          size="lg"
-          loading={submitMutation.isPending}
-          disabled={!status || rsvpClosed}
-          className="w-full"
-          style={{
-            backgroundColor: "var(--color-primary)",
-            color: "#ffffff",
-            borderRadius: "var(--radius)",
-          }}
-        >
-          Submit RSVP
-        </Button>
-      </form>
+            Submit RSVP
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }

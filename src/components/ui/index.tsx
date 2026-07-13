@@ -7,13 +7,7 @@ export function Card({ children, className }: { children: ReactNode; className?:
 }
 
 export function Badge({ children, variant = "default" }: { children: ReactNode; variant?: "default" | "success" | "warning" | "error" | "info" }) {
-  const variants = {
-    default: "bg-slate-100 text-slate-700",
-    success: "bg-green-100 text-green-700",
-    warning: "bg-amber-100 text-amber-700",
-    error: "bg-red-100 text-red-700",
-    info: "bg-blue-100 text-blue-700",
-  };
+  const variants = { default: "bg-slate-100 text-slate-700", success: "bg-green-100 text-green-700", warning: "bg-amber-100 text-amber-700", error: "bg-red-100 text-red-700", info: "bg-blue-100 text-blue-700" };
   return <span className={cn("inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium", variants[variant])}>{children}</span>;
 }
 
@@ -31,11 +25,7 @@ export function EmptyState({ icon, title, description, action }: { icon?: ReactN
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
     <label className="flex items-center gap-2 cursor-pointer">
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        className={cn("relative w-10 h-6 rounded-full transition-colors", checked ? "bg-slate-900" : "bg-slate-200")}
-      >
+      <button type="button" onClick={() => onChange(!checked)} className={cn("relative w-10 h-6 rounded-full transition-colors", checked ? "bg-slate-900" : "bg-slate-200")}>
         <span className={cn("absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform", checked && "translate-x-4")} />
       </button>
       {label && <span className="text-sm text-slate-700">{label}</span>}
@@ -65,13 +55,7 @@ export function RangeInput({ value, onChange, min = 0, max = 100, step = 1, labe
 }
 
 export function FormField({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
-      {children}
-      {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
-    </div>
-  );
+  return <div><label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>{children}{hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}</div>;
 }
 
 export function Skeleton({ className }: { className?: string }) {

@@ -1,56 +1,79 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import { RUSTY_THEME } from "../../lib/theme";
+import type { CSSProperties } from "react";
 import type { UserEvent, ContentSection } from "../../lib/supabase";
 import type { Lang } from "./rusty-layout";
 
-const LANG_STORAGE_KEY = "guest-lang";
+const CREAM = "#F5ECD7";
+const CREAM_LIGHT = "#FAF3E0";
+const GOLD = "#B8962E";
+const TEXT = "#3D3528";
+const TEXT_MUTED = "#8B7355";
+const BORDER = "#D4C695";
 
 interface OutletContext {
   event: UserEvent;
-  lang: Lang;
+  eventId: string;
 }
 
-export default function RustyInfo() {
+export function RustyInfo() {
   const { event } = useOutletContext<OutletContext>();
   const [lang, setLang] = useState<Lang>("en");
 
-  useEffect(() => {
-    const saved = localStorage.getItem(LANG_STORAGE_KEY);
-    if (saved === "en" || saved === "bm") setLang(saved);
-  }, []);
-
-  const theme = event.theme || RUSTY_THEME;
-  const headingFont = theme.headingFont || "Cormorant Garamond";
-  const scriptFont = theme.scriptFont || "Cormorant Garamond";
-
-  const content = event.content;
-  const sections: ContentSection[] = (content?.sections || [])
+  const content = event.content || {};
+  const sections: ContentSection[] = (content.sections || [])
     .filter((s) => s.visible)
     .sort((a, b) => a.order_index - b.order_index);
 
   const t = {
-    en: { title: "Information", empty: "No information available at this time." },
-    bm: { title: "Maklumat", empty: "Tiada maklumat tersedia buat masa ini." },
+    en: { title: "Information" },
+    bm: { title: "Maklumat" },
   }[lang];
 
+  const dividerStyle: CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "0.75rem",
+  };
+
   return (
-    <div className="animate-fade-in py-6">
-      <div className="text-center mb-8">
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <span className="h-px w-10 bg-rusty-gold-dark/40" />
-          <span className="w-1.5 h-1.5 rounded-full bg-rusty-gold-dark" />
-          <span className="h-px w-10 bg-rusty-gold-dark/40" />
+    <div className="max-w-2xl mx-auto py-6" style={{ fontFamily: '"Cormorant Garamond", serif', color: TEXT }}>
+      <div className="flex justify-end mb-4">
+        <div className="flex gap-2">
+          {(["en", "bm"] as Lang[]).map((l) => (
+            <button
+              key={l}
+              onClick={() => setLang(l)}
+              className="px-3 py-1 text-xs tracking-wider uppercase transition-all"
+              style={{
+                fontFamily: '"Inter", sans-serif',
+                color: lang === l ? CREAM : GOLD,
+                backgroundColor: lang === l ? GOLD : "transparent",
+                border: `1px solid ${GOLD}`,
+              }}
+            >
+              {l}
+            </button>
+          ))}
         </div>
-        <h1 className="font-serif text-3xl text-rusty-text" style={{ fontFamily: `"${headingFont}", serif` }}>
-          {t.title}
-        </h1>
       </div>
 
+      <section className="text-center mb-10">
+        <div style={dividerStyle} className="mb-4">
+          <span className="block h-px w-12" style={{ backgroundColor: GOLD }} />
+          <span className="text-xs tracking-[0.3em] uppercase" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+            {t.title}
+          </span>
+          <span className="block h-px w-12" style={{ backgroundColor: GOLD }} />
+        </div>
+      </section>
+
       {sections.length === 0 ? (
-        <div className="py-16 text-center">
-          <p className="text-sm text-rusty-text-light italic" style={{ fontFamily: `"${scriptFont}", serif` }}>
-            {t.empty}
+        <div className="text-center py-16">
+          <span className="block h-px w-16 mx-auto mb-4" style={{ backgroundColor: GOLD, opacity: 0.4 }} />
+          <p className="text-lg" style={{ color: TEXT_MUTED, fontFamily: '"Cormorant Garamond", serif' }}>
+            No information available
           </p>
         </div>
       ) : (
@@ -58,20 +81,25 @@ export default function RustyInfo() {
           {sections.map((section) => (
             <div
               key={section.id}
-              className="rounded-lg border border-rusty-border bg-rusty-cream/50 overflow-hidden animate-fade-in-up"
+              className="overflow-hidden rounded-sm"
+              style={{ backgroundColor: CREAM_LIGHT, border: `1px solid ${BORDER}` }}
             >
               {section.image && (
                 <img
                   src={section.image}
                   alt={section.title}
-                  className="w-full h-44 object-cover"
+                  className="w-full max-h-72 object-cover"
                 />
               )}
-              <div className="p-5">
-                <h2 className="font-serif text-xl text-rusty-text mb-2" style={{ fontFamily: `"${headingFont}", serif` }}>
-                  {section.title}
-                </h2>
-                <p className="text-sm leading-relaxed text-rusty-text-light whitespace-pre-line">
+              <div className="p-6">
+                <div style={dividerStyle} className="mb-4">
+                  <span className="block h-px w-6" style={{ backgroundColor: GOLD, opacity: 0.5 }} />
+                  <span className="text-xs tracking-[0.2em] uppercase" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
+                    {section.title}
+                  </span>
+                  <span className="block h-px w-6" style={{ backgroundColor: GOLD, opacity: 0.5 }} />
+                </div>
+                <p className="text-base leading-relaxed text-center" style={{ color: TEXT, fontFamily: '"Cormorant Garamond", serif' }}>
                   {section.body}
                 </p>
               </div>
@@ -82,3 +110,5 @@ export default function RustyInfo() {
     </div>
   );
 }
+
+export default RustyInfo;
