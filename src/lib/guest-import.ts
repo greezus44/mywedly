@@ -2,11 +2,10 @@ import * as XLSX from "xlsx";
 
 export type ParsedRow = Record<string, string>;
 
-export type GuestField = "full_name" | "access_code" | "group_name" | null;
+export type GuestField = "full_name" | "group_name" | null;
 
 export const FIELD_LABELS: Record<Exclude<GuestField, null>, string> = {
   full_name: "Guest name",
-  access_code: "Password / Access code",
   group_name: "Guest group",
 };
 
