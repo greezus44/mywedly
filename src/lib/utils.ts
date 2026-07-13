@@ -21,3 +21,17 @@ export function getCountdown(targetDate: string | null): { days: number; hours: 
 }
 
 export function cn(...classes: (string | false | null | undefined)[]): string { return classes.filter(Boolean).join(" "); }
+
+export function generateToken(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let token = "";
+  for (let i = 0; i < 32; i++) token += chars[Math.floor(Math.random() * chars.length)];
+  return token;
+}
+
+export function getDeviceType(): "mobile" | "tablet" | "desktop" {
+  const ua = navigator.userAgent;
+  if (/Mobile|Android|iPhone|iPod/.test(ua)) return "mobile";
+  if (/iPad|Tablet/.test(ua)) return "tablet";
+  return "desktop";
+}

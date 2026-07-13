@@ -28,3 +28,18 @@ export const Toggle = ({ checked, onChange, label }: { checked: boolean; onChang
     {label && <span className="font-ui text-sm text-[var(--color-text)]">{label}</span>}
   </label>
 );
+
+export const ColorInput = ({ value, onChange, label }: { value: string; onChange: (v: string) => void; label?: string }) => (
+  <div className="flex items-center gap-2">
+    <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer" />
+    <input type="text" value={value} onChange={(e) => onChange(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg font-ui text-sm text-gray-700" />
+    {label && <span className="font-ui text-xs text-gray-500 whitespace-nowrap">{label}</span>}
+  </div>
+);
+
+export const RangeInput = ({ value, onChange, min = 0, max = 100, step = 1, label }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; label?: string }) => (
+  <div className="space-y-1">
+    {label && <div className="flex items-center justify-between"><span className="font-ui text-xs text-gray-500">{label}</span><span className="font-ui text-xs text-gray-400">{value}</span></div>}
+    <input type="range" value={value} onChange={(e) => onChange(Number(e.target.value))} min={min} max={max} step={step} className="w-full accent-indigo-500" />
+  </div>
+);

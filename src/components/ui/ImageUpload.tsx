@@ -20,16 +20,16 @@ export function ImageUpload({ value, onChange, label, bucket = "wedding-images",
   };
   return (
     <div className={className}>
-      {label && <label className="block font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)] mb-2">{label}</label>}
+      {label && <label className="block font-ui text-xs font-medium text-gray-500 mb-2">{label}</label>}
       {value ? (
         <div className="relative group">
-          <img src={value} alt="" className="w-full h-40 object-cover rounded-lg border border-[var(--color-border)]/20" />
+          <img src={value} alt="" className="w-full h-40 object-cover rounded-lg border border-gray-200" />
           <button onClick={() => onChange(null)} className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X size={14} /></button>
         </div>
       ) : (
-        <label className="flex flex-col items-center justify-center h-40 border-2 border-dashed border-[var(--color-border)]/30 rounded-lg cursor-pointer hover:border-[var(--color-primary)] transition-colors">
-          <Upload size={20} className="text-[var(--color-text-muted)] mb-2" />
-          <span className="font-ui text-xs text-[var(--color-text-muted)]">{uploading ? "Uploading..." : "Click to upload"}</span>
+        <label className="flex flex-col items-center justify-center h-40 border-2 border-dashed border-gray-200 rounded-lg cursor-pointer hover:border-indigo-400 transition-colors">
+          <Upload size={20} className="text-gray-400 mb-2" />
+          <span className="font-ui text-xs text-gray-400">{uploading ? "Uploading..." : "Click to upload"}</span>
           <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])} />
         </label>
       )}
@@ -40,12 +40,12 @@ export function ImageUpload({ value, onChange, label, bucket = "wedding-images",
 export function VideoUpload({ value, onChange, label, className }: { value: string | null; onChange: (v: string | null) => void; label?: string; className?: string }) {
   return (
     <div className={className}>
-      {label && <label className="block font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)] mb-2">{label}</label>}
-      <input type="text" value={value || ""} onChange={(e) => onChange(e.target.value || null)} placeholder="Video URL (mp4)" className="w-full px-4 py-3 bg-[var(--color-surface)] border border-[var(--color-border)]/30 text-[var(--color-text)] font-ui text-sm rounded-lg focus:outline-none focus:border-[var(--color-primary)]" />
+      {label && <label className="block font-ui text-xs font-medium text-gray-500 mb-2">{label}</label>}
+      <input type="text" value={value || ""} onChange={(e) => onChange(e.target.value || null)} placeholder="Video URL (mp4)" className="w-full px-4 py-3 bg-white border border-gray-200 text-gray-700 font-ui text-sm rounded-lg focus:outline-none focus:border-indigo-400" />
     </div>
   );
 }
 
 export function FormField({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
-  return <div><label className="block font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)] mb-2">{label}</label>{children}{hint && <p className="font-ui text-xs text-[var(--color-text-muted)] mt-1">{hint}</p>}</div>;
+  return <div><label className="block font-ui text-xs font-medium text-gray-500 mb-2">{label}</label>{children}{hint && <p className="font-ui text-xs text-gray-400 mt-1">{hint}</p>}</div>;
 }

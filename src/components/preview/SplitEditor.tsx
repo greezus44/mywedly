@@ -62,11 +62,11 @@ export function SplitEditor({ title, children, preview }: { title: string; child
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-white border-b border-gray-100 flex-wrap">
-        <span className="font-ui text-xs uppercase tracking-wider-luxe text-gray-400 hidden md:inline">{title}</span>
+        <span className="font-ui text-xs font-medium text-gray-400 hidden md:inline">{title}</span>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="inline-flex items-center gap-1 bg-gray-100 rounded-lg p-1">
             {([["desktop", Monitor], ["tablet", Tablet], ["mobile", Smartphone]] as const).map(([type, Icon]) => (
-              <button key={type} onClick={() => { setDevice(type); setOrientation("portrait"); }} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-ui font-medium transition-all", device === type ? "bg-white shadow-sm text-[var(--color-primary)]" : "text-gray-500 hover:text-gray-700")}>
+              <button key={type} onClick={() => { setDevice(type); setOrientation("portrait"); }} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-ui font-medium transition-all", device === type ? "bg-white shadow-sm text-indigo-600" : "text-gray-500 hover:text-gray-700")}>
                 <Icon size={14} /><span className="hidden sm:inline">{type.charAt(0).toUpperCase() + type.slice(1)}</span>
               </button>
             ))}
@@ -78,15 +78,15 @@ export function SplitEditor({ title, children, preview }: { title: string; child
           )}
           <div className="inline-flex items-center gap-1 bg-gray-100 rounded-lg p-1">
             {(["fit", "50", "75", "100", "125"] as ZoomLevel[]).map((l) => (
-              <button key={l} onClick={() => setZoom(l)} className={cn("px-2.5 py-1.5 rounded-md text-xs font-ui font-medium transition-all", zoom === l ? "bg-white shadow-sm text-[var(--color-primary)]" : "text-gray-500 hover:text-gray-700")}>{l === "fit" ? "Fit" : `${l}%`}</button>
+              <button key={l} onClick={() => setZoom(l)} className={cn("px-2.5 py-1.5 rounded-md text-xs font-ui font-medium transition-all", zoom === l ? "bg-white shadow-sm text-indigo-600" : "text-gray-500 hover:text-gray-700")}>{l === "fit" ? "Fit" : `${l}%`}</button>
             ))}
           </div>
           <button onClick={() => setFullscreen(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-ui font-medium text-gray-600 transition-all"><Maximize2 size={14} /></button>
         </div>
       </div>
       <div className="lg:hidden flex items-center gap-1 p-1 bg-gray-100 border-b border-gray-100">
-        <button onClick={() => setMobileView("edit")} className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-ui font-medium transition-all", mobileView === "edit" ? "bg-white shadow-sm text-[var(--color-primary)]" : "text-gray-500")}><Edit3 size={14} /> Edit</button>
-        <button onClick={() => setMobileView("preview")} className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-ui font-medium transition-all", mobileView === "preview" ? "bg-white shadow-sm text-[var(--color-primary)]" : "text-gray-500")}><Eye size={14} /> Preview</button>
+        <button onClick={() => setMobileView("edit")} className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-ui font-medium transition-all", mobileView === "edit" ? "bg-white shadow-sm text-indigo-600" : "text-gray-500")}><Edit3 size={14} /> Edit</button>
+        <button onClick={() => setMobileView("preview")} className={cn("flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-ui font-medium transition-all", mobileView === "preview" ? "bg-white shadow-sm text-indigo-600" : "text-gray-500")}><Eye size={14} /> Preview</button>
       </div>
       <div className="flex-1 flex overflow-hidden">
         <div className={cn("w-full lg:w-[420px] lg:flex-shrink-0 overflow-y-auto p-6 bg-white border-r border-gray-100", mobileView === "edit" ? "block" : "hidden lg:block")}>{children}</div>

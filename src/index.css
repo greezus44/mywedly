@@ -80,6 +80,21 @@
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
+/* Dashboard-specific theme - always white/clean, never affected by wedding theme */
+.dash-root {
+  --dash-bg: #fafafa;
+  --dash-surface: #ffffff;
+  --dash-border: #e5e7eb;
+  --dash-text: #1f2937;
+  --dash-text-muted: #6b7280;
+  --dash-accent: #6366f1;
+  --dash-accent-light: #818cf8;
+  --dash-accent-bg: #eef2ff;
+  --dash-radius: 10px;
+  --dash-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --dash-shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
+}
+
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fadeInUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fadeInDown { from { opacity: 0; transform: translateY(-24px); } to { opacity: 1; transform: translateY(0); } }

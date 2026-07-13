@@ -1,42 +1,30 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Wedding, type Guest } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Label, Select, Toggle } from "../../components/ui/Input";
+import { Input, Textarea, Select, Toggle } from "../../components/ui/Input";
 import { Card, Badge, Modal, EmptyState, Toast } from "../../components/ui/index";
 import { FormField } from "../../components/ui/ImageUpload";
-import { formatDate } from "../../lib/utils";
-import { Plus, Pencil, Trash2, Search, Users, Mail, Phone, Download, Save } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Users } from "lucide-react";
 
-const emptyGuest = (weddingId: string): Omit<Guest, "id" | "created_at"> => ({
-  wedding_id: weddingId,
-  full_name: "",
-  email: null,
-  phone: null,
-  group_label: null,
-  tag: null,
-  plus_one_allowed: false,
-  address: null,
-  notes: null,
-  invite_code: Math.random().toString(36).substring(2, 8).toUpperCase(),
-  group_id: null,
-  username: "",
-  first_name: null,
-  last_name: null,
-  rsvp_status: "pending",
-  dietary_requirements: null,
-});
+const EMPTY_GUEST: Partial<Guest> = {
+  full_name: "", email: "", phone: "", group_label: "", tag: "", plus_one_allowed: false,
+  address: "", notes: "", username: "", first_name: "", last_name: "", rsvp_status: "pending",
+};
+
+const STATUS_VARIANTS: Record<string, "default" | "success" | "warning" | "error"> = {
+  pending: "warning", accepted: "success", declined: "error", tentative: "default",
+};
 
 export function GuestsPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Partial<Guest> | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const { data: wedding, isLoading: weddingLoading, error: weddingError } = useQuery({
+  const { data: wedding, isLoading: wLoading, error: wError } = useQuery<Wedding>({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -47,45 +35,33 @@ export function GuestsPage() {
     },
   });
 
-  const { data: guests = [], isLoading: guestsLoading } = useQuery({
+  const { data: guests = [], isLoading: gLoading } = useQuery<Guest[]>({
     queryKey: ["guests", wedding?.id],
     queryFn: async () => {
       if (!wedding) return [];
-      const { data, error } = await supabase
-        .from("guests")
-        .select("*")
-        .eq("wedding_id", wedding.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as Guest[];
+      const { data } = await supabase.from("guests").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false });
+      return (data || []) as Guest[];
     },
     enabled: !!wedding,
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: Omit<Guest, "id" | "created_at">) => {
-      const { error } = await supabase.from("guests").insert(data);
+    mutationFn: async (g: Partial<Guest>) => {
+      if (!wedding) throw new Error("No wedding");
+      const { error } = await supabase.from("guests").insert({ ...g, wedding_id: wedding.id });
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guests"] });
-      setToast({ message: "Guest added", type: "success" });
-      setIsModalOpen(false);
-    },
-    onError: (err) => setToast({ message: err.message || "Failed to add guest", type: "error" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["guests", wedding?.id] }); setToast({ message: "Guest created", type: "success" }); setModalOpen(false); },
+    onError: () => setToast({ message: "Failed to create guest", type: "error" }),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<Guest> }) => {
-      const { error } = await supabase.from("guests").update(data).eq("id", id);
+    mutationFn: async ({ id, ...g }: Partial<Guest> & { id: string }) => {
+      const { error } = await supabase.from("guests").update(g).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guests"] });
-      setToast({ message: "Guest updated", type: "success" });
-      setIsModalOpen(false);
-    },
-    onError: (err) => setToast({ message: err.message || "Failed to update guest", type: "error" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["guests", wedding?.id] }); setToast({ message: "Guest updated", type: "success" }); setModalOpen(false); },
+    onError: () => setToast({ message: "Failed to update guest", type: "error" }),
   });
 
   const deleteMutation = useMutation({
@@ -93,81 +69,38 @@ export function GuestsPage() {
       const { error } = await supabase.from("guests").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guests"] });
-      setToast({ message: "Guest deleted", type: "success" });
-    },
-    onError: (err) => setToast({ message: err.message || "Failed to delete guest", type: "error" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["guests", wedding?.id] }); setToast({ message: "Guest deleted", type: "success" }); },
+    onError: () => setToast({ message: "Failed to delete guest", type: "error" }),
   });
 
-  const filteredGuests = useMemo(() => {
-    return guests.filter((g) => {
-      const matchesSearch =
-        !search ||
-        g.full_name.toLowerCase().includes(search.toLowerCase()) ||
-        (g.email || "").toLowerCase().includes(search.toLowerCase()) ||
-        (g.invite_code || "").toLowerCase().includes(search.toLowerCase());
-      const matchesStatus = statusFilter === "all" || g.rsvp_status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [guests, search, statusFilter]);
-
-  const stats = useMemo(() => ({
-    total: guests.length,
-    accepted: guests.filter((g) => g.rsvp_status === "accepted").length,
-    pending: guests.filter((g) => g.rsvp_status === "pending").length,
-    declined: guests.filter((g) => g.rsvp_status === "declined").length,
-  }), [guests]);
-
-  const handleAdd = () => {
-    if (!wedding) return;
-    setEditingGuest(null);
-    setIsModalOpen(true);
+  const openCreate = () => { setEditing({ ...EMPTY_GUEST }); setModalOpen(true); };
+  const openEdit = (g: Guest) => { setEditing({ ...g }); setModalOpen(true); };
+  const handleSave = () => {
+    if (!editing) return;
+    if (editing.id) updateMutation.mutate(editing as Guest);
+    else createMutation.mutate(editing);
   };
 
-  const handleEdit = (guest: Guest) => {
-    setEditingGuest(guest);
-    setIsModalOpen(true);
-  };
+  const filtered = guests.filter((g) => {
+    const q = search.toLowerCase();
+    return !q || g.full_name.toLowerCase().includes(q) || (g.email || "").toLowerCase().includes(q) || (g.username || "").toLowerCase().includes(q) || (g.group_label || "").toLowerCase().includes(q);
+  });
 
-  const handleDelete = (id: string) => {
-    if (confirm("Delete this guest? This cannot be undone.")) {
-      deleteMutation.mutate(id);
-    }
-  };
-
-  const handleExport = () => {
-    const csv = [
-      ["Full Name", "Email", "Phone", "Invite Code", "RSVP Status", "Group", "Plus One"].join(","),
-      ...filteredGuests.map((g) =>
-        [g.full_name, g.email || "", g.phone || "", g.invite_code, g.rsvp_status, g.group_label || "", g.plus_one_allowed ? "Yes" : "No"]
-          .map((v) => `"${v}"`).join(",")
-      ),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "guests.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  if (weddingLoading || guestsLoading) {
+  if (wLoading) {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-full p-8">
-          <div className="font-ui text-sm text-gray-400">Loading guests...</div>
+          <p className="font-ui text-sm text-gray-500">Loading guests...</p>
         </div>
       </AdminLayout>
     );
   }
 
-  if (weddingError || !wedding) {
+  if (wError || !wedding) {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-full p-8">
-          <p className="font-ui text-sm text-red-500">Unable to load wedding data</p>
+          <p className="font-ui text-sm text-red-500">Unable to load wedding data.</p>
         </div>
       </AdminLayout>
     );
@@ -175,236 +108,138 @@ export function GuestsPage() {
 
   return (
     <AdminLayout>
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto p-6 md:p-8">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-            <div>
-              <h1 className="font-heading text-2xl text-[var(--color-text)]">Guests</h1>
-              <p className="font-ui text-sm text-[var(--color-text-muted)]">{stats.total} total · {stats.accepted} accepted · {stats.pending} pending</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleExport} disabled={filteredGuests.length === 0}>
-                <Download size={14} className="mr-1.5" />
-                Export
-              </Button>
-              <Button variant="primary" size="sm" onClick={handleAdd}>
-                <Plus size={14} className="mr-1.5" />
-                Add Guest
-              </Button>
-            </div>
+      <div className="p-6 lg:p-8 overflow-y-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="font-ui text-xl font-bold text-gray-900">Guests</h1>
+            <p className="font-ui text-sm text-gray-500 mt-1">{guests.length} total guests</p>
           </div>
-
-          {/* Filters */}
-          <div className="flex items-center gap-3 mb-6 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name, email, or invite code..."
-                className="pl-10"
-              />
-            </div>
-            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-auto">
-              <option value="all">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="accepted">Accepted</option>
-              <option value="declined">Declined</option>
-              <option value="tentative">Tentative</option>
-            </Select>
-          </div>
-
-          {/* Guest list */}
-          {filteredGuests.length === 0 ? (
-            <Card className="p-0">
-              <EmptyState
-                icon={<Users size={32} />}
-                title={search || statusFilter !== "all" ? "No guests found" : "No guests yet"}
-                description={search || statusFilter !== "all" ? "Try adjusting your filters" : "Add your first guest to start managing your guest list."}
-                action={!search && statusFilter === "all" ? <Button variant="primary" size="sm" onClick={handleAdd}><Plus size={14} className="mr-1.5" />Add Guest</Button> : undefined}
-              />
-            </Card>
-          ) : (
-            <div className="space-y-2">
-              {filteredGuests.map((guest) => (
-                <Card key={guest.id} className="p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center flex-shrink-0">
-                        <span className="font-heading text-sm text-[var(--color-primary)]">
-                          {guest.full_name.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <h3 className="font-heading text-base text-[var(--color-text)] truncate">{guest.full_name}</h3>
-                          <Badge variant={
-                            guest.rsvp_status === "accepted" ? "success" :
-                            guest.rsvp_status === "declined" ? "error" :
-                            guest.rsvp_status === "tentative" ? "warning" : "default"
-                          }>
-                            {guest.rsvp_status}
-                          </Badge>
-                          {guest.plus_one_allowed && <Badge variant="default">+1</Badge>}
-                        </div>
-                        <div className="flex items-center gap-4 flex-wrap">
-                          {guest.email && (
-                            <span className="flex items-center gap-1 font-ui text-xs text-[var(--color-text-muted)]">
-                              <Mail size={12} /> {guest.email}
-                            </span>
-                          )}
-                          {guest.phone && (
-                            <span className="flex items-center gap-1 font-ui text-xs text-[var(--color-text-muted)]">
-                              <Phone size={12} /> {guest.phone}
-                            </span>
-                          )}
-                          <span className="font-ui text-xs text-[var(--color-text-muted)]">
-                            Code: {guest.invite_code}
-                          </span>
-                          {guest.group_label && (
-                            <span className="font-ui text-xs text-[var(--color-text-muted)]">
-                              Group: {guest.group_label}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <button onClick={() => handleEdit(guest)} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                        <Pencil size={14} className="text-gray-500" />
-                      </button>
-                      <button onClick={() => handleDelete(guest.id)} className="p-2 hover:bg-red-50 rounded-lg transition-colors">
-                        <Trash2 size={14} className="text-red-500" />
-                      </button>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          )}
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white font-ui text-xs font-medium uppercase tracking-wider rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <Plus size={14} /> Add Guest
+          </button>
         </div>
+
+        <div className="relative mb-4">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, email, username, or group..."
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-lg font-ui text-sm text-gray-700 focus:outline-none focus:border-indigo-400"
+          />
+        </div>
+
+        {gLoading ? (
+          <p className="font-ui text-sm text-gray-500">Loading guests...</p>
+        ) : filtered.length === 0 ? (
+          <Card className="p-0">
+            <EmptyState
+              icon={<Users size={40} />}
+              title={search ? "No guests found" : "No guests yet"}
+              description={search ? "Try a different search term." : "Add your first guest to start managing invitations."}
+              action={!search ? <Button variant="outline" size="sm" onClick={openCreate}><Plus size={14} className="mr-1.5" /> Add Guest</Button> : undefined}
+            />
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {filtered.map((guest) => (
+              <Card key={guest.id} className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-ui text-sm font-semibold text-gray-900 truncate">{guest.full_name}</h3>
+                      <Badge variant={STATUS_VARIANTS[guest.rsvp_status] || "default"}>{guest.rsvp_status}</Badge>
+                      {guest.plus_one_allowed && <Badge variant="default">+1</Badge>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      <p className="font-ui text-xs text-gray-500">@{guest.username}</p>
+                      {guest.email && <p className="font-ui text-xs text-gray-500">{guest.email}</p>}
+                      {guest.phone && <p className="font-ui text-xs text-gray-500">{guest.phone}</p>}
+                      {guest.group_label && <p className="font-ui text-xs text-gray-500">Group: {guest.group_label}</p>}
+                    </div>
+                    {guest.tag && <p className="font-ui text-xs text-indigo-600 mt-1">Tag: {guest.tag}</p>}
+                  </div>
+                  <div className="flex items-center gap-1 ml-2">
+                    <button onClick={() => openEdit(guest)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Pencil size={14} /></button>
+                    <button onClick={() => deleteMutation.mutate(guest.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={14} /></button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
-      {isModalOpen && (
-        <GuestModal
-          guest={editingGuest}
-          weddingId={wedding.id}
-          onClose={() => setIsModalOpen(false)}
-          onSave={(data) => {
-            if (editingGuest) {
-              updateMutation.mutate({ id: editingGuest.id, data });
-            } else {
-              createMutation.mutate(data);
-            }
-          }}
-          isSaving={createMutation.isPending || updateMutation.isPending}
-        />
-      )}
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing?.id ? "Edit Guest" : "New Guest"} maxWidth="max-w-xl">
+        {editing && (
+          <div className="space-y-4">
+            <FormField label="Full Name">
+              <Input value={editing.full_name || ""} onChange={(e) => setEditing((p) => ({ ...p, full_name: e.target.value }))} placeholder="John Doe" />
+            </FormField>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="First Name">
+                <Input value={editing.first_name || ""} onChange={(e) => setEditing((p) => ({ ...p, first_name: e.target.value }))} placeholder="John" />
+              </FormField>
+              <FormField label="Last Name">
+                <Input value={editing.last_name || ""} onChange={(e) => setEditing((p) => ({ ...p, last_name: e.target.value }))} placeholder="Doe" />
+              </FormField>
+            </div>
+            <FormField label="Username" hint="Used for guest sign-in">
+              <Input value={editing.username || ""} onChange={(e) => setEditing((p) => ({ ...p, username: e.target.value }))} placeholder="johndoe" />
+            </FormField>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Email">
+                <Input type="email" value={editing.email || ""} onChange={(e) => setEditing((p) => ({ ...p, email: e.target.value }))} placeholder="john@example.com" />
+              </FormField>
+              <FormField label="Phone">
+                <Input value={editing.phone || ""} onChange={(e) => setEditing((p) => ({ ...p, phone: e.target.value }))} placeholder="+60 12 345 6789" />
+              </FormField>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Group Label">
+                <Input value={editing.group_label || ""} onChange={(e) => setEditing((p) => ({ ...p, group_label: e.target.value }))} placeholder="Family" />
+              </FormField>
+              <FormField label="Tag">
+                <Input value={editing.tag || ""} onChange={(e) => setEditing((p) => ({ ...p, tag: e.target.value }))} placeholder="VIP" />
+              </FormField>
+            </div>
+            <FormField label="Address">
+              <Textarea value={editing.address || ""} onChange={(e) => setEditing((p) => ({ ...p, address: e.target.value }))} placeholder="Guest address" />
+            </FormField>
+            <FormField label="Notes">
+              <Textarea value={editing.notes || ""} onChange={(e) => setEditing((p) => ({ ...p, notes: e.target.value }))} placeholder="Internal notes" />
+            </FormField>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="RSVP Status">
+                <Select value={editing.rsvp_status || "pending"} onChange={(e) => setEditing((p) => ({ ...p, rsvp_status: e.target.value }))}>
+                  <option value="pending">Pending</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="declined">Declined</option>
+                  <option value="tentative">Tentative</option>
+                </Select>
+              </FormField>
+              <FormField label="Plus One Allowed">
+                <div className="pt-2"><Toggle checked={editing.plus_one_allowed ?? false} onChange={(v) => setEditing((p) => ({ ...p, plus_one_allowed: v }))} /></div>
+              </FormField>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button variant="ghost" size="sm" onClick={() => setModalOpen(false)}>Cancel</Button>
+              <button
+                onClick={handleSave}
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 bg-indigo-600 text-white font-ui text-xs font-medium uppercase tracking-wider rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              >
+                {editing.id ? "Update" : "Create"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AdminLayout>
-  );
-}
-
-function GuestModal({
-  guest,
-  weddingId,
-  onClose,
-  onSave,
-  isSaving,
-}: {
-  guest: Guest | null;
-  weddingId: string;
-  onClose: () => void;
-  onSave: (data: Omit<Guest, "id" | "created_at">) => void;
-  isSaving: boolean;
-}) {
-  const [form, setForm] = useState<Omit<Guest, "id" | "created_at">>(
-    guest ? { ...guest } : emptyGuest(weddingId)
-  );
-
-  const update = (key: string, value: unknown) => setForm((prev) => ({ ...prev, [key]: value }));
-
-  const handleSubmit = () => {
-    if (!form.full_name.trim()) return;
-    const nameParts = form.full_name.trim().split(" ");
-    const firstName = nameParts[0];
-    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : null;
-    onSave({
-      ...form,
-      first_name: firstName,
-      last_name: lastName,
-      username: form.username || firstName.toLowerCase() + Math.floor(Math.random() * 1000),
-    });
-  };
-
-  return (
-    <Modal open={true} onClose={onClose} title={guest ? "Edit Guest" : "Add Guest"} maxWidth="max-w-xl">
-      <div className="space-y-4">
-        <FormField label="Full Name">
-          <Input value={form.full_name} onChange={(e) => update("full_name", e.target.value)} placeholder="Jane Doe" />
-        </FormField>
-
-        <div className="grid grid-cols-2 gap-3">
-          <FormField label="Email">
-            <Input type="email" value={form.email || ""} onChange={(e) => update("email", e.target.value || null)} placeholder="jane@example.com" />
-          </FormField>
-          <FormField label="Phone">
-            <Input value={form.phone || ""} onChange={(e) => update("phone", e.target.value || null)} placeholder="+60 12 345 6789" />
-          </FormField>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <FormField label="Group Label">
-            <Input value={form.group_label || ""} onChange={(e) => update("group_label", e.target.value || null)} placeholder="Family" />
-          </FormField>
-          <FormField label="Tag">
-            <Input value={form.tag || ""} onChange={(e) => update("tag", e.target.value || null)} placeholder="VIP" />
-          </FormField>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <FormField label="Invite Code">
-            <Input value={form.invite_code} onChange={(e) => update("invite_code", e.target.value)} placeholder="ABC123" />
-          </FormField>
-          <FormField label="RSVP Status">
-            <Select value={form.rsvp_status} onChange={(e) => update("rsvp_status", e.target.value)}>
-              <option value="pending">Pending</option>
-              <option value="accepted">Accepted</option>
-              <option value="declined">Declined</option>
-              <option value="tentative">Tentative</option>
-            </Select>
-          </FormField>
-        </div>
-
-        <FormField label="Address">
-          <Textarea value={form.address || ""} onChange={(e) => update("address", e.target.value || null)} placeholder="Mailing address" rows={2} />
-        </FormField>
-
-        <FormField label="Dietary Requirements">
-          <Input value={form.dietary_requirements || ""} onChange={(e) => update("dietary_requirements", e.target.value || null)} placeholder="Vegetarian, allergies, etc." />
-        </FormField>
-
-        <FormField label="Notes">
-          <Textarea value={form.notes || ""} onChange={(e) => update("notes", e.target.value || null)} placeholder="Internal notes about this guest" rows={2} />
-        </FormField>
-
-        <div className="flex items-center justify-between p-3 bg-[var(--color-bg-light)] rounded-lg">
-          <div>
-            <p className="font-ui text-sm text-[var(--color-text)] font-medium">Plus One Allowed</p>
-            <p className="font-ui text-xs text-[var(--color-text-muted)]">Allow this guest to bring a plus one</p>
-          </div>
-          <Toggle checked={form.plus_one_allowed} onChange={(v) => update("plus_one_allowed", v)} />
-        </div>
-
-        <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-100">
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" size="sm" onClick={handleSubmit} disabled={isSaving || !form.full_name.trim()}>
-            <Save size={14} className="mr-1.5" />
-            {isSaving ? "Saving..." : guest ? "Update Guest" : "Add Guest"}
-          </Button>
-        </div>
-      </div>
-    </Modal>
   );
 }

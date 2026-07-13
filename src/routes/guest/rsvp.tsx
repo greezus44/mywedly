@@ -1,349 +1,374 @@
-import { useState, useEffect, useCallback } from "react";
-import { useParams } from "react-router-dom";
-import { CalendarDays, Clock, MapPin, Check, X, Loader2 } from "lucide-react";
-import { supabase, type WeddingEvent, type Rsvp } from "../../lib/supabase";
-import { useGuestAuth } from "../../lib/guest-auth";
+import { useState, useEffect, type CSSProperties } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { Calendar, Clock, MapPin, Check, X, Heart, Loader2 } from "lucide-react";
+import { supabase, type WeddingEvent, type Rsvp, type GuestEventInvite, type GroupEventInvite } from "../../lib/supabase";
 import { useLang } from "../../lib/lang-context";
-import { getTheme, themeToCssVars } from "../../lib/theme";
+import { useGuestAuth, GuestAuthProvider } from "../../lib/guest-auth";
+import { themeToCssVars, getTheme, coverToCssVars, getCoverConfig, getCoverContent } from "../../lib/theme";
 import { formatDate, formatTime, cn } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
 
-interface EventWithRsvp extends WeddingEvent {
-  rsvpStatus: Rsvp["status"] | "pending";
-  rsvpId: string | null;
-  submitting: boolean;
-}
-
-export function Rsvp() {
-  const { slug } = useParams<{ slug: string }>();
-  const { session } = useGuestAuth();
+function RsvpInner() {
+  const navigate = useNavigate();
+  const params = useParams();
+  const slug = params.slug || "";
+  const { session, loading } = useGuestAuth();
   const { lang, t } = useLang();
-  const [events, setEvents] = useState<EventWithRsvp[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchEvents = useCallback(async () => {
+  const [events, setEvents] = useState<WeddingEvent[]>([]);
+  const [rsvps, setRsvps] = useState<Rsvp[]>([]);
+  const [fetching, setFetching] = useState(true);
+  const [submitting, setSubmitting] = useState<string | null>(null);
+
+  const wedding = session?.wedding ?? null;
+
+  useEffect(() => {
+    if (loading) return;
+    if (!session) {
+      navigate(`/w/${slug}/login`, { replace: true });
+    }
+  }, [session, loading, slug, navigate]);
+
+  useEffect(() => {
     if (!session) return;
-    const { guest, wedding } = session;
+    (async () => {
+      setFetching(true);
+      const guest = session.guest;
+      const w = session.wedding;
 
-    try {
-      // 1. Fetch public events
-      const { data: publicEvents, error: pubErr } = await supabase
-        .from("events")
+      // Fetch all public events for the wedding
+      const { data: publicEvents } = await supabase
+        .from("wedding_events")
         .select("*")
-        .eq("wedding_id", wedding.id)
+        .eq("wedding_id", w.id)
         .eq("visibility", "public")
         .order("sort_order", { ascending: true });
 
-      if (pubErr) throw pubErr;
-
-      // 2. Fetch events invited via guest_event_invites
+      // Fetch guest-specific event invites
       const { data: guestInvites } = await supabase
         .from("guest_event_invites")
         .select("event_id")
         .eq("guest_id", guest.id);
 
-      let invitedEvents: WeddingEvent[] = [];
-      if (guestInvites && guestInvites.length > 0) {
-        const eventIds = guestInvites.map((gi) => gi.event_id);
-        const { data: eventsByGuest, error: ebgErr } = await supabase
-          .from("events")
-          .select("*")
-          .in("id", eventIds)
-          .eq("wedding_id", wedding.id);
-        if (ebgErr) throw ebgErr;
-        invitedEvents = (eventsByGuest || []) as WeddingEvent[];
-      }
-
-      // 3. Fetch events invited via group_event_invites
-      let groupEvents: WeddingEvent[] = [];
+      // Fetch group event invites (if guest has a group_id)
+      let groupEventIds: string[] = [];
       if (guest.group_id) {
         const { data: groupInvites } = await supabase
           .from("group_event_invites")
           .select("event_id")
           .eq("group_id", guest.group_id);
-
-        if (groupInvites && groupInvites.length > 0) {
-          const groupEventIds = groupInvites.map((gi) => gi.event_id);
-          const { data: eventsByGroup, error: ebg2Err } = await supabase
-            .from("events")
-            .select("*")
-            .in("id", groupEventIds)
-            .eq("wedding_id", wedding.id);
-          if (ebg2Err) throw ebg2Err;
-          groupEvents = (eventsByGroup || []) as WeddingEvent[];
-        }
+        groupEventIds = (groupInvites as GroupEventInvite[] | null)?.map((g) => g.event_id) || [];
       }
 
-      // Merge & deduplicate
-      const allEventsMap = new Map<string, WeddingEvent>();
-      [...(publicEvents || []), ...invitedEvents, ...groupEvents].forEach((e) => {
-        allEventsMap.set(e.id, e as WeddingEvent);
-      });
-      const allEvents = Array.from(allEventsMap.values()).sort(
-        (a, b) => (a.sort_order || 0) - (b.sort_order || 0)
-      );
+      const guestEventIds = (guestInvites as GuestEventInvite[] | null)?.map((g) => g.event_id) || [];
+      const publicIds = (publicEvents as WeddingEvent[] | null)?.map((e) => e.id) || [];
 
-      // 4. Fetch existing RSVPs for this guest
+      // Merge: public + guest-specific + group-specific
+      const allEventIds = new Set([...publicIds, ...guestEventIds, ...groupEventIds]);
+
+      // Fetch all events by IDs
+      const idsArray = Array.from(allEventIds);
+      let allEvents: WeddingEvent[] = [];
+      if (idsArray.length > 0) {
+        const { data: evts } = await supabase
+          .from("wedding_events")
+          .select("*")
+          .in("id", idsArray)
+          .order("sort_order", { ascending: true });
+        allEvents = (evts as WeddingEvent[] | null) || [];
+      }
+
+      setEvents(allEvents);
+
+      // Fetch existing RSVPs for this guest
       const { data: existingRsvps } = await supabase
         .from("rsvps")
         .select("*")
-        .eq("guest_id", guest.id)
-        .eq("wedding_id", wedding.id);
+        .eq("guest_id", guest.id);
+      setRsvps((existingRsvps as Rsvp[] | null) || []);
 
-      const rsvpMap = new Map<string, { id: string; status: Rsvp["status"] }>();
-      (existingRsvps || []).forEach((r) => {
-        if (r.event_id) {
-          rsvpMap.set(r.event_id, { id: r.id, status: (r as Rsvp).status });
-        }
-      });
-
-      const eventsWithRsvp: EventWithRsvp[] = allEvents.map((e) => {
-        const existing = rsvpMap.get(e.id);
-        return {
-          ...e,
-          rsvpStatus: existing?.status || "pending",
-          rsvpId: existing?.id || null,
-          submitting: false,
-        };
-      });
-
-      setEvents(eventsWithRsvp);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load events");
-    } finally {
-      setLoading(false);
-    }
+      setFetching(false);
+    })();
   }, [session]);
 
-  useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
+  const getRsvpForEvent = (eventId: string): Rsvp | undefined =>
+    rsvps.find((r) => r.event_id === eventId);
 
   const handleRsvp = async (eventId: string, status: "accepted" | "declined") => {
     if (!session) return;
-    const { guest, wedding } = session;
-    const eventIndex = events.findIndex((e) => e.id === eventId);
-    if (eventIndex === -1) return;
-
-    setEvents((prev) =>
-      prev.map((e, i) => (i === eventIndex ? { ...e, submitting: true } : e))
-    );
+    setSubmitting(eventId);
+    const guest = session.guest;
+    const w = session.wedding;
+    const existing = getRsvpForEvent(eventId);
 
     try {
-      const existing = events[eventIndex];
-      if (existing.rsvpId) {
+      if (existing) {
         // Update existing RSVP
-        const { error: updateErr } = await supabase
+        const { data, error } = await supabase
           .from("rsvps")
           .update({ status, updated_at: new Date().toISOString() })
-          .eq("id", existing.rsvpId);
-        if (updateErr) throw updateErr;
+          .eq("id", existing.id)
+          .select("*")
+          .single();
+        if (!error && data) {
+          setRsvps((prev) =>
+            prev.map((r) => (r.id === existing.id ? (data as Rsvp) : r))
+          );
+        }
       } else {
-        // Insert new RSVP
-        const { data: newRsvp, error: insertErr } = await supabase
+        // Create new RSVP
+        const { data, error } = await supabase
           .from("rsvps")
           .insert({
-            wedding_id: wedding.id,
+            wedding_id: w.id,
             guest_id: guest.id,
             guest_name: guest.full_name,
             guest_email: guest.email,
-            event_id: eventId,
             status,
+            event_id: eventId,
           })
-          .select("id")
-          .maybeSingle();
-        if (insertErr) throw insertErr;
-        existing.rsvpId = newRsvp?.id || null;
+          .select("*")
+          .single();
+        if (!error && data) {
+          setRsvps((prev) => [...prev, data as Rsvp]);
+        }
       }
-
-      setEvents((prev) =>
-        prev.map((e, i) =>
-          i === eventIndex
-            ? { ...e, rsvpStatus: status, submitting: false }
-            : e
-        )
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "RSVP failed");
-      setEvents((prev) =>
-        prev.map((e, i) => (i === eventIndex ? { ...e, submitting: false } : e))
-      );
+    } catch {
+      /* ignore */
     }
+    setSubmitting(null);
   };
 
-  if (!session) return null;
+  if (loading || !session) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: "var(--color-bg)" } as CSSProperties}
+      >
+        <Heart size={24} className="animate-pulse" style={{ color: "var(--color-primary)" }} />
+      </div>
+    );
+  }
 
-  const theme = getTheme(session.wedding);
-  const content = (session.wedding.content || {}) as Record<string, unknown>;
-  const draftContent = (session.wedding.draft_content || {}) as Record<string, never>;
-  const c = { ...content, ...draftContent };
-  const rsvpIntro = (c.rsvp_intro as string) || "";
-  const rsvpClosing = (c.rsvp_closing as string) || "";
+  const theme = getTheme(wedding);
+  const cover = getCoverConfig(wedding);
+  const content = getCoverContent(wedding);
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center px-6 py-16"
-      style={themeToCssVars(theme) as React.CSSProperties}
+      className="min-h-screen pb-16"
+      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover) } as CSSProperties}
     >
-      <div className="max-w-2xl w-full">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <p className="font-ui text-xs uppercase tracking-luxe text-[var(--color-text-muted)] mb-4 opacity-0-init animate-fade-in">
-            {t("invitation")}
-          </p>
-          <h1 className="font-script text-4xl md:text-5xl text-[var(--color-text)] mb-4 opacity-0-init animate-fade-in-up">
-            {t("rsvp")}
-          </h1>
-          <div className="flex items-center justify-center gap-4 opacity-0-init animate-fade-in-up delay-100">
-            <span className="h-px w-12 bg-[var(--color-primary)]/30" />
-            <span className="text-[var(--color-primary)] text-xs">✦</span>
-            <span className="h-px w-12 bg-[var(--color-primary)]/30" />
-          </div>
-          {rsvpIntro && (
-            <p className="font-body text-lg text-[var(--color-text)] leading-relaxed mt-6 opacity-0-init animate-fade-in-up delay-200">
-              {rsvpIntro}
-            </p>
-          )}
+      {/* Header */}
+      <section className="px-6 md:px-12 pt-12 md:pt-16 text-center animate-fade-in opacity-0-init">
+        <p
+          className="font-ui text-xs uppercase tracking-luxe mb-3"
+          style={{ color: "var(--color-primary)" }}
+        >
+          {t("rsvp")}
+        </p>
+        <h1
+          className="font-script text-3xl md:text-5xl mb-4"
+          style={{ color: "var(--color-text)" }}
+        >
+          {t("invitation")}
+        </h1>
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <div className="h-px w-12" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
+          <Heart size={14} style={{ color: "var(--color-primary)" }} />
+          <div className="h-px w-12" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
         </div>
-
-        {/* Loading */}
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 size={24} className="text-[var(--color-primary)] animate-spin" />
-          </div>
-        )}
-
-        {/* Error */}
-        {error && !loading && (
-          <p className="font-ui text-sm text-[var(--color-error)] text-center mb-6">{error}</p>
-        )}
-
-        {/* No events */}
-        {!loading && !error && events.length === 0 && (
-          <p className="font-body text-lg text-[var(--color-text-muted)] text-center py-12">
-            {t("noEvents")}
+        {content.rsvp_intro && (
+          <p
+            className="font-body text-base md:text-lg max-w-xl mx-auto leading-relaxed"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            {content.rsvp_intro}
           </p>
         )}
+      </section>
 
-        {/* Event cards */}
-        {!loading && events.length > 0 && (
+      {/* Events List */}
+      <section className="px-6 md:px-12 py-8 max-w-2xl mx-auto">
+        {fetching ? (
+          <div className="flex justify-center py-12">
+            <Loader2 size={28} className="animate-spin" style={{ color: "var(--color-primary)" }} />
+          </div>
+        ) : events.length === 0 ? (
+          <div className="text-center py-12 animate-fade-in opacity-0-init">
+            <p
+              className="font-ui text-sm uppercase tracking-wider-luxe"
+              style={{ color: "var(--color-text-muted)" }}
+            >
+              {t("noEvents")}
+            </p>
+          </div>
+        ) : (
           <div className="space-y-6">
-            {events.map((event, idx) => (
-              <div
-                key={event.id}
-                className={cn(
-                  "bg-[var(--color-surface)] border border-[var(--color-primary)]/15 p-6 md:p-8 opacity-0-init animate-fade-in-up",
-                  `delay-${Math.min(idx + 1, 5) * 100}`
-                )}
-                style={{ borderRadius: "8px" }}
-              >
-                {/* Event name */}
-                <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">
-                  {event.name}
-                </h2>
-                <p className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-primary)] mb-4">
-                  {event.kind}
-                </p>
+            {events.map((evt, idx) => {
+              const rsvp = getRsvpForEvent(evt.id);
+              const currentStatus = rsvp?.status || "pending";
+              const isSubmittingThis = submitting === evt.id;
 
-                {/* Event details */}
-                <div className="space-y-2 mb-6">
-                  {event.starts_at && (
-                    <>
-                      <div className="flex items-center gap-2 text-[var(--color-text)]">
-                        <CalendarDays size={14} className="text-[var(--color-primary)]" />
-                        <span className="font-body text-sm">
-                          {formatDate(event.starts_at, lang)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-[var(--color-text-muted)]">
-                        <Clock size={14} className="text-[var(--color-primary)]" />
-                        <span className="font-ui text-sm">
-                          {formatTime(event.starts_at, lang)}
-                        </span>
-                      </div>
-                    </>
+              const delayClass = ["delay-100", "delay-200", "delay-300", "delay-400", "delay-500"][Math.min(idx, 4)];
+
+              return (
+                <div
+                  key={evt.id}
+                  className={cn(
+                    "p-6 md:p-8 animate-fade-in-up opacity-0-init",
+                    delayClass
                   )}
-                  {event.venue_name && (
-                    <div className="flex items-start gap-2 text-[var(--color-text)]">
-                      <MapPin size={14} className="text-[var(--color-primary)] mt-0.5" />
-                      <span className="font-body text-sm">
-                        {event.venue_name}
-                        {event.venue_address && `, ${event.venue_address}`}
-                      </span>
-                    </div>
-                  )}
-                  {event.dress_code && (
-                    <p className="font-ui text-xs text-[var(--color-text-muted)] pl-6">
-                      {t("dressCode")}: {event.dress_code}
+                  style={{
+                    background: "var(--color-surface)",
+                    borderRadius: "var(--radius, 8px)",
+                    border: "1px solid var(--color-border)",
+                    borderColor: "color-mix(in srgb, var(--color-border) 20%, transparent)",
+                    boxShadow: "0 2px 12px rgba(184, 151, 58, 0.06)",
+                  }}
+                >
+                  {/* Event name */}
+                  <h2
+                    className="font-script text-2xl md:text-3xl mb-1"
+                    style={{ color: "var(--color-text)" }}
+                  >
+                    {evt.name}
+                  </h2>
+                  {evt.kind && (
+                    <p
+                      className="font-ui text-[10px] uppercase tracking-luxe mb-4"
+                      style={{ color: "var(--color-primary)" }}
+                    >
+                      {evt.kind}
                     </p>
                   )}
-                </div>
 
-                {/* Description */}
-                {event.description && (
-                  <p className="font-body text-sm text-[var(--color-text-muted)] leading-relaxed mb-6">
-                    {event.description}
-                  </p>
-                )}
-
-                {/* RSVP buttons */}
-                <div className="flex gap-3">
-                  <Button
-                    variant={event.rsvpStatus === "accepted" ? "primary" : "outline"}
-                    size="md"
-                    disabled={event.submitting}
-                    onClick={() => handleRsvp(event.id, "accepted")}
-                    className="flex-1"
-                  >
-                    {event.submitting ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : event.rsvpStatus === "accepted" ? (
-                      <>
-                        <Check size={14} className="mr-1.5" />
-                        {t("accepted")}
-                      </>
-                    ) : (
-                      t("accept")
+                  {/* Event details */}
+                  <div className="space-y-2 mb-6">
+                    {evt.starts_at && (
+                      <div className="flex items-center gap-2">
+                        <Calendar size={14} style={{ color: "var(--color-text-muted)" }} />
+                        <p
+                          className="font-ui text-xs uppercase tracking-wider-luxe"
+                          style={{ color: "var(--color-text)" }}
+                        >
+                          {formatDate(evt.starts_at, lang)}
+                        </p>
+                      </div>
                     )}
-                  </Button>
-                  <Button
-                    variant={event.rsvpStatus === "declined" ? "danger" : "outline"}
-                    size="md"
-                    disabled={event.submitting}
-                    onClick={() => handleRsvp(event.id, "declined")}
-                    className="flex-1"
-                  >
-                    {event.rsvpStatus === "declined" ? (
-                      <>
-                        <X size={14} className="mr-1.5" />
-                        {t("declined")}
-                      </>
-                    ) : (
-                      t("decline")
+                    {evt.starts_at && (
+                      <div className="flex items-center gap-2">
+                        <Clock size={14} style={{ color: "var(--color-text-muted)" }} />
+                        <p
+                          className="font-ui text-xs uppercase tracking-wider-luxe"
+                          style={{ color: "var(--color-text)" }}
+                        >
+                          {formatTime(evt.starts_at, lang)}
+                        </p>
+                      </div>
                     )}
-                  </Button>
-                </div>
+                    {evt.venue_name && (
+                      <div className="flex items-center gap-2">
+                        <MapPin size={14} style={{ color: "var(--color-text-muted)" }} />
+                        <p
+                          className="font-ui text-xs uppercase tracking-wider-luxe"
+                          style={{ color: "var(--color-text)" }}
+                        >
+                          {evt.venue_name}
+                        </p>
+                      </div>
+                    )}
+                    {evt.venue_address && (
+                      <p
+                        className="font-body text-sm pl-6"
+                        style={{ color: "var(--color-text-muted)" }}
+                      >
+                        {evt.venue_address}
+                      </p>
+                    )}
+                  </div>
 
-                {/* Pending indicator */}
-                {event.rsvpStatus === "pending" && !event.submitting && (
-                  <p className="font-ui text-xs text-[var(--color-text-muted)] text-center mt-3">
-                    {t("pending")}
-                  </p>
-                )}
-              </div>
-            ))}
+                  {/* Description */}
+                  {evt.description && (
+                    <p
+                      className="font-body text-sm leading-relaxed mb-6"
+                      style={{ color: "var(--color-text-muted)" }}
+                    >
+                      {evt.description}
+                    </p>
+                  )}
+
+                  {/* Current status */}
+                  {currentStatus !== "pending" && (
+                    <p
+                      className="font-ui text-xs uppercase tracking-wider-luxe mb-4"
+                      style={{
+                        color:
+                          currentStatus === "accepted"
+                            ? "var(--color-success)"
+                            : "var(--color-text-muted)",
+                      }}
+                    >
+                      {currentStatus === "accepted" ? t("accepted") : t("declined")}
+                    </p>
+                  )}
+
+                  {/* RSVP buttons */}
+                  <div className="flex gap-3">
+                    <Button
+                      variant={currentStatus === "accepted" ? "primary" : "outline"}
+                      size="md"
+                      onClick={() => handleRsvp(evt.id, "accepted")}
+                      disabled={isSubmittingThis}
+                      className="flex-1"
+                    >
+                      {isSubmittingThis ? (
+                        <Loader2 size={14} className="animate-spin mr-1" />
+                      ) : (
+                        <Check size={14} className="mr-1" />
+                      )}
+                      {t("accept")}
+                    </Button>
+                    <Button
+                      variant={currentStatus === "declined" ? "danger" : "outline"}
+                      size="md"
+                      onClick={() => handleRsvp(evt.id, "declined")}
+                      disabled={isSubmittingThis}
+                      className="flex-1"
+                    >
+                      {isSubmittingThis ? (
+                        <Loader2 size={14} className="animate-spin mr-1" />
+                      ) : (
+                        <X size={14} className="mr-1" />
+                      )}
+                      {t("decline")}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
-        {/* Closing */}
-        {rsvpClosing && !loading && events.length > 0 && (
-          <p className="font-body text-lg text-[var(--color-text)] leading-relaxed italic text-center mt-10 opacity-0-init animate-fade-in-up delay-500">
-            {rsvpClosing}
+        {/* Closing text */}
+        {content.rsvp_closing && (
+          <p
+            className="font-body text-sm md:text-base text-center mt-8 leading-relaxed animate-fade-in opacity-0-init delay-500"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            {content.rsvp_closing}
           </p>
         )}
-      </div>
+      </section>
     </div>
+  );
+}
+
+export function Rsvp() {
+  return (
+    <GuestAuthProvider>
+      <RsvpInner />
+    </GuestAuthProvider>
   );
 }
 

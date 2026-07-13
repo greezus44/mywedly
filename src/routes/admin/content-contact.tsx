@@ -5,18 +5,17 @@ import { AdminLayout } from "./admin-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { ContactPreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Label } from "../../components/ui/Input";
+import { Input, Textarea } from "../../components/ui/Input";
 import { Card, Toast } from "../../components/ui/index";
 import { FormField } from "../../components/ui/ImageUpload";
-import { Save, Eye, Phone, Mail, MapPin } from "lucide-react";
+import { Save, Send } from "lucide-react";
 
 export function ContentContactPage() {
   const queryClient = useQueryClient();
   const [content, setContent] = useState<WeddingContent>({});
-  const [previewWedding, setPreviewWedding] = useState<Wedding | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const { data: wedding, isLoading, error } = useQuery({
+  const { data: wedding, isLoading, error } = useQuery<Wedding>({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -29,47 +28,47 @@ export function ContentContactPage() {
 
   useEffect(() => {
     if (wedding) {
-      const draft = (wedding.draft_content || {}) as WeddingContent;
       const pub = (wedding.content || {}) as WeddingContent;
+      const draft = (wedding.draft_content || {}) as WeddingContent;
       setContent({ ...pub, ...draft });
     }
   }, [wedding]);
 
-  useEffect(() => {
-    if (wedding) {
-      setPreviewWedding({
-        ...wedding,
-        draft_content: content,
-        theme_config: wedding.draft_theme_config || wedding.theme_config,
-      } as Wedding);
-    }
-  }, [wedding, content]);
+  const update = (key: keyof WeddingContent, value: unknown) => setContent((p) => ({ ...p, [key]: value }));
 
-  const saveMutation = useMutation({
-    mutationFn: async (data: WeddingContent) => {
+  const saveDraftMutation = useMutation({
+    mutationFn: async () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
-      const { error } = await supabase
-        .from("weddings")
-        .update({ draft_content: data, updated_at: new Date().toISOString() })
-        .eq("created_by", user.user.id);
+      const { error } = await supabase.from("weddings").update({ draft_content: content }).eq("created_by", user.user.id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wedding"] });
-      setToast({ message: "Contact info saved to draft", type: "success" });
+      setToast({ message: "Draft saved", type: "success" });
     },
-    onError: (err) => setToast({ message: err.message || "Failed to save", type: "error" }),
+    onError: () => setToast({ message: "Failed to save draft", type: "error" }),
   });
 
-  const handleSave = () => saveMutation.mutate(content);
-  const update = (key: keyof WeddingContent, value: unknown) => setContent((prev) => ({ ...prev, [key]: value }));
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error("Not authenticated");
+      const { error } = await supabase.from("weddings").update({ draft_content: content, content: content }).eq("created_by", user.user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wedding"] });
+      setToast({ message: "Contact content published!", type: "success" });
+    },
+    onError: () => setToast({ message: "Failed to publish", type: "error" }),
+  });
 
   if (isLoading) {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-full p-8">
-          <div className="font-ui text-sm text-gray-400">Loading contact editor...</div>
+          <p className="font-ui text-sm text-gray-500">Loading contact editor...</p>
         </div>
       </AdminLayout>
     );
@@ -79,85 +78,52 @@ export function ContentContactPage() {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-full p-8">
-          <p className="font-ui text-sm text-red-500">Unable to load wedding data</p>
+          <p className="font-ui text-sm text-red-500">Unable to load wedding data.</p>
         </div>
       </AdminLayout>
     );
   }
 
+  const previewWedding = { ...wedding, draft_content: content } as Wedding;
+
   return (
     <AdminLayout>
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-6 py-3 bg-white border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h1 className="font-heading text-xl text-[var(--color-text)]">Contact Information</h1>
-            <p className="font-ui text-xs text-[var(--color-text-muted)]">How guests can reach you</p>
+      <div className="flex flex-col h-full">
+        <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200">
+          <h1 className="font-ui text-base font-semibold text-gray-900">Contact Content</h1>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => saveDraftMutation.mutate()} disabled={saveDraftMutation.isPending}>
+              <Save size={14} className="mr-1.5" /> Save Draft
+            </Button>
+            <button
+              onClick={() => publishMutation.mutate()}
+              disabled={publishMutation.isPending}
+              className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 bg-indigo-600 text-white font-ui text-xs font-medium uppercase tracking-wider rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+            >
+              <Send size={14} /> Publish
+            </button>
           </div>
-          <Button variant="primary" size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
-            <Save size={14} className="mr-1.5" />
-            {saveMutation.isPending ? "Saving..." : "Save Draft"}
-          </Button>
         </div>
         <div className="flex-1 overflow-hidden">
-          <SplitEditor
-            title="Contact Content"
-            preview={previewWedding ? <ContactPreview wedding={previewWedding} /> : <div />}
-          >
-            <div className="space-y-6">
-              <FormField label="Phone Number" hint="Primary contact phone">
-                <div className="relative">
-                  <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
-                  <Input
-                    value={content.contact_phone || ""}
-                    onChange={(e) => update("contact_phone", e.target.value)}
-                    placeholder="+60 12 345 6789"
-                    className="pl-10"
-                  />
-                </div>
-              </FormField>
-
-              <FormField label="Email Address" hint="Contact email for inquiries">
-                <div className="relative">
-                  <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
-                  <Input
-                    type="email"
-                    value={content.contact_email || ""}
-                    onChange={(e) => update("contact_email", e.target.value)}
-                    placeholder="contact@ourwedding.com"
-                    className="pl-10"
-                  />
-                </div>
-              </FormField>
-
-              <FormField label="Address" hint="Venue or mailing address">
-                <div className="relative">
-                  <MapPin size={16} className="absolute left-3 top-4 text-[var(--color-text-muted)]" />
-                  <Textarea
-                    value={content.contact_address || ""}
-                    onChange={(e) => update("contact_address", e.target.value)}
-                    placeholder="123 Wedding Venue Drive&#10;City, State 12345"
-                    rows={4}
-                    className="pl-10"
-                  />
-                </div>
-              </FormField>
-
-              <Card className="p-4 bg-[var(--color-bg-light)] border-[var(--color-primary)]/20">
-                <div className="flex items-start gap-3">
-                  <Eye size={16} className="text-[var(--color-primary)] mt-0.5" />
-                  <div>
-                    <p className="font-ui text-xs text-[var(--color-text)] font-medium mb-1">Contact Section</p>
-                    <p className="font-ui text-xs text-[var(--color-text-muted)]">
-                      Only fields you fill in will appear on the guest-facing contact page. Leave blank to hide.
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            </div>
+          <SplitEditor title="Contact Content" preview={<ContactPreview wedding={previewWedding} />}>
+            <Card className="p-5 mb-4">
+              <h3 className="font-ui text-sm font-semibold text-gray-900 mb-4">Contact Details</h3>
+              <div className="space-y-4">
+                <FormField label="Phone Number">
+                  <Input value={content.contact_phone || ""} onChange={(e) => update("contact_phone", e.target.value)} placeholder="+60 12 345 6789" />
+                </FormField>
+                <FormField label="Email Address">
+                  <Input value={content.contact_email || ""} onChange={(e) => update("contact_email", e.target.value)} placeholder="contact@example.com" />
+                </FormField>
+                <FormField label="Address">
+                  <Textarea value={content.contact_address || ""} onChange={(e) => update("contact_address", e.target.value)} placeholder="123 Wedding Lane, City, Country" />
+                </FormField>
+              </div>
+            </Card>
           </SplitEditor>
         </div>
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </div>
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AdminLayout>
   );
 }

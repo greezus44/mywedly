@@ -26,6 +26,8 @@ import { GuestsPage } from "./routes/admin/guests";
 import { MessagesPage } from "./routes/admin/messages";
 import { SettingsPage } from "./routes/admin/settings";
 import { RsvpsPage } from "./routes/admin/rsvps";
+import { SharingPage } from "./routes/admin/sharing";
+import { AnalyticsPage } from "./routes/admin/analytics";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -58,6 +60,8 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/admin/guests" element={<GuestsPage />} />
             <Route path="/admin/messages" element={<MessagesPage />} />
             <Route path="/admin/rsvps" element={<RsvpsPage />} />
+            <Route path="/admin/sharing" element={<SharingPage />} />
+            <Route path="/admin/analytics" element={<AnalyticsPage />} />
             <Route path="/admin/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

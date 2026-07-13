@@ -1,69 +1,117 @@
-import { useState } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Heart, ArrowRight, Globe } from "lucide-react";
-import { useGuestAuth } from "../../lib/guest-auth";
+import { supabase, type Wedding } from "../../lib/supabase";
 import { useLang } from "../../lib/lang-context";
+import { useGuestAuth, GuestAuthProvider } from "../../lib/guest-auth";
+import { themeToCssVars, getTheme, coverToCssVars, getCoverConfig } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
 import { Input, Label } from "../../components/ui/Input";
 
-export function GuestLogin() {
-  const { slug } = useParams<{ slug: string }>();
+function GuestLoginInner() {
+  const params = useParams();
   const navigate = useNavigate();
-  const { signIn } = useGuestAuth();
   const { lang, setLang, t } = useLang();
+  const { signIn } = useGuestAuth();
+
+  const slug = params.slug || "";
   const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [wedding, setWedding] = useState<Wedding | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("weddings")
+        .select("*")
+        .eq("slug", slug)
+        .eq("is_published", true)
+        .single();
+      if (data) setWedding(data as Wedding);
+    })();
+  }, [slug]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!slug || !username.trim()) return;
+    if (!username.trim()) return;
     setLoading(true);
     setError(null);
-    const { error: signInError } = await signIn(username, slug);
-    if (signInError) {
-      setError(signInError);
+    const { error: err } = await signIn(username, slug);
+    if (err) {
+      setError(err);
       setLoading(false);
     } else {
       navigate(`/w/${slug}/home`, { replace: true });
     }
   };
 
+  const theme = getTheme(wedding);
+  const cover = getCoverConfig(wedding);
+
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 bg-[#f5edda]">
-      <div className="w-full max-w-md">
-        {/* Language selector */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          <Globe size={16} className="text-[#8a8a8a]" />
-          <button
-            onClick={() => setLang("en")}
-            className={`font-ui text-xs uppercase tracking-wider-luxe px-3 py-1 rounded transition-colors ${lang === "en" ? "text-[#b8973a] font-semibold" : "text-[#8a8a8a] hover:text-[#2a2a2a]"}`}
-          >
-            EN
-          </button>
-          <span className="text-[#8a8a8a] text-xs">|</span>
-          <button
-            onClick={() => setLang("ms")}
-            className={`font-ui text-xs uppercase tracking-wider-luxe px-3 py-1 rounded transition-colors ${lang === "ms" ? "text-[#b8973a] font-semibold" : "text-[#8a8a8a] hover:text-[#2a2a2a]"}`}
-          >
-            MS
-          </button>
-        </div>
+    <div
+      className="min-h-screen flex items-center justify-center px-6 py-12"
+      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover) } as CSSProperties}
+    >
+      {/* Language selector top-right */}
+      <div className="fixed top-6 right-6 z-10">
+        <button
+          onClick={() => setLang(lang === "en" ? "ms" : "en")}
+          className="flex items-center gap-2 px-4 py-2 font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text)] hover:text-[var(--color-primary)] transition-colors border border-[var(--color-border)]/30 rounded-lg"
+          style={{ background: "var(--color-surface)" }}
+        >
+          <Globe size={14} />
+          <span>{lang === "en" ? t("english") : t("bahasaMelayu")}</span>
+        </button>
+      </div>
 
+      <div className="w-full max-w-md animate-fade-in-up opacity-0-init">
+        {/* Heart icon */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-[#b8973a]/10 rounded-full mb-4">
-            <Heart size={28} className="text-[#b8973a]" />
+          <div
+            className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 animate-scale-in opacity-0-init delay-200"
+            style={{ background: "var(--color-primary)" + "12" }}
+          >
+            <Heart size={28} style={{ color: "var(--color-primary)" }} />
           </div>
-          <h1 className="font-script text-3xl text-[#2a2a2a] mb-2">{t("guestLogin")}</h1>
-          <p className="font-ui text-sm text-[#8a8a8a] uppercase tracking-wider-luxe">
-            {t("invitation")}
+
+          {/* Couple names */}
+          <h1
+            className="font-script text-3xl md:text-4xl mb-2"
+            style={{ color: "var(--color-text)" }}
+          >
+            {wedding?.couple_name_one} <span style={{ color: "var(--color-primary)" }}>&</span> {wedding?.couple_name_two}
+          </h1>
+
+          {/* Sign in helper text */}
+          <p
+            className="font-ui text-xs uppercase tracking-wider-luxe mt-4"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            {t("guestLogin")}
           </p>
+          {wedding?.signin_helper && (
+            <p
+              className="font-body text-sm mt-2 italic"
+              style={{ color: "var(--color-text-muted)" }}
+            >
+              {wedding.signin_helper}
+            </p>
+          )}
         </div>
 
+        {/* Login form card */}
         <form
           onSubmit={handleSubmit}
-          className="bg-white rounded-lg border border-[#b8973a]/15 shadow-sm p-6 space-y-5"
-          style={{ borderRadius: "8px" }}
+          className="space-y-5 p-8 animate-fade-in-up opacity-0-init delay-300"
+          style={{
+            background: "var(--color-surface)",
+            borderRadius: "var(--radius, 8px)",
+            border: "1px solid var(--color-border)",
+            borderColor: "color-mix(in srgb, var(--color-border) 20%, transparent)",
+            boxShadow: "0 4px 24px rgba(184, 151, 58, 0.12)",
+          }}
         >
           <div>
             <Label>{t("username")}</Label>
@@ -74,13 +122,17 @@ export function GuestLogin() {
               required
               autoFocus
               placeholder={t("username")}
-              className="w-full px-5 py-3.5"
-              style={{ borderRadius: "8px" }}
+              disabled={loading}
             />
           </div>
 
           {error && (
-            <p className="font-ui text-sm text-[#c97070] text-center">{error}</p>
+            <p
+              className="font-ui text-sm animate-fade-in"
+              style={{ color: "var(--color-error)" }}
+            >
+              {error}
+            </p>
           )}
 
           <Button
@@ -88,15 +140,36 @@ export function GuestLogin() {
             variant="primary"
             size="lg"
             className="w-full"
-            disabled={loading}
-            style={{ borderRadius: "8px" }}
+            disabled={loading || !username.trim()}
           >
             {loading ? t("loading") : t("enter")}
-            <ArrowRight size={16} className="ml-2" />
+            {!loading && <ArrowRight size={16} className="ml-2" />}
           </Button>
         </form>
+
+        {/* Decorative footer */}
+        <div className="text-center mt-8 animate-fade-in opacity-0-init delay-500">
+          <div
+            className="inline-block w-12 h-px mb-3"
+            style={{ background: "var(--color-primary)", opacity: 0.4 }}
+          />
+          <p
+            className="font-ui text-[10px] uppercase tracking-luxe"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            {wedding?.hashtag || `${wedding?.couple_name_one} & ${wedding?.couple_name_two}`}
+          </p>
+        </div>
       </div>
     </div>
+  );
+}
+
+export function GuestLogin() {
+  return (
+    <GuestAuthProvider>
+      <GuestLoginInner />
+    </GuestAuthProvider>
   );
 }
 

@@ -1,174 +1,284 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { CalendarDays, Clock } from "lucide-react";
-import { useGuestAuth } from "../../lib/guest-auth";
+import { Calendar, Clock, MapPin, Heart, Sparkles } from "lucide-react";
 import { useLang } from "../../lib/lang-context";
-import { getTheme, themeToCssVars } from "../../lib/theme";
+import { useGuestAuth, GuestAuthProvider } from "../../lib/guest-auth";
+import {
+  themeToCssVars,
+  getTheme,
+  coverToCssVars,
+  getCoverConfig,
+  getCoverContent,
+} from "../../lib/theme";
 import { getCountdown, formatDate, formatTime } from "../../lib/utils";
-import { Button } from "../../components/ui/Button";
 
-export function Home() {
-  const { slug } = useParams<{ slug: string }>();
+function HomeInner() {
   const navigate = useNavigate();
-  const { session } = useGuestAuth();
+  const params = useParams();
+  const slug = params.slug || "";
+  const { session, loading } = useGuestAuth();
   const { lang, t } = useLang();
-  const [countdown, setCountdown] = useState(getCountdown(null));
+  const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true });
+
+  const wedding = session?.wedding ?? null;
 
   useEffect(() => {
-    if (!session?.wedding.wedding_date) return;
-    const tick = () => setCountdown(getCountdown(session.wedding.wedding_date));
-    tick();
-    const interval = setInterval(tick, 1000);
+    if (loading) return;
+    if (!session) {
+      navigate(`/w/${slug}/login`, { replace: true });
+    }
+  }, [session, loading, slug, navigate]);
+
+  if (loading || !wedding) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--color-bg)" }}>
+        <Heart size={24} className="animate-pulse" style={{ color: "var(--color-primary)" }} />
+      </div>
+    );
+  }
+
+  useEffect(() => {
+    if (!wedding?.wedding_date) return;
+    setCountdown(getCountdown(wedding.wedding_date));
+    const interval = setInterval(() => {
+      setCountdown(getCountdown(wedding.wedding_date));
+    }, 1000);
     return () => clearInterval(interval);
-  }, [session]);
+  }, [wedding?.wedding_date]);
 
-  if (!session) return null;
+  if (loading || !session) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: "var(--color-bg)" } as CSSProperties}
+      >
+        <Heart size={24} className="animate-pulse" style={{ color: "var(--color-primary)" }} />
+      </div>
+    );
+  }
 
-  const { wedding, guest } = session;
   const theme = getTheme(wedding);
-  const content = (wedding.content || {}) as Record<string, unknown>;
-  const draftContent = (wedding.draft_content || {}) as Record<string, unknown>;
-  const c = { ...content, ...draftContent };
+  const cover = getCoverConfig(wedding);
+  const content = getCoverContent(wedding);
+  const guest = session.guest;
 
   const guestName = guest.first_name || guest.full_name || guest.username;
-  const homeTitle = (c.home_title as string) || `${wedding.couple_name_one} & ${wedding.couple_name_two}`;
-  const homeSubtitle = (c.home_subtitle as string) || t("welcome");
-  const homeBody = (c.home_body as string) || wedding.story || "";
-  const closingText = (c.home_closing_text as string) || (c.invitation_closing as string) || "";
-  const quranVerse = (c.invitation_quran_verse as string) || "";
-  const quranTranslation = (c.invitation_quran_translation as string) || "";
-  const quranReference = (c.invitation_quran_reference as string) || "";
-  const intro = (c.invitation_intro as string) || "";
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center px-6 py-16"
-      style={themeToCssVars(theme) as React.CSSProperties}
+      className="min-h-screen pb-16"
+      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover) } as CSSProperties}
     >
-      <div className="max-w-2xl w-full text-center">
+      {/* Hero Section */}
+      <section className="px-6 md:px-12 pt-12 md:pt-20 pb-16 text-center">
         {/* Bismillah */}
-        <p className="font-heading text-lg text-[var(--color-primary)] italic mb-8 opacity-0-init animate-fade-in">
+        <p
+          className="font-body text-base md:text-lg italic mb-8 animate-fade-in opacity-0-init"
+          style={{ color: "var(--color-text-muted)" }}
+        >
           {t("bismillah")}
         </p>
 
-        {/* Welcome */}
-        <p className="font-ui text-xs md:text-sm uppercase tracking-luxe text-[var(--color-text-muted)] mb-4 opacity-0-init animate-fade-in-up">
-          {homeSubtitle}
-        </p>
-
-        <p className="font-heading text-xl text-[var(--color-text)] mb-8 opacity-0-init animate-fade-in-up delay-100">
-          {guestName}
+        {/* Invitation label */}
+        <p
+          className="font-ui text-xs uppercase tracking-luxe mb-4 animate-fade-in-up opacity-0-init delay-100"
+          style={{ color: "var(--color-primary)" }}
+        >
+          {t("invitation")}
         </p>
 
         {/* Decorative divider */}
-        <div className="flex items-center justify-center gap-4 mb-8 opacity-0-init animate-fade-in-up delay-200">
-          <span className="h-px w-16 bg-[var(--color-primary)]/30" />
-          <span className="text-[var(--color-primary)] text-xs">✦</span>
-          <span className="h-px w-16 bg-[var(--color-primary)]/30" />
+        <div className="flex items-center justify-center gap-3 mb-6 animate-fade-in opacity-0-init delay-200">
+          <div className="h-px w-12" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
+          <Sparkles size={14} style={{ color: "var(--color-primary)" }} />
+          <div className="h-px w-12" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
         </div>
 
-        {/* Couple names */}
-        <h1 className="font-script text-5xl md:text-6xl text-[var(--color-text)] mb-6 opacity-0-init animate-fade-in-up delay-200">
-          {homeTitle}
+        {/* Couple Names */}
+        <h1
+          className="font-script text-4xl md:text-6xl lg:text-7xl mb-2 animate-fade-in-up opacity-0-init delay-200"
+          style={{ color: "var(--color-text)" }}
+        >
+          {wedding.couple_name_one}
+        </h1>
+        <p
+          className="font-script text-2xl md:text-3xl mb-2 animate-fade-in-up opacity-0-init delay-300"
+          style={{ color: "var(--color-primary)" }}
+        >
+          &
+        </p>
+        <h1
+          className="font-script text-4xl md:text-6xl lg:text-7xl mb-8 animate-fade-in-up opacity-0-init delay-300"
+          style={{ color: "var(--color-text)" }}
+        >
+          {wedding.couple_name_two}
         </h1>
 
-        {/* Date & time */}
+        {/* Date */}
         {wedding.wedding_date && (
-          <div className="flex flex-col items-center gap-2 mb-8 opacity-0-init animate-fade-in-up delay-300">
-            <div className="flex items-center gap-2 text-[var(--color-text)]">
-              <CalendarDays size={16} className="text-[var(--color-primary)]" />
-              <span className="font-heading text-lg">{formatDate(wedding.wedding_date, lang)}</span>
-            </div>
-            <div className="flex items-center gap-2 text-[var(--color-text-muted)]">
-              <Clock size={14} />
-              <span className="font-ui text-sm">{formatTime(wedding.wedding_date, lang)}</span>
-            </div>
-            {wedding.location && (
-              <p className="font-heading text-base text-[var(--color-text-muted)] mt-1">
-                {wedding.location}
-              </p>
-            )}
+          <div className="flex items-center justify-center gap-2 mb-2 animate-fade-in-up opacity-0-init delay-400">
+            <Calendar size={16} style={{ color: "var(--color-primary)" }} />
+            <p
+              className="font-ui text-xs md:text-sm uppercase tracking-wider-luxe"
+              style={{ color: "var(--color-text)" }}
+            >
+              {formatDate(wedding.wedding_date, lang)}
+            </p>
           </div>
         )}
 
-        {/* Intro */}
-        {intro && (
-          <p className="font-body text-lg text-[var(--color-text)] leading-relaxed mb-8 opacity-0-init animate-fade-in-up delay-300">
-            {intro}
-          </p>
-        )}
-
-        {/* Body */}
-        {homeBody && (
-          <p className="font-body text-lg text-[var(--color-text)] leading-relaxed mb-8 opacity-0-init animate-fade-in-up delay-400">
-            {homeBody}
-          </p>
-        )}
-
-        {/* Quran verse */}
-        {quranVerse && (
-          <div className="my-10 py-8 border-t border-b border-[var(--color-primary)]/20 opacity-0-init animate-fade-in-up delay-400">
-            <p className="font-heading text-2xl text-[var(--color-text)] leading-relaxed mb-4" dir="rtl">
-              {quranVerse}
+        {/* Time */}
+        {wedding.wedding_date && (
+          <div className="flex items-center justify-center gap-2 mb-2 animate-fade-in-up opacity-0-init delay-400">
+            <Clock size={16} style={{ color: "var(--color-primary)" }} />
+            <p
+              className="font-ui text-xs md:text-sm uppercase tracking-wider-luxe"
+              style={{ color: "var(--color-text)" }}
+            >
+              {formatTime(wedding.wedding_date, lang)}
             </p>
-            {quranTranslation && (
-              <p className="font-body text-base text-[var(--color-text-muted)] italic leading-relaxed">
-                {quranTranslation}
-              </p>
-            )}
-            {quranReference && (
-              <p className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-primary)] mt-4">
-                {quranReference}
-              </p>
-            )}
           </div>
         )}
 
-        {/* Countdown */}
-        {!countdown.isPast && (
-          <div className="mb-10 opacity-0-init animate-fade-in-up delay-500">
-            <p className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)] mb-4">
-              {c.countdown_label as string || t("days")} {t("days")}
+        {/* Location */}
+        {wedding.location && (
+          <div className="flex items-center justify-center gap-2 animate-fade-in-up opacity-0-init delay-500">
+            <MapPin size={16} style={{ color: "var(--color-primary)" }} />
+            <p
+              className="font-ui text-xs md:text-sm uppercase tracking-wider-luxe"
+              style={{ color: "var(--color-text)" }}
+            >
+              {wedding.location}
             </p>
-            <div className="flex justify-center gap-4 md:gap-8">
-              {[
-                { label: t("days"), value: countdown.days },
-                { label: t("hours"), value: countdown.hours },
-                { label: t("minutes"), value: countdown.minutes },
-                { label: t("seconds"), value: countdown.seconds },
-              ].map((unit) => (
-                <div key={unit.label} className="text-center">
-                  <div className="font-heading text-3xl md:text-4xl text-[var(--color-primary)] tabular-nums">
-                    {String(unit.value).padStart(2, "0")}
-                  </div>
-                  <div className="font-ui text-[10px] uppercase tracking-wider-luxe text-[var(--color-text-muted)] mt-1">
-                    {unit.label}
-                  </div>
+          </div>
+        )}
+      </section>
+
+      {/* Countdown Section */}
+      {!countdown.isPast && (
+        <section className="px-6 md:px-12 py-12 text-center animate-fade-in-up opacity-0-init delay-500">
+          <p
+            className="font-ui text-xs uppercase tracking-luxe mb-6"
+            style={{ color: "var(--color-primary)" }}
+          >
+            {content.countdown_label || t("loading")}
+          </p>
+          <div className="flex justify-center gap-6 md:gap-12">
+            {[
+              { label: t("days"), value: countdown.days },
+              { label: t("hours"), value: countdown.hours },
+              { label: t("minutes"), value: countdown.minutes },
+              { label: t("seconds"), value: countdown.seconds },
+            ].map((item) => (
+              <div key={item.label} className="text-center">
+                <div
+                  className="font-script text-3xl md:text-5xl"
+                  style={{ color: "var(--color-text)" }}
+                >
+                  {String(item.value).padStart(2, "0")}
                 </div>
-              ))}
-            </div>
+                <div
+                  className="font-ui text-[10px] md:text-xs uppercase tracking-wider-luxe mt-1"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
+                  {item.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Welcome / Invitation Body */}
+      <section className="px-6 md:px-12 py-12 max-w-2xl mx-auto text-center animate-fade-in-up opacity-0-init delay-500">
+        {/* Guest name */}
+        <p
+          className="font-ui text-xs uppercase tracking-luxe mb-4"
+          style={{ color: "var(--color-primary)" }}
+        >
+          {t("welcome")}
+        </p>
+        <h2
+          className="font-script text-2xl md:text-3xl mb-6"
+          style={{ color: "var(--color-text)" }}
+        >
+          {guestName}
+        </h2>
+
+        {/* Invitation intro */}
+        {content.invitation_intro && (
+          <p
+            className="font-body text-lg md:text-xl leading-relaxed mb-8"
+            style={{ color: "var(--color-text)" }}
+          >
+            {content.invitation_intro}
+          </p>
+        )}
+
+        {/* Home body / welcome text */}
+        {content.home_body && (
+          <p
+            className="font-body text-base md:text-lg leading-relaxed mb-8"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            {content.home_body}
+          </p>
+        )}
+
+        {/* Quran Verse */}
+        {content.invitation_quran_verse && (
+          <div
+            className="my-10 py-8 px-6 md:px-10 animate-fade-in opacity-0-init delay-700"
+            style={{
+              borderTop: "1px solid var(--color-border)",
+              borderBottom: "1px solid var(--color-border)",
+              borderColor: "color-mix(in srgb, var(--color-border) 25%, transparent)",
+            }}
+          >
+            <p
+              className="font-body text-xl md:text-2xl italic leading-relaxed mb-4"
+              style={{ color: "var(--color-text)" }}
+            >
+              {content.invitation_quran_verse}
+            </p>
+            {content.invitation_quran_translation && (
+              <p
+                className="font-body text-base md:text-lg leading-relaxed mb-3"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                {content.invitation_quran_translation}
+              </p>
+            )}
+            {content.invitation_quran_reference && (
+              <p
+                className="font-ui text-xs uppercase tracking-wider-luxe"
+                style={{ color: "var(--color-primary)" }}
+              >
+                — {content.invitation_quran_reference}
+              </p>
+            )}
           </div>
         )}
 
         {/* Closing dua */}
-        {closingText && (
-          <p className="font-body text-lg text-[var(--color-text)] leading-relaxed italic mb-10 opacity-0-init animate-fade-in-up delay-500">
-            {closingText}
+        {content.invitation_closing && (
+          <p
+            className="font-body text-base md:text-lg leading-relaxed mt-8"
+            style={{ color: "var(--color-text)" }}
+          >
+            {content.invitation_closing}
           </p>
         )}
-
-        {/* RSVP CTA */}
-        <div className="opacity-0-init animate-fade-in-up delay-700">
-          <Button
-            variant="outline"
-            size="lg"
-            onClick={() => navigate(`/w/${slug}/rsvp`)}
-          >
-            {t("rsvp")}
-          </Button>
-        </div>
-      </div>
+      </section>
     </div>
+  );
+}
+
+export function Home() {
+  return (
+    <GuestAuthProvider>
+      <HomeInner />
+    </GuestAuthProvider>
   );
 }
 
