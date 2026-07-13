@@ -1,33 +1,27 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { useRustyContext } from "./rusty-layout";
-import { useGuestAuth } from "../../lib/guest-auth";
-import { supabase, type EventMessage, type UserEvent } from "../../lib/supabase";
+import { useState } from "react";
+import { Link, useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { RUSTY_THEME } from "../../lib/theme";
-import { Button } from "../../components/ui/Button";
+import { Heart, Send, AlertCircle, CheckCircle2 } from "lucide-react";
+import { supabase, type EventMessage } from "../../lib/supabase";
 import { Textarea } from "../../components/ui/Input";
-import { MessageCircle, Send, Loader2, AlertCircle, CheckCircle2, X, Heart } from "lucide-react";
+import { Button } from "../../components/ui/Button";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { useRustyOutletContext } from "./rusty-layout";
 
 export type Lang = "en" | "id";
 
-function GoldDivider() {
-  return (
-    <div className="flex items-center justify-center gap-3 my-6">
-      <div className="h-px w-16" style={{ backgroundColor: RUSTY_THEME.accentColor }} />
-      <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: RUSTY_THEME.accentColor }} />
-      <div className="h-px w-16" style={{ backgroundColor: RUSTY_THEME.accentColor }} />
-    </div>
-  );
-}
-
+/**
+ * RustyWishes — guest wishes with cream/gold styling.
+ */
 export default function RustyWishes() {
-  const { event } = useRustyContext();
-  const { guestName, isAuthenticated } = useGuestAuth();
-  const navigate = useNavigate();
+  const { event } = useRustyOutletContext();
+  const { guestName } = useGuestAuth();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
-  const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const headingFont: React.CSSProperties = { fontFamily: "var(--event-font-heading)" };
+  const scriptFont: React.CSSProperties = { fontFamily: "var(--event-font-script)" };
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ["rusty-messages", event.id],
@@ -42,11 +36,10 @@ export default function RustyWishes() {
     },
   });
 
-  const submitMutation = useMutation({
+  const mutation = useMutation({
     mutationFn: async () => {
-      if (!guestName) throw new Error("Please sign in to leave a message");
-      if (!message.trim()) throw new Error("Message cannot be empty");
-      if (message.trim().length < 2) throw new Error("Message is too short");
+      if (!guestName) throw new Error("Please sign in first.");
+      if (!message.trim()) throw new Error("Message cannot be empty.");
       const { error } = await supabase.from("event_messages").insert({
         event_id: event.id,
         guest_name: guestName,
@@ -55,122 +48,109 @@ export default function RustyWishes() {
       if (error) throw error;
     },
     onSuccess: () => {
+      setSuccess("Your wish has been sent!");
+      setError(null);
       setMessage("");
       queryClient.invalidateQueries({ queryKey: ["rusty-messages", event.id] });
-      setToast({ type: "success", msg: "Thank you for your message!" });
     },
     onError: (err: Error) => {
-      setToast({ type: "error", msg: err.message || "Failed to send message." });
+      setError(`Failed to send wish: ${err.message}`);
+      setSuccess(null);
     },
   });
 
-  useEffect(() => {
-    if (!toast) return;
-    const id = setTimeout(() => setToast(null), 4000);
-    return () => clearTimeout(id);
-  }, [toast]);
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center px-6 text-center">
-        <p className="text-sm mb-6" style={{ color: RUSTY_THEME.textMutedColor! }}>Please sign in to leave a message.</p>
-        <Button onClick={() => navigate("./login")} style={{ backgroundColor: RUSTY_THEME.accentColor!, color: "#F5ECD7", borderRadius: "2px" }}>Sign In</Button>
-      </div>
-    );
-  }
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    submitMutation.mutate();
+    mutation.mutate();
   };
 
+  const GoldDivider = () => (
+    <div className="flex items-center justify-center gap-4 my-6">
+      <div className="h-px w-16" style={{ backgroundColor: "var(--event-primary)" }} />
+      <div className="w-2 h-2 rotate-45" style={{ backgroundColor: "var(--event-primary)" }} />
+      <div className="h-px w-16" style={{ backgroundColor: "var(--event-primary)" }} />
+    </div>
+  );
+
   return (
-    <div className="min-h-screen" style={{ backgroundColor: RUSTY_THEME.bgColor!, color: RUSTY_THEME.textColor! }}>
-      <header className="pt-16 pb-8 text-center px-6">
-        <MessageCircle className="w-6 h-6 mx-auto mb-3" style={{ color: RUSTY_THEME.accentColor! }} />
-        <h1 className="font-serif text-3xl" style={{ fontFamily: RUSTY_THEME.headingFont }}>Wishes & Messages</h1>
-        <p className="text-sm mt-2 font-serif italic" style={{ fontFamily: RUSTY_THEME.scriptFont, color: RUSTY_THEME.textMutedColor! }}>
-          Share your love and congratulations
-        </p>
+    <div className="min-h-screen px-6 py-16" style={{ backgroundColor: "var(--event-bg)", color: "var(--event-text)" }}>
+      <div className="max-w-2xl mx-auto">
+        <div className="text-center mb-8">
+          <Heart className="w-8 h-8 mx-auto mb-4" style={{ color: "var(--event-primary)" }} />
+          <h1 className="text-4xl mb-2" style={headingFont}>Guest Wishes</h1>
+          <p className="text-sm" style={{ ...scriptFont, color: "var(--event-text-muted)" }}>
+            Share your love and well wishes
+          </p>
+        </div>
         <GoldDivider />
-      </header>
 
-      <div className="max-w-xl mx-auto px-6 pb-12">
-        <form onSubmit={handleSubmit} className="mb-10">
-          <div className="p-5" style={{ border: `1px solid ${RUSTY_THEME.borderColor}`, borderRadius: "2px", backgroundColor: RUSTY_THEME.bgSubtleColor }}>
-            <p className="text-xs uppercase tracking-wider mb-3" style={{ color: RUSTY_THEME.accentColor! }}>
-              Writing as <span className="font-medium font-serif" style={{ fontFamily: RUSTY_THEME.headingFont, color: RUSTY_THEME.textColor! }}>{guestName}</span>
-            </p>
-            <Textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Write your wishes here..."
-              maxLength={500}
-              className="min-h-[120px]"
-              style={{ backgroundColor: "#F5ECD7", borderColor: RUSTY_THEME.borderColor, color: RUSTY_THEME.textColor, borderRadius: "2px" }}
-            />
-            <div className="flex items-center justify-between mt-3">
-              <p className="text-xs" style={{ color: RUSTY_THEME.textMutedColor! }}>{message.length}/500</p>
-              <Button
-                type="submit"
-                disabled={!message.trim() || submitMutation.isPending}
-                loading={submitMutation.isPending}
-                size="sm"
-                style={{ backgroundColor: RUSTY_THEME.accentColor!, color: "#F5ECD7", borderRadius: "2px" }}
-              >
-                <Send className="w-3.5 h-3.5" />
-                Send
-              </Button>
-            </div>
-          </div>
-        </form>
-
-        <div>
-          <h2 className="font-serif text-xl mb-5 flex items-center gap-2" style={{ fontFamily: RUSTY_THEME.headingFont }}>
-            <Heart className="w-4 h-4" style={{ color: RUSTY_THEME.accentColor! }} />
-            {messages.length} {messages.length === 1 ? "Message" : "Messages"}
-          </h2>
-
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin" style={{ color: RUSTY_THEME.accentColor! }} />
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="text-center py-12" style={{ border: `1px dashed ${RUSTY_THEME.borderColor}`, borderRadius: "2px" }}>
-              <MessageCircle className="w-8 h-8 mx-auto mb-3 opacity-30" style={{ color: RUSTY_THEME.textMutedColor! }} />
-              <p className="text-sm font-serif italic" style={{ fontFamily: RUSTY_THEME.scriptFont, color: RUSTY_THEME.textMutedColor! }}>
-                No messages yet. Be the first to leave a wish!
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {messages.map((m) => (
-                <div key={m.id} className="p-5" style={{ border: `1px solid ${RUSTY_THEME.borderColor}`, borderRadius: "2px", backgroundColor: RUSTY_THEME.bgSubtleColor }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium font-serif" style={{ fontFamily: RUSTY_THEME.headingFont }}>{m.guest_name}</p>
-                    <p className="text-xs" style={{ color: RUSTY_THEME.textMutedColor! }}>
-                      {new Date(m.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                    </p>
-                  </div>
-                  <p className="text-sm leading-relaxed font-serif italic whitespace-pre-wrap" style={{ fontFamily: RUSTY_THEME.scriptFont, color: RUSTY_THEME.textMutedColor! }}>
-                    {m.message}
-                  </p>
-                </div>
-              ))}
+        {/* Submit form */}
+        <form
+          onSubmit={handleSubmit}
+          className="p-6 border mb-10"
+          style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)", borderRadius: "var(--event-radius)" }}
+        >
+          <label className="block text-xs uppercase tracking-wider mb-2" style={{ color: "var(--event-text-muted)" }}>
+            Your message
+          </label>
+          <Textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Write your wish here..."
+            rows={4}
+            style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-bg)", color: "var(--event-text)", borderRadius: "var(--event-radius)" }}
+          />
+          {success && (
+            <div className="flex items-center gap-2 text-sm mt-3" style={{ color: "var(--event-primary)" }}>
+              <CheckCircle2 className="w-4 h-4" /> {success}
             </div>
           )}
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 mt-3">
+              <AlertCircle className="w-4 h-4" /> {error}
+            </div>
+          )}
+          <Button
+            type="submit"
+            loading={mutation.isPending}
+            disabled={!message.trim()}
+            className="mt-4"
+            style={{ backgroundColor: "var(--event-primary)", color: "#fff", borderRadius: "var(--event-radius)" }}
+          >
+            <Send className="w-4 h-4" /> Send Wish
+          </Button>
+        </form>
+
+        {/* Messages list */}
+        {isLoading ? (
+          <div className="text-center py-10" style={{ color: "var(--event-text-muted)" }}>Loading messages...</div>
+        ) : messages.length === 0 ? (
+          <div className="text-center py-10" style={{ color: "var(--event-text-muted)" }}>
+            <p className="text-sm" style={scriptFont}>No wishes yet. Be the first to share your love!</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className="p-5 border"
+                style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)", borderRadius: "var(--event-radius)" }}
+              >
+                <p className="text-sm leading-relaxed mb-3" style={{ ...scriptFont, color: "var(--event-text)" }}>
+                  {msg.message}
+                </p>
+                <p className="text-xs uppercase tracking-wider" style={{ color: "var(--event-primary)" }}>
+                  — {msg.guest_name}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="text-center mt-10">
+          <Link to="home" className="text-sm hover:underline" style={{ color: "var(--event-text-muted)" }}>← Back to home</Link>
         </div>
       </div>
-
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-slide-up">
-          <div className="flex items-center gap-3 px-4 py-3 shadow-lg" style={{ borderRadius: "2px", backgroundColor: toast.type === "success" ? RUSTY_THEME.accentColor : "#B91C1C", color: "#F5ECD7" }}>
-            {toast.type === "success" ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-            <span className="text-sm">{toast.msg}</span>
-            <button onClick={() => setToast(null)} className="opacity-60 hover:opacity-100"><X className="w-4 h-4" /></button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

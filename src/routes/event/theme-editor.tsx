@@ -1,275 +1,243 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useOutletContext } from "react-router-dom";
+import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type ThemeConfig } from "../../lib/supabase";
-import { cn } from "../../lib/utils";
-import { Card, FormField, ColorInput, RangeInput, Toast } from "../../components/ui";
+import { DEFAULT_THEME, THEME_PRESETS, FONT_OPTIONS, themeToEventCssVars } from "../../lib/theme";
+import { EventThemeProvider, useEventTheme } from "../../lib/theme-context";
+import { Card, FormField, ColorInput, RangeInput } from "../../components/ui";
 import { Select } from "../../components/ui/Input";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
-import {
-  DEFAULT_THEME,
-  THEME_PRESETS,
-  FONT_OPTIONS,
-} from "../../lib/theme";
-import { useTheme } from "../../lib/theme-context";
+import { Toast } from "../../components/ui";
+import { cn } from "../../lib/utils";
 
-function ThemeEditorPage() {
-  const { eventId } = useParams();
-  const { event } = useOutletContext<{ event: UserEvent }>();
+interface OutletContext { event: UserEvent; }
+
+/**
+ * ThemedHomePreview — wraps HomePreview in EventThemeProvider so the preview
+ * pane reflects the local theme. The editor form itself is NOT affected.
+ */
+function ThemedHomePreview({ event, theme }: { event: UserEvent; theme: ThemeConfig }) {
+  const previewEvent: UserEvent = { ...event, draft_theme: theme };
+  return (
+    <EventThemeProvider initialTheme={theme}>
+      <HomePreview event={previewEvent} />
+    </EventThemeProvider>
+  );
+}
+
+export default function ThemeEditorPage() {
+  const { event } = useOutletContext<OutletContext>();
   const queryClient = useQueryClient();
-  const { theme, setTheme, updateTheme } = useTheme();
-  const [toast, setToast] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const firstRun = useRef(true);
+  const [localTheme, setLocalTheme] = useState<ThemeConfig>(
+    (event.draft_theme || event.theme || DEFAULT_THEME) as ThemeConfig
+  );
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
-  // Initialize theme from event
   useEffect(() => {
-    const stored = (event.draft_theme || event.theme || DEFAULT_THEME) as ThemeConfig;
-    setTheme(stored);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [event]);
+    setLocalTheme((event.draft_theme || event.theme || DEFAULT_THEME) as ThemeConfig);
+  }, [event.draft_theme, event.theme]);
 
   const saveMutation = useMutation({
-    mutationFn: async (data: ThemeConfig) => {
+    mutationFn: async (theme: ThemeConfig) => {
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_theme: data, updated_at: new Date().toISOString() })
-        .eq("id", eventId!);
+        .update({ draft_theme: theme, updated_at: new Date().toISOString() })
+        .eq("id", event.id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaveState("saved");
-      setToast("Theme saved");
-      setTimeout(() => setSaveState("idle"), 2000);
+      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
+      setToast({ msg: "Theme saved", type: "success" });
     },
     onError: (err: Error) => {
-      setToast(`Failed to save: ${err.message}`);
-      setSaveState("idle");
+      setToast({ msg: `Save failed: ${err.message}`, type: "error" });
     },
   });
 
-  // Debounced auto-save whenever theme changes
-  useEffect(() => {
-    if (firstRun.current) {
-      firstRun.current = false;
-      return;
-    }
+  // Update local theme instantly for preview, debounce persist to DB
+  const updateTheme = (partial: Partial<ThemeConfig>) => {
+    const newTheme = { ...localTheme, ...partial };
+    setLocalTheme(newTheme);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    setSaveState("saving");
     debounceRef.current = setTimeout(() => {
-      saveMutation.mutate(theme);
-    }, 800);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [theme]);
+      saveMutation.mutate(newTheme);
+    }, 600);
+  };
 
   const applyPreset = (presetKey: string) => {
     const preset = THEME_PRESETS[presetKey];
-    if (preset) setTheme(preset);
-  };
-
-  const previewEvent: UserEvent = {
-    ...event,
-    draft_theme: theme,
+    if (preset) {
+      const newTheme = { ...preset, preset: presetKey };
+      setLocalTheme(newTheme);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        saveMutation.mutate(newTheme);
+      }, 600);
+    }
   };
 
   return (
     <>
-      <SplitEditor preview={<HomePreview event={previewEvent} />}>
-        <div className="space-y-6 max-w-xl mx-auto">
+      <SplitEditor
+        preview={<ThemedHomePreview event={event} theme={localTheme} />}
+      >
+        <div className="space-y-6">
           <div>
-            <h2 className="font-heading text-2xl text-[var(--color-text)]">Theme Customizer</h2>
-            <p className="text-sm text-[var(--color-text-muted)] mt-1">
-              {saveState === "saving" ? "Saving..." : saveState === "saved" ? "Saved" : "Changes preview instantly"}
-            </p>
+            <h2 className="font-heading text-2xl text-gray-900">Theme Customizer</h2>
+            <p className="text-sm text-gray-500 mt-1">Customize the visual style of your event. Changes preview instantly.</p>
           </div>
 
-          {/* Preset Selector */}
-          <Card className="p-5">
-            <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-3">
-              Presets
-            </h3>
-            <div className="grid grid-cols-3 gap-3">
+          {/* Preset Selector — fixed gray dashboard styling */}
+          <Card className="p-5 space-y-4">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Theme Presets</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {Object.entries(THEME_PRESETS).map(([key, preset]) => (
                 <button
                   key={key}
+                  type="button"
                   onClick={() => applyPreset(key)}
                   className={cn(
-                    "p-3 border-2 transition-all text-left",
-                    theme.preset === key
-                      ? "border-[var(--color-primary)]"
-                      : "border-[var(--color-border)] hover:border-[var(--color-primary)]"
+                    "p-3 border-2 rounded-lg text-left transition-all",
+                    localTheme.preset === key
+                      ? "border-gray-900 bg-gray-50"
+                      : "border-gray-200 hover:border-gray-400"
                   )}
-                  style={{ borderRadius: "var(--radius)" }}
                 >
-                  <div
-                    className="w-full h-12 mb-2 flex items-center justify-center"
-                    style={{
-                      backgroundColor: preset.bgColor,
-                      borderRadius: "var(--radius)",
-                    }}
-                  >
-                    <div className="flex gap-1">
-                      <div className="w-3 h-3" style={{ backgroundColor: preset.primaryColor }} />
-                      <div className="w-3 h-3" style={{ backgroundColor: preset.accentColor }} />
-                      <div className="w-3 h-3" style={{ backgroundColor: preset.secondaryColor }} />
-                    </div>
+                  <div className="flex gap-1.5 mb-2">
+                    <div className="w-5 h-5 rounded" style={{ backgroundColor: preset.primaryColor }} />
+                    <div className="w-5 h-5 rounded" style={{ backgroundColor: preset.secondaryColor }} />
+                    <div className="w-5 h-5 rounded" style={{ backgroundColor: preset.accentColor }} />
                   </div>
-                  <span className="text-xs font-medium capitalize text-[var(--color-text)]">{key}</span>
+                  <span className="text-sm font-medium text-gray-900 capitalize">{key}</span>
                 </button>
               ))}
             </div>
           </Card>
 
-          {/* Colors */}
-          <Card className="p-5 space-y-4">
-            <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">Colors</h3>
-
+          {/* Colors — fixed gray dashboard styling */}
+          <Card className="p-5 space-y-5">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Colors</h3>
             <div className="grid grid-cols-2 gap-4">
-              <FormField label="Primary">
+              <FormField label="Primary Color">
                 <ColorInput
-                  value={theme.primaryColor || DEFAULT_THEME.primaryColor!}
+                  value={localTheme.primaryColor || DEFAULT_THEME.primaryColor!}
                   onChange={(v) => updateTheme({ primaryColor: v })}
                 />
               </FormField>
-              <FormField label="Secondary">
+              <FormField label="Secondary Color">
                 <ColorInput
-                  value={theme.secondaryColor || DEFAULT_THEME.secondaryColor!}
+                  value={localTheme.secondaryColor || DEFAULT_THEME.secondaryColor!}
                   onChange={(v) => updateTheme({ secondaryColor: v })}
                 />
               </FormField>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField label="Accent">
+              <FormField label="Accent Color">
                 <ColorInput
-                  value={theme.accentColor || DEFAULT_THEME.accentColor!}
+                  value={localTheme.accentColor || DEFAULT_THEME.accentColor!}
                   onChange={(v) => updateTheme({ accentColor: v })}
                 />
               </FormField>
-              <FormField label="Background">
+              <FormField label="Background Color">
                 <ColorInput
-                  value={theme.bgColor || DEFAULT_THEME.bgColor!}
+                  value={localTheme.bgColor || DEFAULT_THEME.bgColor!}
                   onChange={(v) => updateTheme({ bgColor: v })}
                 />
               </FormField>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField label="Background Subtle">
+              <FormField label="Surface Color">
                 <ColorInput
-                  value={theme.bgSubtleColor || DEFAULT_THEME.bgSubtleColor!}
-                  onChange={(v) => updateTheme({ bgSubtleColor: v })}
+                  value={localTheme.surfaceColor || DEFAULT_THEME.surfaceColor!}
+                  onChange={(v) => updateTheme({ surfaceColor: v })}
                 />
               </FormField>
-              <FormField label="Border">
+              <FormField label="Border Color">
                 <ColorInput
-                  value={theme.borderColor || DEFAULT_THEME.borderColor!}
+                  value={localTheme.borderColor || DEFAULT_THEME.borderColor!}
                   onChange={(v) => updateTheme({ borderColor: v })}
                 />
               </FormField>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField label="Text">
+              <FormField label="Text Color">
                 <ColorInput
-                  value={theme.textColor || DEFAULT_THEME.textColor!}
+                  value={localTheme.textColor || DEFAULT_THEME.textColor!}
                   onChange={(v) => updateTheme({ textColor: v })}
                 />
               </FormField>
-              <FormField label="Text Muted">
+              <FormField label="Muted Text Color">
                 <ColorInput
-                  value={theme.textMutedColor || DEFAULT_THEME.textMutedColor!}
+                  value={localTheme.textMutedColor || DEFAULT_THEME.textMutedColor!}
                   onChange={(v) => updateTheme({ textMutedColor: v })}
                 />
               </FormField>
             </div>
           </Card>
 
-          {/* Typography */}
-          <Card className="p-5 space-y-4">
-            <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">Typography</h3>
-
-            <div className="grid grid-cols-1 gap-4">
-              <FormField label="Heading Font">
-                <Select
-                  value={theme.headingFont || "Cormorant Garamond"}
-                  onChange={(e) => updateTheme({ headingFont: e.target.value })}
-                >
-                  {FONT_OPTIONS.map((f) => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </Select>
-              </FormField>
-
-              <FormField label="Body Font">
-                <Select
-                  value={theme.bodyFont || "Inter"}
-                  onChange={(e) => updateTheme({ bodyFont: e.target.value })}
-                >
-                  {FONT_OPTIONS.map((f) => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </Select>
-              </FormField>
-
-              <FormField label="Script Font">
-                <Select
-                  value={theme.scriptFont || "Cormorant Garamond"}
-                  onChange={(e) => updateTheme({ scriptFont: e.target.value })}
-                >
-                  {FONT_OPTIONS.map((f) => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </Select>
-              </FormField>
-            </div>
+          {/* Fonts — fixed gray dashboard styling */}
+          <Card className="p-5 space-y-5">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Fonts</h3>
+            <FormField label="Heading Font">
+              <Select
+                value={localTheme.headingFont || DEFAULT_THEME.headingFont}
+                onChange={(e) => updateTheme({ headingFont: e.target.value })}
+              >
+                {FONT_OPTIONS.map((f) => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </Select>
+            </FormField>
+            <FormField label="Body Font">
+              <Select
+                value={localTheme.bodyFont || DEFAULT_THEME.bodyFont}
+                onChange={(e) => updateTheme({ bodyFont: e.target.value })}
+              >
+                {FONT_OPTIONS.map((f) => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </Select>
+            </FormField>
+            <FormField label="Script Font">
+              <Select
+                value={localTheme.scriptFont || DEFAULT_THEME.scriptFont}
+                onChange={(e) => updateTheme({ scriptFont: e.target.value })}
+              >
+                {FONT_OPTIONS.map((f) => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </Select>
+            </FormField>
           </Card>
 
-          {/* Layout */}
-          <Card className="p-5 space-y-4">
-            <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">Layout</h3>
-
-            <FormField label="Button Radius (px)">
-              <RangeInput
-                value={theme.buttonRadius ?? 2}
-                onChange={(v) => updateTheme({ buttonRadius: v })}
-                min={0}
-                max={24}
-                step={1}
-              />
-            </FormField>
-
-            <FormField label="Section Padding (px)">
-              <RangeInput
-                value={theme.sectionPadding ?? 80}
-                onChange={(v) => updateTheme({ sectionPadding: v })}
-                min={20}
-                max={160}
-                step={10}
-              />
-            </FormField>
-
-            <FormField label="Max Width (px)">
-              <RangeInput
-                value={theme.maxWidth ?? 1200}
-                onChange={(v) => updateTheme({ maxWidth: v })}
-                min={600}
-                max={1600}
-                step={50}
-              />
+          {/* Layout Controls — fixed gray dashboard styling */}
+          <Card className="p-5 space-y-5">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Layout</h3>
+            <RangeInput
+              label="Button Radius (px)"
+              value={localTheme.buttonRadius ?? 2}
+              min={0}
+              max={24}
+              step={1}
+              onChange={(v) => updateTheme({ buttonRadius: v })}
+            />
+            <FormField label="Shadow Style">
+              <Select
+                value={localTheme.shadowStyle || "none"}
+                onChange={(e) => updateTheme({ shadowStyle: e.target.value })}
+              >
+                <option value="none">None</option>
+                <option value="sm">Small</option>
+                <option value="md">Medium</option>
+                <option value="lg">Large</option>
+              </Select>
             </FormField>
           </Card>
         </div>
       </SplitEditor>
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+      {toast && (
+        <Toast
+          message={toast.msg}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </>
   );
 }
-
-export default ThemeEditorPage;

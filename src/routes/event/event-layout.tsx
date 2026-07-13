@@ -3,18 +3,21 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { Badge, Skeleton, Toast } from "../../components/ui";
-import { ThemeProvider } from "../../lib/theme-context";
-import { DEFAULT_THEME } from "../../lib/theme";
-import { Image, LogIn, Home, Palette, Layers, Users, CalendarCheck, Clock, Share2, BarChart3, Settings, ChevronLeft, Menu, X, Eye } from "lucide-react";
+import { Image, LogIn, Home, Palette, CalendarCheck, Users, Clock, Share2, BarChart3, Settings, ChevronLeft, Menu, X, Eye } from "lucide-react";
 import { useState } from "react";
 import { cn } from "../../lib/utils";
 
+/**
+ * Event Layout — the admin dashboard wrapper.
+ * CRITICAL: This does NOT wrap children in EventThemeProvider.
+ * The dashboard always uses fixed gray Tailwind classes for a consistent admin UI.
+ * Event theme only applies to guest-facing pages and the preview pane in the theme editor.
+ */
 const tabs = [
   { key: "cover", label: "Cover", icon: Image },
   { key: "login", label: "Login", icon: LogIn },
   { key: "home", label: "Home", icon: Home },
   { key: "theme", label: "Theme", icon: Palette },
-  { key: "branding", label: "Branding", icon: Layers },
   { key: "events", label: "Events", icon: CalendarCheck },
   { key: "guests", label: "Guests", icon: Users },
   { key: "groups", label: "Groups", icon: Users },
@@ -33,11 +36,7 @@ export default function EventLayoutPage() {
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId).maybeSingle();
-      if (error) throw error;
-      return data as UserEvent | null;
-    },
+    queryFn: async () => { const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId).maybeSingle(); if (error) throw error; return data as UserEvent | null; },
   });
 
   const publishMutation = useMutation({
@@ -57,7 +56,6 @@ export default function EventLayoutPage() {
         if (event.draft_cover_config !== undefined) updates.cover_config = event.draft_cover_config;
         if (event.draft_login_config !== undefined) updates.login_config = event.draft_login_config;
         if (event.draft_theme !== undefined) updates.theme = event.draft_theme;
-        if (event.draft_logo_config !== undefined) updates.logo_config = event.draft_logo_config;
         if (event.draft_content !== undefined) updates.content = event.draft_content;
         if (event.draft_slug !== undefined) updates.slug = event.draft_slug;
         if (event.draft_rsvp_deadline !== undefined) updates.rsvp_deadline = event.draft_rsvp_deadline;
@@ -69,37 +67,36 @@ export default function EventLayoutPage() {
     onError: (err: Error) => { setToast(`Failed to publish: ${err.message}`); },
   });
 
-  if (isLoading) return (<div className="min-h-screen bg-gray-50"><div className="h-16 border-b border-gray-200 bg-white" /><div className="p-8"><Skeleton className="h-64" /></div></div>);
-  if (!event) return (<div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-center"><p className="text-sm text-gray-500 mb-4">Event not found</p><Link to="/dashboard"><Button>Back to Dashboard</Button></Link></div></div>);
-
-  const theme = event.draft_theme || event.theme || DEFAULT_THEME;
+  if (isLoading) return <div className="min-h-screen bg-gray-50"><div className="h-16 border-b border-gray-200 bg-white" /><div className="p-8"><Skeleton className="h-64" /></div></div>;
+  if (!event) return <div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-center"><p className="text-sm text-gray-500 mb-4">Event not found</p><Link to="/dashboard"><Button>Back to Dashboard</Button></Link></div></div>;
 
   return (
-    <ThemeProvider initialTheme={theme}>
-      <div className="min-h-screen bg-gray-50">
-        <div className="sticky top-0 z-40 bg-white border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="h-14 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Link to="/dashboard" className="p-1.5 hover:bg-gray-100 transition-colors" style={{ borderRadius: "var(--radius)" }}><ChevronLeft className="w-5 h-5 text-gray-600" /></Link>
-                <div className="min-w-0"><h1 className="font-heading text-lg truncate">{event.draft_name || event.name}</h1></div>
-                <Badge variant={event.is_published ? "success" : "default"}>{event.is_published ? "Published" : "Draft"}</Badge>
-              </div>
-              <div className="flex items-center gap-2">
-                {event.is_published && event.slug && <Link to={`/e/${event.slug}`} target="_blank"><Button size="sm" variant="ghost"><Eye className="w-3.5 h-3.5" /> View Live</Button></Link>}
-                <Button size="sm" variant={event.is_published ? "secondary" : "primary"} loading={publishMutation.isPending} onClick={() => publishMutation.mutate()}>{event.is_published ? "Unpublish" : "Publish"}</Button>
-                <button className="lg:hidden p-2 hover:bg-gray-100" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>{mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}</button>
-              </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Top Bar — fixed dashboard styling, never affected by event theme */}
+      <div className="sticky top-0 z-40 bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="h-14 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link to="/dashboard" className="p-1.5 hover:bg-gray-100 transition-colors rounded"><ChevronLeft className="w-5 h-5 text-gray-600" /></Link>
+              <div className="min-w-0"><h1 className="font-heading text-lg truncate text-gray-900">{event.draft_name || event.name}</h1></div>
+              <Badge variant={event.is_published ? "success" : "default"}>{event.is_published ? "Published" : "Draft"}</Badge>
             </div>
-            <nav className="hidden lg:flex items-center gap-1 overflow-x-auto pb-px">
-              {tabs.map((tab) => { const isActive = location.pathname.endsWith(`/${tab.key}`); return <Link key={tab.key} to={`/event/${eventId}/${tab.key}`} className={cn("flex items-center gap-2 px-4 py-2.5 text-sm whitespace-nowrap transition-colors border-b-2", isActive ? "border-black text-black font-medium" : "border-transparent text-gray-500 hover:text-black")}><tab.icon className="w-4 h-4" />{tab.label}</Link>; })}
-            </nav>
+            <div className="flex items-center gap-2">
+              {event.is_published && event.slug && <Link to={`/e/${event.slug}`} target="_blank"><Button size="sm" variant="ghost"><Eye className="w-3.5 h-3.5" /> View Live</Button></Link>}
+              <Button size="sm" variant={event.is_published ? "secondary" : "primary"} loading={publishMutation.isPending} onClick={() => publishMutation.mutate()}>{event.is_published ? "Unpublish" : "Publish"}</Button>
+              <button className="lg:hidden p-2 hover:bg-gray-100 rounded" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>{mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}</button>
+            </div>
           </div>
-          {mobileMenuOpen && (<nav className="lg:hidden border-t border-gray-200 bg-white overflow-x-auto"><div className="flex gap-1 p-2 overflow-x-auto">{tabs.map((tab) => { const isActive = location.pathname.endsWith(`/${tab.key}`); return <Link key={tab.key} to={`/event/${eventId}/${tab.key}`} onClick={() => setMobileMenuOpen(false)} className={cn("flex items-center gap-2 px-3 py-2 text-sm whitespace-nowrap transition-colors", isActive ? "bg-black text-white" : "text-gray-500 hover:bg-gray-100")} style={{ borderRadius: "var(--radius)" }}><tab.icon className="w-4 h-4" />{tab.label}</Link>; })}</div></nav>)}
+          {/* Top Navigation — horizontal tabs, no sidebar */}
+          <nav className="hidden lg:flex items-center gap-1 overflow-x-auto pb-px">
+            {tabs.map((tab) => { const isActive = location.pathname.endsWith(`/${tab.key}`); return <Link key={tab.key} to={`/event/${eventId}/${tab.key}`} className={cn("flex items-center gap-2 px-4 py-2.5 text-sm whitespace-nowrap transition-colors border-b-2", isActive ? "border-gray-900 text-gray-900 font-medium" : "border-transparent text-gray-500 hover:text-gray-900")}><tab.icon className="w-4 h-4" />{tab.label}</Link>; })}
+          </nav>
         </div>
-        <div className="max-w-7xl mx-auto"><Outlet context={{ event }} /></div>
-        {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+        {mobileMenuOpen && (<nav className="lg:hidden border-t border-gray-200 bg-white overflow-x-auto"><div className="flex gap-1 p-2 overflow-x-auto">{tabs.map((tab) => { const isActive = location.pathname.endsWith(`/${tab.key}`); return <Link key={tab.key} to={`/event/${eventId}/${tab.key}`} onClick={() => setMobileMenuOpen(false)} className={cn("flex items-center gap-2 px-3 py-2 text-sm whitespace-nowrap transition-colors rounded", isActive ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100")}><tab.icon className="w-4 h-4" />{tab.label}</Link>; })}</div></nav>)}
       </div>
-    </ThemeProvider>
+      {/* Content — dashboard styling, NOT wrapped in EventThemeProvider */}
+      <div className="max-w-7xl mx-auto"><Outlet context={{ event }} /></div>
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+    </div>
   );
 }

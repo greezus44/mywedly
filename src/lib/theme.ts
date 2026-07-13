@@ -6,7 +6,7 @@ export const DEFAULT_THEME: ThemeConfig = {
   secondaryColor: "#2a2a2a",
   accentColor: "#1a1a1a",
   bgColor: "#ffffff",
-  bgSubtleColor: "#f5f5f5",
+  surfaceColor: "#ffffff",
   textColor: "#1a1a1a",
   textMutedColor: "#6b6b6b",
   borderColor: "#e2e2e2",
@@ -14,9 +14,7 @@ export const DEFAULT_THEME: ThemeConfig = {
   bodyFont: "Inter",
   scriptFont: "Cormorant Garamond",
   buttonRadius: 2,
-  sectionPadding: 80,
-  maxWidth: 1200,
-  applyToAll: false,
+  shadowStyle: "none",
 };
 
 export const RUSTY_THEME: ThemeConfig = {
@@ -25,7 +23,7 @@ export const RUSTY_THEME: ThemeConfig = {
   secondaryColor: "#C4A44A",
   accentColor: "#A07820",
   bgColor: "#F5ECD7",
-  bgSubtleColor: "#FAF3E0",
+  surfaceColor: "#FAF3E0",
   textColor: "#3D3528",
   textMutedColor: "#8B7355",
   borderColor: "#D4C695",
@@ -33,47 +31,32 @@ export const RUSTY_THEME: ThemeConfig = {
   bodyFont: "Inter",
   scriptFont: "Cormorant Garamond",
   buttonRadius: 2,
-  sectionPadding: 80,
-  maxWidth: 800,
-  applyToAll: true,
+  shadowStyle: "none",
 };
 
 export const RUSTY_COVER_CONFIG = {
-  bgColor: "#F5ECD7",
-  textColor: "#3D3528",
-  buttonColor: "#B8962E",
-  buttonText: "Enter",
-  scriptFont: "Cormorant Garamond",
-  customText: "Together with their families",
-  showDate: true,
-  showCountdown: false,
+  bgColor: "#F5ECD7", textColor: "#3D3528", buttonColor: "#B8962E", buttonText: "Enter",
+  scriptFont: "Cormorant Garamond", customText: "Together with their families", showDate: true, showCountdown: false,
 };
 
 export const RUSTY_LOGIN_CONFIG = {
-  bgColor: "#FAF3E0",
-  textColor: "#3D3528",
-  buttonColor: "#B8962E",
-  buttonText: "Continue",
-  heading: "Welcome",
-  subheading: "Please enter your name to continue",
-  inputPlaceholder: "Your full name",
+  bgColor: "#FAF3E0", textColor: "#3D3528", buttonColor: "#B8962E", buttonText: "Continue",
+  heading: "Welcome", subheading: "Please enter your name to continue", inputPlaceholder: "Your full name",
 };
 
 export const RUSTY_CONTENT = {
-  invitation_title: "You're Invited",
-  invitation_subtitle: "We would be honoured by your presence",
+  invitation_title: "You're Invited", invitation_subtitle: "We would be honoured by your presence",
   invitation_body: "As we celebrate this sacred union, we invite you to join us for a day filled with love, joy, and cherished moments.",
-  rsvp_button_text: "RSVP",
-  story: "Our journey began with a simple hello, and through every season, our love has grown deeper and stronger.",
+  rsvp_button_text: "RSVP", story: "Our journey began with a simple hello, and through every season, our love has grown deeper and stronger.",
 };
 
 export const THEME_PRESETS: Record<string, ThemeConfig> = {
   classic: DEFAULT_THEME,
   rusty: RUSTY_THEME,
-  mono: { ...DEFAULT_THEME, preset: "mono", primaryColor: "#000000", secondaryColor: "#333333", accentColor: "#000000", bgColor: "#ffffff", bgSubtleColor: "#f5f5f5", textColor: "#1a1a1a", textMutedColor: "#6b6b6b", borderColor: "#e2e2e2" },
-  ocean: { ...DEFAULT_THEME, preset: "ocean", primaryColor: "#0c4a6e", secondaryColor: "#075985", accentColor: "#0ea5e9", bgColor: "#f0f9ff", bgSubtleColor: "#e0f2fe" },
-  forest: { ...DEFAULT_THEME, preset: "forest", primaryColor: "#14532d", secondaryColor: "#166534", accentColor: "#16a34a", bgColor: "#f0fdf4", bgSubtleColor: "#dcfce7" },
-  rose: { ...DEFAULT_THEME, preset: "rose", primaryColor: "#881337", secondaryColor: "#9f1239", accentColor: "#e11d48", bgColor: "#fff1f2", bgSubtleColor: "#ffe4e6" },
+  mono: { ...DEFAULT_THEME, preset: "mono", primaryColor: "#000000", secondaryColor: "#333333", accentColor: "#000000" },
+  ocean: { ...DEFAULT_THEME, preset: "ocean", primaryColor: "#0c4a6e", secondaryColor: "#075985", accentColor: "#0ea5e9", bgColor: "#f0f9ff", surfaceColor: "#e0f2fe" },
+  forest: { ...DEFAULT_THEME, preset: "forest", primaryColor: "#14532d", secondaryColor: "#166534", accentColor: "#16a34a", bgColor: "#f0fdf4", surfaceColor: "#dcfce7" },
+  rose: { ...DEFAULT_THEME, preset: "rose", primaryColor: "#881337", secondaryColor: "#9f1239", accentColor: "#e11d48", bgColor: "#fff1f2", surfaceColor: "#ffe4e6" },
 };
 
 export const FONT_OPTIONS = [
@@ -81,35 +64,28 @@ export const FONT_OPTIONS = [
   { value: "Cormorant Garamond", label: "Cormorant Garamond (Serif)" },
 ];
 
-export function themeToCssVars(theme: ThemeConfig | null): Record<string, string> {
+/**
+ * Convert a ThemeConfig into event-scoped CSS custom properties.
+ * These are applied to a scoped container (.event-themed), NOT to :root,
+ * so the dashboard is never affected.
+ */
+export function themeToEventCssVars(theme: ThemeConfig | null): Record<string, string> {
   const t = theme || DEFAULT_THEME;
   return {
-    "--color-primary": t.primaryColor || DEFAULT_THEME.primaryColor!,
-    "--color-primary-light": t.secondaryColor || DEFAULT_THEME.secondaryColor!,
-    "--color-secondary": t.secondaryColor || DEFAULT_THEME.secondaryColor!,
-    "--color-accent": t.accentColor || DEFAULT_THEME.accentColor!,
-    "--color-bg": t.bgColor || DEFAULT_THEME.bgColor!,
-    "--color-bg-subtle": t.bgSubtleColor || DEFAULT_THEME.bgSubtleColor!,
-    "--color-text": t.textColor || DEFAULT_THEME.textColor!,
-    "--color-text-muted": t.textMutedColor || DEFAULT_THEME.textMutedColor!,
-    "--color-border": t.borderColor || DEFAULT_THEME.borderColor!,
-    "--color-surface": t.bgColor || DEFAULT_THEME.bgColor!,
-    "--color-surface-hover": t.bgSubtleColor || DEFAULT_THEME.bgSubtleColor!,
-    "--font-heading": `"${t.headingFont || "Cormorant Garamond"}", serif`,
-    "--font-body": `"${t.bodyFont || "Inter"}", sans-serif`,
-    "--font-script": `"${t.scriptFont || "Cormorant Garamond"}", serif`,
-    "--radius": `${t.buttonRadius ?? 2}px`,
-    "--max-width": `${t.maxWidth ?? 1200}px`,
+    "--event-primary": t.primaryColor || DEFAULT_THEME.primaryColor!,
+    "--event-secondary": t.secondaryColor || DEFAULT_THEME.secondaryColor!,
+    "--event-accent": t.accentColor || DEFAULT_THEME.accentColor!,
+    "--event-bg": t.bgColor || DEFAULT_THEME.bgColor!,
+    "--event-surface": t.surfaceColor || DEFAULT_THEME.surfaceColor!,
+    "--event-surface-hover": t.surfaceColor || DEFAULT_THEME.surfaceColor!,
+    "--event-text": t.textColor || DEFAULT_THEME.textColor!,
+    "--event-text-muted": t.textMutedColor || DEFAULT_THEME.textMutedColor!,
+    "--event-border": t.borderColor || DEFAULT_THEME.borderColor!,
+    "--event-radius": `${t.buttonRadius ?? 2}px`,
+    "--event-font-heading": `"${t.headingFont || "Cormorant Garamond"}", serif`,
+    "--event-font-body": `"${t.bodyFont || "Inter"}", sans-serif`,
+    "--event-font-script": `"${t.scriptFont || "Cormorant Garamond"}", serif`,
   };
-}
-
-export function applyThemeToElement(el: HTMLElement, theme: ThemeConfig | null) {
-  const vars = themeToCssVars(theme);
-  Object.entries(vars).forEach(([key, value]) => { el.style.setProperty(key, value); });
-}
-
-export function applyThemeToDocument(theme: ThemeConfig | null) {
-  applyThemeToElement(document.documentElement, theme);
 }
 
 export function slugify(text: string): string {

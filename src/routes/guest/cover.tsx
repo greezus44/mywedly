@@ -1,98 +1,93 @@
-import { useNavigate, useParams } from "react-router-dom";
-import { useGuestContext } from "./guest-layout";
-import { supabase, type UserEvent } from "../../lib/supabase";
-import { formatDate, getCountdown, getEventStatus } from "../../lib/utils";
+import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { ChevronDown } from "lucide-react";
+import { formatDate, getCountdown } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { Calendar, MapPin, Clock, ArrowRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useGuestOutletContext } from "./guest-layout";
 
+/**
+ * GuestCover — the cover/landing page for a published event.
+ * Uses cover_config for background/colors/text and event CSS vars for theming.
+ */
 export default function GuestCover() {
-  const { event } = useGuestContext();
+  const { event } = useGuestOutletContext();
   const navigate = useNavigate();
-  const { slug } = useParams<{ slug: string }>();
-  const config = event.cover_config || {};
-  const countdown = getCountdown(event.event_date);
-  const status = getEventStatus(event.event_date);
-  const [, setTick] = useState(0);
+  const cc = event.cover_config || {};
+  const [countdown, setCountdown] = useState(getCountdown(event.event_date));
 
-  // Re-render every second for live countdown
   useEffect(() => {
-    if (!config.showCountdown || countdown.isPast) return;
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
-  }, [config.showCountdown, countdown.isPast]);
+    if (!event.event_date) return;
+    const t = setInterval(() => setCountdown(getCountdown(event.event_date)), 1000);
+    return () => clearInterval(t);
+  }, [event.event_date]);
 
-  const handleEnter = () => navigate(`./login`);
-
-  const bgStyle: React.CSSProperties = config.bgImage
-    ? { backgroundImage: `url(${config.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" }
-    : { backgroundColor: config.bgColor || "var(--color-bg)" };
-
-  const overlayStyle: React.CSSProperties = config.overlayColor
-    ? { backgroundColor: config.overlayColor, opacity: config.overlayOpacity ?? 0.4 }
-    : {};
+  const bgStyle: React.CSSProperties = {};
+  if (cc.bgImage) {
+    bgStyle.backgroundImage = `url(${cc.bgImage})`;
+    bgStyle.backgroundSize = "cover";
+    bgStyle.backgroundPosition = "center";
+  } else if (cc.bgColor) {
+    bgStyle.backgroundColor = cc.bgColor;
+  } else {
+    bgStyle.backgroundColor = "var(--event-bg)";
+  }
+  const overlay = cc.overlayColor
+    ? { backgroundColor: cc.overlayColor, opacity: cc.overlayOpacity ?? 0.3 }
+    : undefined;
+  const textColor = cc.textColor || "var(--event-text)";
+  const buttonColor = cc.buttonColor || "var(--event-primary)";
+  const scriptFont: React.CSSProperties = { fontFamily: "var(--event-font-script)" };
+  const headingFont: React.CSSProperties = { fontFamily: "var(--event-font-heading)" };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden" style={bgStyle}>
-      {config.overlayColor && <div className="absolute inset-0" style={overlayStyle} />}
-      <div className="relative z-10 max-w-2xl mx-auto px-6 py-20 text-center" style={{ color: config.textColor || "var(--color-text)" }}>
-        {config.customText && (
-          <p className="font-[var(--font-script)] text-lg md:text-xl italic mb-6 opacity-80">{config.customText}</p>
+    <div className="min-h-screen relative flex flex-col items-center justify-center px-6 text-center" style={bgStyle}>
+      {overlay && <div className="absolute inset-0" style={overlay} />}
+      <div className="relative z-10 max-w-2xl mx-auto py-20" style={{ color: textColor }}>
+        {cc.logo && (
+          <img
+            src={cc.logo}
+            alt="logo"
+            className="mx-auto mb-8"
+            style={{ width: cc.logoWidth ? `${cc.logoWidth}px` : "80px" }}
+          />
         )}
-        <h1 className="font-[var(--font-heading)] text-4xl md:text-6xl tracking-tight leading-tight mb-4">
+        {cc.customText && (
+          <p className="text-sm uppercase tracking-[0.3em] mb-6 opacity-80" style={scriptFont}>
+            {cc.customText}
+          </p>
+        )}
+        <h1 className="text-5xl md:text-7xl leading-tight mb-4" style={headingFont}>
           {event.name}
         </h1>
-        {event.event_type && (
-          <p className="text-xs uppercase tracking-[0.3em] opacity-70 mb-8">{event.event_type}</p>
+        {cc.showDate !== false && event.event_date && (
+          <p className="text-lg mb-2 opacity-90" style={scriptFont}>
+            {formatDate(event.event_date)}
+            {event.event_time ? ` · ${event.event_time}` : ""}
+          </p>
         )}
-
-        {config.showDate && event.event_date && (
-          <div className="flex items-center justify-center gap-2 mb-2">
-            <Calendar className="w-4 h-4 opacity-70" />
-            <p className="text-sm uppercase tracking-wider">{formatDate(event.event_date)}</p>
-          </div>
-        )}
-        {event.event_time && (
-          <div className="flex items-center justify-center gap-2 mb-8">
-            <Clock className="w-4 h-4 opacity-70" />
-            <p className="text-sm uppercase tracking-wider">{event.event_time}</p>
-          </div>
-        )}
-        {event.venue && (
-          <div className="flex items-center justify-center gap-2 mb-8">
-            <MapPin className="w-4 h-4 opacity-70" />
-            <p className="text-sm">{event.venue}</p>
-          </div>
-        )}
-
-        {config.showCountdown && !countdown.isPast && (
-          <div className="grid grid-cols-4 gap-4 max-w-md mx-auto mb-10">
+        {event.venue && <p className="text-sm mb-8 opacity-75">{event.venue}</p>}
+        {cc.showCountdown !== false && event.event_date && !countdown.isPast && (
+          <div className="flex items-center justify-center gap-6 mb-10">
             {[
               { label: "Days", value: countdown.days },
               { label: "Hours", value: countdown.hours },
-              { label: "Minutes", value: countdown.minutes },
-              { label: "Seconds", value: countdown.seconds },
+              { label: "Mins", value: countdown.minutes },
+              { label: "Secs", value: countdown.seconds },
             ].map((u) => (
               <div key={u.label} className="text-center">
-                <div className="font-[var(--font-heading)] text-3xl md:text-4xl">{String(u.value).padStart(2, "0")}</div>
+                <div className="text-3xl font-heading" style={headingFont}>{u.value}</div>
                 <div className="text-xs uppercase tracking-wider opacity-60 mt-1">{u.label}</div>
               </div>
             ))}
           </div>
         )}
-
-        {status === "completed" && (
-          <p className="text-sm uppercase tracking-wider opacity-70 mb-8">This event has concluded</p>
-        )}
-
         <Button
-          onClick={handleEnter}
-          size="lg"
+          onClick={() => navigate("login")}
           className="mt-4"
-          style={{ backgroundColor: config.buttonColor, color: config.textColor === "#ffffff" ? "#ffffff" : undefined }}
+          style={{ backgroundColor: buttonColor, color: "#fff", borderRadius: "var(--event-radius)" }}
         >
-          {config.buttonText || "Enter"}
-          <ArrowRight className="w-4 h-4" />
+          {cc.buttonText || "Enter"}
+          <ChevronDown className="w-4 h-4" />
         </Button>
       </div>
     </div>

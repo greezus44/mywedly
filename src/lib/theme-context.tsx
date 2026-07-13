@@ -1,34 +1,40 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { ThemeConfig } from "./supabase";
-import { DEFAULT_THEME, themeToCssVars } from "./theme";
+import { DEFAULT_THEME, themeToEventCssVars } from "./theme";
 
-interface ThemeContextValue {
+/**
+ * EventThemeProvider — scopes event theme CSS variables to a container element.
+ * This does NOT modify document :root, so the dashboard is never affected.
+ * Only guest-facing pages and the preview pane use this provider.
+ */
+interface EventThemeContextValue {
   theme: ThemeConfig;
   setTheme: (theme: ThemeConfig) => void;
   updateTheme: (partial: Partial<ThemeConfig>) => void;
-  resetTheme: () => void;
+  cssVars: React.CSSProperties;
 }
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+const EventThemeContext = createContext<EventThemeContextValue | null>(null);
 
-export function ThemeProvider({ children, initialTheme }: { children: ReactNode; initialTheme?: ThemeConfig | null }) {
+export function EventThemeProvider({ children, initialTheme }: { children: ReactNode; initialTheme?: ThemeConfig | null }) {
   const [theme, setThemeState] = useState<ThemeConfig>(initialTheme || DEFAULT_THEME);
-
-  useEffect(() => {
-    const vars = themeToCssVars(theme);
-    const root = document.documentElement;
-    Object.entries(vars).forEach(([key, value]) => { root.style.setProperty(key, value); });
-  }, [theme]);
-
   const setTheme = (t: ThemeConfig) => setThemeState(t);
   const updateTheme = (partial: Partial<ThemeConfig>) => setThemeState((prev) => ({ ...prev, ...partial }));
-  const resetTheme = () => setThemeState(DEFAULT_THEME);
-
-  return <ThemeContext.Provider value={{ theme, setTheme, updateTheme, resetTheme }}>{children}</ThemeContext.Provider>;
+  const cssVars = themeToEventCssVars(theme) as React.CSSProperties;
+  return (
+    <EventThemeContext.Provider value={{ theme, setTheme, updateTheme, cssVars }}>
+      <div className="event-themed" style={cssVars}>{children}</div>
+    </EventThemeContext.Provider>
+  );
 }
 
-export function useTheme(): ThemeContextValue {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error("useTheme must be used within ThemeProvider");
+export function useEventTheme(): EventThemeContextValue {
+  const ctx = useContext(EventThemeContext);
+  if (!ctx) throw new Error("useEventTheme must be used within EventThemeProvider");
   return ctx;
+}
+
+/** Hook for preview components that need event CSS vars without a provider wrapper */
+export function useEventCssVars(theme: ThemeConfig | null): React.CSSProperties {
+  return themeToEventCssVars(theme) as React.CSSProperties;
 }

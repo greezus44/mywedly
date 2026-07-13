@@ -1,187 +1,183 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useOutletContext } from "react-router-dom";
+import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CoverConfig } from "../../lib/supabase";
-import { Button } from "../../components/ui/Button";
-import { Card, FormField, Toggle, ColorInput, RangeInput, Toast } from "../../components/ui";
-import { Input, Textarea } from "../../components/ui/Input";
+import { Card, FormField, Toggle, ColorInput, RangeInput } from "../../components/ui";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
-import { RotateCcw } from "lucide-react";
+import { Toast } from "../../components/ui";
 
-const DEFAULT_COVER_CONFIG: CoverConfig = {
-  bgImage: "",
-  bgColor: "#1a1a1a",
-  overlayColor: "#000000",
-  overlayOpacity: 0.4,
-  textColor: "#ffffff",
-  buttonColor: "#ffffff",
-  buttonText: "Enter",
-  customText: "",
-  showDate: true,
-  showCountdown: false,
-};
+interface OutletContext { event: UserEvent; }
 
-function CoverEditorPage() {
-  const { eventId } = useParams();
-  const { event } = useOutletContext<{ event: UserEvent }>();
+export default function CoverEditorPage() {
+  const { event } = useOutletContext<OutletContext>();
   const queryClient = useQueryClient();
   const [config, setConfig] = useState<CoverConfig>(
-    () => (event.draft_cover_config || event.cover_config || DEFAULT_COVER_CONFIG) as CoverConfig
+    (event.draft_cover_config || event.cover_config || {}) as CoverConfig
   );
-  const [toast, setToast] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const firstRun = useRef(true);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
+  // Sync when event changes from server
   useEffect(() => {
-    const stored = (event.draft_cover_config || event.cover_config || DEFAULT_COVER_CONFIG) as CoverConfig;
-    setConfig(stored);
-  }, [event]);
+    setConfig((event.draft_cover_config || event.cover_config || {}) as CoverConfig);
+  }, [event.draft_cover_config, event.cover_config]);
 
   const saveMutation = useMutation({
-    mutationFn: async (data: CoverConfig) => {
+    mutationFn: async (newConfig: CoverConfig) => {
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_cover_config: data, updated_at: new Date().toISOString() })
-        .eq("id", eventId!);
+        .update({ draft_cover_config: newConfig, updated_at: new Date().toISOString() })
+        .eq("id", event.id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaveState("saved");
-      setToast("Cover saved");
-      setTimeout(() => setSaveState("idle"), 2000);
+      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
+      setToast({ msg: "Cover saved", type: "success" });
     },
     onError: (err: Error) => {
-      setToast(`Failed to save: ${err.message}`);
-      setSaveState("idle");
+      setToast({ msg: `Save failed: ${err.message}`, type: "error" });
     },
   });
 
-  useEffect(() => {
-    if (firstRun.current) {
-      firstRun.current = false;
-      return;
-    }
+  // Debounced auto-save
+  const updateConfig = (partial: Partial<CoverConfig>) => {
+    const newConfig = { ...config, ...partial };
+    setConfig(newConfig);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    setSaveState("saving");
     debounceRef.current = setTimeout(() => {
-      saveMutation.mutate(config);
-    }, 800);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config]);
+      saveMutation.mutate(newConfig);
+    }, 600);
+  };
 
-  const update = (partial: Partial<CoverConfig>) => setConfig((prev) => ({ ...prev, ...partial }));
-  const reset = () => setConfig(DEFAULT_COVER_CONFIG);
+  // Build a preview event object with the latest config
+  const previewEvent: UserEvent = { ...event, draft_cover_config: config };
 
   return (
     <>
-      <SplitEditor preview={<CoverPreview event={event} />}>
-        <div className="space-y-6 max-w-xl mx-auto">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-heading text-2xl text-[var(--color-text)]">Cover Page</h2>
-              <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                {saveState === "saving" ? "Saving..." : saveState === "saved" ? "Saved" : "Edit your cover page"}
-              </p>
-            </div>
-            <Button variant="ghost" size="sm" onClick={reset}>
-              <RotateCcw className="w-3.5 h-3.5" /> Reset
-            </Button>
+      <SplitEditor preview={<CoverPreview event={previewEvent} />}>
+        <div className="space-y-6">
+          <div>
+            <h2 className="font-heading text-2xl text-gray-900">Cover Page</h2>
+            <p className="text-sm text-gray-500 mt-1">Customize the landing page guests see first.</p>
           </div>
 
           <Card className="p-5 space-y-5">
-            <FormField label="Background Image" hint="Upload a full-screen background image">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Background</h3>
+            <FormField label="Background Image">
               <ImageUpload
                 value={config.bgImage || ""}
-                onChange={(url) => update({ bgImage: url })}
-                eventId={eventId}
-                aspectRatio="16/9"
+                onChange={(url) => updateConfig({ bgImage: url })}
+                eventId={event.id}
+                label="Background Image (optional)"
               />
             </FormField>
+            <FormField label="Background Color" hint="Used when no image is set">
+              <ColorInput
+                value={config.bgColor || "#1a1a1a"}
+                onChange={(v) => updateConfig({ bgColor: v })}
+              />
+            </FormField>
+            <FormField label="Overlay Color" hint="Darkens the background image for readability">
+              <ColorInput
+                value={config.overlayColor || "#000000"}
+                onChange={(v) => updateConfig({ overlayColor: v })}
+              />
+            </FormField>
+            <RangeInput
+              label="Overlay Opacity"
+              value={config.overlayOpacity ?? 0.4}
+              min={0}
+              max={1}
+              step={0.1}
+              onChange={(v) => updateConfig({ overlayOpacity: v })}
+            />
+          </Card>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField label="Background Color">
-                <ColorInput
-                  value={config.bgColor || "#1a1a1a"}
-                  onChange={(v) => update({ bgColor: v })}
-                />
-              </FormField>
-              <FormField label="Text Color">
-                <ColorInput
-                  value={config.textColor || "#ffffff"}
-                  onChange={(v) => update({ textColor: v })}
-                />
-              </FormField>
-            </div>
+          <Card className="p-5 space-y-5">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Logo</h3>
+            <ImageUpload
+              value={config.logo || ""}
+              onChange={(url) => updateConfig({ logo: url })}
+              eventId={event.id}
+              label="Cover Logo (optional)"
+              aspectRatio="4/3"
+            />
+            <RangeInput
+              label="Logo Width (px)"
+              value={config.logoWidth ?? 120}
+              min={40}
+              max={300}
+              step={1}
+              onChange={(v) => updateConfig({ logoWidth: v })}
+            />
+          </Card>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField label="Overlay Color" hint="Shown when bg image is set">
-                <ColorInput
-                  value={config.overlayColor || "#000000"}
-                  onChange={(v) => update({ overlayColor: v })}
-                />
-              </FormField>
-              <FormField label="Button Color">
-                <ColorInput
-                  value={config.buttonColor || "#ffffff"}
-                  onChange={(v) => update({ buttonColor: v })}
-                />
-              </FormField>
-            </div>
-
-            <FormField label="Overlay Opacity">
-              <RangeInput
-                value={config.overlayOpacity ?? 0.4}
-                onChange={(v) => update({ overlayOpacity: v })}
-                min={0}
-                max={1}
-                step={0.1}
+          <Card className="p-5 space-y-5">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Text</h3>
+            <FormField label="Text Color">
+              <ColorInput
+                value={config.textColor || "#ffffff"}
+                onChange={(v) => updateConfig({ textColor: v })}
+              />
+            </FormField>
+            <FormField label="Custom Intro Text" hint="Script text shown above the event name">
+              <input
+                type="text"
+                value={config.customText || ""}
+                onChange={(e) => updateConfig({ customText: e.target.value })}
+                placeholder="Together with their families"
+                className="w-full px-4 py-2.5 text-sm bg-white border border-gray-200 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-gray-900 transition-colors rounded-md"
               />
             </FormField>
           </Card>
 
           <Card className="p-5 space-y-5">
-            <FormField label="Custom Text" hint="Displayed above the event name">
-              <Textarea
-                value={config.customText || ""}
-                onChange={(e) => update({ customText: e.target.value })}
-                placeholder="Together with their families..."
-                rows={2}
+            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Button</h3>
+            <FormField label="Button Color">
+              <ColorInput
+                value={config.buttonColor || "#1a1a1a"}
+                onChange={(v) => updateConfig({ buttonColor: v })}
               />
             </FormField>
-
             <FormField label="Button Text">
-              <Input
+              <input
+                type="text"
                 value={config.buttonText || ""}
-                onChange={(e) => update({ buttonText: e.target.value })}
+                onChange={(e) => updateConfig({ buttonText: e.target.value })}
                 placeholder="Enter"
+                className="w-full px-4 py-2.5 text-sm bg-white border border-gray-200 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-gray-900 transition-colors rounded-md"
               />
             </FormField>
+          </Card>
 
-            <div className="flex items-center gap-6 pt-2">
+          <Card className="p-5 space-y-4">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Display Options</h3>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-900">Show Event Date</span>
               <Toggle
                 checked={config.showDate ?? true}
-                onChange={(v) => update({ showDate: v })}
-                label="Show Date"
+                onChange={(v) => updateConfig({ showDate: v })}
               />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-900">Show Countdown</span>
               <Toggle
                 checked={config.showCountdown ?? false}
-                onChange={(v) => update({ showCountdown: v })}
-                label="Show Countdown"
+                onChange={(v) => updateConfig({ showCountdown: v })}
               />
             </div>
           </Card>
         </div>
       </SplitEditor>
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+      {toast && (
+        <Toast
+          message={toast.msg}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </>
   );
 }
-
-export default CoverEditorPage;

@@ -1,32 +1,33 @@
-import { useState, useMemo, useRef } from "react";
-import { useParams, useOutletContext } from "react-router-dom";
+import { useState, useRef } from "react";
+import { useOutletContext, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventGuest } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Card, Badge, EmptyState, FormField, Modal, Toast, ErrorState, Skeleton } from "../../components/ui";
-import { Input } from "../../components/ui/Input";
-import { UserPlus, Search, Trash2, Upload, Download, Users, Mail, Phone } from "lucide-react";
+import { Card, Badge, EmptyState, Skeleton, ErrorState, Modal, Toast } from "../../components/ui";
+import { Input, Select } from "../../components/ui/Input";
+import { Users, Plus, Trash2, Search, Upload, Download, Mail } from "lucide-react";
+import { cn } from "../../lib/utils";
 
-interface NewGuest {
-  name: string;
-  email: string;
-  phone: string;
-  group_name: string;
-  side: string;
-}
+interface OutletContext { event: UserEvent; }
 
-const EMPTY_GUEST: NewGuest = { name: "", email: "", phone: "", group_name: "", side: "" };
-
-function GuestsPage() {
+export default function GuestsPage() {
+  const { event } = useOutletContext<OutletContext>();
   const { eventId } = useParams();
-  const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newGuest, setNewGuest] = useState<NewGuest>(EMPTY_GUEST);
-  const [toast, setToast] = useState<string | null>(null);
-  const [toastType, setToastType] = useState<"success" | "error">("success");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const [newGuest, setNewGuest] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    group_name: "",
+    side: "Bride",
+  });
 
   const { data: guests, isLoading, error } = useQuery({
     queryKey: ["guests", eventId],
@@ -42,31 +43,28 @@ function GuestsPage() {
   });
 
   const addMutation = useMutation({
-    mutationFn: async (guest: NewGuest) => {
+    mutationFn: async () => {
+      const token = crypto.randomUUID();
       const { error } = await supabase.from("event_guests").insert({
         event_id: eventId,
-        name: guest.name,
-        email: guest.email,
-        phone: guest.phone,
-        group_name: guest.group_name,
-        side: guest.side,
-        token: crypto.randomUUID(),
+        name: newGuest.name,
+        email: newGuest.email,
+        phone: newGuest.phone,
+        group_name: newGuest.group_name,
+        side: newGuest.side,
+        token,
         rsvp_status: "pending",
-        plus_ones: 0,
       });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setShowAddModal(false);
-      setNewGuest(EMPTY_GUEST);
-      setToastType("success");
-      setToast("Guest added successfully");
+      setShowAdd(false);
+      setNewGuest({ name: "", email: "", phone: "", group_name: "", side: "Bride" });
+      setToast({ msg: "Guest added", type: "success" });
     },
     onError: (err: Error) => {
-      setToastType("error");
-      setToast(`Failed to add guest: ${err.message}`);
+      setToast({ msg: `Failed to add guest: ${err.message}`, type: "error" });
     },
   });
 
@@ -77,239 +75,149 @@ function GuestsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setToastType("success");
-      setToast("Guest removed");
+      setDeleteId(null);
+      setToast({ msg: "Guest deleted", type: "success" });
     },
     onError: (err: Error) => {
-      setToastType("error");
-      setToast(`Failed to remove: ${err.message}`);
+      setToast({ msg: `Failed to delete: ${err.message}`, type: "error" });
+      setDeleteId(null);
     },
   });
 
-  const importCsvMutation = useMutation({
-    mutationFn: async (rows: NewGuest[]) => {
-      const inserts = rows.map((r) => ({
+  const importMutation = useMutation({
+    mutationFn: async (rows: { name: string; email: string; phone: string; group_name: string; side: string }[]) => {
+      const toInsert = rows.map((r) => ({
         event_id: eventId,
         name: r.name,
-        email: r.email,
-        phone: r.phone,
-        group_name: r.group_name,
-        side: r.side,
+        email: r.email || "",
+        phone: r.phone || "",
+        group_name: r.group_name || "",
+        side: r.side || "Bride",
         token: crypto.randomUUID(),
         rsvp_status: "pending",
-        plus_ones: 0,
       }));
-      const { error } = await supabase.from("event_guests").insert(inserts);
+      const { error } = await supabase.from("event_guests").insert(toInsert);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
-      setToastType("success");
-      setToast("Guests imported successfully");
+      setShowImport(false);
+      setToast({ msg: "Guests imported", type: "success" });
     },
     onError: (err: Error) => {
-      setToastType("error");
-      setToast(`Import failed: ${err.message}`);
+      setToast({ msg: `Import failed: ${err.message}`, type: "error" });
     },
   });
 
-  const filteredGuests = useMemo(() => {
-    if (!guests) return [];
-    const q = search.toLowerCase().trim();
-    if (!q) return guests;
-    return guests.filter(
-      (g) =>
-        g.name.toLowerCase().includes(q) ||
-        g.email.toLowerCase().includes(q) ||
-        g.phone.toLowerCase().includes(q) ||
-        g.group_name.toLowerCase().includes(q)
-    );
-  }, [guests, search]);
-
-  const stats = useMemo(() => {
-    if (!guests) return { total: 0, attending: 0, declined: 0, pending: 0 };
-    return {
-      total: guests.length,
-      attending: guests.filter((g) => g.rsvp_status === "attending").length,
-      declined: guests.filter((g) => g.rsvp_status === "declined").length,
-      pending: guests.filter((g) => g.rsvp_status === "pending").length,
-    };
-  }, [guests]);
-
-  const handleAdd = () => {
-    if (!newGuest.name.trim()) {
-      setToastType("error");
-      setToast("Name is required");
-      return;
-    }
-    addMutation.mutate(newGuest);
-  };
-
-  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleCsvImport = (file: File) => {
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
       const lines = text.split("\n").filter((l) => l.trim());
-      const rows: NewGuest[] = lines.slice(1).map((line) => {
-        const cols = line.split(",").map((c) => c.trim());
+      if (lines.length < 2) {
+        setToast({ msg: "CSV needs a header row and at least one guest", type: "error" });
+        return;
+      }
+      const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+      const rows = lines.slice(1).map((line) => {
+        const values = line.split(",").map((v) => v.trim());
+        const row: Record<string, string> = {};
+        headers.forEach((h, i) => { row[h] = values[i] || ""; });
         return {
-          name: cols[0] || "",
-          email: cols[1] || "",
-          phone: cols[2] || "",
-          group_name: cols[3] || "",
-          side: cols[4] || "",
+          name: row.name || row["name"] || "",
+          email: row.email || "",
+          phone: row.phone || "",
+          group_name: row.group_name || row.group || "",
+          side: row.side || "Bride",
         };
       }).filter((r) => r.name);
       if (rows.length === 0) {
-        setToastType("error");
-        setToast("No valid rows found in CSV");
+        setToast({ msg: "No valid guests found in CSV", type: "error" });
         return;
       }
-      importCsvMutation.mutate(rows);
+      importMutation.mutate(rows);
     };
     reader.readAsText(file);
-    e.target.value = "";
   };
 
-  const exportCsv = () => {
-    if (!guests || guests.length === 0) return;
-    const header = "Name,Email,Phone,Group,Side,RSVP Status,Plus Ones,Dietary,Message\n";
-    const rows = guests.map((g) =>
-      [
-        g.name,
-        g.email,
-        g.phone,
-        g.group_name,
-        g.side,
-        g.rsvp_status,
-        g.plus_ones,
-        g.dietary,
-        g.message,
-      ]
-        .map((v) => `"${(v || "").toString().replace(/"/g, '""')}"`)
-        .join(",")
-    ).join("\n");
-    const blob = new Blob([header + rows], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${event.draft_name || event.name || "event"}-guests.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const filtered = (guests || []).filter((g) => {
+    const q = search.toLowerCase();
+    return g.name.toLowerCase().includes(q) || g.email.toLowerCase().includes(q) || g.group_name.toLowerCase().includes(q);
+  });
+
+  const rsvpBadgeVariant = (status: string): "default" | "success" | "warning" | "error" => {
+    if (status === "attending") return "success";
+    if (status === "declined") return "error";
+    return "warning";
   };
 
-  const rsvpBadge = (status: string) => {
-    if (status === "attending") return <Badge variant="success">Attending</Badge>;
-    if (status === "declined") return <Badge variant="error">Declined</Badge>;
-    return <Badge variant="warning">Pending</Badge>;
-  };
+  if (isLoading) return <div className="p-8"><Skeleton className="h-64" /></div>;
+  if (error) return <ErrorState message={error.message} onRetry={() => queryClient.invalidateQueries({ queryKey: ["guests", eventId] })} />;
 
   return (
-    <div className="p-6 lg:p-8 max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+    <div className="p-6 lg:p-8 space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h2 className="font-heading text-2xl text-[var(--color-text)]">Guests</h2>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">{stats.total} total guests</p>
+          <h2 className="font-heading text-2xl text-gray-900">Guests</h2>
+          <p className="text-sm text-gray-500 mt-1">{guests?.length || 0} total guests</p>
         </div>
         <div className="flex items-center gap-2">
-          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
-          <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importCsvMutation.isPending}>
-            <Upload className="w-3.5 h-3.5" /> Import CSV
+          <Button variant="secondary" size="sm" onClick={() => setShowImport(true)}>
+            <Upload className="w-4 h-4" /> Import CSV
           </Button>
-          <Button variant="secondary" size="sm" onClick={exportCsv} disabled={!guests || guests.length === 0}>
-            <Download className="w-3.5 h-3.5" /> Export
-          </Button>
-          <Button size="sm" onClick={() => setShowAddModal(true)}>
-            <UserPlus className="w-3.5 h-3.5" /> Add Guest
+          <Button size="sm" onClick={() => setShowAdd(true)}>
+            <Plus className="w-4 h-4" /> Add Guest
           </Button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: "Total", value: stats.total, color: "var(--color-text)" },
-          { label: "Attending", value: stats.attending, color: "#16a34a" },
-          { label: "Declined", value: stats.declined, color: "#dc2626" },
-          { label: "Pending", value: stats.pending, color: "#d97706" },
-        ].map((s) => (
-          <Card key={s.label} className="p-4">
-            <p className="text-xs uppercase tracking-wider text-[var(--color-text-muted)]">{s.label}</p>
-            <p className="text-2xl font-heading mt-1" style={{ color: s.color }}>{s.value}</p>
-          </Card>
-        ))}
-      </div>
-
-      {/* Search */}
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]" />
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, email, phone, or group..."
+          placeholder="Search by name, email, or group..."
           className="pl-10"
         />
       </div>
 
-      {/* Table */}
-      <Card className="overflow-hidden">
-        {isLoading ? (
-          <div className="p-6 space-y-3">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
-        ) : error ? (
-          <ErrorState message={error.message} onRetry={() => queryClient.invalidateQueries({ queryKey: ["guests", eventId] })} />
-        ) : filteredGuests.length === 0 ? (
-          <EmptyState
-            icon={<Users className="w-12 h-12" />}
-            title={search ? "No guests found" : "No guests yet"}
-            description={search ? "Try a different search term" : "Add your first guest or import from CSV"}
-            action={!search ? <Button size="sm" onClick={() => setShowAddModal(true)}><UserPlus className="w-3.5 h-3.5" /> Add Guest</Button> : undefined}
-          />
-        ) : (
+      {!filtered.length ? (
+        <EmptyState
+          icon={<Users className="w-12 h-12" />}
+          title={search ? "No guests found" : "No guests yet"}
+          description={search ? "Try a different search term." : "Add guests manually or import a CSV file."}
+          action={!search ? <Button onClick={() => setShowAdd(true)}><Plus className="w-4 h-4" /> Add Guest</Button> : undefined}
+        />
+      ) : (
+        <Card className="overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead>
-                <tr className="border-b border-[var(--color-border)] bg-[var(--color-bg-subtle)]">
-                  <th className="text-left text-xs uppercase tracking-wider text-[var(--color-text-muted)] px-4 py-3 font-medium">Name</th>
-                  <th className="text-left text-xs uppercase tracking-wider text-[var(--color-text-muted)] px-4 py-3 font-medium hidden md:table-cell">Contact</th>
-                  <th className="text-left text-xs uppercase tracking-wider text-[var(--color-text-muted)] px-4 py-3 font-medium hidden lg:table-cell">Group</th>
-                  <th className="text-left text-xs uppercase tracking-wider text-[var(--color-text-muted)] px-4 py-3 font-medium">RSVP</th>
-                  <th className="text-left text-xs uppercase tracking-wider text-[var(--color-text-muted)] px-4 py-3 font-medium hidden lg:table-cell">Plus Ones</th>
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left text-xs font-medium uppercase tracking-wider text-gray-500 px-4 py-3">Name</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-wider text-gray-500 px-4 py-3">Email</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-wider text-gray-500 px-4 py-3">Phone</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-wider text-gray-500 px-4 py-3">Group</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-wider text-gray-500 px-4 py-3">Side</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-wider text-gray-500 px-4 py-3">RSVP</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
-              <tbody>
-                {filteredGuests.map((g) => (
-                  <tr key={g.id} className="border-b border-[var(--color-border)] last:border-0 hover:bg-[var(--color-bg-subtle)] transition-colors">
+              <tbody className="divide-y divide-gray-200">
+                {filtered.map((g) => (
+                  <tr key={g.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-sm text-gray-900 font-medium">{g.name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{g.email || "—"}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{g.phone || "—"}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{g.group_name || "—"}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{g.side}</td>
                     <td className="px-4 py-3">
-                      <span className="text-sm font-medium text-[var(--color-text)]">{g.name}</span>
-                      {g.side && <span className="text-xs text-[var(--color-text-muted)] block">{g.side}</span>}
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      <div className="flex flex-col gap-0.5">
-                        {g.email && <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-1"><Mail className="w-3 h-3" />{g.email}</span>}
-                        {g.phone && <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-1"><Phone className="w-3 h-3" />{g.phone}</span>}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
-                      <span className="text-sm text-[var(--color-text-muted)]">{g.group_name || "—"}</span>
-                    </td>
-                    <td className="px-4 py-3">{rsvpBadge(g.rsvp_status)}</td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
-                      <span className="text-sm text-[var(--color-text-muted)]">{g.plus_ones}</span>
+                      <Badge variant={rsvpBadgeVariant(g.rsvp_status)}>{g.rsvp_status}</Badge>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
-                        onClick={() => deleteMutation.mutate(g.id)}
-                        disabled={deleteMutation.isPending}
-                        className="p-1.5 text-[var(--color-text-muted)] hover:text-red-600 hover:bg-red-50 transition-colors"
-                        style={{ borderRadius: "var(--radius)" }}
+                        onClick={() => setDeleteId(g.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 transition-colors rounded"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -319,62 +227,86 @@ function GuestsPage() {
               </tbody>
             </table>
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
 
       {/* Add Guest Modal */}
-      <Modal open={showAddModal} onClose={() => setShowAddModal(false)} title="Add Guest">
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Guest">
         <div className="space-y-4">
-          <FormField label="Name" hint="Required">
-            <Input
-              value={newGuest.name}
-              onChange={(e) => setNewGuest({ ...newGuest, name: e.target.value })}
-              placeholder="Jane Doe"
-            />
-          </FormField>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField label="Email">
-              <Input
-                type="email"
-                value={newGuest.email}
-                onChange={(e) => setNewGuest({ ...newGuest, email: e.target.value })}
-                placeholder="jane@example.com"
-              />
-            </FormField>
-            <FormField label="Phone">
-              <Input
-                value={newGuest.phone}
-                onChange={(e) => setNewGuest({ ...newGuest, phone: e.target.value })}
-                placeholder="+1 234 567 8900"
-              />
-            </FormField>
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">Name</label>
+            <Input value={newGuest.name} onChange={(e) => setNewGuest({ ...newGuest, name: e.target.value })} placeholder="Jane Doe" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField label="Group">
-              <Input
-                value={newGuest.group_name}
-                onChange={(e) => setNewGuest({ ...newGuest, group_name: e.target.value })}
-                placeholder="Family"
-              />
-            </FormField>
-            <FormField label="Side">
-              <Input
-                value={newGuest.side}
-                onChange={(e) => setNewGuest({ ...newGuest, side: e.target.value })}
-                placeholder="Bride / Groom"
-              />
-            </FormField>
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">Email</label>
+            <Input type="email" value={newGuest.email} onChange={(e) => setNewGuest({ ...newGuest, email: e.target.value })} placeholder="jane@example.com" />
           </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" size="sm" onClick={() => setShowAddModal(false)}>Cancel</Button>
-            <Button size="sm" onClick={handleAdd} loading={addMutation.isPending}>Add Guest</Button>
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">Phone</label>
+            <Input value={newGuest.phone} onChange={(e) => setNewGuest({ ...newGuest, phone: e.target.value })} placeholder="555-1234" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">Group</label>
+            <Input value={newGuest.group_name} onChange={(e) => setNewGuest({ ...newGuest, group_name: e.target.value })} placeholder="Family" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">Side</label>
+            <Select value={newGuest.side} onChange={(e) => setNewGuest({ ...newGuest, side: e.target.value })}>
+              <option value="Bride">Bride</option>
+              <option value="Groom">Groom</option>
+              <option value="Both">Both</option>
+            </Select>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button onClick={() => addMutation.mutate()} loading={addMutation.isPending} disabled={!newGuest.name}>
+              Add Guest
+            </Button>
+            <Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button>
           </div>
         </div>
       </Modal>
 
-      {toast && <Toast message={toast} type={toastType} onClose={() => setToast(null)} />}
+      {/* Import CSV Modal */}
+      <Modal open={showImport} onClose={() => setShowImport(false)} title="Import Guests from CSV">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Upload a CSV file with columns: <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">name, email, phone, group_name, side</code>
+          </p>
+          <div
+            onClick={() => fileRef.current?.click()}
+            className="flex flex-col items-center justify-center border-2 border-dashed border-gray-200 hover:border-gray-400 cursor-pointer p-8 rounded-lg transition-colors"
+          >
+            <Upload className="w-8 h-8 text-gray-400 mb-2" />
+            <span className="text-sm text-gray-500">Click to select a CSV file</span>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleCsvImport(f);
+              e.target.value = "";
+            }}
+          />
+          {importMutation.isPending && <p className="text-sm text-gray-500">Importing...</p>}
+          <Button variant="ghost" onClick={() => setShowImport(false)}>Cancel</Button>
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation */}
+      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Delete Guest">
+        <p className="text-sm text-gray-600 mb-6">Are you sure you want to remove this guest?</p>
+        <div className="flex gap-3">
+          <Button variant="danger" onClick={() => deleteMutation.mutate(deleteId!)} loading={deleteMutation.isPending}>
+            Delete
+          </Button>
+          <Button variant="ghost" onClick={() => setDeleteId(null)}>Cancel</Button>
+        </div>
+      </Modal>
+
+      {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
-
-export default GuestsPage;

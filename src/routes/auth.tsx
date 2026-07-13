@@ -4,45 +4,23 @@ import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Toast } from "../components/ui";
-
 export default function AuthPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-
+  const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false); const [error, setError] = useState<string | null>(null); const [toast, setToast] = useState<string | null>(null);
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
+    e.preventDefault(); setLoading(true); setError(null);
     try {
-      if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        if (data.session) { navigate("/dashboard"); }
-        else { setToast("Account created. Please sign in."); setMode("signin"); }
-      } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        if (data.session) navigate("/dashboard");
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed");
-    } finally {
-      setLoading(false);
-    }
+      if (mode === "signup") { const { data, error } = await supabase.auth.signUp({ email, password }); if (error) throw error; if (data.session) { navigate("/dashboard"); } else { setToast("Account created. Please sign in."); setMode("signin"); } }
+      else { const { data, error } = await supabase.auth.signInWithPassword({ email, password }); if (error) throw error; if (data.session) navigate("/dashboard"); }
+    } catch (err) { setError(err instanceof Error ? err.message : "Authentication failed"); } finally { setLoading(false); }
   };
-
   return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <Link to="/" className="block text-center mb-12"><span className="font-heading text-3xl text-black">MyWedly</span></Link>
-        <div className="flex border border-gray-200 mb-8" style={{ borderRadius: "var(--radius)" }}>
-          {(["signin", "signup"] as const).map((m) => <button key={m} onClick={() => { setMode(m); setError(null); }} className={`flex-1 py-2.5 text-sm font-medium transition-colors ${mode === m ? "bg-black text-white" : "text-gray-500 hover:text-black"}`} style={{ borderRadius: "var(--radius)" }}>{m === "signin" ? "Sign In" : "Sign Up"}</button>)}
-        </div>
+        <div className="flex border border-gray-200 mb-8 rounded-md">{(["signin", "signup"] as const).map((m) => <button key={m} onClick={() => { setMode(m); setError(null); }} className={`flex-1 py-2.5 text-sm font-medium transition-colors rounded-md ${mode === m ? "bg-black text-white" : "text-gray-500 hover:text-black"}`}>{m === "signin" ? "Sign In" : "Sign Up"}</button>)}</div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div><label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">Email</label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required /></div>
           <div><label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">Password</label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} /></div>

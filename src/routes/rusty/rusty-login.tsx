@@ -1,21 +1,27 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useRustyContext } from "./rusty-layout";
-import { useGuestAuth } from "../../lib/guest-auth";
-import { RUSTY_LOGIN_CONFIG, RUSTY_THEME } from "../../lib/theme";
-import { Button } from "../../components/ui/Button";
+import { ArrowRight } from "lucide-react";
+import { RUSTY_LOGIN_CONFIG } from "../../lib/theme";
 import { Input } from "../../components/ui/Input";
-import { ArrowRight, User } from "lucide-react";
+import { Button } from "../../components/ui/Button";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { useRustyOutletContext } from "./rusty-layout";
 
 export type Lang = "en" | "id";
 
+/**
+ * RustyLogin — guest login with cream/gold styling.
+ */
 export default function RustyLogin() {
-  const { event } = useRustyContext();
-  const navigate = useNavigate();
+  const { event } = useRustyOutletContext();
   const { signIn } = useGuestAuth();
-  const config = { ...RUSTY_LOGIN_CONFIG, ...(event.login_config || {}) };
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const lc = { ...RUSTY_LOGIN_CONFIG, ...(event.login_config || {}) };
+  const headingFont: React.CSSProperties = { fontFamily: "var(--event-font-heading)" };
+  const scriptFont: React.CSSProperties = { fontFamily: "var(--event-font-script)" };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,71 +30,82 @@ export default function RustyLogin() {
       setError("Please enter your name to continue.");
       return;
     }
-    if (trimmed.length < 2) {
-      setError("Name must be at least 2 characters.");
-      return;
-    }
+    setError(null);
     signIn(trimmed, event.id);
-    navigate("./home");
+    navigate("home");
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden" style={{ backgroundColor: config.bgColor || RUSTY_THEME.bgSubtleColor! }}>
-      {/* Gold ornamental border */}
-      <div className="absolute inset-4 border pointer-events-none" style={{ borderColor: RUSTY_THEME.accentColor, borderRadius: "2px" }} />
+    <div
+      className="min-h-screen relative flex items-center justify-center px-6"
+      style={{ backgroundColor: lc.bgColor || "var(--event-surface)", color: lc.textColor || "var(--event-text)" }}
+    >
+      {/* Decorative gold top border */}
+      <div className="absolute top-0 left-0 right-0 h-1" style={{ backgroundColor: "var(--event-primary)" }} />
 
-      <div className="relative z-10 w-full max-w-md mx-auto px-6 py-20 text-center" style={{ color: config.textColor || RUSTY_THEME.textColor! }}>
-        {/* Ornamental divider top */}
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="h-px w-12" style={{ backgroundColor: RUSTY_THEME.accentColor }} />
-          <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: RUSTY_THEME.accentColor }} />
-          <div className="h-px w-12" style={{ backgroundColor: RUSTY_THEME.accentColor }} />
+      <div className="relative z-10 w-full max-w-md py-16">
+        {lc.logo && (
+          <img
+            src={lc.logo}
+            alt="logo"
+            className="mx-auto mb-8"
+            style={{ width: lc.logoWidth ? `${lc.logoWidth}px` : "72px" }}
+          />
+        )}
+
+        {/* Ornamental divider */}
+        <div className="flex items-center justify-center gap-4 mb-8">
+          <div className="h-px w-12" style={{ backgroundColor: "var(--event-primary)" }} />
+          <div className="w-2 h-2 rotate-45" style={{ backgroundColor: "var(--event-primary)" }} />
+          <div className="h-px w-12" style={{ backgroundColor: "var(--event-primary)" }} />
         </div>
 
-        <div className="mb-8">
-          <h1 className="font-serif text-3xl md:text-4xl mb-2" style={{ fontFamily: RUSTY_THEME.headingFont, color: RUSTY_THEME.textColor }}>
-            {config.heading || "Welcome"}
-          </h1>
-          {config.subheading && <p className="text-sm opacity-70 italic font-serif" style={{ fontFamily: RUSTY_THEME.scriptFont }}>{config.subheading}</p>}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl mb-2" style={headingFont}>{lc.heading || "Welcome"}</h1>
+          {lc.subheading && (
+            <p className="text-sm opacity-75" style={scriptFont}>{lc.subheading}</p>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50" style={{ color: RUSTY_THEME.accentColor! }} />
-            <Input
-              type="text"
-              value={name}
-              onChange={(e) => { setName(e.target.value); setError(null); }}
-              placeholder={config.inputPlaceholder || "Your full name"}
-              className="pl-11"
-              style={{ backgroundColor: "#F5ECD7", borderColor: RUSTY_THEME.borderColor, color: RUSTY_THEME.textColor, borderRadius: "2px" }}
-              autoFocus
-              maxLength={100}
-            />
-          </div>
-          {error && <p className="text-xs text-red-500 text-left">{error}</p>}
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={lc.inputPlaceholder || "Your full name"}
+            className="text-center"
+            style={{
+              borderColor: "var(--event-border)",
+              backgroundColor: "var(--event-bg)",
+              color: "var(--event-text)",
+              borderRadius: "var(--event-radius)",
+            }}
+            autoFocus
+          />
+          {error && <p className="text-sm text-red-600 text-center">{error}</p>}
           <Button
             type="submit"
-            size="lg"
             className="w-full"
-            style={{ backgroundColor: config.buttonColor || RUSTY_THEME.accentColor!, color: "#F5ECD7", borderRadius: "2px" }}
+            style={{
+              backgroundColor: lc.buttonColor || "var(--event-primary)",
+              color: "#fff",
+              borderRadius: "var(--event-radius)",
+            }}
           >
-            {config.buttonText || "Continue"}
+            {lc.buttonText || "Continue"}
             <ArrowRight className="w-4 h-4" />
           </Button>
         </form>
 
-        <p className="mt-8 text-xs opacity-50 uppercase tracking-wider font-serif" style={{ fontFamily: RUSTY_THEME.scriptFont, color: RUSTY_THEME.accentColor }}>
-          {event.name}
-        </p>
-
-        {/* Ornamental divider bottom */}
-        <div className="flex items-center justify-center gap-3 mt-8">
-          <div className="h-px w-12" style={{ backgroundColor: RUSTY_THEME.accentColor }} />
-          <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: RUSTY_THEME.accentColor }} />
-          <div className="h-px w-12" style={{ backgroundColor: RUSTY_THEME.accentColor }} />
+        {/* Ornamental divider */}
+        <div className="flex items-center justify-center gap-4 mt-8">
+          <div className="h-px w-12" style={{ backgroundColor: "var(--event-primary)" }} />
+          <div className="w-2 h-2 rotate-45" style={{ backgroundColor: "var(--event-primary)" }} />
+          <div className="h-px w-12" style={{ backgroundColor: "var(--event-primary)" }} />
         </div>
       </div>
+
+      {/* Decorative gold bottom border */}
+      <div className="absolute bottom-0 left-0 right-0 h-1" style={{ backgroundColor: "var(--event-primary)" }} />
     </div>
   );
 }

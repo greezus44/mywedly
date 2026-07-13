@@ -1,14 +1,15 @@
-import { useMemo } from "react";
-import { useParams, useOutletContext } from "react-router-dom";
+import { useOutletContext, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventGuest, type EventRsvp, type EventMessage, type ScheduleItem } from "../../lib/supabase";
-import { formatDate, getCountdown, getEventStatus } from "../../lib/utils";
-import { Card, Badge, EmptyState, Skeleton } from "../../components/ui";
-import { BarChart3, Users, CalendarCheck, MessageSquare, Clock, TrendingUp, Eye, Mail } from "lucide-react";
+import { supabase, type UserEvent, type EventGuest, type EventRsvp, type EventMessage } from "../../lib/supabase";
+import { Card, Badge, Skeleton, ErrorState } from "../../components/ui";
+import { Users, Mail, Check, X, Clock, MessageSquare, Calendar, MapPin, Eye, TrendingUp, UserPlus } from "lucide-react";
+import { formatDate, getEventStatus } from "../../lib/utils";
 
-function AnalyticsPage() {
+interface OutletContext { event: UserEvent; }
+
+export default function AnalyticsPage() {
+  const { event } = useOutletContext<OutletContext>();
   const { eventId } = useParams();
-  const { event } = useOutletContext<{ event: UserEvent }>();
 
   const { data: guests, isLoading: guestsLoading } = useQuery({
     queryKey: ["guests", eventId],
@@ -31,260 +32,208 @@ function AnalyticsPage() {
   const { data: messages, isLoading: messagesLoading } = useQuery({
     queryKey: ["messages", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("event_messages").select("*").eq("event_id", eventId);
+      const { data, error } = await supabase.from("event_messages").select("*").eq("event_id", eventId).order("created_at", { ascending: false });
       if (error) throw error;
       return data as EventMessage[];
     },
   });
 
-  const { data: scheduleItems, isLoading: scheduleLoading } = useQuery({
-    queryKey: ["schedule", eventId],
+  const { data: subEvents } = useQuery({
+    queryKey: ["sub_events", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("schedule_items").select("*").eq("event_id", eventId);
+      const { data, error } = await supabase.from("sub_events").select("*").eq("parent_event_id", eventId);
       if (error) throw error;
-      return data as ScheduleItem[];
+      return data as { id: string; name: string }[];
     },
   });
 
-  const stats = useMemo(() => {
-    const totalGuests = guests?.length ?? 0;
-    const attending = rsvps?.filter((r) => r.status === "attending").length ?? 0;
-    const declined = rsvps?.filter((r) => r.status === "declined").length ?? 0;
-    const pending = (guests?.filter((g) => g.rsvp_status === "pending").length ?? 0);
-    const totalRsvps = rsvps?.length ?? 0;
-    const totalPlusOnes = rsvps?.filter((r) => r.status === "attending").reduce((sum, r) => sum + (r.plus_ones || 0), 0) ?? 0;
-    const totalAttendees = attending + totalPlusOnes;
-    const responseRate = totalGuests > 0 ? Math.round((totalRsvps / totalGuests) * 100) : 0;
-    const attendingRate = totalRsvps > 0 ? Math.round((attending / totalRsvps) * 100) : 0;
+  const isLoading = guestsLoading || rsvpsLoading || messagesLoading;
 
-    return {
-      totalGuests,
-      attending,
-      declined,
-      pending,
-      totalRsvps,
-      totalPlusOnes,
-      totalAttendees,
-      responseRate,
-      attendingRate,
-      totalMessages: messages?.length ?? 0,
-      totalScheduleItems: scheduleItems?.length ?? 0,
-    };
-  }, [guests, rsvps, messages, scheduleItems]);
+  if (isLoading) return <div className="p-8 space-y-6"><Skeleton className="h-32" /><Skeleton className="h-64" /></div>;
 
-  const countdown = useMemo(() => {
-    const dateStr = event.draft_event_date || event.event_date;
-    return getCountdown(dateStr);
-  }, [event]);
+  const totalGuests = guests?.length || 0;
+  const totalRsvps = rsvps?.length || 0;
+  const attending = rsvps?.filter((r) => r.status === "attending").length || 0;
+  const declined = rsvps?.filter((r) => r.status === "declined").length || 0;
+  const pending = rsvps?.filter((r) => r.status === "pending").length || 0;
+  const noResponse = totalGuests - totalRsvps;
+  const plusOnes = rsvps?.reduce((sum, r) => sum + (r.plus_ones || 0), 0) || 0;
+  const totalAttendees = attending + plusOnes;
+  const responseRate = totalGuests > 0 ? Math.round((totalRsvps / totalGuests) * 100) : 0;
+  const attendingRate = totalRsvps > 0 ? Math.round((attending / totalRsvps) * 100) : 0;
 
   const eventStatus = getEventStatus(event.draft_event_date || event.event_date);
+  const statusVariant: "info" | "success" | "default" = eventStatus === "upcoming" ? "info" : eventStatus === "ongoing" ? "success" : "default";
 
-  // RSVP bar chart data
-  const rsvpBars = useMemo(() => {
-    const max = Math.max(stats.attending, stats.declined, stats.pending, 1);
-    return [
-      { label: "Attending", value: stats.attending, color: "#16a34a", pct: (stats.attending / max) * 100 },
-      { label: "Declined", value: stats.declined, color: "#dc2626", pct: (stats.declined / max) * 100 },
-      { label: "Pending", value: stats.pending, color: "#d97706", pct: (stats.pending / max) * 100 },
-    ];
-  }, [stats]);
+  // Per sub-event RSVP breakdown
+  const subEventStats = (subEvents || []).map((sub) => {
+    const subRsvps = rsvps?.filter((r) => r.sub_event_id === sub.id) || [];
+    return {
+      name: sub.name,
+      attending: subRsvps.filter((r) => r.status === "attending").length,
+      declined: subRsvps.filter((r) => r.status === "declined").length,
+      pending: subRsvps.filter((r) => r.status === "pending").length,
+      total: subRsvps.length,
+    };
+  });
 
-  const isLoading = guestsLoading || rsvpsLoading || messagesLoading || scheduleLoading;
-
-  const statCards = [
-    { label: "Total Guests", value: stats.totalGuests, icon: Users, color: "var(--color-text)" },
-    { label: "Attending", value: stats.attending, icon: CalendarCheck, color: "#16a34a" },
-    { label: "Total Attendees", value: stats.totalAttendees, icon: TrendingUp, color: "#0ea5e9", hint: `incl. ${stats.totalPlusOnes} plus ones` },
-    { label: "Messages", value: stats.totalMessages, icon: MessageSquare, color: "#8b5cf6" },
-  ];
+  const maxBar = Math.max(totalGuests, 1);
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl mx-auto">
-      <div className="mb-6">
-        <h2 className="font-heading text-2xl text-[var(--color-text)] flex items-center gap-2">
-          <BarChart3 className="w-5 h-5" /> Analytics
-        </h2>
-        <p className="text-sm text-[var(--color-text-muted)] mt-1">Track your event's performance</p>
+    <div className="p-6 lg:p-8 space-y-6">
+      <div>
+        <h2 className="font-heading text-2xl text-gray-900">Analytics</h2>
+        <p className="text-sm text-gray-500 mt-1">Track guest engagement and RSVP statistics.</p>
       </div>
 
-      {isLoading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i} className="p-4">
-              <Skeleton className="h-4 w-20 mb-2" />
-              <Skeleton className="h-8 w-16" />
-            </Card>
-          ))}
+      {/* Event Summary */}
+      <Card className="p-5">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h3 className="font-heading text-lg text-gray-900">{event.draft_name || event.name}</h3>
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
+              <Badge variant={statusVariant}>{eventStatus}</Badge>
+              {event.draft_event_date && <span className="text-sm text-gray-500">{formatDate(event.draft_event_date)}</span>}
+              {event.draft_venue && <span className="text-sm text-gray-500 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{event.draft_venue}</span>}
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-3xl font-heading text-gray-900">{responseRate}%</p>
+            <p className="text-xs text-gray-500 uppercase tracking-wider">Response Rate</p>
+          </div>
         </div>
-      ) : (
-        <>
-          {/* Stat Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            {statCards.map((s) => (
-              <Card key={s.label} className="p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <s.icon className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
-                  <p className="text-xs uppercase tracking-wider text-[var(--color-text-muted)]">{s.label}</p>
+      </Card>
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-gray-400 mb-1"><Users className="w-4 h-4" /></div>
+          <p className="text-2xl font-heading text-gray-900">{totalGuests}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Total Guests</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-green-600 mb-1"><Check className="w-4 h-4" /></div>
+          <p className="text-2xl font-heading text-gray-900">{attending}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Attending</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-red-600 mb-1"><X className="w-4 h-4" /></div>
+          <p className="text-2xl font-heading text-gray-900">{declined}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Declined</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-amber-600 mb-1"><Clock className="w-4 h-4" /></div>
+          <p className="text-2xl font-heading text-gray-900">{pending + noResponse}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">No Response</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-blue-600 mb-1"><UserPlus className="w-4 h-4" /></div>
+          <p className="text-2xl font-heading text-gray-900">{plusOnes}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Plus Ones</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-gray-400 mb-1"><TrendingUp className="w-4 h-4" /></div>
+          <p className="text-2xl font-heading text-gray-900">{totalAttendees}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider">Total Attendees</p>
+        </Card>
+      </div>
+
+      {/* RSVP Breakdown Chart */}
+      <Card className="p-5">
+        <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-4">RSVP Breakdown</h3>
+        <div className="space-y-3">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm text-green-700 flex items-center gap-1.5"><Check className="w-3.5 h-3.5" /> Attending</span>
+              <span className="text-sm text-gray-600">{attending} ({totalRsvps > 0 ? attendingRate : 0}% of responses)</span>
+            </div>
+            <div className="h-6 bg-gray-100 rounded overflow-hidden">
+              <div className="h-full bg-green-500 transition-all duration-500 rounded" style={{ width: `${(attending / maxBar) * 100}%` }} />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm text-red-700 flex items-center gap-1.5"><X className="w-3.5 h-3.5" /> Declined</span>
+              <span className="text-sm text-gray-600">{declined}</span>
+            </div>
+            <div className="h-6 bg-gray-100 rounded overflow-hidden">
+              <div className="h-full bg-red-500 transition-all duration-500 rounded" style={{ width: `${(declined / maxBar) * 100}%` }} />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm text-amber-700 flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Pending</span>
+              <span className="text-sm text-gray-600">{pending}</span>
+            </div>
+            <div className="h-6 bg-gray-100 rounded overflow-hidden">
+              <div className="h-full bg-amber-500 transition-all duration-500 rounded" style={{ width: `${(pending / maxBar) * 100}%` }} />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm text-gray-600 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> No Response</span>
+              <span className="text-sm text-gray-600">{noResponse}</span>
+            </div>
+            <div className="h-6 bg-gray-100 rounded overflow-hidden">
+              <div className="h-full bg-gray-400 transition-all duration-500 rounded" style={{ width: `${(noResponse / maxBar) * 100}%` }} />
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Sub-Event Breakdown */}
+      {subEventStats.length > 0 && (
+        <Card className="p-5">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500 mb-4">Per-Event Breakdown</h3>
+          <div className="space-y-4">
+            {subEventStats.map((stat) => {
+              const subMax = Math.max(stat.total, 1);
+              return (
+                <div key={stat.name}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-900">{stat.name}</span>
+                    <span className="text-sm text-gray-500">{stat.total} responses</span>
+                  </div>
+                  <div className="flex h-6 bg-gray-100 rounded overflow-hidden">
+                    {stat.attending > 0 && <div className="bg-green-500 transition-all duration-500" style={{ width: `${(stat.attending / subMax) * 100}%` }} title={`${stat.attending} attending`} />}
+                    {stat.declined > 0 && <div className="bg-red-500 transition-all duration-500" style={{ width: `${(stat.declined / subMax) * 100}%` }} title={`${stat.declined} declined`} />}
+                    {stat.pending > 0 && <div className="bg-amber-500 transition-all duration-500" style={{ width: `${(stat.pending / subMax) * 100}%` }} title={`${stat.pending} pending`} />}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                    <span className="text-green-600">{stat.attending} attending</span>
+                    <span className="text-red-600">{stat.declined} declined</span>
+                    <span className="text-amber-600">{stat.pending} pending</span>
+                  </div>
                 </div>
-                <p className="text-2xl font-heading" style={{ color: s.color }}>{s.value}</p>
-                {s.hint && <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{s.hint}</p>}
-              </Card>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Messages */}
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xs font-medium uppercase tracking-wider text-gray-500">Guest Messages</h3>
+          <span className="text-sm text-gray-500">{messages?.length || 0} total</span>
+        </div>
+        {!messages || messages.length === 0 ? (
+          <p className="text-sm text-gray-400">No messages yet.</p>
+        ) : (
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {(messages || []).slice(0, 10).map((msg) => (
+              <div key={msg.id} className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-2 mb-1">
+                  <MessageSquare className="w-3.5 h-3.5 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-900">{msg.guest_name}</span>
+                  <span className="text-xs text-gray-400">{formatDate(msg.created_at)}</span>
+                </div>
+                <p className="text-sm text-gray-600">{msg.message}</p>
+              </div>
             ))}
           </div>
-
-          {/* Event Status & Countdown */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <Card className="p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">Event Status</h3>
-                <Badge variant={eventStatus === "upcoming" ? "info" : eventStatus === "ongoing" ? "success" : eventStatus === "completed" ? "default" : "warning"}>
-                  {eventStatus}
-                </Badge>
-              </div>
-              {event.draft_event_date || event.event_date ? (
-                <p className="text-sm text-[var(--color-text)]">{formatDate(event.draft_event_date || event.event_date)}</p>
-              ) : (
-                <p className="text-sm text-[var(--color-text-muted)]">No date set</p>
-              )}
-            </Card>
-
-            <Card className="p-5">
-              <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-3">Countdown</h3>
-              {countdown.isPast ? (
-                <p className="text-sm text-[var(--color-text-muted)]">Event has passed</p>
-              ) : (
-                <div className="flex gap-4">
-                  {[
-                    { label: "Days", value: countdown.days },
-                    { label: "Hours", value: countdown.hours },
-                    { label: "Mins", value: countdown.minutes },
-                    { label: "Secs", value: countdown.seconds },
-                  ].map((u) => (
-                    <div key={u.label}>
-                      <span className="text-2xl font-heading text-[var(--color-text)]">{u.value}</span>
-                      <span className="text-xs text-[var(--color-text-muted)] ml-1 uppercase tracking-wider">{u.label}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-          </div>
-
-          {/* RSVP Breakdown */}
-          <Card className="p-5 mb-6">
-            <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-4">RSVP Breakdown</h3>
-
-            {stats.totalGuests === 0 ? (
-              <EmptyState icon={<Users className="w-10 h-10" />} title="No data yet" description="Add guests to see RSVP analytics" />
-            ) : (
-              <>
-                {/* Bar Chart */}
-                <div className="space-y-3 mb-6">
-                  {rsvpBars.map((bar) => (
-                    <div key={bar.label}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm text-[var(--color-text)]">{bar.label}</span>
-                        <span className="text-sm font-medium text-[var(--color-text)]">{bar.value}</span>
-                      </div>
-                      <div className="h-6 bg-[var(--color-bg-subtle)] overflow-hidden" style={{ borderRadius: "var(--radius)" }}>
-                        <div
-                          className="h-full transition-all duration-500"
-                          style={{
-                            width: `${bar.pct}%`,
-                            backgroundColor: bar.color,
-                            borderRadius: "var(--radius)",
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Rates */}
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[var(--color-border)]">
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-[var(--color-text-muted)]">Response Rate</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className="flex-1 h-2 bg-[var(--color-bg-subtle)] overflow-hidden" style={{ borderRadius: "var(--radius)" }}>
-                        <div
-                          className="h-full bg-[var(--color-primary)] transition-all duration-500"
-                          style={{ width: `${stats.responseRate}%` }}
-                        />
-                      </div>
-                      <span className="text-sm font-medium text-[var(--color-text)]">{stats.responseRate}%</span>
-                    </div>
-                    <p className="text-xs text-[var(--color-text-muted)] mt-1">{stats.totalRsvps} of {stats.totalGuests} responded</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-[var(--color-text-muted)]">Attending Rate</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className="flex-1 h-2 bg-[var(--color-bg-subtle)] overflow-hidden" style={{ borderRadius: "var(--radius)" }}>
-                        <div
-                          className="h-full bg-green-500 transition-all duration-500"
-                          style={{ width: `${stats.attendingRate}%` }}
-                        />
-                      </div>
-                      <span className="text-sm font-medium text-[var(--color-text)]">{stats.attendingRate}%</span>
-                    </div>
-                    <p className="text-xs text-[var(--color-text-muted)] mt-1">{stats.attending} of {stats.totalRsvps} attending</p>
-                  </div>
-                </div>
-              </>
-            )}
-          </Card>
-
-          {/* Summary */}
-          <Card className="p-5">
-            <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-4">Summary</h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-[var(--color-text-muted)]" />
-                <div>
-                  <p className="text-xs text-[var(--color-text-muted)]">Invited</p>
-                  <p className="text-sm font-medium text-[var(--color-text)]">{stats.totalGuests}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <CalendarCheck className="w-4 h-4 text-[var(--color-text-muted)]" />
-                <div>
-                  <p className="text-xs text-[var(--color-text-muted)]">Schedule Items</p>
-                  <p className="text-sm font-medium text-[var(--color-text)]">{stats.totalScheduleItems}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-[var(--color-text-muted)]" />
-                <div>
-                  <p className="text-xs text-[var(--color-text-muted)]">Guest Messages</p>
-                  <p className="text-sm font-medium text-[var(--color-text)]">{stats.totalMessages}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-[var(--color-text-muted)]" />
-                <div>
-                  <p className="text-xs text-[var(--color-text-muted)]">Pending RSVPs</p>
-                  <p className="text-sm font-medium text-[var(--color-text)]">{stats.pending}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-[var(--color-text-muted)]" />
-                <div>
-                  <p className="text-xs text-[var(--color-text-muted)]">Total Attendees</p>
-                  <p className="text-sm font-medium text-[var(--color-text)]">{stats.totalAttendees}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Eye className="w-4 h-4 text-[var(--color-text-muted)]" />
-                <div>
-                  <p className="text-xs text-[var(--color-text-muted)]">Published</p>
-                  <p className="text-sm font-medium text-[var(--color-text)]">{event.is_published ? "Yes" : "No"}</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </>
-      )}
+        )}
+      </Card>
     </div>
   );
 }
-
-export default AnalyticsPage;

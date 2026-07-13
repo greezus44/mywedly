@@ -3,40 +3,63 @@
 @tailwind utilities;
 
 :root {
-  --color-primary: #1a1a1a;
-  --color-primary-light: #2a2a2a;
-  --color-secondary: #2a2a2a;
-  --color-accent: #1a1a1a;
-  --color-bg: #ffffff;
-  --color-bg-subtle: #f5f5f5;
-  --color-text: #1a1a1a;
-  --color-text-muted: #6b6b6b;
-  --color-border: #e2e2e2;
-  --color-surface: #ffffff;
-  --color-surface-hover: #f9f9f9;
-  --color-error: #dc2626;
-  --color-success: #16a34a;
-  --color-warning: #d97706;
-  --font-heading: "Cormorant Garamond", serif;
-  --font-body: "Inter", sans-serif;
-  --font-script: "Cormorant Garamond", serif;
-  --radius: 2px;
-  --max-width: 1200px;
+  /* Dashboard theme — always fixed, never affected by event theme */
+  --dash-bg: #f9fafb;
+  --dash-surface: #ffffff;
+  --dash-surface-hover: #f3f4f6;
+  --dash-text: #111827;
+  --dash-text-muted: #6b7280;
+  --dash-border: #e5e7eb;
+  --dash-primary: #111827;
+  --dash-primary-hover: #374151;
+  --dash-primary-text: #ffffff;
+  --dash-radius: 6px;
+  --dash-font-heading: "Cormorant Garamond", serif;
+  --dash-font-body: "Inter", sans-serif;
+
+  /* Event theme defaults — overridden by .event-themed scope */
+  --event-primary: #1a1a1a;
+  --event-secondary: #2a2a2a;
+  --event-accent: #1a1a1a;
+  --event-bg: #ffffff;
+  --event-surface: #ffffff;
+  --event-surface-hover: #f5f5f5;
+  --event-text: #1a1a1a;
+  --event-text-muted: #6b6b6b;
+  --event-border: #e2e2e2;
+  --event-radius: 2px;
+  --event-font-heading: "Cormorant Garamond", serif;
+  --event-font-body: "Inter", sans-serif;
+  --event-font-script: "Cormorant Garamond", serif;
+  --event-max-width: 1200px;
 }
 
 @layer base {
-  * { border-color: var(--color-border); }
-  body { font-family: var(--font-body); background-color: var(--color-bg); color: var(--color-text); -webkit-font-smoothing: antialiased; }
-  h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
+  * { border-color: var(--dash-border); }
+  body { font-family: var(--dash-font-body); background-color: var(--dash-bg); color: var(--dash-text); -webkit-font-smoothing: antialiased; }
+  h1, h2, h3, h4, h5, h6 { font-family: var(--dash-font-heading); }
 }
 
-@layer components {
-  .font-heading { font-family: var(--font-heading); }
-  .font-script { font-family: var(--font-script); }
+/* Event-themed scope — only applies to guest pages and preview panes */
+.event-themed, .event-themed * {
+  border-color: var(--event-border);
+}
+.event-themed {
+  background-color: var(--event-bg);
+  color: var(--event-text);
+  font-family: var(--event-font-body);
+}
+.event-themed h1, .event-themed h2, .event-themed h3, .event-themed h4, .event-themed h5, .event-themed h6 {
+  font-family: var(--event-font-heading);
+  color: var(--event-text);
 }
 
-body, * { transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
+/* Smooth transitions for theme changes — only on event-themed elements */
+.event-themed, .event-themed * {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-border); }
-::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
+::-webkit-scrollbar-thumb { background: var(--dash-border); }
+::-webkit-scrollbar-thumb:hover { background: var(--dash-text-muted); }
