@@ -65,8 +65,9 @@ export interface SubEvent {
 }
 
 export interface EventGuest {
-  id: string; event_id: string; name: string; email: string;
-  phone: string; group_name: string; side: string; token: string;
+  id: string; event_id: string; name: string; username: string | null;
+  email: string; phone: string; group_name: string; side: string;
+  group_id: string | null; token: string;
   rsvp_status: string; rsvp_submitted_at: string | null;
   plus_ones: number; dietary: string; message: string;
   created_at: string; table_number: string | null;
@@ -97,7 +98,15 @@ export interface GuestGroup {
 }
 
 export interface GuestGroupMember { guest_id: string; group_id: string; created_at: string; }
-export interface GroupEventInvite { id: string; group_id: string; event_id: string; sub_event_id: string | null; created_at: string; }
+
+export interface SubEventGroupAssignment {
+  id: string; sub_event_id: string; group_id: string; created_at: string;
+}
+
+export interface GuestInvitationOverride {
+  id: string; sub_event_id: string; guest_id: string;
+  is_invited: boolean; created_at: string;
+}
 
 export interface CustomPage {
   id: string; event_id: string; title: string; nav_label: string;

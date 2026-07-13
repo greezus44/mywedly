@@ -67,20 +67,18 @@ export default function GuestLayout() {
         <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-8">
           <Outlet context={{ event }} />
         </main>
-        {(footerPages.length > 0 || true) && (
-          <footer className="border-t mt-8" style={{ borderColor: "var(--event-border)", background: "var(--event-surface)" }}>
-            <div className="max-w-5xl mx-auto px-4 py-6">
-              {footerPages.length > 0 && (
-                <div className="flex flex-wrap gap-4 mb-4">
-                  {footerPages.map((page) => (
-                    <Link key={page.id} to={`/e/${slug}/p/${page.slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>{page.nav_label}</Link>
-                  ))}
-                </div>
-              )}
-              <p className="text-sm text-center" style={{ color: "var(--event-muted)" }}>&copy; {new Date().getFullYear()} {event.name}</p>
-            </div>
-          </footer>
-        )}
+        <footer className="border-t mt-8" style={{ borderColor: "var(--event-border)", background: "var(--event-surface)" }}>
+          <div className="max-w-5xl mx-auto px-4 py-6">
+            {footerPages.length > 0 && (
+              <div className="flex flex-wrap gap-4 mb-4">
+                {footerPages.map((page) => (
+                  <Link key={page.id} to={`/e/${slug}/p/${page.slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>{page.nav_label}</Link>
+                ))}
+              </div>
+            )}
+            <p className="text-sm text-center" style={{ color: "var(--event-muted)" }}>&copy; {new Date().getFullYear()} {event.name}</p>
+          </div>
+        </footer>
       </div>
     </EventThemeProvider>
   );

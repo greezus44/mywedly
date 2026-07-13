@@ -3,55 +3,82 @@ import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type ThemeConfig } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Card, ColorInput, FormField } from "../../components/ui";
-import { Select } from "../../components/ui/Input";
+import { ColorInput, Select, FormField } from "../../components/ui";
 import { THEME_PRESETS, RICH_FONT_OPTIONS } from "../../lib/theme";
-import { SplitEditor } from "../../components/preview/SplitEditor";
-import { CoverPreview } from "../../components/preview/PreviewRenderers";
 
 export default function ThemeEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
   const theme = event.draft_theme || event.theme || {};
+  const [bg, setBg] = React.useState(theme.bg || "#faf7f2");
+  const [surface, setSurface] = React.useState(theme.surface || "#ffffff");
+  const [border, setBorder] = React.useState(theme.border || "#e8e0d5");
+  const [text, setText] = React.useState(theme.text || "#2d2424");
+  const [muted, setMuted] = React.useState(theme.muted || "#8a7a72");
+  const [primary, setPrimary] = React.useState(theme.primary || "#b8860b");
+  const [primaryHover, setPrimaryHover] = React.useState(theme.primaryHover || "#9a7209");
+  const [primaryLight, setPrimaryLight] = React.useState(theme.primaryLight || "#f5e6c8");
+  const [accent, setAccent] = React.useState(theme.accent || "#d4a574");
+  const [font, setFont] = React.useState(theme.font || '"Cormorant Garamond", serif');
+
   const saveMutation = useMutation({
-    mutationFn: async (newTheme: ThemeConfig) => { const { error } = await supabase.from("user_events").update({ draft_theme: newTheme }).eq("id", event.id); if (error) throw error; },
+    mutationFn: async () => {
+      const themeConfig: ThemeConfig = { bg, surface, border, text, muted, primary, primaryHover, primaryLight, accent, font };
+      const { error } = await supabase.from("user_events").update({ draft_theme: themeConfig }).eq("id", event.id);
+      if (error) throw error;
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", event.id] }),
     onError: (err: any) => alert("Failed to save: " + (err.message || "Unknown error")),
   });
-  const [local, setLocal] = React.useState<ThemeConfig>(theme);
-  React.useEffect(() => setLocal(theme), [JSON.stringify(theme)]);
-  const update = (patch: Partial<ThemeConfig>) => setLocal((prev) => ({ ...prev, ...patch }));
+
+  const applyPreset = (preset: ThemeConfig) => {
+    setBg(preset.bg || ""); setSurface(preset.surface || ""); setBorder(preset.border || "");
+    setText(preset.text || ""); setMuted(preset.muted || ""); setPrimary(preset.primary || "");
+    setPrimaryHover(preset.primaryHover || ""); setPrimaryLight(preset.primaryLight || "");
+    setAccent(preset.accent || ""); setFont(preset.font || "");
+  };
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-dash-text">Theme</h2>
-        <Button onClick={() => saveMutation.mutate(local)} loading={saveMutation.isPending}>Save Changes</Button>
-      </div>
-      <SplitEditor preview={<CoverPreview event={{ ...event, draft_theme: local } as UserEvent} />}>
-        <Card className="p-4 space-y-4">
+      <h2 className="text-xl font-semibold text-dash-text mb-6">Theme</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-4">
           <FormField label="Preset">
-            <Select value="" onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { const preset = THEME_PRESETS.find((p) => p.name === e.target.value); if (preset) setLocal(preset.theme); }}>
+            <Select value="" onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { const preset = THEME_PRESETS.find((p) => p.name === e.target.value); if (preset) applyPreset(preset.theme); }}>
               <option value="">Choose a preset...</option>
               {THEME_PRESETS.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
             </Select>
           </FormField>
-          <FormField label="Font">
-            <Select value={local.font || ""} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => update({ font: e.target.value })}>
+          <div className="grid grid-cols-2 gap-4">
+            <ColorInput label="Background" value={bg} onChange={setBg} />
+            <ColorInput label="Surface" value={surface} onChange={setSurface} />
+            <ColorInput label="Border" value={border} onChange={setBorder} />
+            <ColorInput label="Text" value={text} onChange={setText} />
+            <ColorInput label="Muted" value={muted} onChange={setMuted} />
+            <ColorInput label="Primary" value={primary} onChange={setPrimary} />
+            <ColorInput label="Primary Hover" value={primaryHover} onChange={setPrimaryHover} />
+            <ColorInput label="Primary Light" value={primaryLight} onChange={setPrimaryLight} />
+            <ColorInput label="Accent" value={accent} onChange={setAccent} />
+          </div>
+          <FormField label="Font Family">
+            <Select value={font} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFont(e.target.value)}>
               {RICH_FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
             </Select>
           </FormField>
-          <div className="grid grid-cols-2 gap-4">
-            <ColorInput label="Background" value={local.bg || "#ffffff"} onChange={(v) => update({ bg: v })} />
-            <ColorInput label="Surface" value={local.surface || "#ffffff"} onChange={(v) => update({ surface: v })} />
-            <ColorInput label="Primary" value={local.primary || "#000000"} onChange={(v) => update({ primary: v })} />
-            <ColorInput label="Primary Hover" value={local.primaryHover || "#000000"} onChange={(v) => update({ primaryHover: v })} />
-            <ColorInput label="Text" value={local.text || "#000000"} onChange={(v) => update({ text: v })} />
-            <ColorInput label="Muted" value={local.muted || "#666666"} onChange={(v) => update({ muted: v })} />
-            <ColorInput label="Border" value={local.border || "#cccccc"} onChange={(v) => update({ border: v })} />
-            <ColorInput label="Accent" value={local.accent || "#cccccc"} onChange={(v) => update({ accent: v })} />
+          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>Save Changes</Button>
+        </div>
+        <div className="rounded-xl border border-dash-border overflow-hidden" style={{ background: bg, color: text, fontFamily: font }}>
+          <div className="p-8 text-center">
+            <h1 className="text-3xl font-serif mb-2" style={{ color: primary }}>Preview Title</h1>
+            <p className="mb-4" style={{ color: muted }}>Preview subtitle text</p>
+            <div className="inline-block px-6 py-2.5 rounded-lg text-white font-medium" style={{ background: primary }}>Button</div>
+            <div className="mt-4 p-4 rounded-lg border" style={{ borderColor: border, background: surface }}>
+              <p style={{ color: text }}>Card content example</p>
+              <p className="text-sm" style={{ color: muted }}>Muted text example</p>
+            </div>
           </div>
-        </Card>
-      </SplitEditor>
+        </div>
+      </div>
     </div>
   );
 }

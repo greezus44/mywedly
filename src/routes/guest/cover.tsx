@@ -10,9 +10,10 @@ export default function GuestCover() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { signIn } = useGuestAuth();
-  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["public-event", slug],
@@ -30,12 +31,23 @@ export default function GuestCover() {
   const cfg = event.cover_config || {};
   const loginCfg = event.login_config || {};
 
-  const handleEnter = (e: React.FormEvent) => {
+  const handleEnter = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) { setError("Please enter your name"); return; }
-    if (loginCfg.require_password && password !== loginCfg.password) { setError("Incorrect password"); return; }
-    signIn(name.trim(), event.id);
-    navigate(`/e/${slug}/home`);
+    setError(null);
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername) { setError("Please enter your username"); return; }
+    setLoading(true);
+    try {
+      const { data: guest, error: guestError } = await supabase.from("event_guests").select("*").eq("event_id", event.id).ilike("username", trimmedUsername).maybeSingle();
+      if (guestError) throw guestError;
+      if (!guest) { setError("Username not found. Please check with the host."); setLoading(false); return; }
+      if (loginCfg.require_password && password !== loginCfg.password) { setError("Incorrect password"); setLoading(false); return; }
+      signIn(guest.name, event.id, guest.id);
+      navigate(`/e/${slug}/home`);
+    } catch (err: any) {
+      setError("Unable to sign in. Please try again.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -52,10 +64,10 @@ export default function GuestCover() {
           <form onSubmit={handleEnter} className="mt-8 space-y-3">
             {loginCfg.heading && <h2 className="text-xl font-serif" style={{ color: "var(--event-primary)" }}>{loginCfg.heading}</h2>}
             {loginCfg.subheading && <p className="text-sm event-muted-text">{loginCfg.subheading}</p>}
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter your name" className="w-full px-4 py-2.5 rounded-lg border bg-white/80 text-center" style={{ borderColor: "var(--event-border)" }} />
+            <input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Enter your username" className="w-full px-4 py-2.5 rounded-lg border bg-white/80 text-center" style={{ borderColor: "var(--event-border)" }} />
             {loginCfg.require_password && <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter password" className="w-full px-4 py-2.5 rounded-lg border bg-white/80 text-center" style={{ borderColor: "var(--event-border)" }} />}
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <button type="submit" className="w-full px-6 py-2.5 rounded-lg text-white font-medium" style={{ background: "var(--event-primary)" }}>Enter</button>
+            <button type="submit" disabled={loading} className="w-full px-6 py-2.5 rounded-lg text-white font-medium disabled:opacity-50" style={{ background: "var(--event-primary)" }}>{loading ? "Signing in..." : "Enter"}</button>
           </form>
         </div>
       </div>

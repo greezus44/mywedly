@@ -7,7 +7,6 @@ import { Input, Card, FormField } from "../../components/ui";
 import { slugify, isValidSlug } from "../../lib/theme";
 import { generateQrDataUrl, downloadQrCode } from "../../lib/qr";
 import { Copy, Download, ExternalLink } from "lucide-react";
-import { formatDate } from "../../lib/utils";
 
 export default function SharingEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();

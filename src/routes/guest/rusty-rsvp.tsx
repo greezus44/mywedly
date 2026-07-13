@@ -18,10 +18,7 @@ export default function RustyRsvp() {
   const closed = isRsvpClosed(event.rsvp_deadline);
 
   const submitMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("event_rsvps").insert({ event_id: event.id, guest_name: guestName || "Guest", attending: attending!, plus_ones: plusOnes, dietary, message });
-      if (error) throw error;
-    },
+    mutationFn: async () => { const { error } = await supabase.from("event_rsvps").insert({ event_id: event.id, guest_name: guestName || "Guest", attending: attending!, plus_ones: plusOnes, dietary, message }); if (error) throw error; },
     onSuccess: () => { setSubmitted(true); queryClient.invalidateQueries({ queryKey: ["rsvps", event.id] }); },
     onError: (err: any) => alert("Failed to submit RSVP: " + (err.message || "Unknown error")),
   });
@@ -40,14 +37,9 @@ export default function RustyRsvp() {
             <button onClick={() => setAttending(false)} className="flex-1 py-3 rounded-lg border-2 transition-colors" style={{ borderColor: attending === false ? "var(--event-primary)" : "var(--event-border)", background: attending === false ? "var(--event-primary-light)" : "transparent", color: attending === false ? "var(--event-primary)" : "var(--event-text)" }}>Regretfully Decline</button>
           </div>
         </div>
-        {attending === true && (
-          <>
-            <div><label className="block text-sm mb-1 event-muted-text">Plus Ones</label><input type="number" min={0} max={5} value={plusOnes} onChange={(e) => setPlusOnes(Math.max(0, Number(e.target.value)))} className="w-full px-4 py-2.5 rounded-lg border bg-white" style={{ borderColor: "var(--event-border)" }} /></div>
-            <div><label className="block text-sm mb-1 event-muted-text">Dietary Requirements</label><input value={dietary} onChange={(e) => setDietary(e.target.value)} placeholder="e.g. Vegetarian" className="w-full px-4 py-2.5 rounded-lg border bg-white" style={{ borderColor: "var(--event-border)" }} /></div>
-          </>
-        )}
+        {attending === true && (<><div><label className="block text-sm mb-1 event-muted-text">Plus Ones</label><input type="number" min={0} max={5} value={plusOnes} onChange={(e) => setPlusOnes(Math.max(0, Number(e.target.value)))} className="w-full px-4 py-2.5 rounded-lg border bg-white" style={{ borderColor: "var(--event-border)" }} /></div><div><label className="block text-sm mb-1 event-muted-text">Dietary Requirements</label><input value={dietary} onChange={(e) => setDietary(e.target.value)} placeholder="e.g. Vegetarian" className="w-full px-4 py-2.5 rounded-lg border bg-white" style={{ borderColor: "var(--event-border)" }} /></div></>)}
         <div><label className="block text-sm mb-1 event-muted-text">Message</label><textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} className="w-full px-4 py-2.5 rounded-lg border bg-white" style={{ borderColor: "var(--event-border)" }} /></div>
-        <button onClick={() => submitMutation.mutate()} disabled={attending === null} className="w-full py-2.5 rounded-lg text-white font-medium disabled:opacity-50" style={{ background: "var(--event-primary)" }}>Submit RSVP</button>
+        <button onClick={() => submitMutation.mutate()} disabled={attending === null || submitMutation.isPending} className="w-full py-2.5 rounded-lg text-white font-medium disabled:opacity-50" style={{ background: "var(--event-primary)" }}>{submitMutation.isPending ? "Submitting..." : "Submit RSVP"}</button>
       </div>
     </div>
   );
