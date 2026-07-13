@@ -1,213 +1,225 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, Loader2, QrCode, Link as LinkIcon, Check } from "lucide-react";
+import { Copy, Download, Loader2, QrCode, Link as LinkIcon } from "lucide-react";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { slugify, isValidSlug } from "../../lib/theme";
 import { formatDate } from "../../lib/utils";
 import { generateQrDataUrl, downloadQrCode } from "../../lib/qr";
-import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
 import {
+  Button,
   Card,
   FormField,
+  Input,
   Badge,
   Toast,
-  type ToastType,
 } from "../../components/ui";
 
 export default function SharingPage() {
   const { event } = useOutletContext<{ event: UserEvent }>();
-  const queryClient = useQueryClient();
-  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
-  const [slug, setSlug] = useState(event.draft_slug ?? event.slug ?? "");
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const slugValid = !slug || isValidSlug(slug);
-  const baseUrl = window.location.origin;
-  const shareUrl = slug ? `${baseUrl}/e/${slug}` : `${baseUrl}/e/your-slug`;
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [slug, setSlug] = useState(event.draft_slug || event.slug || "");
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
+  const [qrLoading, setQrLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!slug) {
-      setQrDataUrl(null);
+    setSlug(event.draft_slug || event.slug || "");
+  }, [event]);
+
+  const publishedSlug = event.slug || event.draft_slug;
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const guestUrl = publishedSlug ? `${baseUrl}/e/${publishedSlug}` : "";
+
+  // Generate QR code
+  useEffect(() => {
+    if (!guestUrl) {
+      setQrDataUrl("");
       return;
     }
-    let cancelled = false;
-    generateQrDataUrl(shareUrl, 256)
-      .then((url) => {
-        if (!cancelled) setQrDataUrl(url);
-      })
-      .catch(() => {
-        if (!cancelled) setQrDataUrl(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, shareUrl]);
+    setQrLoading(true);
+    generateQrDataUrl(guestUrl, 256)
+      .then((url) => setQrDataUrl(url))
+      .catch(() => setQrDataUrl(""))
+      .finally(() => setQrLoading(false));
+  }, [guestUrl]);
 
-  const updateMutation = useMutation({
-    mutationFn: async (updates: Record<string, unknown>) => {
-      const { error } = await supabase
-        .from("user_events")
-        .update(updates)
-        .eq("id", event.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
-      setToast({ message: "Slug saved!", type: "success" });
-    },
-    onError: (err: Error) => {
-      setToast({ message: err.message, type: "error" });
-    },
-  });
-
-  const handleSaveSlug = () => {
-    if (!slug || !isValidSlug(slug)) {
-      setToast({ message: "Invalid slug. Use only lowercase letters, numbers, and hyphens.", type: "error" });
-      return;
+  const handleSlugChange = (value: string) => {
+    setSlug(value);
+    if (value && !isValidSlug(value)) {
+      setSlugError("Slug can only contain lowercase letters, numbers, and hyphens.");
+    } else {
+      setSlugError(null);
     }
-    updateMutation.mutate({ draft_slug: slug });
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      setCopied(true);
-      setToast({ message: "Link copied!", type: "success" });
-      setTimeout(() => setCopied(false), 2000);
-    });
+  const handleSlugBlur = () => {
+    if (slug && !isValidSlug(slug)) {
+      const autoSlug = slugify(slug);
+      if (autoSlug && isValidSlug(autoSlug)) {
+        setSlug(autoSlug);
+        setSlugError(null);
+      }
+    }
+  };
+
+  const handleSaveSlug = async () => {
+    if (slug && !isValidSlug(slug)) {
+      setToast({ message: "Please fix the slug before saving.", type: "error" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("user_events")
+        .update({ draft_slug: slug || null })
+        .eq("id", event.id);
+
+      if (error) throw error;
+      setToast({ message: "Slug saved", type: "success" });
+    } catch (err) {
+      setToast({
+        message: err instanceof Error ? err.message : "Failed to save",
+        type: "error",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (!guestUrl) {
+      setToast({ message: "No published link available yet", type: "error" });
+      return;
+    }
+    navigator.clipboard
+      .writeText(guestUrl)
+      .then(() => setToast({ message: "Link copied to clipboard", type: "success" }))
+      .catch(() => setToast({ message: "Failed to copy link", type: "error" }));
   };
 
   const handleDownloadQr = () => {
-    downloadQrCode(shareUrl, `${slug || "event"}-qr.png`).catch(() => {
+    if (!guestUrl) return;
+    downloadQrCode(guestUrl, `${publishedSlug || "event"}-qr.png`).catch(() => {
       setToast({ message: "Failed to download QR code", type: "error" });
     });
   };
 
   return (
-    <div className="h-full overflow-y-auto p-4">
-      <div className="mx-auto max-w-2xl space-y-6 p-4">
-        <div>
-          <h2 className="font-heading text-xl font-bold text-gray-900">
-            Sharing
-          </h2>
-          <p className="mt-1 text-sm text-gray-600">
-            Share your event website with guests.
+    <div className="mx-auto max-w-3xl p-6">
+      <div className="mb-6">
+        <h1 className="text-xl font-semibold text-gray-900">Sharing</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Share your event with guests via link or QR code
+        </p>
+      </div>
+
+      {/* Event info */}
+      <Card className="mb-6 p-5">
+        <h3 className="text-sm font-semibold text-gray-700">Event Details</h3>
+        <div className="mt-3 flex flex-col gap-1.5 text-sm text-gray-600">
+          <p>
+            <span className="font-medium text-gray-900">
+              {event.draft_name || event.name || "Untitled Event"}
+            </span>
           </p>
+          {(event.draft_event_date || event.event_date) && (
+            <p>{formatDate(event.draft_event_date || event.event_date)}</p>
+          )}
+          {(event.draft_venue || event.venue) && (
+            <p>{event.draft_venue || event.venue}</p>
+          )}
         </div>
+      </Card>
 
-        {/* Event info */}
-        <Card className="space-y-2 p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
-            Event Details
-          </h3>
-          <p className="text-lg font-medium text-gray-900">
-            {event.draft_name ?? event.name}
-          </p>
-          {(event.draft_event_date ?? event.event_date) && (
-            <p className="text-sm text-gray-600">
-              {formatDate(event.draft_event_date ?? event.event_date)}
-            </p>
-          )}
-          {(event.draft_venue ?? event.venue) && (
-            <p className="text-sm text-gray-600">
-              {event.draft_venue ?? event.venue}
-            </p>
-          )}
-        </Card>
+      {/* Slug editor */}
+      <Card className="mb-6 p-5">
+        <h3 className="text-sm font-semibold text-gray-700">Event URL</h3>
+        <p className="mt-1 text-xs text-gray-500">
+          Set a custom slug for your event's public URL
+        </p>
 
-        {/* Slug */}
-        <Card className="space-y-4 p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
-            Custom URL
-          </h3>
-          <FormField
-            label="URL slug"
-            hint="This will be used in your event link: /e/your-slug"
-          >
-            <div className="flex gap-2">
+        <div className="mt-4 flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">/e/</span>
+            <div className="flex-1">
               <Input
                 value={slug}
-                onChange={(e) => setSlug(slugify(e.target.value))}
+                onChange={(e) => handleSlugChange(e.target.value)}
+                onBlur={handleSlugBlur}
                 placeholder="my-event"
               />
-              <Button
-                size="md"
-                onClick={handleSaveSlug}
-                disabled={updateMutation.isPending || !slugValid}
-              >
-                {updateMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Save"
-                )}
-              </Button>
             </div>
-          </FormField>
-          {!slugValid && (
-            <p className="text-xs text-red-600">
-              Slug can only contain lowercase letters, numbers, and hyphens.
-            </p>
-          )}
-          {slugValid && slug && (
+            <Button
+              size="sm"
+              onClick={handleSaveSlug}
+              disabled={saving || (!!slug && !isValidSlug(slug))}
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+            </Button>
+          </div>
+
+          {slugError && <p className="text-xs text-red-600">{slugError}</p>}
+
+          {slug && isValidSlug(slug) && (
             <div className="flex items-center gap-2 rounded-md bg-gray-50 px-3 py-2">
               <LinkIcon className="h-4 w-4 text-gray-400" />
-              <span className="flex-1 truncate text-sm text-gray-700">
-                {shareUrl}
+              <span className="text-xs text-gray-600">
+                {baseUrl}/e/{slug}
               </span>
-              <button
-                onClick={handleCopy}
-                className="text-gray-500 transition-colors hover:text-gray-900"
-                aria-label="Copy link"
-              >
-                {copied ? (
-                  <Check className="h-4 w-4 text-green-600" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </button>
+              {slug === event.slug && <Badge variant="success">Published</Badge>}
             </div>
           )}
-          {event.is_published ? (
-            <Badge variant="success">Published</Badge>
-          ) : (
-            <Badge variant="warning">Not published yet — publish to share</Badge>
-          )}
-        </Card>
+        </div>
+      </Card>
 
-        {/* QR Code */}
-        <Card className="space-y-4 p-4">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
-            QR Code
-          </h3>
-          {qrDataUrl ? (
-            <div className="flex flex-col items-center gap-4">
-              <img
-                src={qrDataUrl}
-                alt="QR code for event link"
-                className="h-48 w-48 rounded-lg border border-gray-200"
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleDownloadQr}
-              >
-                <Download className="h-4 w-4" /> Download PNG
+      {/* Published link & QR */}
+      <Card className="p-5">
+        <h3 className="text-sm font-semibold text-gray-700">Share Link</h3>
+
+        {guestUrl ? (
+          <div className="mt-4 flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 truncate rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                {guestUrl}
+              </div>
+              <Button variant="secondary" size="sm" onClick={handleCopyLink}>
+                <Copy className="h-4 w-4" />
+                Copy
               </Button>
             </div>
-          ) : (
-            <div className="flex flex-col items-center gap-4 py-8 text-gray-400">
-              <QrCode className="h-16 w-16" />
-              <p className="text-sm">
-                {slug
-                  ? "Generating QR code..."
-                  : "Enter a slug to generate a QR code"}
-              </p>
+
+            <div className="flex flex-col items-center gap-3 border-t border-gray-100 pt-4">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+                QR Code
+              </h4>
+              {qrLoading ? (
+                <div className="flex h-48 w-48 items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                </div>
+              ) : qrDataUrl ? (
+                <img
+                  src={qrDataUrl}
+                  alt="QR Code"
+                  className="h-48 w-48 rounded-lg border border-gray-200"
+                />
+              ) : (
+                <div className="flex h-48 w-48 items-center justify-center rounded-lg border border-dashed border-gray-300">
+                  <QrCode className="h-12 w-12 text-gray-300" />
+                </div>
+              )}
+              <Button variant="secondary" size="sm" onClick={handleDownloadQr} disabled={!qrDataUrl}>
+                <Download className="h-4 w-4" />
+                Download QR
+              </Button>
             </div>
-          )}
-        </Card>
-      </div>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            Publish your event to generate a shareable link and QR code.
+          </div>
+        )}
+      </Card>
 
       {toast && (
         <Toast

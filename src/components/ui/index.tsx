@@ -1,22 +1,24 @@
-import {
-  type ReactNode,
-  useEffect,
-  useState,
-  type HTMLAttributes,
-  type InputHTMLAttributes,
-} from "react";
-import { AlertCircle, X } from "lucide-react";
+import React, { useEffect, useCallback } from "react";
+import { X, AlertCircle, CheckCircle2, Info, AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Select } from "./Input";
 
-// ---------------------------------------------------------------------------
-// Card
-// ---------------------------------------------------------------------------
+export { Button } from "./Button";
+export { Input, Textarea, Select } from "./Input";
+export { ImageUpload } from "./ImageUpload";
+export { RichTextEditor } from "./RichTextEditor";
+export { TimePicker } from "./TimePicker";
+export { DatePicker } from "./DatePicker";
+export { DateTimePicker } from "./DateTimePicker";
 
-export function Card({ className, children, ...props }: HTMLAttributes<HTMLDivElement>) {
+/* ── Card ─────────────────────────────────────────── */
+
+export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {}
+
+export function Card({ className, children, ...props }: CardProps) {
   return (
     <div
-      className={cn("rounded-lg border border-gray-200 bg-white", className)}
+      className={cn("bg-white border border-gray-200 rounded-lg", className)}
       {...props}
     >
       {children}
@@ -24,13 +26,17 @@ export function Card({ className, children, ...props }: HTMLAttributes<HTMLDivEl
   );
 }
 
-// ---------------------------------------------------------------------------
-// Badge
-// ---------------------------------------------------------------------------
+/* ── Badge ────────────────────────────────────────── */
 
-export type BadgeVariant = "default" | "success" | "warning" | "error" | "info";
+type BadgeVariant = "default" | "success" | "warning" | "error" | "info";
 
-const badgeVariants: Record<BadgeVariant, string> = {
+export interface BadgeProps {
+  variant?: BadgeVariant;
+  children: React.ReactNode;
+  className?: string;
+}
+
+const badgeVariantClasses: Record<BadgeVariant, string> = {
   default: "bg-gray-100 text-gray-700",
   success: "bg-green-100 text-green-700",
   warning: "bg-amber-100 text-amber-700",
@@ -38,85 +44,79 @@ const badgeVariants: Record<BadgeVariant, string> = {
   info: "bg-blue-100 text-blue-700",
 };
 
-export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
-  variant?: BadgeVariant;
-}
-
-export function Badge({ variant = "default", className, children, ...props }: BadgeProps) {
+export function Badge({ variant = "default", children, className }: BadgeProps) {
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium",
-        badgeVariants[variant],
-        className,
+        badgeVariantClasses[variant],
+        className
       )}
-      {...props}
     >
       {children}
     </span>
   );
 }
 
-// ---------------------------------------------------------------------------
-// EmptyState
-// ---------------------------------------------------------------------------
+/* ── EmptyState ───────────────────────────────────── */
 
 export interface EmptyStateProps {
-  icon?: ReactNode;
+  icon?: React.ReactNode;
   title: string;
   description?: string;
-  action?: ReactNode;
-  className?: string;
+  action?: React.ReactNode;
 }
 
-export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
+export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center gap-3 px-6 py-12 text-center",
-        className,
+    <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+      {icon && (
+        <div className="text-gray-300" aria-hidden>
+          {icon}
+        </div>
       )}
-    >
-      {icon && <div className="text-gray-300">{icon}</div>}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        {description && (
-          <p className="mt-1 text-sm text-gray-500">{description}</p>
-        )}
-      </div>
+      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      {description && (
+        <p className="max-w-sm text-sm text-gray-500">{description}</p>
+      )}
       {action && <div className="mt-2">{action}</div>}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Toggle
-// ---------------------------------------------------------------------------
+/* ── Toggle ───────────────────────────────────────── */
 
 export interface ToggleProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label?: string;
-  className?: string;
+  disabled?: boolean;
 }
 
-export function Toggle({ checked, onChange, label, className }: ToggleProps) {
+export function Toggle({ checked, onChange, label, disabled }: ToggleProps) {
   return (
-    <label className={cn("inline-flex items-center gap-2 cursor-pointer", className)}>
+    <label
+      className={cn(
+        "inline-flex items-center gap-2 cursor-pointer select-none",
+        disabled && "opacity-50 cursor-not-allowed"
+      )}
+    >
       <button
         type="button"
         role="switch"
         aria-checked={checked}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors",
+          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
           checked ? "bg-gray-900" : "bg-gray-300",
+          disabled && "cursor-not-allowed"
         )}
       >
         <span
           className={cn(
             "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-            checked ? "translate-x-4" : "translate-x-0.5",
+            checked ? "translate-x-4" : "translate-x-0.5"
           )}
         />
       </button>
@@ -125,42 +125,36 @@ export function Toggle({ checked, onChange, label, className }: ToggleProps) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// ColorInput
-// ---------------------------------------------------------------------------
+/* ── ColorInput ────────────────────────────────────── */
 
 export interface ColorInputProps {
   value: string;
   onChange: (value: string) => void;
   label?: string;
-  className?: string;
 }
 
-export function ColorInput({ value, onChange, label, className }: ColorInputProps) {
+export function ColorInput({ value, onChange, label }: ColorInputProps) {
   return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      {label && <label className="text-xs font-medium text-gray-600">{label}</label>}
-      <div className="flex items-center gap-2">
-        <input
-          type="color"
-          value={value || "#000000"}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-8 w-8 cursor-pointer rounded border border-gray-200 p-0.5"
-        />
-        <input
-          type="text"
-          value={value ?? ""}
-          onChange={(e) => onChange(e.target.value)}
-          className="flex-1 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-gray-400 focus:outline-none"
-        />
-      </div>
-    </div>
+    <label className="flex items-center gap-2">
+      {label && <span className="text-sm text-gray-700">{label}</span>}
+      <input
+        type="color"
+        value={value || "#000000"}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-8 w-10 cursor-pointer rounded border border-gray-200 bg-white p-0.5"
+      />
+      <input
+        type="text"
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-24 rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-gray-400 focus:outline-none"
+        placeholder="#000000"
+      />
+    </label>
   );
 }
 
-// ---------------------------------------------------------------------------
-// RangeInput
-// ---------------------------------------------------------------------------
+/* ── RangeInput ────────────────────────────────────── */
 
 export interface RangeInputProps {
   value: number;
@@ -169,7 +163,6 @@ export interface RangeInputProps {
   max?: number;
   step?: number;
   label?: string;
-  className?: string;
 }
 
 export function RangeInput({
@@ -179,15 +172,14 @@ export function RangeInput({
   max = 100,
   step = 1,
   label,
-  className,
 }: RangeInputProps) {
   return (
-    <div className={cn("flex flex-col gap-1", className)}>
+    <label className="flex flex-col gap-1">
       {label && (
-        <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-gray-600">{label}</label>
-          <span className="text-xs text-gray-400">{value}</span>
-        </div>
+        <span className="flex items-center justify-between text-sm text-gray-700">
+          {label}
+          <span className="text-xs text-gray-500">{value}</span>
+        </span>
       )}
       <input
         type="range"
@@ -198,117 +190,120 @@ export function RangeInput({
         onChange={(e) => onChange(Number(e.target.value))}
         className="w-full cursor-pointer accent-gray-900"
       />
-    </div>
+    </label>
   );
 }
 
-// ---------------------------------------------------------------------------
-// FormField
-// ---------------------------------------------------------------------------
+/* ── FormField ─────────────────────────────────────── */
 
 export interface FormFieldProps {
-  label?: string;
+  label: string;
+  children: React.ReactNode;
   hint?: string;
-  children: ReactNode;
-  className?: string;
 }
 
-export function FormField({ label, hint, children, className }: FormFieldProps) {
+export function FormField({ label, children, hint }: FormFieldProps) {
   return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      {label && (
-        <label className="text-sm font-medium text-gray-700">{label}</label>
-      )}
+    <div className="flex flex-col gap-1.5">
+      <label className="text-sm font-medium text-gray-700">{label}</label>
       {children}
-      {hint && <p className="text-xs text-gray-400">{hint}</p>}
+      {hint && <p className="text-xs text-gray-500">{hint}</p>}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Skeleton
-// ---------------------------------------------------------------------------
+/* ── Skeleton ──────────────────────────────────────── */
 
-export function Skeleton({ className }: { className?: string }) {
-  return (
-    <div className={cn("animate-pulse rounded-md bg-gray-200", className)} />
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ErrorState
-// ---------------------------------------------------------------------------
-
-export interface ErrorStateProps {
-  message?: string;
-  onRetry?: () => void;
+export interface SkeletonProps {
   className?: string;
 }
 
-export function ErrorState({ message, onRetry, className }: ErrorStateProps) {
+export function Skeleton({ className }: SkeletonProps) {
   return (
     <div
-      className={cn(
-        "flex flex-col items-center justify-center gap-3 px-6 py-12 text-center",
-        className,
-      )}
-    >
-      <AlertCircle className="h-8 w-8 text-red-400" />
-      <div>
-        <h3 className="text-sm font-semibold text-gray-900">Something went wrong</h3>
-        {message && <p className="mt-1 text-sm text-gray-500">{message}</p>}
-      </div>
+      className={cn("animate-pulse rounded bg-gray-200", className)}
+      aria-busy="true"
+      aria-live="polite"
+    />
+  );
+}
+
+/* ── ErrorState ───────────────────────────────────── */
+
+export interface ErrorStateProps {
+  title?: string;
+  message?: string;
+  onRetry?: () => void;
+}
+
+export function ErrorState({
+  title = "Something went wrong",
+  message = "An unexpected error occurred. Please try again.",
+  onRetry,
+}: ErrorStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+      <AlertCircle className="h-10 w-10 text-red-400" />
+      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      <p className="max-w-sm text-sm text-gray-500">{message}</p>
       {onRetry && (
         <button
           onClick={onRetry}
           className="mt-2 rounded-md bg-gray-900 px-4 py-2 text-xs font-medium uppercase tracking-wider text-white hover:bg-gray-700"
         >
-          Try again
+          Try Again
         </button>
       )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Toast
-// ---------------------------------------------------------------------------
+/* ── Toast ─────────────────────────────────────────── */
 
-export type ToastType = "success" | "error" | "info" | "warning";
+type ToastType = "success" | "error" | "info" | "warning";
 
 export interface ToastProps {
   message: string;
   type?: ToastType;
   onClose?: () => void;
-  duration?: number;
 }
 
-const toastTypeClasses: Record<ToastType, string> = {
-  success: "bg-green-50 border-green-200 text-green-800",
-  error: "bg-red-50 border-red-200 text-red-800",
-  info: "bg-blue-50 border-blue-200 text-blue-800",
-  warning: "bg-amber-50 border-amber-200 text-amber-800",
+const toastIcons: Record<ToastType, React.ReactNode> = {
+  success: <CheckCircle2 className="h-5 w-5 text-green-500" />,
+  error: <AlertCircle className="h-5 w-5 text-red-500" />,
+  info: <Info className="h-5 w-5 text-blue-500" />,
+  warning: <AlertTriangle className="h-5 w-5 text-amber-500" />,
 };
 
-export function Toast({ message, type = "info", onClose, duration = 3000 }: ToastProps) {
+const toastBorderClasses: Record<ToastType, string> = {
+  success: "border-green-200",
+  error: "border-red-200",
+  info: "border-blue-200",
+  warning: "border-amber-200",
+};
+
+export function Toast({ message, type = "info", onClose }: ToastProps) {
   useEffect(() => {
     if (!onClose) return;
-    const timer = setTimeout(onClose, duration);
+    const timer = setTimeout(onClose, 4000);
     return () => clearTimeout(timer);
-  }, [onClose, duration]);
+  }, [onClose]);
 
   return (
     <div
       className={cn(
-        "fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg animate-fade-in-up",
-        toastTypeClasses[type],
+        "fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border bg-white px-4 py-3 shadow-lg animate-fade-in-up",
+        toastBorderClasses[type]
       )}
+      role="alert"
     >
-      <span className="text-sm font-medium">{message}</span>
+      {toastIcons[type]}
+      <span className="text-sm text-gray-800">{message}</span>
       {onClose && (
         <button
           onClick={onClose}
-          className="text-current opacity-60 hover:opacity-100"
+          className="ml-2 text-gray-400 hover:text-gray-600"
+          aria-label="Close toast"
         >
           <X className="h-4 w-4" />
         </button>
@@ -317,61 +312,72 @@ export function Toast({ message, type = "info", onClose, duration = 3000 }: Toas
   );
 }
 
-// ---------------------------------------------------------------------------
-// Modal (placeholder re-export — DatePicker will provide the real one)
-// ---------------------------------------------------------------------------
+/* ── Modal ─────────────────────────────────────────── */
 
 export interface ModalProps {
   open: boolean;
   onClose: () => void;
-  children: ReactNode;
+  title?: string;
+  children: React.ReactNode;
   className?: string;
 }
 
-/**
- * Lightweight modal. Re-exported here so consumers can import from `ui`.
- * The DatePicker component (created separately) may provide its own Modal.
- */
-export function Modal({ open, onClose, children, className }: ModalProps) {
-  const [mounted, setMounted] = useState(open);
-  useEffect(() => {
-    if (open) setMounted(true);
-    else {
-      const t = setTimeout(() => setMounted(false), 200);
-      return () => clearTimeout(t);
-    }
-  }, [open]);
+export function Modal({ open, onClose, title, children, className }: ModalProps) {
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    },
+    [onClose]
+  );
 
-  if (!mounted && !open) return null;
+  useEffect(() => {
+    if (!open) return;
+    document.addEventListener("keydown", handleKeyDown);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+    };
+  }, [open, handleKeyDown]);
+
+  if (!open) return null;
 
   return (
     <div
-      className={cn(
-        "fixed inset-0 z-50 flex items-center justify-center p-4",
-        open ? "animate-fade-in" : "animate-fade-in pointer-events-none opacity-0",
-      )}
-      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+      aria-modal="true"
+      role="dialog"
     >
-      <div className="absolute inset-0 bg-black/40" />
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
       <div
         className={cn(
-          "relative z-10 w-full max-w-md rounded-lg border border-gray-200 bg-white shadow-xl",
-          className,
+          "relative z-10 w-full max-w-lg rounded-lg border border-gray-200 bg-white shadow-xl animate-fade-in-up",
+          className
         )}
-        onClick={(e) => e.stopPropagation()}
       >
-        {children}
+        {title && (
+          <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+            <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+              aria-label="Close modal"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        )}
+        <div className="px-5 py-4">{children}</div>
       </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Re-exports
-// ---------------------------------------------------------------------------
+/* ── LoadingSpinner ───────────────────────────────── */
 
-export { Select } from "./Input";
-export type { SelectProps } from "./Input";
-export { TimePicker } from "./TimePicker";
-export { DatePicker } from "./DatePicker";
-export { DateTimePicker } from "./DateTimePicker";
+export function LoadingSpinner({ className }: { className?: string }) {
+  return <Loader2 className={cn("h-5 w-5 animate-spin text-gray-500", className)} />;
+}

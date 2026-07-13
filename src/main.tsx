@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -6,13 +6,82 @@ import {
   Route,
   Navigate,
   Outlet,
-  useLocation,
+  useNavigate,
 } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { supabase } from "./lib/supabase";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { GuestAuthProvider } from "./lib/guest-auth";
+import { LoadingSpinner } from "./components/ui";
+import "./index.css";
 
-// Route pages
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      staleTime: 30 * 1000,
+    },
+  },
+});
+
+/* ── Protected Route ───────────────────────────────── */
+
+function ProtectedRoute() {
+  const navigate = useNavigate();
+  const [checking, setChecking] = useState(true);
+  const [authenticated, setAuthenticated] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      if (data.session) {
+        setAuthenticated(true);
+        setChecking(false);
+      } else {
+        setAuthenticated(false);
+        setChecking(false);
+        navigate("/auth");
+      }
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!mounted) return;
+        if (session) {
+          setAuthenticated(true);
+        } else {
+          setAuthenticated(false);
+          navigate("/auth");
+        }
+      }
+    );
+
+    return () => {
+      mounted = false;
+      listener?.subscription?.unsubscribe();
+    };
+  }, [navigate]);
+
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <LoadingSpinner className="h-8 w-8" />
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return null;
+  }
+
+  return <Outlet />;
+}
+
+/* ── Lazy-ish imports (static for simplicity) ──────── */
+
 import LandingPage from "./routes/landing";
 import AuthPage from "./routes/auth";
 import DashboardPage from "./routes/dashboard";
@@ -44,139 +113,89 @@ import RustyRsvpPage from "./routes/rusty/rusty-rsvp";
 import RustyWishesPage from "./routes/rusty/rusty-wishes";
 import RustyContactPage from "./routes/rusty/rusty-contact";
 
-// ---------------------------------------------------------------------------
-// Query client
-// ---------------------------------------------------------------------------
+/* ── App Routes ────────────────────────────────────── */
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      refetchOnWindowFocus: false,
-      staleTime: 30 * 1000,
-    },
-  },
-});
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Landing */}
+      <Route path="/" element={<LandingPage />} />
 
-// ---------------------------------------------------------------------------
-// Auth guard
-// ---------------------------------------------------------------------------
+      {/* Auth */}
+      <Route path="/auth" element={<AuthPage />} />
 
-function ProtectedRoute(): ReactNode {
-  const [authState, setAuthState] = useState<
-    "loading" | "authenticated" | "unauthenticated"
-  >("loading");
-  const location = useLocation();
+      {/* Dashboard (protected) */}
+      <Route
+        path="/dashboard"
+        element={<ProtectedRoute />}
+      >
+        <Route index element={<DashboardPage />} />
+      </Route>
 
-  useEffect(() => {
-    let mounted = true;
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-      setAuthState(session ? "authenticated" : "unauthenticated");
-    });
+      {/* Event editor (protected) */}
+      <Route
+        path="/event/:eventId"
+        element={<ProtectedRoute />}
+      >
+        <Route element={<EventLayoutPage />}>
+          <Route index element={<Navigate to="cover" replace />} />
+        <Route path="cover" element={<CoverEditorPage />} />
+        <Route path="login" element={<LoginEditorPage />} />
+        <Route path="home" element={<HomeEditorPage />} />
+        <Route path="theme" element={<ThemeEditorPage />} />
+        <Route path="events" element={<EventsPage />} />
+        <Route path="guests" element={<GuestsPage />} />
+        <Route path="groups" element={<GroupsPage />} />
+        <Route path="rsvp" element={<RsvpPage />} />
+        <Route path="timeline" element={<TimelinePage />} />
+        <Route path="sharing" element={<SharingPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        </Route>
+      </Route>
 
-    // Also check current session on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      setAuthState(session ? "authenticated" : "unauthenticated");
-    });
+      {/* Guest view */}
+      <Route path="/e/:slug" element={<GuestLayoutPage />}>
+        <Route index element={<GuestCoverPage />} />
+        <Route path="login" element={<GuestLoginPage />} />
+        <Route path="home" element={<GuestHomePage />} />
+        <Route path="rsvp" element={<GuestRsvpPage />} />
+        <Route path="wishes" element={<GuestWishesPage />} />
+        <Route path="contact" element={<GuestContactPage />} />
+      </Route>
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
+      {/* Rusty view */}
+      <Route path="/r/:slug" element={<RustyLayoutPage />}>
+        <Route index element={<RustyCoverPage />} />
+        <Route path="login" element={<RustyLoginPage />} />
+        <Route path="home" element={<RustyHomePage />} />
+        <Route path="rsvp" element={<RustyRsvpPage />} />
+        <Route path="wishes" element={<RustyWishesPage />} />
+        <Route path="contact" element={<RustyContactPage />} />
+      </Route>
 
-  if (authState === "loading") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-gray-900" />
-      </div>
-    );
-  }
-
-  if (authState === "unauthenticated") {
-    return <Navigate to="/auth" state={{ from: location }} replace />;
-  }
-
-  return <Outlet />;
+      {/* Catch-all */}
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 }
 
-// ---------------------------------------------------------------------------
-// App
-// ---------------------------------------------------------------------------
-
-function App(): ReactNode {
+function Main() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <QueryClientProvider client={queryClient}>
-          <Routes>
-            {/* Public */}
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/auth" element={<AuthPage />} />
-
-            {/* Dashboard (protected) */}
-            <Route element={<ProtectedRoute />}>
-              <Route path="/dashboard" element={<DashboardPage />} />
-            </Route>
-
-            {/* Event editor (protected) */}
-            <Route element={<ProtectedRoute />}>
-              <Route path="/event/:eventId" element={<EventLayoutPage />}>
-                <Route index element={<Navigate to="cover" replace />} />
-                <Route path="cover" element={<CoverEditorPage />} />
-                <Route path="login" element={<LoginEditorPage />} />
-                <Route path="home" element={<HomeEditorPage />} />
-                <Route path="theme" element={<ThemeEditorPage />} />
-                <Route path="events" element={<EventsPage />} />
-                <Route path="guests" element={<GuestsPage />} />
-                <Route path="groups" element={<GroupsPage />} />
-                <Route path="rsvp" element={<RsvpPage />} />
-                <Route path="timeline" element={<TimelinePage />} />
-                <Route path="sharing" element={<SharingPage />} />
-                <Route path="stats" element={<AnalyticsPage />} />
-                <Route path="settings" element={<SettingsPage />} />
-              </Route>
-            </Route>
-
-            {/* Guest view */}
-            <Route path="/e/:slug" element={<GuestLayoutPage />}>
-              <Route index element={<GuestCoverPage />} />
-              <Route path="login" element={<GuestLoginPage />} />
-              <Route path="home" element={<GuestHomePage />} />
-              <Route path="rsvp" element={<GuestRsvpPage />} />
-              <Route path="wishes" element={<GuestWishesPage />} />
-              <Route path="contact" element={<GuestContactPage />} />
-            </Route>
-
-            {/* Rusty view */}
-            <Route path="/r/:slug" element={<RustyLayoutPage />}>
-              <Route index element={<RustyCoverPage />} />
-              <Route path="login" element={<RustyLoginPage />} />
-              <Route path="home" element={<RustyHomePage />} />
-              <Route path="rsvp" element={<RustyRsvpPage />} />
-              <Route path="wishes" element={<RustyWishesPage />} />
-              <Route path="contact" element={<RustyContactPage />} />
-            </Route>
-
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </QueryClientProvider>
-      </BrowserRouter>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <GuestAuthProvider>
+            <AppRoutes />
+          </GuestAuthProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
     </ErrorBoundary>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Mount
-// ---------------------------------------------------------------------------
-
-const rootEl = document.getElementById("root");
-if (!rootEl) {
-  throw new Error("Root element #root not found");
-}
-createRoot(rootEl).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <Main />
+  </React.StrictMode>
+);

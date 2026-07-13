@@ -1,8 +1,4 @@
-import { useMemo } from "react";
-
-// ---------------------------------------------------------------------------
-// HTML sanitizer
-// ---------------------------------------------------------------------------
+import React from "react";
 
 const ALLOWED_TAGS = new Set([
   "p",
@@ -42,108 +38,91 @@ const ALLOWED_STYLE_PROPS = new Set([
 ]);
 
 /**
- * Sanitize an HTML string, allowing only a safe subset of tags, attributes,
- * and inline style properties. Strips <script>, event handlers, javascript:
- * URLs, and any disallowed styles.
+ * Sanitize an HTML string using DOMParser with an allowlist of tags, attributes, and style properties.
  */
-export function sanitizeHtml(html: string): string {
+export function sanitizeHtml(html: string | null | undefined): string {
   if (!html) return "";
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  cleanNode(doc.body);
-  return doc.body.innerHTML;
-}
+  if (typeof window === "undefined" || typeof DOMParser === "undefined") return html;
 
-function cleanNode(node: Node): void {
-  // Walk children first so we can safely remove nodes while iterating.
-  const children = Array.from(node.childNodes);
-  for (const child of children) {
-    if (child.nodeType === Node.ELEMENT_NODE) {
-      cleanElement(child as Element);
-    } else if (child.nodeType === Node.COMMENT_NODE) {
-      node.removeChild(child);
-    }
-    // Text nodes are kept as-is.
-  }
-}
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
 
-function cleanElement(el: Element): void {
-  const tag = el.tagName.toLowerCase();
+    const walk = (node: Node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as Element;
+        const tag = el.tagName.toLowerCase();
 
-  if (!ALLOWED_TAGS.has(tag)) {
-    // Replace disallowed element with its children (unwrap), or remove.
-    const parent = el.parentNode;
-    if (!parent) return;
-    if (tag === "script" || tag === "style" || tag === "iframe" || tag === "object") {
-      parent.removeChild(el);
-      return;
-    }
-    // Unwrap: move children up, then remove the element.
-    while (el.firstChild) {
-      parent.insertBefore(el.firstChild, el);
-    }
-    parent.removeChild(el);
-    return;
-  }
+        if (!ALLOWED_TAGS.has(tag)) {
+          // Replace disallowed element with its text content
+          const text = document.createTextNode(el.textContent || "");
+          el.parentNode?.replaceChild(text, el);
+          return;
+        }
 
-  // Remove disallowed attributes.
-  const attrs = Array.from(el.attributes);
-  for (const attr of attrs) {
-    if (!ALLOWED_ATTRS.has(attr.name)) {
-      el.removeAttribute(attr.name);
-      continue;
-    }
-    // Sanitize href/src — block javascript: URLs.
-    if ((attr.name === "href" || attr.name === "src")) {
-      const val = attr.value.trim().toLowerCase();
-      if (val.startsWith("javascript:") || val.startsWith("data:text/html")) {
-        el.removeAttribute(attr.name);
+        // Remove disallowed attributes
+        Array.from(el.attributes).forEach((attr) => {
+          if (!ALLOWED_ATTRS.has(attr.name.toLowerCase())) {
+            el.removeAttribute(attr.name);
+          } else if (attr.name.toLowerCase() === "style") {
+            // Filter style properties
+            const cleaned = filterStyles(attr.value);
+            if (cleaned) {
+              el.setAttribute("style", cleaned);
+            } else {
+              el.removeAttribute("style");
+            }
+          } else if (attr.name.toLowerCase() === "href") {
+            // Only allow http(s) and mailto
+            const val = attr.value;
+            if (!/^(https?:|mailto:|\/|#)/i.test(val)) {
+              el.removeAttribute("href");
+            }
+          } else if (attr.name.toLowerCase() === "src") {
+            // Only allow http(s) and relative
+            const val = attr.value;
+            if (!/^(https?:|\/|data:image)/i.test(val)) {
+              el.removeAttribute("src");
+            }
+          }
+        });
       }
-    }
-  }
 
-  // Sanitize inline style.
-  if (el.hasAttribute("style")) {
-    const style = el.getAttribute("style") ?? "";
-    el.setAttribute("style", sanitizeStyle(style));
-  }
+      // Walk children (copy to handle removal)
+      const children = Array.from(node.childNodes);
+      children.forEach(walk);
+    };
 
-  // Recurse into children.
-  cleanNode(el);
+    walk(doc.body);
+
+    return doc.body.innerHTML;
+  } catch {
+    return html;
+  }
 }
 
-function sanitizeStyle(style: string): string {
-  const declarations = style.split(";");
-  const kept: string[] = [];
-  for (const decl of declarations) {
-    const idx = decl.indexOf(":");
-    if (idx === -1) continue;
-    const prop = decl.slice(0, idx).trim().toLowerCase();
-    const value = decl.slice(idx + 1).trim();
-    if (!prop || !value) continue;
-    if (!ALLOWED_STYLE_PROPS.has(prop)) continue;
-    // Block url() in style values (prevents background-image: url(javascript:...) etc.)
-    if (value.toLowerCase().includes("url(")) continue;
-    if (value.toLowerCase().includes("expression(")) continue;
-    kept.push(`${prop}: ${value}`);
-  }
-  return kept.join("; ");
+function filterStyles(styleStr: string): string {
+  if (!styleStr) return "";
+  const parts = styleStr.split(";").map((s) => s.trim()).filter(Boolean);
+  const filtered = parts.filter((part) => {
+    const colonIdx = part.indexOf(":");
+    if (colonIdx === -1) return false;
+    const prop = part.substring(0, colonIdx).trim().toLowerCase();
+    return ALLOWED_STYLE_PROPS.has(prop);
+  });
+  return filtered.join("; ");
 }
-
-// ---------------------------------------------------------------------------
-// RichTextContent component
-// ---------------------------------------------------------------------------
 
 interface RichTextContentProps {
-  html: string;
+  html: string | null | undefined;
   className?: string;
 }
 
 /**
- * Renders sanitized HTML content. The HTML is sanitized before being
- * inserted via dangerouslySetInnerHTML to prevent XSS.
+ * Render sanitized HTML content
  */
 export function RichTextContent({ html, className }: RichTextContentProps) {
-  const sanitized = useMemo(() => sanitizeHtml(html ?? ""), [html]);
+  const sanitized = React.useMemo(() => sanitizeHtml(html), [html]);
   return (
     <div
       className={className}

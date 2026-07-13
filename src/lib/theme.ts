@@ -1,109 +1,89 @@
-import type {
-  ThemeConfig,
-  CoverConfig,
-  LoginConfig,
-  EventContent,
-} from "./supabase";
-
-// ---------------------------------------------------------------------------
-// Default theme
-// ---------------------------------------------------------------------------
+import type { ThemeConfig } from "./supabase";
 
 export const DEFAULT_THEME: ThemeConfig = {
   preset: "classic",
-  primaryColor: "#1a1a1a",
+  primaryColor: "#111827",
   secondaryColor: "#6b7280",
-  accentColor: "#b08d57",
+  accentColor: "#d4af37",
   bgColor: "#ffffff",
   surfaceColor: "#ffffff",
-  textColor: "#1f2937",
+  textColor: "#111827",
   textMutedColor: "#6b7280",
   borderColor: "#e5e7eb",
-  headingFont: '"Cormorant Garamond", serif',
-  bodyFont: '"Inter", sans-serif',
-  scriptFont: '"Dancing Script", cursive',
+  headingFont: "Cormorant Garamond",
+  bodyFont: "Inter",
+  scriptFont: "Dancing Script",
   buttonRadius: 6,
   shadowStyle: "soft",
 };
 
-// ---------------------------------------------------------------------------
-// Rusty theme — luxury cream & gold wedding aesthetic
-// ---------------------------------------------------------------------------
-
 export const RUSTY_THEME: ThemeConfig = {
   preset: "rusty",
-  primaryColor: "#3d2b1f",
-  secondaryColor: "#8a6d3b",
-  accentColor: "#c9a961",
-  bgColor: "#faf6ef",
-  surfaceColor: "#fffdf8",
-  textColor: "#3d2b1f",
-  textMutedColor: "#8a7a5f",
-  borderColor: "#e8dcc8",
-  headingFont: '"Playfair Display", serif',
-  bodyFont: '"Lora", serif',
-  scriptFont: '"Great Vibes", cursive',
-  buttonRadius: 2,
+  primaryColor: "#8b7355",
+  secondaryColor: "#a89072",
+  accentColor: "#d4af37",
+  bgColor: "#fdfbf7",
+  surfaceColor: "#ffffff",
+  textColor: "#3d3528",
+  textMutedColor: "#8a7a65",
+  borderColor: "#e8dfd0",
+  headingFont: "Cormorant Garamond",
+  bodyFont: "EB Garamond",
+  scriptFont: "Great Vibes",
+  buttonRadius: 4,
   shadowStyle: "soft",
 };
 
-export const RUSTY_COVER_CONFIG: CoverConfig = {
+export const RUSTY_COVER_CONFIG = {
   bgImage: null,
-  bgColor: "#faf6ef",
-  overlayColor: "#3d2b1f",
-  overlayOpacity: 0.35,
-  textColor: "#fffdf8",
-  buttonColor: "#c9a961",
-  buttonText: "View Invitation",
-  font: '"Playfair Display", serif',
-  scriptFont: '"Great Vibes", cursive',
-  customText: "Together with their families",
+  bgColor: "#fdfbf7",
+  overlayColor: "#000000",
+  overlayOpacity: 0.2,
+  textColor: "#3d3528",
+  buttonColor: "#8b7355",
+  buttonText: "Enter",
+  font: "Cormorant Garamond",
+  scriptFont: "Great Vibes",
+  customText: null,
   showDate: true,
   showCountdown: true,
   logo: null,
   logoWidth: 120,
 };
 
-export const RUSTY_LOGIN_CONFIG: LoginConfig = {
+export const RUSTY_LOGIN_CONFIG = {
   bgImage: null,
-  bgColor: "#faf6ef",
-  overlayColor: "#3d2b1f",
-  overlayOpacity: 0.25,
-  textColor: "#3d2b1f",
-  buttonColor: "#c9a961",
-  buttonText: "Enter",
+  bgColor: "#fdfbf7",
+  overlayColor: "#000000",
+  overlayOpacity: 0.15,
+  textColor: "#3d3528",
+  buttonColor: "#8b7355",
+  buttonText: "Continue",
   heading: "Welcome",
   subheading: "Please enter your name to continue",
   inputPlaceholder: "Your full name",
   logo: null,
-  logoWidth: 120,
+  logoWidth: 100,
 };
 
-export const RUSTY_CONTENT: EventContent = {
-  rich_title: "Together with their families",
-  rich_subtitle: "request the pleasure of your company",
-  rich_body:
-    "<p>We invite you to join us as we celebrate our union and begin our journey together as one.</p>",
-  story:
-    "Our story began with a simple hello and grew into a lifetime of love, laughter, and shared dreams. We are so grateful to have you by our side as we take this next step together.",
+export const RUSTY_CONTENT = {
+  rich_title: null,
+  rich_subtitle: null,
+  rich_body: null,
+  story: null,
   story_image: null,
   invitation_title: "You're Invited",
-  invitation_subtitle: "To celebrate our wedding",
+  invitation_subtitle: "We would be honored by your presence",
   invitation_body:
-    "<p>Please join us for an evening of celebration as we exchange our vows and dance the night away.</p>",
-  invitation_text: "We would be honored by your presence.",
-  rsvp_button_text: "RSVP Now",
+    "Together with our families, we invite you to share in our celebration of love.",
+  invitation_text: null,
+  rsvp_button_text: "RSVP",
   sections: [],
 };
-
-// ---------------------------------------------------------------------------
-// Theme presets
-// ---------------------------------------------------------------------------
 
 export interface ThemePreset {
   id: string;
   name: string;
-  description: string;
   theme: ThemeConfig;
 }
 
@@ -111,33 +91,59 @@ export const THEME_PRESETS: ThemePreset[] = [
   {
     id: "classic",
     name: "Classic",
-    description: "Clean, modern, timeless",
-    theme: DEFAULT_THEME,
+    theme: {
+      preset: "classic",
+      primaryColor: "#111827",
+      secondaryColor: "#6b7280",
+      accentColor: "#d4af37",
+      bgColor: "#ffffff",
+      surfaceColor: "#ffffff",
+      textColor: "#111827",
+      textMutedColor: "#6b7280",
+      borderColor: "#e5e7eb",
+      headingFont: "Cormorant Garamond",
+      bodyFont: "Inter",
+      scriptFont: "Dancing Script",
+      buttonRadius: 6,
+      shadowStyle: "soft",
+    },
   },
   {
     id: "rusty",
     name: "Rusty",
-    description: "Luxury cream & gold",
-    theme: RUSTY_THEME,
+    theme: {
+      preset: "rusty",
+      primaryColor: "#8b7355",
+      secondaryColor: "#a89072",
+      accentColor: "#d4af37",
+      bgColor: "#fdfbf7",
+      surfaceColor: "#ffffff",
+      textColor: "#3d3528",
+      textMutedColor: "#8a7a65",
+      borderColor: "#e8dfd0",
+      headingFont: "Cormorant Garamond",
+      bodyFont: "EB Garamond",
+      scriptFont: "Great Vibes",
+      buttonRadius: 4,
+      shadowStyle: "soft",
+    },
   },
   {
     id: "mono",
-    name: "Monochrome",
-    description: "Black & white minimalism",
+    name: "Mono",
     theme: {
-      ...DEFAULT_THEME,
       preset: "mono",
       primaryColor: "#000000",
       secondaryColor: "#525252",
-      accentColor: "#000000",
+      accentColor: "#a3a3a3",
       bgColor: "#ffffff",
       surfaceColor: "#fafafa",
-      textColor: "#171717",
+      textColor: "#000000",
       textMutedColor: "#737373",
       borderColor: "#e5e5e5",
-      headingFont: '"Montserrat", sans-serif',
-      bodyFont: '"Inter", sans-serif',
-      scriptFont: '"Cormorant Garamond", serif',
+      headingFont: "Montserrat",
+      bodyFont: "Inter",
+      scriptFont: "Dancing Script",
       buttonRadius: 0,
       shadowStyle: "none",
     },
@@ -145,21 +151,19 @@ export const THEME_PRESETS: ThemePreset[] = [
   {
     id: "ocean",
     name: "Ocean",
-    description: "Cool blues & seafoam",
     theme: {
-      ...DEFAULT_THEME,
       preset: "ocean",
-      primaryColor: "#0c4a6e",
-      secondaryColor: "#0e7490",
-      accentColor: "#06b6d4",
-      bgColor: "#f0f9ff",
+      primaryColor: "#1e3a5f",
+      secondaryColor: "#3b6e9e",
+      accentColor: "#7eb8d9",
+      bgColor: "#f0f6fb",
       surfaceColor: "#ffffff",
-      textColor: "#0c4a6e",
-      textMutedColor: "#0369a1",
-      borderColor: "#bae6fd",
-      headingFont: '"Playfair Display", serif',
-      bodyFont: '"Inter", sans-serif',
-      scriptFont: '"Dancing Script", cursive',
+      textColor: "#1e3a5f",
+      textMutedColor: "#5a7a99",
+      borderColor: "#cfe0ee",
+      headingFont: "Playfair Display",
+      bodyFont: "Lora",
+      scriptFont: "Dancing Script",
       buttonRadius: 8,
       shadowStyle: "soft",
     },
@@ -167,149 +171,117 @@ export const THEME_PRESETS: ThemePreset[] = [
   {
     id: "forest",
     name: "Forest",
-    description: "Earthy greens & naturals",
     theme: {
-      ...DEFAULT_THEME,
       preset: "forest",
-      primaryColor: "#14532d",
-      secondaryColor: "#166534",
-      accentColor: "#65a30d",
-      bgColor: "#f7fee7",
+      primaryColor: "#2d4a2b",
+      secondaryColor: "#5b7a56",
+      accentColor: "#a3c293",
+      bgColor: "#f5f7f2",
       surfaceColor: "#ffffff",
-      textColor: "#14532d",
-      textMutedColor: "#3f6212",
-      borderColor: "#d9f99d",
-      headingFont: '"EB Garamond", serif',
-      bodyFont: '"Lora", serif',
-      scriptFont: '"Dancing Script", cursive',
-      buttonRadius: 4,
+      textColor: "#2d4a2b",
+      textMutedColor: "#6b7a66",
+      borderColor: "#d5e0cf",
+      headingFont: "Cormorant Garamond",
+      bodyFont: "Lora",
+      scriptFont: "Great Vibes",
+      buttonRadius: 6,
       shadowStyle: "soft",
     },
   },
   {
     id: "rose",
     name: "Rose",
-    description: "Soft pinks & romance",
     theme: {
-      ...DEFAULT_THEME,
       preset: "rose",
-      primaryColor: "#9d174d",
-      secondaryColor: "#be185d",
-      accentColor: "#f472b6",
-      bgColor: "#fdf2f8",
+      primaryColor: "#9d5b6b",
+      secondaryColor: "#c08a97",
+      accentColor: "#e8c5cf",
+      bgColor: "#fdf5f7",
       surfaceColor: "#ffffff",
-      textColor: "#831843",
-      textMutedColor: "#9d174d",
-      borderColor: "#fbcfe8",
-      headingFont: '"Cormorant Garamond", serif',
-      bodyFont: '"Crimson Text", serif',
-      scriptFont: '"Great Vibes", cursive',
-      buttonRadius: 9999,
+      textColor: "#6b3a4a",
+      textMutedColor: "#9a7a85",
+      borderColor: "#f0d9e0",
+      headingFont: "Playfair Display",
+      bodyFont: "Lora",
+      scriptFont: "Dancing Script",
+      buttonRadius: 10,
       shadowStyle: "soft",
     },
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Font options
-// ---------------------------------------------------------------------------
-
 export interface FontOption {
-  label: string;
   value: string;
-  category: "heading" | "body" | "script";
+  label: string;
+  stack: string;
 }
 
 export const FONT_OPTIONS: FontOption[] = [
-  { label: "Cormorant Garamond", value: '"Cormorant Garamond", serif', category: "heading" },
-  { label: "Inter", value: '"Inter", sans-serif', category: "body" },
-  { label: "Dancing Script", value: '"Dancing Script", cursive', category: "script" },
-  { label: "Playfair Display", value: '"Playfair Display", serif', category: "heading" },
-  { label: "Great Vibes", value: '"Great Vibes", cursive', category: "script" },
-  { label: "Montserrat", value: '"Montserrat", sans-serif', category: "body" },
-  { label: "Lora", value: '"Lora", serif', category: "body" },
-  { label: "Crimson Text", value: '"Crimson Text", serif', category: "body" },
-  { label: "EB Garamond", value: '"EB Garamond", serif', category: "heading" },
+  { value: "Cormorant Garamond", label: "Cormorant Garamond", stack: '"Cormorant Garamond", serif' },
+  { value: "Inter", label: "Inter", stack: '"Inter", sans-serif' },
+  { value: "Playfair Display", label: "Playfair Display", stack: '"Playfair Display", serif' },
+  { value: "Montserrat", label: "Montserrat", stack: '"Montserrat", sans-serif' },
+  { value: "Lora", label: "Lora", stack: '"Lora", serif' },
+  { value: "Crimson Text", label: "Crimson Text", stack: '"Crimson Text", serif' },
+  { value: "EB Garamond", label: "EB Garamond", stack: '"EB Garamond", serif' },
 ];
 
-/**
- * Rich font options — the 9 fonts available in the rich text editor.
- */
 export const RICH_FONT_OPTIONS: FontOption[] = [
-  { label: "Cormorant Garamond", value: '"Cormorant Garamond", serif', category: "heading" },
-  { label: "Inter", value: '"Inter", sans-serif', category: "body" },
-  { label: "Dancing Script", value: '"Dancing Script", cursive', category: "script" },
-  { label: "Playfair Display", value: '"Playfair Display", serif', category: "heading" },
-  { label: "Great Vibes", value: '"Great Vibes", cursive', category: "script" },
-  { label: "Montserrat", value: '"Montserrat", sans-serif', category: "body" },
-  { label: "Lora", value: '"Lora", serif', category: "body" },
-  { label: "Crimson Text", value: '"Crimson Text", serif', category: "body" },
-  { label: "EB Garamond", value: '"EB Garamond", serif', category: "heading" },
+  { value: "Cormorant Garamond", label: "Cormorant Garamond", stack: '"Cormorant Garamond", serif' },
+  { value: "Inter", label: "Inter", stack: '"Inter", sans-serif' },
+  { value: "Playfair Display", label: "Playfair Display", stack: '"Playfair Display", serif' },
+  { value: "Montserrat", label: "Montserrat", stack: '"Montserrat", sans-serif' },
+  { value: "Lora", label: "Lora", stack: '"Lora", serif' },
+  { value: "Crimson Text", label: "Crimson Text", stack: '"Crimson Text", serif' },
+  { value: "EB Garamond", label: "EB Garamond", stack: '"EB Garamond", serif' },
+  { value: "Dancing Script", label: "Dancing Script", stack: '"Dancing Script", cursive' },
+  { value: "Great Vibes", label: "Great Vibes", stack: '"Great Vibes", cursive' },
 ];
 
 export interface FontSizeOption {
-  label: string;
   value: string;
+  label: string;
 }
 
 export const FONT_SIZE_OPTIONS: FontSizeOption[] = [
-  { label: "Small", value: "12px" },
-  { label: "Normal", value: "16px" },
-  { label: "Medium", value: "20px" },
-  { label: "Large", value: "28px" },
-  { label: "X-Large", value: "36px" },
-  { label: "Heading 1", value: "48px" },
-  { label: "Heading 2", value: "40px" },
-  { label: "Heading 3", value: "32px" },
+  { value: "12px", label: "Small" },
+  { value: "14px", label: "Medium" },
+  { value: "16px", label: "Normal" },
+  { value: "18px", label: "Large" },
+  { value: "24px", label: "Heading 3" },
+  { value: "32px", label: "Heading 2" },
+  { value: "48px", label: "Heading 1" },
 ];
 
-// ---------------------------------------------------------------------------
-// Theme → CSS variables
-// ---------------------------------------------------------------------------
-
 /**
- * Convert a ThemeConfig into a record of CSS custom properties (--event-*)
- * suitable for use as inline `style` on a `.event-themed` container.
+ * Convert a ThemeConfig to CSS variables for the .event-themed scope
  */
 export function themeToEventCssVars(theme: ThemeConfig | null | undefined): Record<string, string> {
-  const t = theme ?? DEFAULT_THEME;
+  if (!theme) return {};
+
   const vars: Record<string, string> = {};
 
-  if (t.primaryColor) vars["--event-primary"] = t.primaryColor;
-  if (t.secondaryColor) vars["--event-secondary"] = t.secondaryColor;
-  if (t.accentColor) vars["--event-accent"] = t.accentColor;
-  if (t.bgColor) vars["--event-bg"] = t.bgColor;
-  if (t.surfaceColor) vars["--event-surface"] = t.surfaceColor;
-  if (t.textColor) vars["--event-text"] = t.textColor;
-  if (t.textMutedColor) vars["--event-muted"] = t.textMutedColor;
-  if (t.borderColor) vars["--event-border"] = t.borderColor;
-  if (t.headingFont) vars["--event-heading-font"] = t.headingFont;
-  if (t.bodyFont) vars["--event-body-font"] = t.bodyFont;
-  if (t.scriptFont) vars["--event-script-font"] = t.scriptFont;
-  if (t.buttonRadius != null) {
-    vars["--event-button-radius"] =
-      t.buttonRadius >= 9999 ? "9999px" : `${t.buttonRadius}px`;
-  }
-  if (t.shadowStyle) {
-    vars["--event-shadow"] =
-      t.shadowStyle === "none"
-        ? "none"
-        : t.shadowStyle === "hard"
-          ? "0 4px 0 0 rgb(0 0 0 / 0.15)"
-          : "0 1px 3px 0 rgb(0 0 0 / 0.1)";
-  }
+  if (theme.primaryColor) vars["--event-primary"] = theme.primaryColor;
+  if (theme.secondaryColor) vars["--event-secondary"] = theme.secondaryColor;
+  if (theme.accentColor) vars["--event-accent"] = theme.accentColor;
+  if (theme.bgColor) vars["--event-bg"] = theme.bgColor;
+  if (theme.surfaceColor) vars["--event-surface"] = theme.surfaceColor;
+  if (theme.textColor) vars["--event-text"] = theme.textColor;
+  if (theme.textMutedColor) vars["--event-muted"] = theme.textMutedColor;
+  if (theme.borderColor) vars["--event-border"] = theme.borderColor;
+  if (theme.headingFont) vars["--event-heading-font"] = `"${theme.headingFont}", serif`;
+  if (theme.bodyFont) vars["--event-body-font"] = `"${theme.bodyFont}", sans-serif`;
+  if (theme.scriptFont) vars["--event-script-font"] = `"${theme.scriptFont}", cursive`;
+  if (theme.buttonRadius != null) vars["--event-button-radius"] = `${theme.buttonRadius}px`;
 
   return vars;
 }
 
-// ---------------------------------------------------------------------------
-// Slug helpers
-// ---------------------------------------------------------------------------
-
 /**
- * Convert text into a URL-safe slug.
+ * Convert text to a URL-safe slug
  */
-export function slugify(text: string): string {
+export function slugify(text: string | null | undefined): string {
+  if (!text) return "";
   return text
     .toString()
     .toLowerCase()
@@ -321,8 +293,9 @@ export function slugify(text: string): string {
 }
 
 /**
- * Validate that a slug contains only lowercase letters, numbers, and hyphens.
+ * Validate a slug string
  */
-export function isValidSlug(slug: string): boolean {
+export function isValidSlug(slug: string | null | undefined): boolean {
+  if (!slug) return false;
   return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
 }

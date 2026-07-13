@@ -1,81 +1,81 @@
-import { useCallback, useRef, useState } from "react";
-import { ImagePlus, Loader2, Trash2, Upload } from "lucide-react";
+import React, { useCallback, useRef, useState } from "react";
+import { Upload, X, ImageIcon, Loader2 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { compressImage, uploadImage, removeImage, extractPathFromUrl } from "../../lib/upload";
+import { compressImage, uploadImage, extractPathFromUrl } from "../../lib/upload";
 
 export interface ImageUploadProps {
   value: string | null;
   onChange: (url: string | null) => void;
   eventId?: string;
   label?: string;
-  aspectRatio?: string; // e.g. "16/9", "1/1", "4/3"
+  aspectRatio?: "16/9" | "4/3" | "1/1" | "3/2" | "auto";
 }
 
 export function ImageUpload({
   value,
   onChange,
-  eventId,
+  eventId = "temp",
   label,
   aspectRatio = "16/9",
 }: ImageUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleFile = useCallback(
     async (file: File) => {
       setError(null);
-      if (!file.type.startsWith("image/")) {
-        setError("Please select an image file");
-        return;
-      }
-      if (!eventId) {
-        setError("Event ID is required to upload images");
-        return;
-      }
-      setLoading(true);
-      setProgress(0);
+      setUploading(true);
       try {
-        // Remove existing image first.
-        if (value) {
-          const existingPath = extractPathFromUrl(value);
-          if (existingPath) {
-            await removeImage(existingPath).catch(() => {});
-          }
-        }
-        const result = await uploadImage(file, eventId, setProgress);
+        const result = await uploadImage(file, eventId);
         onChange(result.url);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed");
       } finally {
-        setLoading(false);
-        setProgress(0);
+        setUploading(false);
       }
     },
-    [eventId, onChange, value],
+    [eventId, onChange]
   );
 
-  const handleRemove = useCallback(async () => {
-    if (value) {
-      const path = extractPathFromUrl(value);
-      if (path) {
-        await removeImage(path).catch(() => {});
-      }
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith("image/")) {
+      handleFile(file);
     }
-    onChange(null);
-  }, [onChange, value]);
+  };
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragging(false);
-      const file = e.dataTransfer.files?.[0];
-      if (file) handleFile(file);
-    },
-    [handleFile],
-  );
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+  };
+
+  const handleRemove = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange(null);
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const aspectClass =
+    aspectRatio === "auto"
+      ? "min-h-[120px]"
+      : cn("aspect-[var(--ar)]");
+
+  const aspectStyle: React.CSSProperties =
+    aspectRatio !== "auto" ? ({ ["--ar" as string]: aspectRatio } as React.CSSProperties) : {};
 
   return (
     <div className="flex flex-col gap-2">
@@ -84,78 +84,73 @@ export function ImageUpload({
       )}
       <div
         className={cn(
-          "relative overflow-hidden rounded-lg border-2 border-dashed transition-colors",
-          dragging ? "border-gray-400 bg-gray-50" : "border-gray-200",
-          loading && "pointer-events-none",
+          "relative w-full overflow-hidden rounded-lg border-2 border-dashed transition-colors",
+          dragging
+            ? "border-gray-900 bg-gray-50"
+            : "border-gray-300 bg-gray-50",
+          aspectClass
         )}
-        style={{ aspectRatio }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
+        style={aspectStyle}
         onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onClick={() => !uploading && inputRef.current?.click()}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
       >
-        {value ? (
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleInputChange}
+          className="hidden"
+        />
+
+        {uploading ? (
+          <div className="flex h-full w-full items-center justify-center bg-gray-100">
+            <div className="flex flex-col items-center gap-2 text-gray-500">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="text-xs">Uploading…</span>
+            </div>
+          </div>
+        ) : value ? (
           <>
             <img
               src={value}
-              alt="Upload preview"
+              alt="Uploaded"
               className="h-full w-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
             />
-            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity hover:opacity-100">
-              <button
-                type="button"
-                onClick={() => inputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-gray-100"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                Replace
-              </button>
-              <button
-                type="button"
-                onClick={handleRemove}
-                className="inline-flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Remove
-              </button>
-            </div>
+            <button
+              onClick={handleRemove}
+              className="absolute top-2 right-2 rounded-full bg-black/60 p-1.5 text-white hover:bg-black/80"
+              aria-label="Remove image"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </>
         ) : (
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
-            className="flex h-full w-full flex-col items-center justify-center gap-2 text-gray-400 hover:text-gray-600"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <span className="text-xs">
-                  {progress > 0 ? `Uploading ${progress}%` : "Processing..."}
-                </span>
-              </>
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-gray-400">
+            {dragging ? (
+              <Upload className="h-8 w-8" />
             ) : (
-              <>
-                <ImagePlus className="h-6 w-6" />
-                <span className="text-xs font-medium">Click or drag to upload</span>
-              </>
+              <ImageIcon className="h-8 w-8" />
             )}
-          </button>
+            <span className="text-xs">
+              {dragging ? "Drop image here" : "Click or drag to upload"}
+            </span>
+          </div>
         )}
       </div>
       {error && <p className="text-xs text-red-600">{error}</p>}
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
-          e.target.value = "";
-        }}
-      />
     </div>
   );
 }

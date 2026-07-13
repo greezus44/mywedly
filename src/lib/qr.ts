@@ -1,59 +1,66 @@
 /**
- * Generate a QR code as a data URL using the qrserver.com API.
+ * Generate a QR code as a data URL using the qrserver.com API
  */
 export async function generateQrDataUrl(
   text: string,
-  size = 256,
+  size = 256
 ): Promise<string> {
-  if (!text) throw new Error("Text is required to generate a QR code");
-  const url = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(
-    text,
-  )}`;
+  if (!text) return "";
+  const encoded = encodeURIComponent(text);
+  const url = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encoded}`;
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error("Failed to generate QR code");
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("Failed to generate QR code");
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error("Failed to read QR blob"));
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    // Fallback: return the URL directly so it can be used as an img src
+    return url;
   }
-
-  const blob = await response.blob();
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
 }
 
 /**
- * Download a QR code as a PNG file.
+ * Download a QR code as a PNG image
  */
 export async function downloadQrCode(text: string, filename: string): Promise<void> {
-  const dataUrl = await generateQrDataUrl(text);
-  triggerDownload(dataUrl, filename);
+  if (!text) return;
+  const dataUrl = await generateQrDataUrl(text, 512);
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = filename || "qr-code.png";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 /**
- * Download a QR code as an SVG file.
+ * Download a QR code as an SVG
  */
 export async function downloadQrSvg(text: string, filename: string): Promise<void> {
-  if (!text) throw new Error("Text is required to generate a QR code");
-  const size = 256;
+  if (!text) return;
   const encoded = encodeURIComponent(text);
-  const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-  <image width="${size}" height="${size}" href="https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&amp;data=${encoded}" />
-</svg>`;
-  const blob = new Blob([svg], { type: "image/svg+xml" });
-  const url = URL.createObjectURL(blob);
-  triggerDownload(url, filename);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+  const svgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=512x512&format=svg&data=${encoded}`;
 
-function triggerDownload(url: string, filename: string): void {
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  try {
+    const response = await fetch(svgUrl);
+    if (!response.ok) throw new Error("Failed to generate SVG");
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename || "qr-code.svg";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  } catch {
+    // Fallback: open in new tab
+    window.open(svgUrl, "_blank");
+  }
 }

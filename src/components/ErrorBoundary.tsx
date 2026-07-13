@@ -1,4 +1,5 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import React, { Component, ErrorInfo, ReactNode } from "react";
+import { AlertCircle, RefreshCw } from "lucide-react";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -21,12 +22,16 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    // eslint-disable-next-line no-console
-    console.error("ErrorBoundary caught:", error, errorInfo);
+    console.error("ErrorBoundary caught an error:", error, errorInfo);
   }
 
-  handleReload = (): void => {
+  handleReload = () => {
+    this.setState({ hasError: false, error: null });
     window.location.reload();
+  };
+
+  handleReset = () => {
+    this.setState({ hasError: false, error: null });
   };
 
   render(): ReactNode {
@@ -34,37 +39,47 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       if (this.props.fallback) {
         return this.props.fallback;
       }
+
       return (
-        <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 p-8 text-center">
-          <div className="rounded-full bg-red-50 p-4">
-            <svg
-              className="h-8 w-8 text-red-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
-              />
-            </svg>
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
+        <div className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
+          <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
+              <AlertCircle className="h-6 w-6 text-red-500" />
+            </div>
+            <h1 className="mb-2 text-lg font-semibold text-gray-900">
               Something went wrong
-            </h2>
-            <p className="mt-1 text-sm text-gray-500">
-              {this.state.error?.message ?? "An unexpected error occurred."}
+            </h1>
+            <p className="mb-6 text-sm text-gray-500">
+              An unexpected error occurred. You can try reloading the page or
+              go back to try again.
             </p>
+            {this.state.error && (
+              <details className="mb-4 text-left">
+                <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-600">
+                  Error details
+                </summary>
+                <pre className="mt-2 overflow-auto rounded bg-gray-50 p-3 text-xs text-gray-600">
+                  {this.state.error.message}
+                  {this.state.error.stack ? `\n\n${this.state.error.stack}` : ""}
+                </pre>
+              </details>
+            )}
+            <div className="flex justify-center gap-3">
+              <button
+                onClick={this.handleReset}
+                className="rounded-md border border-gray-200 px-4 py-2 text-xs font-medium uppercase tracking-wider text-gray-700 hover:bg-gray-50"
+              >
+                Try Again
+              </button>
+              <button
+                onClick={this.handleReload}
+                className="inline-flex items-center gap-2 rounded-md bg-gray-900 px-4 py-2 text-xs font-medium uppercase tracking-wider text-white hover:bg-gray-700"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reload Page
+              </button>
+            </div>
           </div>
-          <button
-            onClick={this.handleReload}
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-gray-900 px-6 py-2.5 text-sm font-medium uppercase tracking-wider text-white transition-colors hover:bg-gray-700"
-          >
-            Reload page
-          </button>
         </div>
       );
     }

@@ -1,41 +1,43 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useOutletContext, useNavigate } from "react-router-dom";
 import type { UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { themeToEventCssVars } from "../../lib/theme";
-import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { Toast, type ToastType } from "../../components/ui";
 
 export default function GuestLoginPage() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const navigate = useNavigate();
   const { signIn } = useGuestAuth();
   const [name, setName] = useState("");
-  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const config = event.login_config ?? {};
-  const cssVars = themeToEventCssVars(event.theme);
+  const config = event.login_config || {};
+  const bgImage = config.bgImage;
+  const bgColor = config.bgColor || "#1a1a2e";
+  const overlayColor = config.overlayColor || "#000000";
+  const overlayOpacity = config.overlayOpacity ?? 0.2;
+  const textColor = config.textColor || "#ffffff";
+  const buttonColor = config.buttonColor || "#ffffff";
+  const buttonText = config.buttonText || "Continue";
+  const heading = config.heading || `Welcome to ${event.name || "Our Event"}`;
+  const subheading = config.subheading || "Please enter your name to continue";
+  const inputPlaceholder = config.inputPlaceholder || "Your full name";
+  const eventType = event.event_type || "Event";
 
-  const bgStyle: React.CSSProperties = {};
-  if (config.bgImage) {
-    bgStyle.backgroundImage = `url(${config.bgImage})`;
-    bgStyle.backgroundSize = "cover";
-    bgStyle.backgroundPosition = "center";
-  } else if (config.bgColor) {
-    bgStyle.backgroundColor = config.bgColor;
-  }
+  const containerStyle: React.CSSProperties = {
+    backgroundImage: bgImage ? `url(${bgImage})` : undefined,
+    backgroundColor: bgColor,
+    color: textColor,
+  };
 
-  const overlayStyle: React.CSSProperties = {};
-  if (config.overlayColor) {
-    overlayStyle.backgroundColor = config.overlayColor;
-    overlayStyle.opacity = config.overlayOpacity ?? 0.25;
-  }
+  const overlayStyle: React.CSSProperties = {
+    backgroundColor: overlayColor,
+    opacity: overlayOpacity,
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setToast({ message: "Please enter your name", type: "error" });
+      setError("Please enter your name");
       return;
     }
     signIn(name.trim(), event.id);
@@ -44,69 +46,62 @@ export default function GuestLoginPage() {
 
   return (
     <div
-      className="event-themed relative flex min-h-screen flex-col items-center justify-center px-6 py-16 text-center"
-      style={cssVars}
+      className="event-themed relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-8 text-center"
+      style={containerStyle}
     >
-      <div className="absolute inset-0" style={bgStyle} />
       <div className="absolute inset-0" style={overlayStyle} />
 
-      <div className="relative z-10 flex w-full max-w-xs flex-col items-center">
+      <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-4">
         {config.logo && (
           <img
             src={config.logo}
             alt="Logo"
-            style={{ width: config.logoWidth ?? 120 }}
-            className="mb-6"
+            style={{ width: config.logoWidth || 100 }}
+            className="mb-2 max-w-[60%] object-contain"
+            onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
           />
         )}
 
-        {config.heading && (
-          <h2
-            className="font-heading text-3xl md:text-4xl"
-            style={{ color: config.textColor ?? "inherit" }}
-          >
-            {config.heading}
-          </h2>
-        )}
+        <h2
+          className="text-3xl font-semibold"
+          style={{ fontFamily: "var(--event-heading-font)" }}
+        >
+          {heading}
+        </h2>
 
-        {config.subheading && (
-          <p
-            className="font-body mt-2 text-sm"
-            style={{ color: config.textColor ?? "inherit" }}
-          >
-            {config.subheading}
-          </p>
-        )}
+        <p className="text-sm opacity-80">{subheading}</p>
 
-        <form onSubmit={handleSubmit} className="mt-6 w-full">
-          <Input
+        <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4">
+          <input
+            type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={config.inputPlaceholder ?? "Enter your name"}
-            className="bg-white/90"
+            onChange={(e) => {
+              setName(e.target.value);
+              setError(null);
+            }}
+            placeholder={inputPlaceholder}
+            className="w-full rounded-md border px-4 py-3 text-center text-sm text-gray-900 placeholder:text-gray-400"
+            style={{ borderColor: "rgba(255,255,255,0.3)" }}
             autoFocus
           />
-          <Button
+
+          {error && <p className="text-sm text-red-300">{error}</p>}
+
+          <button
             type="submit"
-            className="mt-4 w-full"
+            className="w-full rounded px-6 py-3 text-sm font-medium uppercase tracking-wider transition-opacity hover:opacity-90"
             style={{
-              backgroundColor: config.buttonColor ?? "var(--event-primary)",
-              color: "#ffffff",
-              borderRadius: "var(--event-button-radius)",
+              backgroundColor: buttonColor,
+              color: textColor,
+              borderRadius: "var(--event-button-radius, 6px)",
             }}
           >
-            {config.buttonText ?? "Enter"}
-          </Button>
+            {buttonText}
+          </button>
         </form>
-      </div>
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+        <p className="text-xs opacity-60">{eventType}</p>
+      </div>
     </div>
   );
 }

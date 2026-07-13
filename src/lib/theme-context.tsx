@@ -1,70 +1,45 @@
-import {
-  createContext,
-  useContext,
-  useMemo,
-  type ReactNode,
-} from "react";
+import React, { createContext, useContext, useMemo } from "react";
 import type { ThemeConfig } from "./supabase";
-import {
-  DEFAULT_THEME,
-  themeToEventCssVars,
-} from "./theme";
+import { themeToEventCssVars } from "./theme";
 
 interface EventThemeContextValue {
-  theme: ThemeConfig;
-  cssVars: Record<string, string>;
+  theme: ThemeConfig | null;
 }
 
-const EventThemeContext = createContext<EventThemeContextValue | null>(null);
+const EventThemeContext = createContext<EventThemeContextValue>({
+  theme: null,
+});
 
 interface EventThemeProviderProps {
-  children: ReactNode;
+  children: React.ReactNode;
   initialTheme?: ThemeConfig | null;
 }
 
-/**
- * Wraps children in a `.event-themed` div with CSS variables derived from
- * the provided theme. Provides the theme + computed CSS vars via context.
- */
 export function EventThemeProvider({
   children,
-  initialTheme,
+  initialTheme = null,
 }: EventThemeProviderProps) {
-  const theme = initialTheme ?? DEFAULT_THEME;
-  const cssVars = useMemo(() => themeToEventCssVars(theme), [theme]);
-
   const value = useMemo<EventThemeContextValue>(
-    () => ({ theme, cssVars }),
-    [theme, cssVars],
+    () => ({ theme: initialTheme }),
+    [initialTheme]
   );
+
+  const cssVars = useMemo(() => themeToEventCssVars(initialTheme), [initialTheme]);
 
   return (
     <EventThemeContext.Provider value={value}>
-      <div className="event-themed" style={cssVars}>
+      <div className="event-themed" style={cssVars as React.CSSProperties}>
         {children}
       </div>
     </EventThemeContext.Provider>
   );
 }
 
-/**
- * Access the current event theme and its computed CSS variables.
- */
-export function useEventTheme(): EventThemeContextValue {
+export function useEventTheme(): ThemeConfig | null {
   const ctx = useContext(EventThemeContext);
-  if (!ctx) {
-    // Fallback so components used outside a provider still render.
-    return {
-      theme: DEFAULT_THEME,
-      cssVars: themeToEventCssVars(DEFAULT_THEME),
-    };
-  }
-  return ctx;
+  return ctx.theme;
 }
 
-/**
- * Compute the CSS variables for a given theme (handy outside of context).
- */
-export function useEventCssVars(theme: ThemeConfig | null | undefined): Record<string, string> {
-  return useMemo(() => themeToEventCssVars(theme), [theme]);
+export function useEventCssVars(theme: ThemeConfig | null | undefined): React.CSSProperties {
+  return useMemo(() => themeToEventCssVars(theme) as React.CSSProperties, [theme]);
 }

@@ -1,464 +1,559 @@
-import { useMemo } from "react";
-import type { UserEvent } from "../../lib/supabase";
-import {
-  themeToEventCssVars,
-  DEFAULT_THEME,
-} from "../../lib/theme";
-import { EventThemeProvider } from "../../lib/theme-context";
-import {
-  formatDate,
-  formatTime12,
-  getCountdown,
-} from "../../lib/utils";
+import React from "react";
+import type { UserEvent, CoverConfig, LoginConfig, ThemeConfig, EventContent } from "../../lib/supabase";
+import { themeToEventCssVars } from "../../lib/theme";
+import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
 import { RichTextContent } from "../../lib/sanitize";
 
-// ---------------------------------------------------------------------------
-// Helpers — resolve draft_* with fallback to published values
-// ---------------------------------------------------------------------------
+/* ── Helpers ─────────────────────────────────────── */
 
-function resolve<T>(draft: T | null | undefined, published: T | null | undefined): T | null {
-  return draft ?? published ?? null;
+function getDraft<T>(draft: T | null | undefined, published: T | null | undefined): T | null {
+  return draft != null ? draft : published != null ? published : null;
 }
 
-function useResolvedEvent(event: UserEvent) {
-  return useMemo(() => {
-    const theme = resolve(event.draft_theme, event.theme) ?? DEFAULT_THEME;
-    const coverConfig = resolve(event.draft_cover_config, event.cover_config);
-    const loginConfig = resolve(event.draft_login_config, event.login_config);
-    const content = resolve(event.draft_content, event.content);
-    const sharingConfig = resolve(event.draft_sharing_config, event.sharing_config);
-    const name = resolve(event.draft_name, event.name) ?? "Untitled Event";
-    const eventType = resolve(event.draft_event_type, event.event_type) ?? "Event";
-    const eventDate = resolve(event.draft_event_date, event.event_date);
-    const eventTime = resolve(event.draft_event_time, event.event_time);
-    const venue = resolve(event.draft_venue, event.venue);
-    const address = resolve(event.draft_address, event.address);
-    const coverImage = resolve(event.draft_cover_image, event.cover_image);
-    const slug = resolve(event.draft_slug, event.slug);
-    const rsvpDeadline = resolve(event.draft_rsvp_deadline, event.rsvp_deadline);
-
-    return {
-      theme,
-      coverConfig,
-      loginConfig,
-      content,
-      sharingConfig,
-      name,
-      eventType,
-      eventDate,
-      eventTime,
-      venue,
-      address,
-      coverImage,
-      slug,
-      rsvpDeadline,
-    };
-  }, [event]);
+function getTheme(event: UserEvent): ThemeConfig | null {
+  return getDraft<ThemeConfig>(event.draft_theme, event.theme);
 }
 
-// ---------------------------------------------------------------------------
-// CoverPreview
-// ---------------------------------------------------------------------------
+function getCoverConfig(event: UserEvent): CoverConfig | null {
+  return getDraft<CoverConfig>(event.draft_cover_config, event.cover_config);
+}
+
+function getLoginConfig(event: UserEvent): LoginConfig | null {
+  return getDraft<LoginConfig>(event.draft_login_config, event.login_config);
+}
+
+function getContent(event: UserEvent): EventContent | null {
+  return getDraft<EventContent>(event.draft_content, event.content);
+}
+
+function getCoverImage(event: UserEvent): string | null {
+  return getDraft<string>(event.draft_cover_image, event.cover_image);
+}
+
+function getEventName(event: UserEvent): string {
+  return getDraft<string>(event.draft_name, event.name) || "Our Event";
+}
+
+function getEventType(event: UserEvent): string {
+  return getDraft<string>(event.draft_event_type, event.event_type) || "Event";
+}
+
+function getEventDate(event: UserEvent): string | null {
+  return getDraft<string>(event.draft_event_date, event.event_date);
+}
+
+function getEventTime(event: UserEvent): string | null {
+  return getDraft<string>(event.draft_event_time, event.event_time);
+}
+
+function getVenue(event: UserEvent): string | null {
+  return getDraft<string>(event.draft_venue, event.venue);
+}
+
+function getAddress(event: UserEvent): string | null {
+  return getDraft<string>(event.draft_address, event.address);
+}
+
+function themedStyle(event: UserEvent): React.CSSProperties {
+  return themeToEventCssVars(getTheme(event)) as React.CSSProperties;
+}
+
+/* ── CoverPreview ─────────────────────────────────── */
 
 export function CoverPreview({ event }: { event: UserEvent }) {
-  const r = useResolvedEvent(event);
-  const cssVars = themeToEventCssVars(r.theme);
-  const config = r.coverConfig ?? {};
-  const countdown = getCountdown(r.eventDate);
+  const config = getCoverConfig(event);
+  const image = getCoverImage(event);
+  const name = getEventName(event);
+  const date = getEventDate(event);
+  const eventType = getEventType(event);
 
-  const bgStyle: React.CSSProperties = {};
-  if (config.bgImage || r.coverImage) {
-    bgStyle.backgroundImage = `url(${config.bgImage ?? r.coverImage})`;
-    bgStyle.backgroundSize = "cover";
-    bgStyle.backgroundPosition = "center";
-  } else if (config.bgColor) {
-    bgStyle.backgroundColor = config.bgColor;
-  }
+  const bgImage = config?.bgImage || image;
+  const bgColor = config?.bgColor || "#1a1a2e";
+  const overlayColor = config?.overlayColor || "#000000";
+  const overlayOpacity = config?.overlayOpacity ?? 0.3;
+  const textColor = config?.textColor || "#ffffff";
+  const buttonColor = config?.buttonColor || "#ffffff";
+  const buttonText = config?.buttonText || "Enter";
+  const headingFont = config?.font || "Cormorant Garamond";
+  const scriptFont = config?.scriptFont || "Dancing Script";
+  const showDate = config?.showDate ?? true;
+  const showCountdown = config?.showCountdown ?? false;
 
-  const overlayStyle: React.CSSProperties = {};
-  if (config.overlayColor) {
-    overlayStyle.backgroundColor = config.overlayColor;
-    overlayStyle.opacity = config.overlayOpacity ?? 0.3;
-  }
+  const countdown = getCountdown(date);
+
+  const containerStyle: React.CSSProperties = {
+    ...themedStyle(event),
+    backgroundImage: bgImage ? `url(${bgImage})` : undefined,
+    backgroundColor: bgColor,
+    color: textColor,
+  };
+
+  const overlayStyle: React.CSSProperties = {
+    backgroundColor: overlayColor,
+    opacity: overlayOpacity,
+  };
 
   return (
-    <EventThemeProvider initialTheme={r.theme}>
-      <div className="event-themed relative min-h-[500px] w-full" style={cssVars}>
-        <div className="absolute inset-0" style={overlayStyle} />
-        <div className="relative z-10 flex min-h-[500px] flex-col items-center justify-center px-6 py-16 text-center">
-          {config.logo && (
-            <img
-              src={config.logo}
-              alt="Logo"
-              style={{ width: config.logoWidth ?? 120 }}
-              className="mb-6"
-            />
-          )}
-          {config.customText && (
-            <p
-              className="font-script mb-4 text-lg"
-              style={{ color: config.textColor ?? "inherit" }}
-            >
-              {config.customText}
-            </p>
-          )}
-          <h1
-            className="font-heading text-4xl md:text-6xl"
-            style={{ color: config.textColor ?? "inherit" }}
+    <div
+      className="event-themed relative flex min-h-[400px] flex-col items-center justify-center overflow-hidden p-8 text-center"
+      style={containerStyle}
+    >
+      <div className="absolute inset-0" style={overlayStyle} />
+
+      <div className="relative z-10 flex flex-col items-center gap-4">
+        {config?.logo && (
+          <img
+            src={config.logo}
+            alt="Logo"
+            style={{ width: config.logoWidth || 120 }}
+            className="mb-2 max-w-[60%] object-contain"
+            onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+          />
+        )}
+
+        <p
+          className="text-sm uppercase tracking-[0.3em] opacity-80"
+          style={{ fontFamily: `"${scriptFont}", cursive` }}
+        >
+          {eventType}
+        </p>
+
+        <h1
+          className="text-4xl font-semibold md:text-5xl"
+          style={{ fontFamily: `"${headingFont}", serif` }}
+        >
+          {name}
+        </h1>
+
+        {showDate && date && (
+          <p
+            className="text-lg opacity-90"
+            style={{ fontFamily: `"${headingFont}", serif` }}
           >
-            {r.name}
-          </h1>
-          {config.showDate && r.eventDate && (
-            <p
-              className="font-body mt-4 text-sm uppercase tracking-widest"
-              style={{ color: config.textColor ?? "inherit" }}
-            >
-              {formatDate(r.eventDate)}
-              {r.eventTime && ` • ${formatTime12(r.eventTime)}`}
-            </p>
-          )}
-          {config.showCountdown && !countdown.isPast && r.eventDate && (
-            <div
-              className="font-body mt-6 flex gap-4 text-sm"
-              style={{ color: config.textColor ?? "inherit" }}
-            >
-              <div>
-                <span className="text-2xl font-bold">{countdown.days}</span>
-                <span className="ml-1 text-xs uppercase">Days</span>
+            {formatDate(date)}
+          </p>
+        )}
+
+        {showCountdown && !countdown.isPast && (
+          <div className="mt-2 flex gap-4 text-center">
+            {(["days", "hours", "minutes", "seconds"] as const).map((unit) => (
+              <div key={unit} className="flex flex-col">
+                <span className="text-2xl font-semibold">
+                  {countdown[unit]}
+                </span>
+                <span className="text-[10px] uppercase tracking-wider opacity-70">
+                  {unit}
+                </span>
               </div>
-              <div>
-                <span className="text-2xl font-bold">{countdown.hours}</span>
-                <span className="ml-1 text-xs uppercase">Hrs</span>
-              </div>
-              <div>
-                <span className="text-2xl font-bold">{countdown.minutes}</span>
-                <span className="ml-1 text-xs uppercase">Min</span>
-              </div>
-            </div>
-          )}
-          {config.buttonText && (
-            <button
-              className="font-body mt-8 rounded-md px-8 py-3 text-sm font-medium uppercase tracking-wider"
-              style={{
-                backgroundColor: config.buttonColor ?? "var(--event-primary)",
-                color: config.textColor === "#ffffff" ? "#ffffff" : "var(--event-bg)",
-                borderRadius: "var(--event-button-radius)",
-              }}
-            >
-              {config.buttonText}
-            </button>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
+
+        <button
+          className="mt-4 rounded px-8 py-3 text-sm font-medium uppercase tracking-wider transition-opacity hover:opacity-90"
+          style={{
+            backgroundColor: buttonColor,
+            color: textColor,
+            borderRadius: "var(--event-button-radius, 6px)",
+          }}
+        >
+          {buttonText}
+        </button>
       </div>
-    </EventThemeProvider>
+    </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// LoginPreview
-// ---------------------------------------------------------------------------
+/* ── LoginPreview ─────────────────────────────────── */
 
 export function LoginPreview({ event }: { event: UserEvent }) {
-  const r = useResolvedEvent(event);
-  const cssVars = themeToEventCssVars(r.theme);
-  const config = r.loginConfig ?? {};
+  const config = getLoginConfig(event);
+  const name = getEventName(event);
+  const eventType = getEventType(event);
 
-  const bgStyle: React.CSSProperties = {};
-  if (config.bgImage) {
-    bgStyle.backgroundImage = `url(${config.bgImage})`;
-    bgStyle.backgroundSize = "cover";
-    bgStyle.backgroundPosition = "center";
-  } else if (config.bgColor) {
-    bgStyle.backgroundColor = config.bgColor;
-  }
+  const bgImage = config?.bgImage;
+  const bgColor = config?.bgColor || "#1a1a2e";
+  const overlayColor = config?.overlayColor || "#000000";
+  const overlayOpacity = config?.overlayOpacity ?? 0.2;
+  const textColor = config?.textColor || "#ffffff";
+  const buttonColor = config?.buttonColor || "#ffffff";
+  const buttonText = config?.buttonText || "Continue";
+  const heading = config?.heading || `Welcome to ${name}`;
+  const subheading = config?.subheading || "Please enter your name to continue";
+  const inputPlaceholder = config?.inputPlaceholder || "Your full name";
 
-  const overlayStyle: React.CSSProperties = {};
-  if (config.overlayColor) {
-    overlayStyle.backgroundColor = config.overlayColor;
-    overlayStyle.opacity = config.overlayOpacity ?? 0.25;
-  }
+  const containerStyle: React.CSSProperties = {
+    ...themedStyle(event),
+    backgroundImage: bgImage ? `url(${bgImage})` : undefined,
+    backgroundColor: bgColor,
+    color: textColor,
+  };
+
+  const overlayStyle: React.CSSProperties = {
+    backgroundColor: overlayColor,
+    opacity: overlayOpacity,
+  };
 
   return (
-    <EventThemeProvider initialTheme={r.theme}>
-      <div className="event-themed relative min-h-[500px] w-full" style={cssVars}>
-        <div className="absolute inset-0" style={bgStyle} />
-        <div className="absolute inset-0" style={overlayStyle} />
-        <div className="relative z-10 flex min-h-[500px] flex-col items-center justify-center px-6 py-16 text-center">
-          {config.logo && (
-            <img
-              src={config.logo}
-              alt="Logo"
-              style={{ width: config.logoWidth ?? 120 }}
-              className="mb-6"
-            />
-          )}
-          {config.heading && (
-            <h2
-              className="font-heading text-3xl md:text-4xl"
-              style={{ color: config.textColor ?? "inherit" }}
-            >
-              {config.heading}
-            </h2>
-          )}
-          {config.subheading && (
-            <p
-              className="font-body mt-2 text-sm"
-              style={{ color: config.textColor ?? "inherit" }}
-            >
-              {config.subheading}
-            </p>
-          )}
-          <div className="mt-6 w-full max-w-xs">
-            <div
-              className="rounded-md border bg-white/90 px-4 py-3 text-sm text-gray-400"
-              style={{ borderColor: "var(--event-border)" }}
-            >
-              {config.inputPlaceholder ?? "Enter your name"}
-            </div>
-            <button
-              className="font-body mt-4 w-full rounded-md px-6 py-2.5 text-sm font-medium uppercase tracking-wider"
-              style={{
-                backgroundColor: config.buttonColor ?? "var(--event-primary)",
-                color: "#ffffff",
-                borderRadius: "var(--event-button-radius)",
-              }}
-            >
-              {config.buttonText ?? "Enter"}
-            </button>
-          </div>
-        </div>
+    <div
+      className="event-themed relative flex min-h-[400px] flex-col items-center justify-center overflow-hidden p-8 text-center"
+      style={containerStyle}
+    >
+      <div className="absolute inset-0" style={overlayStyle} />
+
+      <div className="relative z-10 flex w-full max-w-sm flex-col items-center gap-4">
+        {config?.logo && (
+          <img
+            src={config.logo}
+            alt="Logo"
+            style={{ width: config.logoWidth || 100 }}
+            className="mb-2 max-w-[60%] object-contain"
+            onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+          />
+        )}
+
+        <h2
+          className="text-3xl font-semibold"
+          style={{ fontFamily: "var(--event-heading-font)" }}
+        >
+          {heading}
+        </h2>
+
+        <p className="text-sm opacity-80">{subheading}</p>
+
+        <input
+          type="text"
+          placeholder={inputPlaceholder}
+          className="w-full rounded-md border px-4 py-3 text-center text-sm text-gray-900 placeholder:text-gray-400"
+          style={{ borderColor: "rgba(255,255,255,0.3)" }}
+          readOnly
+        />
+
+        <button
+          className="w-full rounded px-6 py-3 text-sm font-medium uppercase tracking-wider transition-opacity hover:opacity-90"
+          style={{
+            backgroundColor: buttonColor,
+            color: textColor,
+            borderRadius: "var(--event-button-radius, 6px)",
+          }}
+        >
+          {buttonText}
+        </button>
+
+        <p className="text-xs opacity-60">{eventType}</p>
       </div>
-    </EventThemeProvider>
+    </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// HomePreview
-// ---------------------------------------------------------------------------
+/* ── HomePreview ──────────────────────────────────── */
 
 export function HomePreview({ event }: { event: UserEvent }) {
-  const r = useResolvedEvent(event);
-  const cssVars = themeToEventCssVars(r.theme);
-  const content = r.content ?? {};
+  const content = getContent(event);
+  const name = getEventName(event);
+  const date = getEventDate(event);
+  const time = getEventTime(event);
+  const venue = getVenue(event);
+  const address = getAddress(event);
+  const eventType = getEventType(event);
+
+  const invitationTitle = content?.invitation_title || "You're Invited";
+  const invitationSubtitle = content?.invitation_subtitle || "";
+  const invitationBody = content?.invitation_body || "";
+  const invitationText = content?.invitation_text || "";
+  const rsvpButtonText = content?.rsvp_button_text || "RSVP";
+  const story = content?.story || "";
+  const storyImage = content?.story_image || null;
+  const sections = content?.sections || [];
 
   return (
-    <EventThemeProvider initialTheme={r.theme}>
-      <div className="event-themed min-h-[500px] w-full" style={cssVars}>
-        {/* Hero / invitation */}
-        <section className="px-6 py-16 text-center">
-          {content.rich_title ? (
-            <RichTextContent
-              html={content.rich_title}
-              className="font-heading text-3xl md:text-5xl"
-            />
-          ) : (
-            <h1 className="font-heading text-3xl md:text-5xl">{r.name}</h1>
-          )}
-          {content.rich_subtitle && (
-            <RichTextContent
-              html={content.rich_subtitle}
-              className="font-script mt-4 text-xl"
-            />
-          )}
-          {r.eventDate && (
-            <p className="font-body mt-4 text-sm uppercase tracking-widest text-muted">
-              {formatDate(r.eventDate)}
-              {r.eventTime && ` • ${formatTime12(r.eventTime)}`}
-            </p>
-          )}
-          {r.venue && (
-            <p className="font-body mt-2 text-sm text-muted">{r.venue}</p>
-          )}
-        </section>
+    <div
+      className="event-themed flex flex-col items-center"
+      style={themedStyle(event)}
+    >
+      {/* Hero section */}
+      <div className="flex w-full flex-col items-center gap-4 px-6 py-16 text-center">
+        <p
+          className="text-sm uppercase tracking-[0.3em] opacity-70"
+          style={{ fontFamily: "var(--event-script-font)" }}
+        >
+          {eventType}
+        </p>
 
-        {/* Story */}
-        {(content.story || content.story_image) && (
-          <section className="border-current px-6 py-12">
-            {content.story_image && (
-              <img
-                src={content.story_image}
-                alt="Story"
-                className="mx-auto mb-6 max-h-80 rounded-lg object-cover"
-              />
-            )}
-            {content.story && (
-              <p className="font-body mx-auto max-w-2xl text-base leading-relaxed text-current">
-                {content.story}
-              </p>
-            )}
-          </section>
+        <h1
+          className="text-4xl font-semibold md:text-5xl"
+          style={{ fontFamily: "var(--event-heading-font)" }}
+        >
+          {name}
+        </h1>
+
+        {content?.rich_title && (
+          <RichTextContent
+            html={content.rich_title}
+            className="text-3xl font-semibold"
+          />
         )}
 
-        {/* Invitation body */}
-        {content.rich_body && (
-          <section className="border-current px-6 py-12">
-            <RichTextContent
-              html={content.rich_body}
-              className="font-body mx-auto max-w-2xl text-base leading-relaxed text-current"
-            />
-          </section>
+        {content?.rich_subtitle && (
+          <RichTextContent
+            html={content.rich_subtitle}
+            className="text-lg opacity-80"
+          />
         )}
 
-        {/* Invitation card */}
-        {(content.invitation_title || content.invitation_body || content.invitation_text) && (
-          <section className="border-current px-6 py-12 text-center">
-            {content.invitation_title && (
-              <h2 className="font-heading text-2xl md:text-3xl">{content.invitation_title}</h2>
-            )}
-            {content.invitation_subtitle && (
-              <p className="font-script mt-2 text-lg text-muted">{content.invitation_subtitle}</p>
-            )}
-            {content.invitation_body && (
-              <RichTextContent
-                html={content.invitation_body}
-                className="font-body mx-auto mt-4 max-w-2xl text-base leading-relaxed text-current"
-              />
-            )}
-            {content.invitation_text && (
-              <p className="font-body mx-auto mt-4 max-w-xl text-sm italic text-muted">
-                {content.invitation_text}
-              </p>
-            )}
-          </section>
-        )}
-
-        {/* Content sections */}
-        {content.sections && content.sections.length > 0 && (
-          <section className="border-current px-6 py-12">
-            {content.sections
-              .filter((s) => s.visible)
-              .sort((a, b) => a.order_index - b.order_index)
-              .map((section) => (
-                <div key={section.id} className="mx-auto mb-8 max-w-2xl">
-                  <h3 className="font-heading text-xl">{section.title}</h3>
-                  {section.image && (
-                    <img
-                      src={section.image}
-                      alt={section.title}
-                      className="my-4 w-full rounded-lg object-cover"
-                    />
-                  )}
-                  <RichTextContent
-                    html={section.body}
-                    className="font-body mt-2 text-base leading-relaxed text-current"
-                  />
-                </div>
-              ))}
-          </section>
-        )}
-
-        {/* RSVP button */}
-        <section className="px-6 py-12 text-center">
-          <button
-            className="font-body rounded-md px-8 py-3 text-sm font-medium uppercase tracking-wider"
-            style={{
-              backgroundColor: "var(--event-primary)",
-              color: "var(--event-bg)",
-              borderRadius: "var(--event-button-radius)",
-            }}
+        {date && (
+          <p
+            className="text-lg opacity-90"
+            style={{ fontFamily: "var(--event-heading-font)" }}
           >
-            {content.rsvp_button_text ?? "RSVP Now"}
-          </button>
-        </section>
+            {formatDate(date)}
+            {time ? ` at ${formatTime12(time)}` : ""}
+          </p>
+        )}
+
+        {venue && (
+          <p className="text-sm opacity-70">
+            {venue}
+            {address ? `, ${address}` : ""}
+          </p>
+        )}
+
+        {content?.rich_body && (
+          <RichTextContent
+            html={content.rich_body}
+            className="mt-4 max-w-2xl text-left"
+          />
+        )}
       </div>
-    </EventThemeProvider>
+
+      {/* Invitation section */}
+      <div className="flex w-full flex-col items-center gap-4 border-t px-6 py-12 text-center" style={{ borderColor: "var(--event-border)" }}>
+        <h2
+          className="text-2xl font-semibold"
+          style={{ fontFamily: "var(--event-heading-font)" }}
+        >
+          {invitationTitle}
+        </h2>
+
+        {invitationSubtitle && (
+          <p className="text-sm opacity-80">{invitationSubtitle}</p>
+        )}
+
+        {invitationBody && (
+          <p className="max-w-xl text-sm opacity-70">{invitationBody}</p>
+        )}
+
+        {invitationText && (
+          <RichTextContent
+            html={invitationText}
+            className="max-w-xl text-left text-sm"
+          />
+        )}
+
+        <button
+          className="mt-4 rounded px-8 py-3 text-sm font-medium uppercase tracking-wider transition-opacity hover:opacity-90"
+          style={{
+            backgroundColor: "var(--event-primary)",
+            color: "var(--event-bg)",
+            borderRadius: "var(--event-button-radius, 6px)",
+          }}
+        >
+          {rsvpButtonText}
+        </button>
+      </div>
+
+      {/* Story section */}
+      {story && (
+        <div className="flex w-full flex-col items-center gap-4 border-t px-6 py-12" style={{ borderColor: "var(--event-border)" }}>
+          <h2
+            className="text-2xl font-semibold"
+            style={{ fontFamily: "var(--event-heading-font)" }}
+          >
+            Our Story
+          </h2>
+          {storyImage && (
+            <img
+              src={storyImage}
+              alt="Story"
+              className="max-w-md rounded-lg"
+              onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+            />
+          )}
+          <RichTextContent
+            html={story}
+            className="max-w-xl text-left text-sm opacity-80"
+          />
+        </div>
+      )}
+
+      {/* Content sections */}
+      {sections.length > 0 && (
+        <div className="flex w-full flex-col gap-8 border-t px-6 py-12" style={{ borderColor: "var(--event-border)" }}>
+          {sections
+            .filter((s) => s.visible)
+            .sort((a, b) => a.order_index - b.order_index)
+            .map((section) => (
+              <div key={section.id} className="flex flex-col gap-3">
+                <h3
+                  className="text-xl font-semibold"
+                  style={{ fontFamily: "var(--event-heading-font)" }}
+                >
+                  {section.title}
+                </h3>
+                {section.image && (
+                  <img
+                    src={section.image}
+                    alt={section.title}
+                    className="max-w-md rounded-lg"
+                    onError={(e) => ((e.target as HTMLImageElement).style.display = "none")}
+                  />
+                )}
+                <RichTextContent
+                  html={section.body}
+                  className="text-left text-sm opacity-80"
+                />
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// RsvpPreview
-// ---------------------------------------------------------------------------
+/* ── RsvpPreview ──────────────────────────────────── */
 
 export function RsvpPreview({ event }: { event: UserEvent }) {
-  const r = useResolvedEvent(event);
-  const cssVars = themeToEventCssVars(r.theme);
-  const content = r.content ?? {};
+  const content = getContent(event);
+  const name = getEventName(event);
+  const date = getEventDate(event);
+  const venue = getVenue(event);
+
+  const rsvpButtonText = content?.rsvp_button_text || "Submit RSVP";
 
   return (
-    <EventThemeProvider initialTheme={r.theme}>
-      <div className="event-themed min-h-[500px] w-full" style={cssVars}>
-        <section className="px-6 py-12">
-          <div className="mx-auto max-w-lg rounded-lg border-current bg-surface p-8 shadow-sm" style={{ boxShadow: "var(--event-shadow)" }}>
-            <h2 className="font-heading text-center text-2xl">
-              {content.rsvp_button_text ? "RSVP" : "RSVP"}
-            </h2>
-            <p className="font-body mt-2 text-center text-sm text-muted">
-              {r.name}
+    <div
+      className="event-themed flex min-h-[400px] flex-col items-center px-6 py-12"
+      style={themedStyle(event)}
+    >
+      <div className="flex w-full max-w-md flex-col gap-6">
+        <div className="text-center">
+          <h1
+            className="text-3xl font-semibold"
+            style={{ fontFamily: "var(--event-heading-font)" }}
+          >
+            RSVP
+          </h1>
+          <p className="mt-1 text-sm opacity-70">
+            {name}
+          </p>
+          {date && (
+            <p className="text-xs opacity-60">
+              {formatDate(date)}
             </p>
-            {r.eventDate && (
-              <p className="font-body mt-1 text-center text-xs text-muted">
-                {formatDate(r.eventDate)}
-              </p>
-            )}
+          )}
+          {venue && (
+            <p className="text-xs opacity-60">{venue}</p>
+          )}
+        </div>
 
-            {/* Name field */}
-            <div className="mt-6">
-              <label className="font-body mb-1 block text-xs font-medium uppercase tracking-wider text-muted">
-                Your Name
-              </label>
-              <div className="rounded-md border-current bg-current px-3 py-2 text-sm text-current">
-                John Doe
-              </div>
-            </div>
+        {/* Name */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
+            Full Name
+          </label>
+          <input
+            type="text"
+            readOnly
+            placeholder="Your name"
+            className="rounded-md border px-3 py-2 text-sm"
+            style={{
+              borderColor: "var(--event-border)",
+              backgroundColor: "var(--event-surface)",
+              color: "var(--event-text)",
+            }}
+          />
+        </div>
 
-            {/* Attending toggle */}
-            <div className="mt-4">
-              <label className="font-body mb-1 block text-xs font-medium uppercase tracking-wider text-muted">
-                Will you attend?
-              </label>
-              <div className="flex gap-2">
-                <div className="flex-1 rounded-md border-current bg-primary px-4 py-2 text-center text-sm text-inverted">
-                  Yes, with joy
-                </div>
-                <div className="flex-1 rounded-md border-current bg-current px-4 py-2 text-center text-sm text-current">
-                  Sadly, no
-                </div>
-              </div>
-            </div>
-
-            {/* Plus ones */}
-            <div className="mt-4">
-              <label className="font-body mb-1 block text-xs font-medium uppercase tracking-wider text-muted">
-                Number of guests
-              </label>
-              <div className="rounded-md border-current bg-current px-3 py-2 text-sm text-current">
-                1
-              </div>
-            </div>
-
-            {/* Dietary */}
-            <div className="mt-4">
-              <label className="font-body mb-1 block text-xs font-medium uppercase tracking-wider text-muted">
-                Dietary requirements
-              </label>
-              <div className="rounded-md border-current bg-current px-3 py-2 text-sm text-current">
-                None
-              </div>
-            </div>
-
-            {/* Message */}
-            <div className="mt-4">
-              <label className="font-body mb-1 block text-xs font-medium uppercase tracking-wider text-muted">
-                Message to the couple
-              </label>
-              <div className="min-h-[60px] rounded-md border-current bg-current px-3 py-2 text-sm text-current">
-                Can't wait to celebrate with you!
-              </div>
-            </div>
-
-            <button
-              className="font-body mt-6 w-full rounded-md px-6 py-2.5 text-sm font-medium uppercase tracking-wider"
-              style={{
-                backgroundColor: "var(--event-primary)",
-                color: "var(--event-bg)",
-                borderRadius: "var(--event-button-radius)",
-              }}
-            >
-              Submit RSVP
-            </button>
+        {/* Status */}
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
+            Will you attend?
+          </label>
+          <div className="flex gap-3">
+            <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border px-4 py-2.5 text-sm" style={{ borderColor: "var(--event-border)" }}>
+              <input type="radio" name="rsvp-status" readOnly />
+              <span>Joyfully Accepts</span>
+            </label>
+            <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border px-4 py-2.5 text-sm" style={{ borderColor: "var(--event-border)" }}>
+              <input type="radio" name="rsvp-status" readOnly />
+              <span>Regretfully Declines</span>
+            </label>
           </div>
-        </section>
+        </div>
+
+        {/* Plus ones */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
+            Number of Guests
+          </label>
+          <input
+            type="number"
+            readOnly
+            defaultValue={0}
+            className="rounded-md border px-3 py-2 text-sm"
+            style={{
+              borderColor: "var(--event-border)",
+              backgroundColor: "var(--event-surface)",
+              color: "var(--event-text)",
+            }}
+          />
+        </div>
+
+        {/* Dietary */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
+            Dietary Requirements
+          </label>
+          <textarea
+            readOnly
+            placeholder="Any dietary restrictions?"
+            className="min-h-[80px] rounded-md border px-3 py-2 text-sm"
+            style={{
+              borderColor: "var(--event-border)",
+              backgroundColor: "var(--event-surface)",
+              color: "var(--event-text)",
+            }}
+          />
+        </div>
+
+        {/* Message */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
+            Message
+          </label>
+          <textarea
+            readOnly
+            placeholder="Leave a message for the host…"
+            className="min-h-[80px] rounded-md border px-3 py-2 text-sm"
+            style={{
+              borderColor: "var(--event-border)",
+              backgroundColor: "var(--event-surface)",
+              color: "var(--event-text)",
+            }}
+          />
+        </div>
+
+        <button
+          className="rounded px-6 py-3 text-sm font-medium uppercase tracking-wider transition-opacity hover:opacity-90"
+          style={{
+            backgroundColor: "var(--event-primary)",
+            color: "var(--event-bg)",
+            borderRadius: "var(--event-button-radius, 6px)",
+          }}
+        >
+          {rsvpButtonText}
+        </button>
       </div>
-    </EventThemeProvider>
+    </div>
   );
 }

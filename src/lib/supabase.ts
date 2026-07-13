@@ -1,7 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const supabaseUrl =
+  (import.meta.env.VITE_SUPABASE_URL as string) || "http://localhost:54321";
+const supabaseAnonKey =
+  (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || "anon-key";
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
@@ -10,9 +12,30 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// ---------------------------------------------------------------------------
-// Shared config interfaces
-// ---------------------------------------------------------------------------
+export const EVENT_TYPES = [
+  "Wedding",
+  "Birthday",
+  "Corporate",
+  "Anniversary",
+  "Graduation",
+  "Baby Shower",
+  "Other",
+] as const;
+
+export type EventType = (typeof EVENT_TYPES)[number];
+
+export const EVENT_TEMPLATES = [
+  {
+    id: "default",
+    name: "Classic",
+    description: "A clean, modern event template",
+  },
+  {
+    id: "rusty",
+    name: "Rusty's Template",
+    description: "Luxury wedding with cream & gold aesthetic",
+  },
+] as const;
 
 export interface CoverConfig {
   bgImage?: string | null;
@@ -91,10 +114,6 @@ export interface SharingConfig {
   shareMessage?: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Domain entities
-// ---------------------------------------------------------------------------
-
 export interface UserEvent {
   id: string;
   creator_id: string;
@@ -110,7 +129,6 @@ export interface UserEvent {
   theme: ThemeConfig | null;
   content: EventContent | null;
   sharing_config: SharingConfig | null;
-
   draft_name: string | null;
   draft_event_type: string | null;
   draft_event_date: string | null;
@@ -123,7 +141,6 @@ export interface UserEvent {
   draft_theme: ThemeConfig | null;
   draft_content: EventContent | null;
   draft_sharing_config: SharingConfig | null;
-
   is_published: boolean;
   is_archived: boolean;
   published_at: string | null;
@@ -153,6 +170,8 @@ export interface SubEvent {
   updated_at: string;
 }
 
+export type RsvpStatus = "pending" | "attending" | "declined";
+
 export interface EventGuest {
   id: string;
   event_id: string;
@@ -162,7 +181,7 @@ export interface EventGuest {
   group_name: string | null;
   side: string | null;
   token: string;
-  rsvp_status: "pending" | "attending" | "declined";
+  rsvp_status: RsvpStatus;
   rsvp_submitted_at: string | null;
   plus_ones: number;
   dietary: string | null;
@@ -241,55 +260,3 @@ export interface GroupEventInvite {
   sub_event_id: string | null;
   created_at: string;
 }
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-export const EVENT_TYPES = [
-  "Wedding",
-  "Birthday",
-  "Corporate",
-  "Anniversary",
-  "Graduation",
-  "Baby Shower",
-  "Other",
-] as const;
-
-export type EventType = (typeof EVENT_TYPES)[number];
-
-export interface EventTemplate {
-  id: string;
-  name: string;
-  description: string;
-}
-
-export const EVENT_TEMPLATES: EventTemplate[] = [
-  {
-    id: "default",
-    name: "Classic",
-    description: "A clean, modern event template",
-  },
-  {
-    id: "rusty",
-    name: "Rusty's Template",
-    description: "Luxury wedding with cream & gold aesthetic",
-  },
-];
-
-// ---------------------------------------------------------------------------
-// Table names (handy for queries)
-// ---------------------------------------------------------------------------
-
-export const TABLES = {
-  EVENTS: "events",
-  SUB_EVENTS: "sub_events",
-  GUESTS: "event_guests",
-  RSVPS: "event_rsvps",
-  SCHEDULE: "schedule_items",
-  MESSAGES: "event_messages",
-  GUEST_GROUPS: "guest_groups",
-  GUEST_GROUP_MEMBERS: "guest_group_members",
-  GUEST_EVENT_INVITES: "guest_event_invites",
-  GROUP_EVENT_INVITES: "group_event_invites",
-} as const;

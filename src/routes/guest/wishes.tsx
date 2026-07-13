@@ -1,143 +1,193 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useOutletContext, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Send } from "lucide-react";
 import { supabase, type UserEvent, type EventMessage } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { themeToEventCssVars } from "../../lib/theme";
-import { Button } from "../../components/ui/Button";
-import { Textarea } from "../../components/ui/Input";
-import { Card, EmptyState, Skeleton, Toast, type ToastType } from "../../components/ui";
-import { formatDateShort, formatTime12 } from "../../lib/utils";
-
-async function fetchMessages(eventId: string): Promise<EventMessage[]> {
-  const { data, error } = await supabase
-    .from("event_messages")
-    .select("*")
-    .eq("event_id", eventId)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as EventMessage[];
-}
+import { timeAgo } from "../../lib/utils";
+import { Toast } from "../../components/ui";
 
 export default function GuestWishesPage() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const navigate = useNavigate();
   const { guestName } = useGuestAuth();
-  const queryClient = useQueryClient();
-  const [message, setMessage] = useState("");
-  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const [messages, setMessages] = useState<EventMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newMessage, setNewMessage] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const cssVars = themeToEventCssVars(event.theme);
+  // If not signed in, redirect to login
+  useEffect(() => {
+    if (!guestName) {
+      navigate("login");
+    }
+  }, [guestName, navigate]);
 
-  // Redirect to login if not signed in
+  // Fetch messages
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("event_messages")
+          .select("*")
+          .eq("event_id", event.id)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        setMessages((data || []) as EventMessage[]);
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMessages();
+  }, [event.id]);
+
   if (!guestName) {
-    navigate("login");
     return null;
   }
 
-  const { data: messages, isLoading } = useQuery({
-    queryKey: ["messages", event.id],
-    queryFn: () => fetchMessages(event.id),
-  });
-
-  const postMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("event_messages").insert({
-        event_id: event.id,
-        guest_name: guestName,
-        message: message.trim(),
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["messages", event.id] });
-      setMessage("");
-      setToast({ message: "Wish posted!", type: "success" });
-    },
-    onError: (err: Error) => {
-      setToast({ message: err.message, type: "error" });
-    },
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim()) return;
-    postMutation.mutate();
+    if (!newMessage.trim()) return;
+
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase
+        .from("event_messages")
+        .insert({
+          event_id: event.id,
+          guest_name: guestName,
+          message: newMessage.trim(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setMessages((prev) => [data as EventMessage, ...prev]);
+      setNewMessage("");
+      setToast({ message: "Wish posted!", type: "success" });
+    } catch (err) {
+      setToast({
+        message: err instanceof Error ? err.message : "Failed to post wish",
+        type: "error",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <div className="event-themed min-h-screen" style={cssVars}>
-      <section className="px-6 py-12">
-        <div className="mx-auto max-w-2xl">
-          <h2 className="font-heading text-center text-3xl">Wishes</h2>
-          <p className="font-body mt-2 text-center text-sm text-muted">
-            Share your well wishes with {event.name}.
+    <div className="event-themed flex min-h-screen flex-col items-center px-6 py-12">
+      <div className="flex w-full max-w-2xl flex-col gap-6">
+        <div className="text-center">
+          <h1
+            className="text-3xl font-semibold"
+            style={{ fontFamily: "var(--event-heading-font)", color: "var(--event-text)" }}
+          >
+            Wishes
+          </h1>
+          <p
+            className="mt-1 text-sm opacity-70"
+            style={{ color: "var(--event-text)" }}
+          >
+            Leave a message for {event.name || "the event"}
           </p>
+        </div>
 
-          {/* Post form */}
-          <form onSubmit={handleSubmit} className="mt-8">
-            <Textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Write your wish..."
-              rows={3}
-            />
-            <div className="mt-3 flex justify-end">
-              <Button
-                type="submit"
-                size="sm"
-                disabled={postMutation.isPending || !message.trim()}
+        {/* New message form */}
+        <form
+          onSubmit={handleSubmit}
+          className="flex flex-col gap-3 rounded-lg border p-4"
+          style={{
+            borderColor: "var(--event-border)",
+            backgroundColor: "var(--event-surface)",
+          }}
+        >
+          <textarea
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Write your wish…"
+            className="min-h-[100px] rounded-md border px-3 py-2 text-sm"
+            style={{
+              borderColor: "var(--event-border)",
+              backgroundColor: "var(--event-surface)",
+              color: "var(--event-text)",
+            }}
+          />
+          <button
+            type="submit"
+            disabled={submitting || !newMessage.trim()}
+            className="flex items-center justify-center gap-2 rounded px-6 py-2.5 text-sm font-medium uppercase tracking-wider transition-opacity hover:opacity-90 disabled:opacity-50"
+            style={{
+              backgroundColor: "var(--event-primary)",
+              color: "var(--event-bg)",
+              borderRadius: "var(--event-button-radius, 6px)",
+            }}
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Posting…
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4" />
+                Post Wish
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Messages list */}
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin" style={{ color: "var(--event-muted)" }} />
+          </div>
+        ) : messages.length === 0 ? (
+          <p
+            className="py-8 text-center text-sm opacity-60"
+            style={{ color: "var(--event-text)" }}
+          >
+            No wishes yet. Be the first to leave a message!
+          </p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className="rounded-lg border p-4"
                 style={{
-                  backgroundColor: "var(--event-primary)",
-                  color: "var(--event-bg)",
-                  borderRadius: "var(--event-button-radius)",
+                  borderColor: "var(--event-border)",
+                  backgroundColor: "var(--event-surface)",
                 }}
               >
-                {postMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Posting...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" /> Post Wish
-                  </>
-                )}
-              </Button>
-            </div>
-          </form>
-
-          {/* Messages list */}
-          <div className="mt-8 space-y-4">
-            {isLoading ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                  <Skeleton key={i} className="h-24" />
-                ))}
+                <div className="flex items-center justify-between">
+                  <span
+                    className="text-sm font-semibold"
+                    style={{ color: "var(--event-text)" }}
+                  >
+                    {msg.guest_name || "Anonymous"}
+                  </span>
+                  <span
+                    className="text-xs opacity-50"
+                    style={{ color: "var(--event-muted)" }}
+                  >
+                    {timeAgo(msg.created_at)}
+                  </span>
+                </div>
+                <p
+                  className="mt-2 text-sm opacity-80"
+                  style={{ color: "var(--event-text)" }}
+                >
+                  {msg.message}
+                </p>
               </div>
-            ) : !messages || messages.length === 0 ? (
-              <EmptyState
-                title="No wishes yet"
-                description="Be the first to leave a wish!"
-              />
-            ) : (
-              messages.map((msg) => (
-                <Card key={msg.id} className="p-4">
-                  <p className="text-sm text-current">{msg.message}</p>
-                  <div className="mt-3 flex items-center justify-between text-xs text-muted">
-                    <span className="font-medium">— {msg.guest_name}</span>
-                    <span>
-                      {formatDateShort(msg.created_at)}{" "}
-                      {msg.created_at &&
-                        formatTime12(msg.created_at.slice(11, 16))}
-                    </span>
-                  </div>
-                </Card>
-              ))
-            )}
+            ))}
           </div>
-        </div>
-      </section>
+        )}
+      </div>
 
       {toast && (
         <Toast

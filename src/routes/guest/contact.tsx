@@ -1,104 +1,157 @@
+import React from "react";
 import { useOutletContext } from "react-router-dom";
 import type { UserEvent } from "../../lib/supabase";
 import { formatDate, formatTime12 } from "../../lib/utils";
-import { themeToEventCssVars } from "../../lib/theme";
-import { MapPin, Calendar, Clock } from "lucide-react";
+import { MapPin, Calendar, Clock, Navigation } from "lucide-react";
 
 export default function GuestContactPage() {
   const { event } = useOutletContext<{ event: UserEvent }>();
-  const cssVars = themeToEventCssVars(event.theme);
+
+  const venue = event.venue;
+  const address = event.address;
+  const date = event.event_date;
+  const time = event.event_time;
+
+  const mapsUrl = address
+    ? `https://maps.google.com/?q=${encodeURIComponent(address)}`
+    : venue
+    ? `https://maps.google.com/?q=${encodeURIComponent(venue)}`
+    : null;
 
   return (
-    <div className="event-themed min-h-screen" style={cssVars}>
-      <section className="px-6 py-12">
-        <div className="mx-auto max-w-lg">
-          <h2 className="font-heading text-center text-3xl">Contact &amp; Details</h2>
-          <p className="font-body mt-2 text-center text-sm text-muted">
-            Everything you need to know about {event.name}.
+    <div className="event-themed flex min-h-screen flex-col items-center px-6 py-12">
+      <div className="flex w-full max-w-2xl flex-col gap-6">
+        <div className="text-center">
+          <h1
+            className="text-3xl font-semibold"
+            style={{ fontFamily: "var(--event-heading-font)", color: "var(--event-text)" }}
+          >
+            Venue & Contact
+          </h1>
+          <p
+            className="mt-1 text-sm opacity-70"
+            style={{ color: "var(--event-text)" }}
+          >
+            {event.name || "Event details"}
           </p>
-
-          <div className="mt-8 space-y-4">
-            {/* Date */}
-            {event.event_date && (
-              <div
-                className="flex items-start gap-3 rounded-lg bg-surface p-4"
-                style={{ boxShadow: "var(--event-shadow)" }}
-              >
-                <Calendar className="mt-0.5 h-5 w-5 text-muted" />
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted">
-                    Date
-                  </p>
-                  <p className="mt-1 text-sm text-current">
-                    {formatDate(event.event_date)}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Time */}
-            {event.event_time && (
-              <div
-                className="flex items-start gap-3 rounded-lg bg-surface p-4"
-                style={{ boxShadow: "var(--event-shadow)" }}
-              >
-                <Clock className="mt-0.5 h-5 w-5 text-muted" />
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted">
-                    Time
-                  </p>
-                  <p className="mt-1 text-sm text-current">
-                    {formatTime12(event.event_time)}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Venue */}
-            {event.venue && (
-              <div
-                className="flex items-start gap-3 rounded-lg bg-surface p-4"
-                style={{ boxShadow: "var(--event-shadow)" }}
-              >
-                <MapPin className="mt-0.5 h-5 w-5 text-muted" />
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted">
-                    Venue
-                  </p>
-                  <p className="mt-1 text-sm text-current">{event.venue}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Address */}
-            {event.address && (
-              <div
-                className="flex items-start gap-3 rounded-lg bg-surface p-4"
-                style={{ boxShadow: "var(--event-shadow)" }}
-              >
-                <MapPin className="mt-0.5 h-5 w-5 text-muted" />
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted">
-                    Address
-                  </p>
-                  <p className="mt-1 text-sm text-current">{event.address}</p>
-                  {event.address && (
-                    <a
-                      href={`https://maps.google.com/?q=${encodeURIComponent(event.address)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2 inline-block text-xs font-medium underline"
-                      style={{ color: "var(--event-primary)" }}
-                    >
-                      Open in Google Maps →
-                    </a>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
-      </section>
+
+        {/* Info cards */}
+        <div className="flex flex-col gap-4">
+          {/* Date & Time */}
+          {(date || time) && (
+            <div
+              className="flex items-start gap-4 rounded-lg border p-5"
+              style={{
+                borderColor: "var(--event-border)",
+                backgroundColor: "var(--event-surface)",
+              }}
+            >
+              <div
+                className="flex h-10 w-10 items-center justify-center rounded-full"
+                style={{ backgroundColor: "var(--event-primary)" }}
+              >
+                <Calendar className="h-5 w-5" style={{ color: "var(--event-bg)" }} />
+              </div>
+              <div className="flex-1">
+                <h3
+                  className="text-sm font-semibold uppercase tracking-wider opacity-60"
+                  style={{ color: "var(--event-text)" }}
+                >
+                  Date & Time
+                </h3>
+                {date && (
+                  <p
+                    className="mt-1 text-base font-medium"
+                    style={{ color: "var(--event-text)" }}
+                  >
+                    {formatDate(date)}
+                  </p>
+                )}
+                {time && (
+                  <p
+                    className="mt-1 flex items-center gap-1.5 text-sm opacity-70"
+                    style={{ color: "var(--event-text)" }}
+                  >
+                    <Clock className="h-3.5 w-3.5" />
+                    {formatTime12(time)}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Venue */}
+          {venue && (
+            <div
+              className="flex items-start gap-4 rounded-lg border p-5"
+              style={{
+                borderColor: "var(--event-border)",
+                backgroundColor: "var(--event-surface)",
+              }}
+            >
+              <div
+                className="flex h-10 w-10 items-center justify-center rounded-full"
+                style={{ backgroundColor: "var(--event-primary)" }}
+              >
+                <MapPin className="h-5 w-5" style={{ color: "var(--event-bg)" }} />
+              </div>
+              <div className="flex-1">
+                <h3
+                  className="text-sm font-semibold uppercase tracking-wider opacity-60"
+                  style={{ color: "var(--event-text)" }}
+                >
+                  Venue
+                </h3>
+                <p
+                  className="mt-1 text-base font-medium"
+                  style={{ color: "var(--event-text)" }}
+                >
+                  {venue}
+                </p>
+                {address && (
+                  <p
+                    className="mt-1 text-sm opacity-70"
+                    style={{ color: "var(--event-text)" }}
+                  >
+                    {address}
+                  </p>
+                )}
+                {mapsUrl && (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-flex items-center gap-1.5 text-sm underline"
+                    style={{ color: "var(--event-primary)" }}
+                  >
+                    <Navigation className="h-3.5 w-3.5" />
+                    Get Directions
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* No info */}
+          {!venue && !date && !time && !address && (
+            <div
+              className="rounded-lg border p-8 text-center"
+              style={{
+                borderColor: "var(--event-border)",
+                backgroundColor: "var(--event-surface)",
+              }}
+            >
+              <p
+                className="text-sm opacity-60"
+                style={{ color: "var(--event-text)" }}
+              >
+                No venue or contact information available for this event.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
