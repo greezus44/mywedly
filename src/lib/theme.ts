@@ -1,4 +1,33 @@
-import type { ThemeConfig, CoverConfig, WeddingContent } from "./supabase";
+import type { ThemeConfig, CoverConfig, WeddingContent, LogoConfig } from "./supabase";
+
+export const DEFAULT_LOGO_CONFIG: LogoConfig = {
+  url: null,
+  visible: true,
+  width: "64px",
+  height: "auto",
+  maintainAspectRatio: true,
+  position: "top-center",
+  offsetX: "0px",
+  offsetY: "0px",
+  margin: "0px",
+  padding: "0px",
+  responsive: {
+    desktop: { width: "64px", height: "auto" },
+    tablet: { width: "56px", height: "auto" },
+    mobile: { width: "48px", height: "auto" },
+  },
+  opacity: 100,
+  borderRadius: "0px",
+  dropShadow: { enabled: false, blur: "8px", color: "#000000", offsetX: "0px", offsetY: "4px" },
+  glow: { enabled: false, color: "#b8973a", blur: "20px" },
+  rotation: 0,
+  maxWidth: "none",
+  maxHeight: "none",
+  objectFit: "contain",
+  showOnPages: "cover-only",
+  customPages: [],
+  showInNavbar: false,
+};
 
 export const DEFAULT_THEME: ThemeConfig = {
   colors: { primary: "#b8973a", primaryLight: "#d4b85c", primaryDark: "#8a6f28", background: "#f5edda", backgroundLight: "#faf5e8", surface: "#ffffff", text: "#2a2a2a", textMuted: "#8a8a8a", border: "#b8973a", accent: "#c9a0a0", success: "#8a9a7b", warning: "#d4b85c", error: "#c97070" },
@@ -7,7 +36,7 @@ export const DEFAULT_THEME: ThemeConfig = {
 };
 
 export const DEFAULT_COVER_CONFIG: CoverConfig = {
-  branding: { logoUrl: null, logoSize: "64px", logoPosition: "center", logoVisible: true, divider: "line" },
+  branding: { logoUrl: null, logoSize: "64px", logoPosition: "center", logoVisible: true, divider: "line", logo: { ...DEFAULT_LOGO_CONFIG } },
   colors: { primary: "#b8973a", secondary: "#d4b85c", accent: "#c9a0a0", background: "#1a1a1a", text: "#ffffff", buttonColor: "#b8973a", buttonTextColor: "#ffffff", overlayColor: "#000000", overlayOpacity: 0.4 },
   typography: { headingFont: "Playfair Display", bodyFont: "Cormorant Garamond", headingSize: "3rem", bodySize: "1rem", headingWeight: "400", bodyWeight: "400", letterSpacing: "0.15em" },
   layout: { contentAlignment: "center", verticalPosition: "center", buttonStyle: "outline", borderRadius: "8px", spacing: "1.5rem" },
@@ -82,6 +111,48 @@ export function coverToCssVars(cover: CoverConfig | null | undefined): Record<st
     "--cover-blur": `${cb.blur || 0}px`,
     "--cover-brightness": `${cb.brightness || 100}%`,
   };
+}
+
+export function getLogoConfig(wedding: { cover_config?: CoverConfig | Record<string, never>; draft_cover_config?: CoverConfig | Record<string, never> | null } | null): LogoConfig {
+  const cover = getCoverConfig(wedding);
+  return cover.branding?.logo || DEFAULT_LOGO_CONFIG;
+}
+
+export function getLogoStyle(logo: LogoConfig, device: "desktop" | "tablet" | "mobile" = "desktop"): React.CSSProperties {
+  const size = logo.responsive?.[device] || { width: logo.width, height: logo.height };
+  const filters: string[] = [];
+  if (logo.dropShadow?.enabled) {
+    filters.push(`drop-shadow(${logo.dropShadow.offsetX} ${logo.dropShadow.offsetY} ${logo.dropShadow.blur} ${logo.dropShadow.color})`);
+  }
+  if (logo.glow?.enabled) {
+    filters.push(`drop-shadow(0 0 ${logo.glow.blur} ${logo.glow.color})`);
+  }
+  return {
+    width: size.width,
+    height: logo.maintainAspectRatio ? "auto" : size.height,
+    maxWidth: logo.maxWidth === "none" ? undefined : logo.maxWidth,
+    maxHeight: logo.maxHeight === "none" ? undefined : logo.maxHeight,
+    objectFit: logo.objectFit,
+    opacity: logo.opacity / 100,
+    borderRadius: logo.borderRadius,
+    transform: `rotate(${logo.rotation}deg)`,
+    margin: logo.margin,
+    padding: logo.padding,
+    filter: filters.length > 0 ? filters.join(" ") : undefined,
+  };
+}
+
+export function getLogoPositionClasses(position: LogoConfig["position"]): { container: string; item: string } {
+  const map: Record<string, { container: string; item: string }> = {
+    "top-left": { container: "items-start justify-start", item: "self-start" },
+    "top-center": { container: "items-center justify-start", item: "self-center" },
+    "top-right": { container: "items-end justify-start", item: "self-end" },
+    "center": { container: "items-center justify-center", item: "self-center" },
+    "bottom-left": { container: "items-start justify-end", item: "self-start" },
+    "bottom-center": { container: "items-center justify-end", item: "self-center" },
+    "bottom-right": { container: "items-end justify-end", item: "self-end" },
+  };
+  return map[position] || map["top-center"];
 }
 
 export function getTheme(wedding: { theme_config?: ThemeConfig | Record<string, never> } | null): ThemeConfig {

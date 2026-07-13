@@ -5,25 +5,29 @@ import { AdminLayout } from "./admin-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { RsvpPreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Select, Toggle } from "../../components/ui/Input";
+import { Input, Textarea, Select } from "../../components/ui/Input";
 import { Card, Badge, Modal, EmptyState, Toast } from "../../components/ui/index";
-import { ImageUpload, FormField } from "../../components/ui/ImageUpload";
+import { FormField } from "../../components/ui/ImageUpload";
 import { formatDate, formatTime } from "../../lib/utils";
-import { Plus, Pencil, Trash2, Calendar } from "lucide-react";
+import { Save, Calendar, Plus, Pencil, Trash2, Clock, MapPin } from "lucide-react";
 
-const EMPTY_EVENT: Partial<WeddingEvent> = {
-  name: "", kind: "ceremony", starts_at: "", venue_name: "", venue_address: "", dress_code: "",
-  notes: "", visibility: "public", sort_order: 0, description: "", maps_url: "", image_url: null,
-  rsvp_deadline: "", capacity: null, programme: "",
-};
+const EVENT_KINDS: { value: EventKind; label: string }[] = [
+  { value: "ceremony", label: "Ceremony" },
+  { value: "reception", label: "Reception" },
+  { value: "welcome", label: "Welcome" },
+  { value: "rehearsal", label: "Rehearsal" },
+  { value: "brunch", label: "Brunch" },
+  { value: "cultural", label: "Cultural" },
+  { value: "other", label: "Other" },
+];
 
 export function EventsPage() {
   const queryClient = useQueryClient();
-  const [editing, setEditing] = useState<Partial<WeddingEvent> | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [editingEvent, setEditingEvent] = useState<WeddingEvent | null>(null);
+  const [showModal, setShowModal] = useState(false);
 
-  const { data: wedding, isLoading: wLoading, error: wError } = useQuery<Wedding>({
+  const { data: wedding, isLoading } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -34,204 +38,197 @@ export function EventsPage() {
     },
   });
 
-  const { data: events = [], isLoading: eLoading } = useQuery<WeddingEvent[]>({
+  const { data: events, isLoading: eventsLoading } = useQuery({
     queryKey: ["events", wedding?.id],
     queryFn: async () => {
       if (!wedding) return [];
-      const { data } = await supabase.from("events").select("*").eq("wedding_id", wedding.id).order("sort_order", { ascending: true });
+      const { data } = await supabase.from("events").select("*").eq("wedding_id", wedding.id).order("sort_order");
       return (data || []) as WeddingEvent[];
     },
     enabled: !!wedding,
   });
 
-  const createMutation = useMutation({
-    mutationFn: async (ev: Partial<WeddingEvent>) => {
-      if (!wedding) throw new Error("No wedding");
-      const { error } = await supabase.from("events").insert({ ...ev, wedding_id: wedding.id });
+  const createEvent = useMutation({
+    mutationFn: async (event: Omit<WeddingEvent, "id" | "created_at">) => {
+      const { error } = await supabase.from("events").insert(event);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events", wedding?.id] }); setToast({ message: "Event created", type: "success" }); setModalOpen(false); },
-    onError: () => setToast({ message: "Failed to create event", type: "error" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events"] }); setToast("Event created"); setShowModal(false); },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, ...ev }: Partial<WeddingEvent> & { id: string }) => {
-      const { error } = await supabase.from("events").update(ev).eq("id", id);
+  const updateEvent = useMutation({
+    mutationFn: async ({ id, ...event }: Partial<WeddingEvent> & { id: string }) => {
+      const { error } = await supabase.from("events").update(event).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events", wedding?.id] }); setToast({ message: "Event updated", type: "success" }); setModalOpen(false); },
-    onError: () => setToast({ message: "Failed to update event", type: "error" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events"] }); setToast("Event updated"); setShowModal(false); },
   });
 
-  const deleteMutation = useMutation({
+  const deleteEvent = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("events").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events", wedding?.id] }); setToast({ message: "Event deleted", type: "success" }); },
-    onError: () => setToast({ message: "Failed to delete event", type: "error" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events"] }); setToast("Event deleted"); },
   });
 
-  const openCreate = () => { setEditing({ ...EMPTY_EVENT }); setModalOpen(true); };
-  const openEdit = (ev: WeddingEvent) => { setEditing({ ...ev }); setModalOpen(true); };
-  const handleSave = () => {
-    if (!editing) return;
-    if (editing.id) updateMutation.mutate(editing as WeddingEvent);
-    else createMutation.mutate(editing);
+  if (isLoading) return <AdminLayout><div className="flex items-center justify-center h-full"><div className="animate-pulse text-gray-400">Loading...</div></div></AdminLayout>;
+  if (!wedding) return <AdminLayout><div className="p-6 text-gray-500">Wedding not found</div></AdminLayout>;
+
+  const handleAdd = () => {
+    setEditingEvent(null);
+    setShowModal(true);
   };
 
-  if (wLoading) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-full p-8">
-          <p className="font-ui text-sm text-gray-500">Loading events...</p>
-        </div>
-      </AdminLayout>
-    );
-  }
+  const handleEdit = (event: WeddingEvent) => {
+    setEditingEvent(event);
+    setShowModal(true);
+  };
 
-  if (wError || !wedding) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-full p-8">
-          <p className="font-ui text-sm text-red-500">Unable to load wedding data.</p>
-        </div>
-      </AdminLayout>
-    );
-  }
+  const handleSave = (formData: Record<string, string>) => {
+    const eventData = {
+      wedding_id: wedding.id,
+      name: formData.name || "Untitled Event",
+      kind: (formData.kind || "ceremony") as EventKind,
+      starts_at: formData.starts_at || null,
+      venue_name: formData.venue_name || null,
+      venue_address: formData.venue_address || null,
+      dress_code: formData.dress_code || null,
+      notes: formData.notes || null,
+      visibility: (formData.visibility || "public") as EventVisibility,
+      sort_order: Number(formData.sort_order) || 0,
+      description: formData.description || null,
+      maps_url: formData.maps_url || null,
+      image_url: formData.image_url || null,
+      capacity: formData.capacity ? Number(formData.capacity) : null,
+      programme: formData.programme || null,
+      rsvp_deadline: formData.rsvp_deadline || null,
+    };
+
+    if (editingEvent) {
+      updateEvent.mutate({ id: editingEvent.id, ...eventData });
+    } else {
+      createEvent.mutate(eventData);
+    }
+  };
 
   return (
     <AdminLayout>
-      <div className="flex flex-col h-full">
-        <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200">
-          <h1 className="font-ui text-base font-semibold text-gray-900">Events</h1>
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white font-ui text-xs font-medium uppercase tracking-wider rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            <Plus size={14} /> Add Event
-          </button>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <SplitEditor title="Events & RSVP Preview" preview={<RsvpPreview wedding={wedding} events={events} />}>
-            {eLoading ? (
-              <p className="font-ui text-sm text-gray-500">Loading events...</p>
-            ) : events.length === 0 ? (
-              <EmptyState
-                icon={<Calendar size={40} />}
-                title="No events yet"
-                description="Create your first event to manage RSVPs and schedules."
-                action={<Button variant="outline" size="sm" onClick={openCreate}><Plus size={14} className="mr-1.5" /> Add Event</Button>}
-              />
-            ) : (
-              <div className="space-y-3">
-                {events.map((event) => (
-                  <Card key={event.id} className="p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-ui text-sm font-semibold text-gray-900">{event.name}</h3>
-                          <Badge variant="default">{event.kind}</Badge>
-                          {event.visibility === "private" && <Badge variant="warning">Private</Badge>}
+      <SplitEditor title="Events Manager" preview={<RsvpPreview wedding={wedding} events={events || []} />}>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar size={18} className="text-indigo-600" />
+              <h2 className="font-ui text-base font-semibold text-gray-900">Events</h2>
+            </div>
+            <Button variant="primary" size="sm" onClick={handleAdd}>
+              <Plus size={14} className="mr-1" /> Add Event
+            </Button>
+          </div>
+
+          {eventsLoading ? (
+            <div className="text-center py-8 text-gray-400 font-ui text-sm">Loading events...</div>
+          ) : events && events.length > 0 ? (
+            <div className="space-y-3">
+              {events.map((event) => (
+                <Card key={event.id} className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-ui text-sm font-semibold text-gray-900">{event.name}</h3>
+                        <Badge variant="default">{event.kind}</Badge>
+                        <Badge variant={event.visibility === "public" ? "success" : "warning"}>{event.visibility}</Badge>
+                      </div>
+                      {event.starts_at && (
+                        <div className="flex items-center gap-1.5 font-ui text-xs text-gray-500 mb-1">
+                          <Clock size={12} />
+                          {formatDate(event.starts_at)} at {formatTime(event.starts_at)}
                         </div>
-                        <p className="font-ui text-xs text-gray-500">
-                          {formatDate(event.starts_at)}{event.starts_at && ` · ${formatTime(event.starts_at)}`}
-                        </p>
-                        {event.venue_name && <p className="font-ui text-xs text-gray-500 mt-1">{event.venue_name}</p>}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => openEdit(event)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Pencil size={14} /></button>
-                        <button onClick={() => deleteMutation.mutate(event.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={14} /></button>
-                      </div>
+                      )}
+                      {event.venue_name && (
+                        <div className="flex items-center gap-1.5 font-ui text-xs text-gray-500">
+                          <MapPin size={12} />
+                          {event.venue_name}
+                        </div>
+                      )}
                     </div>
-                    {event.capacity && <p className="font-ui text-xs text-gray-400 mt-1">Capacity: {event.capacity}</p>}
-                  </Card>
-                ))}
-              </div>
-            )}
-          </SplitEditor>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => handleEdit(event)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"><Pencil size={14} className="text-gray-500" /></button>
+                      <button onClick={() => { if (confirm("Delete this event?")) deleteEvent.mutate(event.id); }} className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={14} className="text-red-500" /></button>
+                    </div>
+                  </div>
+                  {event.description && <p className="font-ui text-xs text-gray-500 mt-2">{event.description}</p>}
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon={<Calendar size={48} />} title="No events yet" description="Add your wedding events so guests can RSVP to them." action={<Button variant="primary" size="sm" onClick={handleAdd}><Plus size={14} className="mr-1" /> Add Event</Button>} />
+          )}
+        </div>
+      </SplitEditor>
+
+      {showModal && (
+        <EventModal event={editingEvent} onClose={() => setShowModal(false)} onSave={handleSave} />
+      )}
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+    </AdminLayout>
+  );
+}
+
+function EventModal({ event, onClose, onSave }: { event: WeddingEvent | null; onClose: () => void; onSave: (data: Record<string, string>) => void }) {
+  const [form, setForm] = useState<Record<string, string>>({
+    name: event?.name || "",
+    kind: event?.kind || "ceremony",
+    starts_at: event?.starts_at ? new Date(event.starts_at).toISOString().slice(0, 16) : "",
+    venue_name: event?.venue_name || "",
+    venue_address: event?.venue_address || "",
+    dress_code: event?.dress_code || "",
+    notes: event?.notes || "",
+    visibility: event?.visibility || "public",
+    sort_order: String(event?.sort_order || 0),
+    description: event?.description || "",
+    maps_url: event?.maps_url || "",
+    image_url: event?.image_url || "",
+    capacity: event?.capacity ? String(event.capacity) : "",
+    programme: event?.programme || "",
+  });
+
+  const set = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  return (
+    <Modal open onClose={onClose} title={event ? "Edit Event" : "Add Event"} maxWidth="max-w-xl">
+      <div className="space-y-4">
+        <FormField label="Event Name"><Input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Akad Nikah" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
+        <div className="grid grid-cols-2 gap-4">
+          <FormField label="Event Type">
+            <Select value={form.kind} onChange={(e) => set("kind", e.target.value)} className="!bg-white !border-gray-200 !text-gray-700">
+              {EVENT_KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+            </Select>
+          </FormField>
+          <FormField label="Visibility">
+            <Select value={form.visibility} onChange={(e) => set("visibility", e.target.value)} className="!bg-white !border-gray-200 !text-gray-700">
+              <option value="public">Public</option>
+              <option value="private">Private</option>
+            </Select>
+          </FormField>
+        </div>
+        <FormField label="Date & Time"><Input type="datetime-local" value={form.starts_at} onChange={(e) => set("starts_at", e.target.value)} className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
+        <div className="grid grid-cols-2 gap-4">
+          <FormField label="Venue Name"><Input value={form.venue_name} onChange={(e) => set("venue_name", e.target.value)} placeholder="Venue name" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
+          <FormField label="Capacity"><Input type="number" value={form.capacity} onChange={(e) => set("capacity", e.target.value)} placeholder="Max guests" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
+        </div>
+        <FormField label="Venue Address"><Textarea value={form.venue_address} onChange={(e) => set("venue_address", e.target.value)} placeholder="Full address" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
+        <FormField label="Maps URL"><Input value={form.maps_url} onChange={(e) => set("maps_url", e.target.value)} placeholder="Google Maps link" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
+        <FormField label="Dress Code"><Input value={form.dress_code} onChange={(e) => set("dress_code", e.target.value)} placeholder="e.g. Formal / Smart Casual" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
+        <FormField label="Description"><Textarea value={form.description} onChange={(e) => set("description", e.target.value)} placeholder="Event description" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
+        <FormField label="Programme"><Textarea value={form.programme} onChange={(e) => set("programme", e.target.value)} placeholder="Event programme details" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
+        <FormField label="Notes"><Textarea value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Additional notes" className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
+        <FormField label="Sort Order"><Input type="number" value={form.sort_order} onChange={(e) => set("sort_order", e.target.value)} className="!bg-white !border-gray-200 !text-gray-700" /></FormField>
+        <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+          <Button variant="outline" size="md" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" size="md" onClick={() => onSave(form)}><Save size={14} className="mr-1" /> {event ? "Update" : "Create"}</Button>
         </div>
       </div>
-
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing?.id ? "Edit Event" : "New Event"} maxWidth="max-w-xl">
-        {editing && (
-          <div className="space-y-4">
-            <FormField label="Event Name">
-              <Input value={editing.name || ""} onChange={(e) => setEditing((p) => ({ ...p, name: e.target.value }))} placeholder="Akad Nikah" />
-            </FormField>
-            <div className="grid grid-cols-2 gap-3">
-              <FormField label="Type">
-                <Select value={editing.kind || "ceremony"} onChange={(e) => setEditing((p) => ({ ...p, kind: e.target.value as EventKind }))}>
-                  <option value="ceremony">Ceremony</option>
-                  <option value="reception">Reception</option>
-                  <option value="welcome">Welcome</option>
-                  <option value="rehearsal">Rehearsal</option>
-                  <option value="brunch">Brunch</option>
-                  <option value="cultural">Cultural</option>
-                  <option value="other">Other</option>
-                </Select>
-              </FormField>
-              <FormField label="Visibility">
-                <Select value={editing.visibility || "public"} onChange={(e) => setEditing((p) => ({ ...p, visibility: e.target.value as EventVisibility }))}>
-                  <option value="public">Public</option>
-                  <option value="private">Private</option>
-                </Select>
-              </FormField>
-            </div>
-            <FormField label="Date & Time">
-              <Input type="datetime-local" value={editing.starts_at ? editing.starts_at.slice(0, 16) : ""} onChange={(e) => setEditing((p) => ({ ...p, starts_at: e.target.value }))} />
-            </FormField>
-            <div className="grid grid-cols-2 gap-3">
-              <FormField label="Venue Name">
-                <Input value={editing.venue_name || ""} onChange={(e) => setEditing((p) => ({ ...p, venue_name: e.target.value }))} placeholder="Grand Ballroom" />
-              </FormField>
-              <FormField label="Capacity">
-                <Input type="number" value={editing.capacity ?? ""} onChange={(e) => setEditing((p) => ({ ...p, capacity: e.target.value ? parseInt(e.target.value) : null }))} placeholder="200" />
-              </FormField>
-            </div>
-            <FormField label="Venue Address">
-              <Input value={editing.venue_address || ""} onChange={(e) => setEditing((p) => ({ ...p, venue_address: e.target.value }))} placeholder="123 Wedding Lane" />
-            </FormField>
-            <FormField label="Maps URL">
-              <Input value={editing.maps_url || ""} onChange={(e) => setEditing((p) => ({ ...p, maps_url: e.target.value }))} placeholder="https://maps.google.com/..." />
-            </FormField>
-            <div className="grid grid-cols-2 gap-3">
-              <FormField label="Dress Code">
-                <Input value={editing.dress_code || ""} onChange={(e) => setEditing((p) => ({ ...p, dress_code: e.target.value }))} placeholder="Formal" />
-              </FormField>
-              <FormField label="RSVP Deadline">
-                <Input type="datetime-local" value={editing.rsvp_deadline ? editing.rsvp_deadline.slice(0, 16) : ""} onChange={(e) => setEditing((p) => ({ ...p, rsvp_deadline: e.target.value }))} />
-              </FormField>
-            </div>
-            <FormField label="Sort Order">
-              <Input type="number" value={editing.sort_order ?? 0} onChange={(e) => setEditing((p) => ({ ...p, sort_order: parseInt(e.target.value) || 0 }))} />
-            </FormField>
-            <FormField label="Description">
-              <Textarea value={editing.description || ""} onChange={(e) => setEditing((p) => ({ ...p, description: e.target.value }))} placeholder="Event description" />
-            </FormField>
-            <FormField label="Programme">
-              <Textarea value={editing.programme || ""} onChange={(e) => setEditing((p) => ({ ...p, programme: e.target.value }))} placeholder="Event programme details" />
-            </FormField>
-            <FormField label="Event Image">
-              <ImageUpload value={editing.image_url || null} onChange={(url) => setEditing((p) => ({ ...p, image_url: url }))} />
-            </FormField>
-            <FormField label="Notes">
-              <Textarea value={editing.notes || ""} onChange={(e) => setEditing((p) => ({ ...p, notes: e.target.value }))} placeholder="Internal notes" />
-            </FormField>
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <Button variant="ghost" size="sm" onClick={() => setModalOpen(false)}>Cancel</Button>
-              <button
-                onClick={handleSave}
-                disabled={createMutation.isPending || updateMutation.isPending}
-                className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 bg-indigo-600 text-white font-ui text-xs font-medium uppercase tracking-wider rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
-              >
-                {editing.id ? "Update" : "Create"}
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </AdminLayout>
+    </Modal>
   );
 }

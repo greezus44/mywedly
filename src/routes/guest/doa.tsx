@@ -1,123 +1,73 @@
-import { useState, useEffect, type CSSProperties } from "react";
+import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Heart, Sparkles } from "lucide-react";
+import { Heart } from "lucide-react";
+import { useGuestAuth } from "../../lib/guest-auth";
 import { useLang } from "../../lib/lang-context";
-import { useGuestAuth, GuestAuthProvider } from "../../lib/guest-auth";
-import { themeToCssVars, getTheme, coverToCssVars, getCoverConfig, getCoverContent } from "../../lib/theme";
+import { themeToCssVars, coverToCssVars, getTheme, getCoverConfig, getCoverContent, getLogoConfig, getLogoStyle } from "../../lib/theme";
+import { getDeviceType } from "../../lib/utils";
 
-function DoaInner() {
+export function Doa() {
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const params = useParams();
-  const slug = params.slug || "";
-  const { session, loading } = useGuestAuth();
+  const { session } = useGuestAuth();
   const { t } = useLang();
 
-  const wedding = session?.wedding ?? null;
-
   useEffect(() => {
-    if (loading) return;
-    if (!session) {
-      navigate(`/w/${slug}/login`, { replace: true });
-    }
-  }, [session, loading, slug, navigate]);
+    if (!session) navigate(`/w/${slug}/login`, { replace: true });
+  }, [session, slug, navigate]);
 
-  if (loading || !session) {
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ background: "var(--color-bg)" } as CSSProperties}
-      >
-        <Heart size={24} className="animate-pulse" style={{ color: "var(--color-primary)" }} />
-      </div>
-    );
-  }
+  if (!session) return null;
 
+  const wedding = session.wedding;
   const theme = getTheme(wedding);
   const cover = getCoverConfig(wedding);
   const content = getCoverContent(wedding);
+  const logo = getLogoConfig(wedding);
+  const device = getDeviceType();
+
+  const showLogo = logo.visible && logo.url && (logo.showOnPages === "all-pages" || (logo.showOnPages === "custom" && logo.customPages.includes("doa")));
 
   return (
     <div
-      className="min-h-screen pb-16"
-      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover) } as CSSProperties}
+      className="min-h-screen px-6 py-12 md:py-20"
+      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover) } as React.CSSProperties}
     >
-      {/* Header */}
-      <section className="px-6 md:px-12 pt-12 md:pt-16 text-center animate-fade-in opacity-0-init">
-        <p
-          className="font-ui text-xs uppercase tracking-luxe mb-3"
-          style={{ color: "var(--color-primary)" }}
-        >
-          {t("doa")}
-        </p>
-        <h1
-          className="font-script text-3xl md:text-5xl mb-4"
-          style={{ color: "var(--color-text)" }}
-        >
-          {content.doa_title || t("doa")}
-        </h1>
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="h-px w-12" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
-          <Sparkles size={14} style={{ color: "var(--color-primary)" }} />
-          <div className="h-px w-12" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
-        </div>
-      </section>
+      <div className="max-w-2xl mx-auto text-center">
+        {showLogo && (
+          <div className="flex justify-center mb-8 animate-fade-in">
+            <img src={logo.url!} alt="Logo" style={getLogoStyle(logo, device)} />
+          </div>
+        )}
 
-      {/* Doa Image */}
-      {content.doa_image_url && (
-        <div className="px-6 md:px-12 mb-10 max-w-2xl mx-auto animate-fade-in-up opacity-0-init delay-200">
-          <img
-            src={content.doa_image_url}
-            alt="Doa"
-            className="w-full rounded-lg object-cover"
-            style={{
-              borderRadius: "var(--radius, 8px)",
-              maxHeight: "400px",
-              border: "1px solid var(--color-border)",
-              borderColor: "color-mix(in srgb, var(--color-border) 20%, transparent)",
-            }}
-          />
-        </div>
-      )}
+        <div className="animate-fade-in-up">
+          <p className="font-script text-xl text-[var(--color-primary)] mb-6">
+            {t("bismillah")}
+          </p>
 
-      {/* Doa Body */}
-      {content.doa_body && (
-        <section className="px-6 md:px-12 max-w-2xl mx-auto animate-fade-in-up opacity-0-init delay-300">
-          <div
-            className="p-8 md:p-10"
-            style={{
-              background: "var(--color-surface)",
-              borderRadius: "var(--radius, 8px)",
-              border: "1px solid var(--color-border)",
-              borderColor: "color-mix(in srgb, var(--color-border) 20%, transparent)",
-              boxShadow: "0 2px 12px rgba(184, 151, 58, 0.06)",
-            }}
-          >
-            <p
-              className="font-body text-lg md:text-xl leading-relaxed text-center"
-              style={{ color: "var(--color-text)" }}
-            >
+          <h1 className="font-script text-4xl text-[var(--color-primary)] mb-8">
+            {content.doa_title || t("doa")}
+          </h1>
+
+          <div className="flex items-center justify-center gap-3 mb-8">
+            <div className="h-px w-16 bg-[var(--color-primary)]/30" />
+            <Heart size={18} className="text-[var(--color-primary)]" />
+            <div className="h-px w-16 bg-[var(--color-primary)]/30" />
+          </div>
+
+          {content.doa_body && (
+            <p className="font-body text-lg text-[var(--color-text)] leading-relaxed whitespace-pre-line mb-10">
               {content.doa_body}
             </p>
-          </div>
-        </section>
-      )}
+          )}
 
-      {/* Decorative footer */}
-      <div className="text-center mt-12 animate-fade-in opacity-0-init delay-500">
-        <Heart
-          size={16}
-          style={{ color: "var(--color-primary)", opacity: 0.4 }}
-        />
+          {content.invitation_closing && (
+            <p className="font-body text-base text-[var(--color-text-muted)] italic mt-10">
+              {content.invitation_closing}
+            </p>
+          )}
+        </div>
       </div>
     </div>
-  );
-}
-
-export function Doa() {
-  return (
-    <GuestAuthProvider>
-      <DoaInner />
-    </GuestAuthProvider>
   );
 }
 

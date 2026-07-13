@@ -42,15 +42,17 @@ function DeviceFrame({ device, orientation, children }: { device: DeviceType; or
   );
 }
 
-export function SplitEditor({ title, children, preview }: { title: string; children: ReactNode; preview: ReactNode }) {
-  const [device, setDevice] = useState<DeviceType>("desktop");
+export function SplitEditor({ title, children, preview, device: deviceProp }: { title: string; children: ReactNode; preview: ReactNode; device?: DeviceType }) {
+  const [device, setDevice] = useState<DeviceType>(deviceProp || "desktop");
   const [orientation, setOrientation] = useState<Orientation>("portrait");
   const [zoom, setZoom] = useState<ZoomLevel>("fit");
   const [fullscreen, setFullscreen] = useState(false);
   const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
 
-  const zoomScale = zoom === "fit" ? null : parseInt(zoom) / 100;
+  // Sync external device prop if provided
+  if (deviceProp && deviceProp !== device) setDevice(deviceProp);
 
+  const zoomScale = zoom === "fit" ? null : parseInt(zoom) / 100;
   const previewContent = (
     <div className="flex items-center justify-center p-4 bg-gray-50 min-h-full">
       <div style={zoomScale ? { transform: `scale(${zoomScale})`, transformOrigin: "center top" } : undefined}>

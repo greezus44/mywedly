@@ -1,201 +1,97 @@
-import { useState, useEffect, type CSSProperties } from "react";
+import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Phone, Mail, MapPin, Heart } from "lucide-react";
+import { useGuestAuth } from "../../lib/guest-auth";
 import { useLang } from "../../lib/lang-context";
-import { useGuestAuth, GuestAuthProvider } from "../../lib/guest-auth";
-import { themeToCssVars, getTheme, coverToCssVars, getCoverConfig, getCoverContent } from "../../lib/theme";
+import { themeToCssVars, coverToCssVars, getTheme, getCoverConfig, getCoverContent, getLogoConfig, getLogoStyle } from "../../lib/theme";
+import { getDeviceType } from "../../lib/utils";
 
-function ContactInner() {
+export function Contact() {
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const params = useParams();
-  const slug = params.slug || "";
-  const { session, loading } = useGuestAuth();
+  const { session } = useGuestAuth();
   const { t } = useLang();
 
-  const wedding = session?.wedding ?? null;
-
   useEffect(() => {
-    if (loading) return;
-    if (!session) {
-      navigate(`/w/${slug}/login`, { replace: true });
-    }
-  }, [session, loading, slug, navigate]);
+    if (!session) navigate(`/w/${slug}/login`, { replace: true });
+  }, [session, slug, navigate]);
 
-  if (loading || !session) {
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ background: "var(--color-bg)" } as CSSProperties}
-      >
-        <Heart size={24} className="animate-pulse" style={{ color: "var(--color-primary)" }} />
-      </div>
-    );
-  }
+  if (!session) return null;
 
+  const wedding = session.wedding;
   const theme = getTheme(wedding);
   const cover = getCoverConfig(wedding);
   const content = getCoverContent(wedding);
+  const logo = getLogoConfig(wedding);
+  const device = getDeviceType();
 
-  const phone = content.contact_phone || wedding?.contact_phone || null;
-  const email = content.contact_email || null;
-  const address = content.contact_address || wedding?.location || null;
+  const showLogo = logo.visible && logo.url && (logo.showOnPages === "all-pages" || (logo.showOnPages === "custom" && logo.customPages.includes("contact")));
+
+  const phone = content.contact_phone || wedding.contact_phone;
+  const email = content.contact_email;
+  const address = content.contact_address || wedding.location;
 
   return (
     <div
-      className="min-h-screen pb-16"
-      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover) } as CSSProperties}
+      className="min-h-screen px-6 py-12 md:py-20"
+      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover) } as React.CSSProperties}
     >
-      {/* Header */}
-      <section className="px-6 md:px-12 pt-12 md:pt-16 text-center animate-fade-in opacity-0-init">
-        <p
-          className="font-ui text-xs uppercase tracking-luxe mb-3"
-          style={{ color: "var(--color-primary)" }}
-        >
-          {t("contact")}
-        </p>
-        <h1
-          className="font-script text-3xl md:text-5xl mb-4"
-          style={{ color: "var(--color-text)" }}
-        >
-          {t("contact")}
-        </h1>
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="h-px w-12" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
-          <Heart size={14} style={{ color: "var(--color-primary)" }} />
-          <div className="h-px w-12" style={{ background: "var(--color-primary)", opacity: 0.4 }} />
+      <div className="max-w-2xl mx-auto text-center">
+        {showLogo && (
+          <div className="flex justify-center mb-8 animate-fade-in">
+            <img src={logo.url!} alt="Logo" style={getLogoStyle(logo, device)} />
+          </div>
+        )}
+
+        <div className="animate-fade-in-up">
+          <h1 className="font-script text-4xl text-[var(--color-primary)] mb-3">{t("contact")}</h1>
+
+          <div className="flex items-center justify-center gap-3 my-6">
+            <div className="h-px w-16 bg-[var(--color-primary)]/30" />
+            <Heart size={18} className="text-[var(--color-primary)]" />
+            <div className="h-px w-16 bg-[var(--color-primary)]/30" />
+          </div>
+
+          <div className="space-y-6 mt-10">
+            {phone && (
+              <a
+                href={`tel:${phone}`}
+                className="flex flex-col items-center gap-2 p-6 bg-[var(--color-surface)] border border-[var(--color-border)]/20 rounded-lg hover:border-[var(--color-primary)]/50 transition-all animate-fade-in-up opacity-0-init delay-200"
+              >
+                <div className="w-12 h-12 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center">
+                  <Phone size={20} className="text-[var(--color-primary)]" />
+                </div>
+                <p className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">{t("contact")}</p>
+                <p className="font-body text-lg text-[var(--color-text)]">{phone}</p>
+              </a>
+            )}
+
+            {email && (
+              <a
+                href={`mailto:${email}`}
+                className="flex flex-col items-center gap-2 p-6 bg-[var(--color-surface)] border border-[var(--color-border)]/20 rounded-lg hover:border-[var(--color-primary)]/50 transition-all animate-fade-in-up opacity-0-init delay-300"
+              >
+                <div className="w-12 h-12 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center">
+                  <Mail size={20} className="text-[var(--color-primary)]" />
+                </div>
+                <p className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">Email</p>
+                <p className="font-body text-lg text-[var(--color-text)]">{email}</p>
+              </a>
+            )}
+
+            {address && (
+              <div className="flex flex-col items-center gap-2 p-6 bg-[var(--color-surface)] border border-[var(--color-border)]/20 rounded-lg animate-fade-in-up opacity-0-init delay-400">
+                <div className="w-12 h-12 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center">
+                  <MapPin size={20} className="text-[var(--color-primary)]" />
+                </div>
+                <p className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">{t("address")}</p>
+                <p className="font-body text-lg text-[var(--color-text)]">{address}</p>
+              </div>
+            )}
+          </div>
         </div>
-      </section>
-
-      {/* Contact cards */}
-      <section className="px-6 md:px-12 max-w-2xl mx-auto space-y-4">
-        {/* Phone */}
-        {phone && (
-          <a
-            href={`tel:${phone}`}
-            className="flex items-center gap-4 p-6 animate-fade-in-up opacity-0-init delay-200 transition-all hover:scale-[1.02]"
-            style={{
-              background: "var(--color-surface)",
-              borderRadius: "var(--radius, 8px)",
-              border: "1px solid var(--color-border)",
-              borderColor: "color-mix(in srgb, var(--color-border) 20%, transparent)",
-              boxShadow: "0 2px 12px rgba(184, 151, 58, 0.06)",
-            }}
-          >
-            <div
-              className="flex items-center justify-center w-12 h-12 rounded-full flex-shrink-0"
-              style={{ background: "color-mix(in srgb, var(--color-primary) 12%, transparent)" }}
-            >
-              <Phone size={20} style={{ color: "var(--color-primary)" }} />
-            </div>
-            <div>
-              <p
-                className="font-ui text-[10px] uppercase tracking-luxe mb-1"
-                style={{ color: "var(--color-text-muted)" }}
-              >
-                {t("contact")} • Phone
-              </p>
-              <p
-                className="font-body text-lg"
-                style={{ color: "var(--color-text)" }}
-              >
-                {phone}
-              </p>
-            </div>
-          </a>
-        )}
-
-        {/* Email */}
-        {email && (
-          <a
-            href={`mailto:${email}`}
-            className="flex items-center gap-4 p-6 animate-fade-in-up opacity-0-init delay-300 transition-all hover:scale-[1.02]"
-            style={{
-              background: "var(--color-surface)",
-              borderRadius: "var(--radius, 8px)",
-              border: "1px solid var(--color-border)",
-              borderColor: "color-mix(in srgb, var(--color-border) 20%, transparent)",
-              boxShadow: "0 2px 12px rgba(184, 151, 58, 0.06)",
-            }}
-          >
-            <div
-              className="flex items-center justify-center w-12 h-12 rounded-full flex-shrink-0"
-              style={{ background: "color-mix(in srgb, var(--color-primary) 12%, transparent)" }}
-            >
-              <Mail size={20} style={{ color: "var(--color-primary)" }} />
-            </div>
-            <div>
-              <p
-                className="font-ui text-[10px] uppercase tracking-luxe mb-1"
-                style={{ color: "var(--color-text-muted)" }}
-              >
-                {t("contact")} • Email
-              </p>
-              <p
-                className="font-body text-lg break-all"
-                style={{ color: "var(--color-text)" }}
-              >
-                {email}
-              </p>
-            </div>
-          </a>
-        )}
-
-        {/* Address */}
-        {address && (
-          <div
-            className="flex items-start gap-4 p-6 animate-fade-in-up opacity-0-init delay-400"
-            style={{
-              background: "var(--color-surface)",
-              borderRadius: "var(--radius, 8px)",
-              border: "1px solid var(--color-border)",
-              borderColor: "color-mix(in srgb, var(--color-border) 20%, transparent)",
-              boxShadow: "0 2px 12px rgba(184, 151, 58, 0.06)",
-            }}
-          >
-            <div
-              className="flex items-center justify-center w-12 h-12 rounded-full flex-shrink-0"
-              style={{ background: "color-mix(in srgb, var(--color-primary) 12%, transparent)" }}
-            >
-              <MapPin size={20} style={{ color: "var(--color-primary)" }} />
-            </div>
-            <div>
-              <p
-                className="font-ui text-[10px] uppercase tracking-luxe mb-1"
-                style={{ color: "var(--color-text-muted)" }}
-              >
-                {t("address")}
-              </p>
-              <p
-                className="font-body text-lg leading-relaxed"
-                style={{ color: "var(--color-text)" }}
-              >
-                {address}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Fallback if no contact info */}
-        {!phone && !email && !address && (
-          <div className="text-center py-12 animate-fade-in opacity-0-init">
-            <p
-              className="font-ui text-sm uppercase tracking-wider-luxe"
-              style={{ color: "var(--color-text-muted)" }}
-            >
-              {t("loading")}
-            </p>
-          </div>
-        )}
-      </section>
+      </div>
     </div>
-  );
-}
-
-export function Contact() {
-  return (
-    <GuestAuthProvider>
-      <ContactInner />
-    </GuestAuthProvider>
   );
 }
 

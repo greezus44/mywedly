@@ -5,21 +5,19 @@ import { AdminLayout } from "./admin-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Select, ColorInput } from "../../components/ui/Input";
+import { Input, Label, Select, ColorInput } from "../../components/ui/Input";
 import { Card, Toast } from "../../components/ui/index";
 import { FormField } from "../../components/ui/ImageUpload";
-import { THEME_PRESETS, DEFAULT_THEME, DEFAULT_COVER_CONFIG, FONT_OPTIONS } from "../../lib/theme";
+import { THEME_PRESETS, DEFAULT_THEME, FONT_OPTIONS } from "../../lib/theme";
 import { cn } from "../../lib/utils";
-import { Save, Send, Check } from "lucide-react";
+import { Save, Palette, Check } from "lucide-react";
 
 export function ThemeEditorPage() {
   const queryClient = useQueryClient();
-  const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
-  const [cover, setCover] = useState<CoverConfig>(DEFAULT_COVER_CONFIG);
-  const [themeName, setThemeName] = useState("My Custom Theme");
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<string>("presets");
 
-  const { data: wedding, isLoading, error } = useQuery<Wedding>({
+  const { data: wedding, isLoading } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -30,246 +28,204 @@ export function ThemeEditorPage() {
     },
   });
 
-  const { data: savedThemes } = useQuery<SavedTheme[]>({
+  const draftTheme: ThemeConfig = (wedding?.draft_theme_config && "colors" in wedding.draft_theme_config ? wedding.draft_theme_config : wedding?.theme_config && "colors" in wedding.theme_config ? wedding.theme_config : DEFAULT_THEME) as ThemeConfig;
+
+  const [theme, setTheme] = useState<ThemeConfig>(draftTheme);
+
+  useEffect(() => {
+    if (wedding && JSON.stringify(draftTheme) !== JSON.stringify(theme)) {
+      setTheme(draftTheme);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wedding]);
+
+  const { data: savedThemes } = useQuery({
     queryKey: ["saved-themes", wedding?.id],
     queryFn: async () => {
       if (!wedding) return [];
-      const { data } = await supabase.from("saved_themes").select("*").eq("wedding_id", wedding.id);
+      const { data } = await supabase.from("saved_themes").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false });
       return (data || []) as SavedTheme[];
     },
     enabled: !!wedding,
   });
 
-  useEffect(() => {
-    if (wedding) {
-      const draftT = wedding.draft_theme_config;
-      if (draftT && "colors" in draftT) setTheme(draftT as ThemeConfig);
-      else if (wedding.theme_config && "colors" in wedding.theme_config) setTheme(wedding.theme_config as ThemeConfig);
-      const draftC = wedding.draft_cover_config;
-      if (draftC && "colors" in draftC) setCover(draftC as CoverConfig);
-      else if (wedding.cover_config && "colors" in wedding.cover_config) setCover(wedding.cover_config as CoverConfig);
-    }
-  }, [wedding]);
+  const saveDraft = useMutation({
+    mutationFn: async (newTheme: ThemeConfig) => {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error("Not authenticated");
+      const { error } = await supabase.from("weddings").update({ draft_theme_config: newTheme }).eq("created_by", user.user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wedding"] }); setToast("Draft saved"); },
+  });
 
-  const updateColor = (key: string, value: string) => setTheme((p) => ({ ...p, colors: { ...p.colors, [key]: value } }));
-  const updateTypography = (key: string, value: string) => setTheme((p) => ({ ...p, typography: { ...p.typography, [key]: value } }));
+  const publish = useMutation({
+    mutationFn: async () => {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error("Not authenticated");
+      const { error } = await supabase.from("weddings").update({ theme_config: theme, draft_theme_config: theme }).eq("created_by", user.user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wedding"] }); setToast("Theme published successfully"); },
+  });
 
-  const applyPreset = (preset: typeof THEME_PRESETS[0]) => {
-    setTheme(preset.theme);
-    setCover(preset.cover);
-    setThemeName(preset.name);
-    setToast({ message: `Applied ${preset.name}`, type: "success" });
+  const saveCustomTheme = useMutation({
+    mutationFn: async (name: string) => {
+      if (!wedding) throw new Error("No wedding");
+      const { error } = await supabase.from("saved_themes").insert({ wedding_id: wedding.id, name, theme_config: theme, cover_config: (wedding.draft_cover_config || wedding.cover_config) as CoverConfig });
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["saved-themes"] }); setToast("Theme saved to presets"); },
+  });
+
+  const update = (patch: Partial<ThemeConfig>) => {
+    const newTheme = { ...theme, ...patch };
+    setTheme(newTheme);
+    saveDraft.mutate(newTheme);
   };
 
-  const saveDraftMutation = useMutation({
-    mutationFn: async () => {
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("weddings").update({ draft_theme_config: theme, draft_cover_config: cover }).eq("created_by", user.user.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["wedding"] });
-      setToast({ message: "Draft saved", type: "success" });
-    },
-    onError: () => setToast({ message: "Failed to save draft", type: "error" }),
-  });
+  if (isLoading) return <AdminLayout><div className="flex items-center justify-center h-full"><div className="animate-pulse text-gray-400">Loading...</div></div></AdminLayout>;
+  if (!wedding) return <AdminLayout><div className="p-6 text-gray-500">Wedding not found</div></AdminLayout>;
 
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("weddings").update({ draft_theme_config: theme, draft_cover_config: cover, theme_config: theme, cover_config: cover }).eq("created_by", user.user.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["wedding"] });
-      setToast({ message: "Theme published!", type: "success" });
-    },
-    onError: () => setToast({ message: "Failed to publish", type: "error" }),
-  });
-
-  const saveCustomThemeMutation = useMutation({
-    mutationFn: async () => {
-      if (!wedding) throw new Error("No wedding");
-      const { error } = await supabase.from("saved_themes").insert({ wedding_id: wedding.id, name: themeName, theme_config: theme, cover_config: cover });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["saved-themes", wedding?.id] });
-      setToast({ message: "Custom theme saved!", type: "success" });
-    },
-    onError: () => setToast({ message: "Failed to save custom theme", type: "error" }),
-  });
-
-  if (isLoading) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-full p-8">
-          <p className="font-ui text-sm text-gray-500">Loading theme editor...</p>
-        </div>
-      </AdminLayout>
-    );
-  }
-
-  if (error || !wedding) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-full p-8">
-          <p className="font-ui text-sm text-red-500">Unable to load wedding data.</p>
-        </div>
-      </AdminLayout>
-    );
-  }
-
-  const previewWedding = { ...wedding, draft_theme_config: theme, draft_cover_config: cover } as Wedding;
-  const colors = theme.colors || {};
-  const typography = theme.typography || {};
+  const tc = theme.colors || {};
+  const ty = theme.typography || {};
   const ui = theme.ui || {};
+
+  const sections = [
+    { key: "presets", label: "Presets" },
+    { key: "colors", label: "Colours" },
+    { key: "typography", label: "Typography" },
+    { key: "ui", label: "UI" },
+    { key: "saved", label: "Saved" },
+  ];
+
+  const previewWedding = { ...wedding, draft_theme_config: theme } as Wedding;
 
   return (
     <AdminLayout>
-      <div className="flex flex-col h-full">
-        <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200">
-          <h1 className="font-ui text-base font-semibold text-gray-900">Theme Editor</h1>
+      <SplitEditor title="Theme Editor" preview={<HomePreview wedding={previewWedding} />}>
+        <div className="space-y-6">
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => saveDraftMutation.mutate()} disabled={saveDraftMutation.isPending}>
-              <Save size={14} className="mr-1.5" /> Save Draft
-            </Button>
-            <button
-              onClick={() => publishMutation.mutate()}
-              disabled={publishMutation.isPending}
-              className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 bg-indigo-600 text-white font-ui text-xs font-medium uppercase tracking-wider rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
-            >
-              <Send size={14} /> Publish
-            </button>
+            <Palette size={18} className="text-indigo-600" />
+            <h2 className="font-ui text-base font-semibold text-gray-900">Theme Editor</h2>
           </div>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <SplitEditor title="Theme Preview" preview={<HomePreview wedding={previewWedding} />}>
-            <Card className="p-5 mb-4">
-              <h3 className="font-ui text-sm font-semibold text-gray-900 mb-4">Preset Themes</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {THEME_PRESETS.map((preset) => (
-                  <button
-                    key={preset.name}
-                    onClick={() => applyPreset(preset)}
-                    className={cn(
-                      "p-3 rounded-lg border-2 transition-all text-left hover:border-indigo-400",
-                      theme.colors?.primary === preset.theme.colors?.primary ? "border-indigo-500 bg-indigo-50" : "border-gray-200"
-                    )}
-                  >
-                    <div className="flex items-center gap-1.5 mb-2">
-                      {preset.theme.colors && [preset.theme.colors.primary, preset.theme.colors.primaryLight, preset.theme.colors.primaryDark].map((c, i) => (
-                        <div key={i} className="w-6 h-6 rounded-full border border-gray-200" style={{ background: c }} />
-                      ))}
-                    </div>
-                    <p className="font-ui text-xs font-medium text-gray-900">{preset.name}</p>
-                    {theme.colors?.primary === preset.theme.colors?.primary && <Check size={12} className="text-indigo-600 mt-1" />}
-                  </button>
-                ))}
-              </div>
-            </Card>
 
-            <Card className="p-5 mb-4">
-              <h3 className="font-ui text-sm font-semibold text-gray-900 mb-4">Custom Colours</h3>
-              <div className="space-y-4">
-                <FormField label="Primary"><ColorInput value={colors.primary || "#b8973a"} onChange={(v) => updateColor("primary", v)} /></FormField>
-                <FormField label="Primary Light"><ColorInput value={colors.primaryLight || "#d4b85c"} onChange={(v) => updateColor("primaryLight", v)} /></FormField>
-                <FormField label="Primary Dark"><ColorInput value={colors.primaryDark || "#8a6f28"} onChange={(v) => updateColor("primaryDark", v)} /></FormField>
-                <FormField label="Background"><ColorInput value={colors.background || "#f5edda"} onChange={(v) => updateColor("background", v)} /></FormField>
-                <FormField label="Background Light"><ColorInput value={colors.backgroundLight || "#faf5e8"} onChange={(v) => updateColor("backgroundLight", v)} /></FormField>
-                <FormField label="Surface"><ColorInput value={colors.surface || "#ffffff"} onChange={(v) => updateColor("surface", v)} /></FormField>
-                <FormField label="Text"><ColorInput value={colors.text || "#2a2a2a"} onChange={(v) => updateColor("text", v)} /></FormField>
-                <FormField label="Text Muted"><ColorInput value={colors.textMuted || "#8a8a8a"} onChange={(v) => updateColor("textMuted", v)} /></FormField>
-                <FormField label="Border"><ColorInput value={colors.border || "#b8973a"} onChange={(v) => updateColor("border", v)} /></FormField>
-                <FormField label="Accent"><ColorInput value={colors.accent || "#c9a0a0"} onChange={(v) => updateColor("accent", v)} /></FormField>
-              </div>
-            </Card>
+          {/* Section tabs */}
+          <div className="flex gap-1 flex-wrap border-b border-gray-100 pb-3">
+            {sections.map((s) => (
+              <button key={s.key} onClick={() => setActiveSection(s.key)} className={cn("px-3 py-1.5 text-xs font-ui font-medium rounded-lg transition-all", activeSection === s.key ? "bg-indigo-50 text-indigo-600" : "text-gray-500 hover:text-gray-700")}>{s.label}</button>
+            ))}
+          </div>
 
-            <Card className="p-5 mb-4">
-              <h3 className="font-ui text-sm font-semibold text-gray-900 mb-4">Typography</h3>
-              <div className="space-y-4">
-                <FormField label="Script Font">
-                  <Select value={typography.scriptFont || "Playfair Display"} onChange={(e) => updateTypography("scriptFont", e.target.value)}>
-                    {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-                  </Select>
-                </FormField>
-                <FormField label="Heading Font">
-                  <Select value={typography.headingFont || "Cormorant Garamond"} onChange={(e) => updateTypography("headingFont", e.target.value)}>
-                    {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-                  </Select>
-                </FormField>
-                <FormField label="Body Font">
-                  <Select value={typography.bodyFont || "Cormorant Garamond"} onChange={(e) => updateTypography("bodyFont", e.target.value)}>
-                    {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-                  </Select>
-                </FormField>
-                <FormField label="UI Font">
-                  <Select value={typography.uiFont || "Jost"} onChange={(e) => updateTypography("uiFont", e.target.value)}>
-                    {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-                  </Select>
-                </FormField>
-                <FormField label="Script Size"><Input value={typography.scriptSize || "3rem"} onChange={(e) => updateTypography("scriptSize", e.target.value)} /></FormField>
-                <FormField label="Heading Size"><Input value={typography.headingSize || "1.5rem"} onChange={(e) => updateTypography("headingSize", e.target.value)} /></FormField>
-                <FormField label="Body Size"><Input value={typography.bodySize || "1.0625rem"} onChange={(e) => updateTypography("bodySize", e.target.value)} /></FormField>
-                <FormField label="Letter Spacing"><Input value={typography.letterSpacing || "0.15em"} onChange={(e) => updateTypography("letterSpacing", e.target.value)} /></FormField>
-              </div>
-            </Card>
-
-            <Card className="p-5 mb-4">
-              <h3 className="font-ui text-sm font-semibold text-gray-900 mb-4">UI</h3>
-              <div className="space-y-4">
-                <FormField label="Corner Radius">
-                  <Input value={ui.radius || "8px"} onChange={(e) => setTheme((p) => ({ ...p, ui: { ...p.ui, radius: e.target.value } }))} placeholder="8px" />
-                </FormField>
-                <FormField label="Button Radius">
-                  <Input value={ui.buttonRadius || "8px"} onChange={(e) => setTheme((p) => ({ ...p, ui: { ...p.ui, buttonRadius: e.target.value } }))} placeholder="8px" />
-                </FormField>
-                <FormField label="Button Style">
-                  <Select value={ui.buttonStyle || "outline"} onChange={(e) => setTheme((p) => ({ ...p, ui: { ...p.ui, buttonStyle: e.target.value } }))}>
-                    <option value="outline">Outline</option>
-                    <option value="solid">Solid</option>
-                    <option value="underline">Underline</option>
-                  </Select>
-                </FormField>
-              </div>
-            </Card>
-
-            <Card className="p-5 mb-4">
-              <h3 className="font-ui text-sm font-semibold text-gray-900 mb-4">Save Custom Theme</h3>
-              <div className="space-y-3">
-                <FormField label="Theme Name">
-                  <Input value={themeName} onChange={(e) => setThemeName(e.target.value)} placeholder="My Custom Theme" />
-                </FormField>
-                <Button variant="outline" size="sm" onClick={() => saveCustomThemeMutation.mutate()} disabled={saveCustomThemeMutation.isPending}>
-                  <Save size={14} className="mr-1.5" /> Save to Saved Themes
-                </Button>
-                {(savedThemes || []).length > 0 && (
-                  <div className="pt-2">
-                    <p className="font-ui text-xs font-medium text-gray-500 mb-2">Saved Themes</p>
-                    <div className="space-y-1.5">
-                      {(savedThemes || []).map((st) => (
-                        <button
-                          key={st.id}
-                          onClick={() => { setTheme(st.theme_config); setCover(st.cover_config); setThemeName(st.name); }}
-                          className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-indigo-50 rounded-lg transition-colors"
-                        >
-                          <span className="font-ui text-xs font-medium text-gray-700">{st.name}</span>
-                          <div className="flex items-center gap-1">
-                            <div className="w-4 h-4 rounded-full border border-gray-200" style={{ background: st.theme_config.colors?.primary }} />
-                          </div>
-                        </button>
-                      ))}
-                    </div>
+          {activeSection === "presets" && (
+            <div className="space-y-3">
+              <p className="font-ui text-xs text-gray-500">Choose a preset theme to apply instantly.</p>
+              {THEME_PRESETS.map((preset) => (
+                <button key={preset.name} onClick={() => { setTheme(preset.theme); saveDraft.mutate(preset.theme); }} className="w-full flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-indigo-400 transition-colors text-left">
+                  <div className="flex gap-1">
+                    <div className="w-6 h-6 rounded-full border border-gray-200" style={{ background: preset.theme.colors?.primary }} />
+                    <div className="w-6 h-6 rounded-full border border-gray-200" style={{ background: preset.theme.colors?.background }} />
+                    <div className="w-6 h-6 rounded-full border border-gray-200" style={{ background: preset.theme.colors?.accent }} />
                   </div>
+                  <span className="font-ui text-sm text-gray-900 flex-1">{preset.name}</span>
+                  {JSON.stringify(theme) === JSON.stringify(preset.theme) && <Check size={16} className="text-indigo-600" />}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {activeSection === "colors" && (
+            <div className="space-y-4">
+              <FormField label="Primary Colour"><ColorInput value={tc.primary || "#b8973a"} onChange={(v) => update({ colors: { ...tc, primary: v } })} /></FormField>
+              <FormField label="Primary Light"><ColorInput value={tc.primaryLight || "#d4b85c"} onChange={(v) => update({ colors: { ...tc, primaryLight: v } })} /></FormField>
+              <FormField label="Primary Dark"><ColorInput value={tc.primaryDark || "#8a6f28"} onChange={(v) => update({ colors: { ...tc, primaryDark: v } })} /></FormField>
+              <FormField label="Background"><ColorInput value={tc.background || "#f5edda"} onChange={(v) => update({ colors: { ...tc, background: v } })} /></FormField>
+              <FormField label="Background Light"><ColorInput value={tc.backgroundLight || "#faf5e8"} onChange={(v) => update({ colors: { ...tc, backgroundLight: v } })} /></FormField>
+              <FormField label="Surface"><ColorInput value={tc.surface || "#ffffff"} onChange={(v) => update({ colors: { ...tc, surface: v } })} /></FormField>
+              <FormField label="Text"><ColorInput value={tc.text || "#2a2a2a"} onChange={(v) => update({ colors: { ...tc, text: v } })} /></FormField>
+              <FormField label="Text Muted"><ColorInput value={tc.textMuted || "#8a8a8a"} onChange={(v) => update({ colors: { ...tc, textMuted: v } })} /></FormField>
+              <FormField label="Border"><ColorInput value={tc.border || "#b8973a"} onChange={(v) => update({ colors: { ...tc, border: v } })} /></FormField>
+              <FormField label="Accent"><ColorInput value={tc.accent || "#c9a0a0"} onChange={(v) => update({ colors: { ...tc, accent: v } })} /></FormField>
+            </div>
+          )}
+
+          {activeSection === "typography" && (
+            <div className="space-y-4">
+              <FormField label="Script Font">
+                <Select value={ty.scriptFont || "Playfair Display"} onChange={(e) => update({ typography: { ...ty, scriptFont: e.target.value } })} className="!bg-white !border-gray-200 !text-gray-700">
+                  {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+                </Select>
+              </FormField>
+              <FormField label="Heading Font">
+                <Select value={ty.headingFont || "Cormorant Garamond"} onChange={(e) => update({ typography: { ...ty, headingFont: e.target.value } })} className="!bg-white !border-gray-200 !text-gray-700">
+                  {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+                </Select>
+              </FormField>
+              <FormField label="Body Font">
+                <Select value={ty.bodyFont || "Cormorant Garamond"} onChange={(e) => update({ typography: { ...ty, bodyFont: e.target.value } })} className="!bg-white !border-gray-200 !text-gray-700">
+                  {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+                </Select>
+              </FormField>
+              <FormField label="UI Font">
+                <Select value={ty.uiFont || "Jost"} onChange={(e) => update({ typography: { ...ty, uiFont: e.target.value } })} className="!bg-white !border-gray-200 !text-gray-700">
+                  {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
+                </Select>
+              </FormField>
+              <FormField label="Script Size"><Input value={ty.scriptSize || "3rem"} onChange={(e) => update({ typography: { ...ty, scriptSize: e.target.value } })} /></FormField>
+              <FormField label="Heading Size"><Input value={ty.headingSize || "1.5rem"} onChange={(e) => update({ typography: { ...ty, headingSize: e.target.value } })} /></FormField>
+              <FormField label="Body Size"><Input value={ty.bodySize || "1.0625rem"} onChange={(e) => update({ typography: { ...ty, bodySize: e.target.value } })} /></FormField>
+              <FormField label="Letter Spacing"><Input value={ty.letterSpacing || "0.15em"} onChange={(e) => update({ typography: { ...ty, letterSpacing: e.target.value } })} /></FormField>
+            </div>
+          )}
+
+          {activeSection === "ui" && (
+            <div className="space-y-4">
+              <FormField label="Corner Radius"><Input value={ui.radius || "8px"} onChange={(e) => update({ ui: { ...ui, radius: e.target.value } })} /></FormField>
+              <FormField label="Button Radius"><Input value={ui.buttonRadius || "8px"} onChange={(e) => update({ ui: { ...ui, buttonRadius: e.target.value } })} /></FormField>
+              <FormField label="Button Style">
+                <Select value={ui.buttonStyle || "outline"} onChange={(e) => update({ ui: { ...ui, buttonStyle: e.target.value } })} className="!bg-white !border-gray-200 !text-gray-700">
+                  <option value="outline">Outline</option>
+                  <option value="solid">Solid</option>
+                </Select>
+              </FormField>
+            </div>
+          )}
+
+          {activeSection === "saved" && (
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <Input id="theme-name" placeholder="Theme name" className="!bg-white !border-gray-200 !text-gray-700" />
+                <Button variant="primary" size="md" onClick={() => { const input = document.getElementById("theme-name") as HTMLInputElement; if (input.value) { saveCustomTheme.mutate(input.value); input.value = ""; } }}>
+                  <Save size={14} className="mr-1" /> Save
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {savedThemes && savedThemes.length > 0 ? (
+                  savedThemes.map((st) => (
+                    <button key={st.id} onClick={() => { setTheme(st.theme_config); saveDraft.mutate(st.theme_config); }} className="w-full flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-lg hover:border-indigo-400 transition-colors text-left">
+                      <div className="flex gap-1">
+                        <div className="w-5 h-5 rounded-full border border-gray-200" style={{ background: st.theme_config.colors?.primary }} />
+                        <div className="w-5 h-5 rounded-full border border-gray-200" style={{ background: st.theme_config.colors?.background }} />
+                      </div>
+                      <span className="font-ui text-sm text-gray-900 flex-1">{st.name}</span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="font-ui text-sm text-gray-400 text-center py-4">No saved themes yet</p>
                 )}
               </div>
-            </Card>
-          </SplitEditor>
+            </div>
+          )}
+
+          {/* Publish button */}
+          <div className="pt-4 border-t border-gray-100">
+            <Button variant="primary" size="md" className="w-full" onClick={() => publish.mutate()} disabled={publish.isPending}>
+              <Save size={14} className="mr-2" /> Publish Theme
+            </Button>
+          </div>
         </div>
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      </div>
+      </SplitEditor>
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </AdminLayout>
   );
 }

@@ -3,8 +3,7 @@ import JSZip from "jszip";
 
 export async function generateQRDataURL(text: string, options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }): Promise<string> {
   return QRCode.toDataURL(text, {
-    width: options?.width || 256,
-    margin: options?.margin || 2,
+    width: options?.width || 256, margin: options?.margin || 2,
     color: { dark: options?.color?.dark || "#000000", light: options?.color?.light || "#ffffff" },
     errorCorrectionLevel: "H",
   });
@@ -12,9 +11,7 @@ export async function generateQRDataURL(text: string, options?: { width?: number
 
 export async function generateQRSVG(text: string, options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }): Promise<string> {
   return QRCode.toString(text, {
-    type: "svg",
-    width: options?.width || 256,
-    margin: options?.margin || 2,
+    type: "svg", width: options?.width || 256, margin: options?.margin || 2,
     color: { dark: options?.color?.dark || "#000000", light: options?.color?.light || "#ffffff" },
     errorCorrectionLevel: "H",
   });
@@ -23,9 +20,7 @@ export async function generateQRSVG(text: string, options?: { width?: number; ma
 export async function downloadQRPNG(text: string, filename: string, width = 512): Promise<void> {
   const dataUrl = await generateQRDataURL(text, { width });
   const link = document.createElement("a");
-  link.href = dataUrl;
-  link.download = filename;
-  link.click();
+  link.href = dataUrl; link.download = filename; link.click();
 }
 
 export async function downloadQRSVG(text: string, filename: string, width = 512): Promise<void> {
@@ -33,9 +28,7 @@ export async function downloadQRSVG(text: string, filename: string, width = 512)
   const blob = new Blob([svg], { type: "image/svg+xml" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
+  link.href = url; link.download = filename; link.click();
   URL.revokeObjectURL(url);
 }
 
@@ -43,11 +36,7 @@ export async function downloadQRHighRes(text: string, filename: string, width = 
   await downloadQRPNG(text, filename, width);
 }
 
-export async function downloadAllGuestQRsAsZip(
-  items: { guestName: string; token: string }[],
-  filename: string,
-  urlBuilder: (token: string) => string
-): Promise<void> {
+export async function downloadAllGuestQRsAsZip(items: { guestName: string; token: string }[], filename: string, urlBuilder: (token: string) => string): Promise<void> {
   const zip = new JSZip();
   for (const item of items) {
     const dataUrl = await generateQRDataURL(urlBuilder(item.token), { width: 512 });
@@ -58,17 +47,11 @@ export async function downloadAllGuestQRsAsZip(
   const blob = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
+  link.href = url; link.download = filename; link.click();
   URL.revokeObjectURL(url);
 }
 
-export async function downloadAllGuestQRsAsPDF(
-  items: { guestName: string; token: string }[],
-  filename: string,
-  urlBuilder: (token: string) => string
-): Promise<void> {
+export async function downloadAllGuestQRsAsPDF(items: { guestName: string; token: string }[], filename: string, urlBuilder: (token: string) => string): Promise<void> {
   const { default: jsPDF } = await import("jspdf");
   const pdf = new jsPDF();
   let y = 20;
@@ -83,9 +66,7 @@ export async function downloadAllGuestQRsAsPDF(
   pdf.save(filename);
 }
 
-export function copyToClipboard(text: string): Promise<void> {
-  return navigator.clipboard.writeText(text);
-}
+export function copyToClipboard(text: string): Promise<void> { return navigator.clipboard.writeText(text); }
 
 export function getShareUrl(platform: string, url: string, text: string): string {
   const encodedUrl = encodeURIComponent(url);

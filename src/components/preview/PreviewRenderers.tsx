@@ -1,29 +1,43 @@
-import type { Wedding, WeddingEvent, CoverConfig } from "../../lib/supabase";
-import { getCoverContent, themeToCssVars, coverToCssVars, DEFAULT_COVER_CONFIG } from "../../lib/theme";
+import type { Wedding, WeddingEvent, LogoConfig } from "../../lib/supabase";
+import { getCoverContent, themeToCssVars, coverToCssVars, DEFAULT_COVER_CONFIG, getLogoConfig, getLogoStyle, getLogoPositionClasses } from "../../lib/theme";
 import { getCountdown, formatDate, formatTime } from "../../lib/utils";
 import { useLang } from "../../lib/lang-context";
+import type { DeviceType } from "./SplitEditor";
 
-function mergeCover(wedding: Wedding): CoverConfig {
+function mergeCover(wedding: Wedding | null) {
+  if (!wedding) return DEFAULT_COVER_CONFIG;
   const draft = wedding.draft_cover_config;
-  if (draft && "colors" in draft) return draft as CoverConfig;
-  if (wedding.cover_config && "colors" in wedding.cover_config) return wedding.cover_config as CoverConfig;
+  if (draft && "colors" in draft) return draft as any;
+  if (wedding.cover_config && "colors" in wedding.cover_config) return wedding.cover_config as any;
   return DEFAULT_COVER_CONFIG;
 }
 
-function coverStyle(wedding: Wedding): React.CSSProperties {
+function coverStyle(wedding: Wedding | null): React.CSSProperties {
   const cover = mergeCover(wedding);
-  return { ...themeToCssVars(wedding.theme_config && "colors" in wedding.theme_config ? (wedding.theme_config as any) : undefined), ...coverToCssVars(cover) } as React.CSSProperties;
+  const theme = wedding?.theme_config && "colors" in wedding.theme_config ? (wedding.theme_config as any) : undefined;
+  return { ...themeToCssVars(theme), ...coverToCssVars(cover) } as React.CSSProperties;
 }
 
-export function CoverPreview({ wedding }: { wedding: Wedding }) {
+function LogoRenderer({ wedding, device }: { wedding: Wedding | null; device: DeviceType }) {
+  const logo = getLogoConfig(wedding);
+  if (!logo.visible || !logo.url) return null;
+  const pos = getLogoPositionClasses(logo.position);
+  const style = getLogoStyle(logo, device);
+  return (
+    <div className={`flex w-full ${pos.container}`} style={{ transform: `translate(${logo.offsetX}, ${logo.offsetY})` }}>
+      <img src={logo.url} alt="" style={style} className={pos.item} />
+    </div>
+  );
+}
+
+export function CoverPreview({ wedding, device = "desktop" }: { wedding: Wedding | null; device?: DeviceType }) {
   const content = getCoverContent(wedding);
   const cover = mergeCover(wedding);
   const { lang } = useLang();
-  const cd = getCountdown(wedding.wedding_date);
+  const cd = getCountdown(wedding?.wedding_date || null);
   const cc = cover.colors || {};
   const cb = cover.background || {};
   const cl = cover.layout || {};
-  const ct = cover.typography || {};
   const align = cl.contentAlignment || "center";
   const vPos = cl.verticalPosition || "center";
   const vClass = vPos === "top" ? "justify-start pt-20" : vPos === "bottom" ? "justify-end pb-20" : "justify-center";
@@ -37,13 +51,13 @@ export function CoverPreview({ wedding }: { wedding: Wedding }) {
       {cb.type === "video" && cb.videoUrl && <video autoPlay loop muted className="absolute inset-0 w-full h-full object-cover" style={{ filter: `blur(${cb.blur || 0}px) brightness(${cb.brightness || 100}%)` }}><source src={cb.videoUrl} /></video>}
       <div className="absolute inset-0" style={{ background: cc.overlayColor || "#000000", opacity: overlayOpacity }} />
       {cb.overlayGradient && <div className="absolute inset-0" style={{ background: cb.overlayGradient }} />}
-      <div className="relative z-10 flex flex-col" style={{ gap: cl.spacing || "1.5rem" }}>
-        {cover.branding?.logoVisible && cover.branding?.logoUrl && <img src={cover.branding.logoUrl} alt="" style={{ width: cover.branding.logoSize || "64px", height: "auto" }} className="object-contain" />}
+      <div className="relative z-10 flex flex-col w-full" style={{ gap: cl.spacing || "1.5rem" }}>
+        <LogoRenderer wedding={wedding} device={device} />
         <p className="font-ui text-xs uppercase" style={{ color: "var(--cover-text)", letterSpacing: "var(--cover-letter-spacing)", opacity: 0.8 }}>{content.cover_welcome || "Welcome"}</p>
-        <h1 className="font-script text-4xl md:text-5xl" style={{ color: "var(--cover-text)", fontFamily: "var(--cover-heading-font)", fontSize: "var(--cover-heading-size)" }}>{wedding.couple_name_one}</h1>
+        <h1 className="font-script text-4xl md:text-5xl" style={{ color: "var(--cover-text)", fontFamily: "var(--cover-heading-font)", fontSize: "var(--cover-heading-size)" }}>{wedding?.couple_name_one || "Couple One"}</h1>
         <p className="font-script text-2xl" style={{ color: "var(--cover-text)", opacity: 0.6 }}>&</p>
-        <h1 className="font-script text-4xl md:text-5xl" style={{ color: "var(--cover-text)", fontFamily: "var(--cover-heading-font)", fontSize: "var(--cover-heading-size)" }}>{wedding.couple_name_two}</h1>
-        <p className="font-ui text-xs uppercase" style={{ color: "var(--cover-text)", letterSpacing: "var(--cover-letter-spacing)", opacity: 0.8 }}>{formatDate(wedding.wedding_date, lang)}</p>
+        <h1 className="font-script text-4xl md:text-5xl" style={{ color: "var(--cover-text)", fontFamily: "var(--cover-heading-font)", fontSize: "var(--cover-heading-size)" }}>{wedding?.couple_name_two || "Couple Two"}</h1>
+        <p className="font-ui text-xs uppercase" style={{ color: "var(--cover-text)", letterSpacing: "var(--cover-letter-spacing)", opacity: 0.8 }}>{formatDate(wedding?.wedding_date || null, lang)}</p>
         {!cd.isPast && (
           <div className="flex gap-4">
             {(["days", "hours", "minutes", "seconds"] as const).map((u) => (
@@ -51,7 +65,7 @@ export function CoverPreview({ wedding }: { wedding: Wedding }) {
             ))}
           </div>
         )}
-        <button style={btnStyle === "solid" ? { background: "var(--cover-button)", color: "var(--cover-button-text)", borderRadius: "var(--cover-radius)" } : btnStyle === "underline" ? { background: "transparent", color: "var(--cover-text)", borderBottom: "2px solid var(--cover-button)" } : { background: "transparent", color: "var(--cover-button)", border: `1px solid var(--cover-button)`, borderRadius: "var(--cover-radius)" }} className="px-7 py-3 font-ui text-xs uppercase" >
+        <button style={btnStyle === "solid" ? { background: "var(--cover-button)", color: "var(--cover-button-text)", borderRadius: "var(--cover-radius)" } : btnStyle === "underline" ? { background: "transparent", color: "var(--cover-text)", borderBottom: "2px solid var(--cover-button)" } : { background: "transparent", color: "var(--cover-button)", border: `1px solid var(--cover-button)`, borderRadius: "var(--cover-radius)" }} className="px-7 py-3 font-ui text-xs uppercase">
           {content.cover_button_text || "Enter Website"}
         </button>
       </div>
@@ -59,7 +73,7 @@ export function CoverPreview({ wedding }: { wedding: Wedding }) {
   );
 }
 
-export function LoginPreview({ wedding }: { wedding: Wedding }) {
+export function LoginPreview({ wedding }: { wedding: Wedding | null }) {
   return (
     <div style={coverStyle(wedding)} className="min-h-full flex flex-col items-center justify-center px-6 py-16 bg-[var(--color-bg)]">
       <div className="w-full max-w-sm">
@@ -71,7 +85,7 @@ export function LoginPreview({ wedding }: { wedding: Wedding }) {
           </div>
         </div>
         <div className="text-center mb-6">
-          <h2 className="font-script text-3xl text-[var(--color-primary)] mb-2">{wedding.couple_name_one} & {wedding.couple_name_two}</h2>
+          <h2 className="font-script text-3xl text-[var(--color-primary)] mb-2">{wedding?.couple_name_one || "Couple"} & {wedding?.couple_name_two || "Two"}</h2>
           <p className="font-ui text-xs uppercase tracking-luxe text-[var(--color-text-muted)]">Guest Sign In</p>
         </div>
         <div className="mb-4">
@@ -84,18 +98,18 @@ export function LoginPreview({ wedding }: { wedding: Wedding }) {
   );
 }
 
-export function HomePreview({ wedding }: { wedding: Wedding }) {
+export function HomePreview({ wedding }: { wedding: Wedding | null }) {
   const content = getCoverContent(wedding);
   const { lang } = useLang();
-  const cd = getCountdown(wedding.wedding_date);
+  const cd = getCountdown(wedding?.wedding_date || null);
   return (
     <div style={coverStyle(wedding)} className="min-h-full bg-[var(--color-bg)] py-12 px-6">
       <div className="max-w-2xl mx-auto text-center">
         <p className="font-ui text-xs uppercase tracking-luxe text-[var(--color-primary)] mb-4">{content.invitation_intro || "Invitation"}</p>
-        <h1 className="font-script text-4xl text-[var(--color-primary)] mb-2">{wedding.couple_name_one}</h1>
+        <h1 className="font-script text-4xl text-[var(--color-primary)] mb-2">{wedding?.couple_name_one || "Couple One"}</h1>
         <p className="font-script text-2xl text-[var(--color-primary)]/60 mb-2">&</p>
-        <h1 className="font-script text-4xl text-[var(--color-primary)] mb-6">{wedding.couple_name_two}</h1>
-        <p className="font-ui text-xs uppercase tracking-luxe text-[var(--color-text-muted)] mb-8">{formatDate(wedding.wedding_date, lang)}</p>
+        <h1 className="font-script text-4xl text-[var(--color-primary)] mb-6">{wedding?.couple_name_two || "Couple Two"}</h1>
+        <p className="font-ui text-xs uppercase tracking-luxe text-[var(--color-text-muted)] mb-8">{formatDate(wedding?.wedding_date || null, lang)}</p>
         {!cd.isPast && (
           <div className="flex justify-center gap-6 mb-8">
             {(["days", "hours", "minutes", "seconds"] as const).map((u) => (
@@ -117,7 +131,7 @@ export function HomePreview({ wedding }: { wedding: Wedding }) {
   );
 }
 
-export function EventCardPreview({ event, wedding }: { event: WeddingEvent; wedding: Wedding }) {
+export function EventCardPreview({ event, wedding }: { event: WeddingEvent; wedding: Wedding | null }) {
   return (
     <div style={coverStyle(wedding)} className="bg-[var(--color-surface)] border border-[var(--color-border)]/20 rounded-lg p-6 mb-4">
       <div className="text-center mb-4">
@@ -138,7 +152,7 @@ export function EventCardPreview({ event, wedding }: { event: WeddingEvent; wedd
   );
 }
 
-export function RsvpPreview({ wedding, events }: { wedding: Wedding; events: WeddingEvent[] }) {
+export function RsvpPreview({ wedding, events }: { wedding: Wedding | null; events: WeddingEvent[] }) {
   const content = getCoverContent(wedding);
   return (
     <div style={coverStyle(wedding)} className="min-h-full bg-[var(--color-bg)] py-12 px-6">
@@ -150,7 +164,7 @@ export function RsvpPreview({ wedding, events }: { wedding: Wedding; events: Wed
   );
 }
 
-export function DoaPreview({ wedding }: { wedding: Wedding }) {
+export function DoaPreview({ wedding }: { wedding: Wedding | null }) {
   const content = getCoverContent(wedding);
   return (
     <div style={coverStyle(wedding)} className="min-h-full bg-[var(--color-bg)] py-12 px-6">
@@ -163,7 +177,7 @@ export function DoaPreview({ wedding }: { wedding: Wedding }) {
   );
 }
 
-export function SendMessagePreview({ wedding }: { wedding: Wedding }) {
+export function SendMessagePreview({ wedding }: { wedding: Wedding | null }) {
   const content = getCoverContent(wedding);
   return (
     <div style={coverStyle(wedding)} className="min-h-full bg-[var(--color-bg)] py-12 px-6">
@@ -182,7 +196,7 @@ export function SendMessagePreview({ wedding }: { wedding: Wedding }) {
   );
 }
 
-export function ContactPreview({ wedding }: { wedding: Wedding }) {
+export function ContactPreview({ wedding }: { wedding: Wedding | null }) {
   const content = getCoverContent(wedding);
   return (
     <div style={coverStyle(wedding)} className="min-h-full bg-[var(--color-bg)] py-12 px-6">

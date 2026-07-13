@@ -80,7 +80,6 @@
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
-/* Dashboard-specific theme - always white/clean, never affected by wedding theme */
 .dash-root {
   --dash-bg: #fafafa;
   --dash-surface: #ffffff;

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { Menu, X, LogOut, Heart, BarChart3, Share2 } from "lucide-react";
+import { Menu, X, LogOut, Heart } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type Wedding } from "../../lib/supabase";
 import { cn } from "../../lib/utils";

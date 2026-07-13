@@ -11,29 +11,33 @@ export type EventKind = "ceremony" | "reception" | "welcome" | "rehearsal" | "br
 export type EventVisibility = "public" | "private";
 export type RsvpStatus = "pending" | "accepted" | "declined" | "tentative";
 
-export interface Wedding {
-  id: string; slug: string; couple_name_one: string; couple_name_two: string;
-  full_name_one?: string; full_name_two?: string;
-  wedding_date: string | null; location: string | null; hero_image_url: string | null;
-  story: string | null; hashtag: string | null;
-  theme: Record<string, unknown>;
-  theme_config: ThemeConfig | Record<string, never>;
-  draft_theme_config: ThemeConfig | null;
-  cover_config: CoverConfig | Record<string, never>;
-  draft_cover_config: CoverConfig | Record<string, never> | null;
-  sharing_config: SharingConfig | Record<string, never>;
-  qr_token: string | null;
-  is_published: boolean; created_by: string; created_at: string; updated_at: string;
-  content: WeddingContent | Record<string, never>;
-  draft_content: WeddingContent | Record<string, never> | null;
-  signin_helper: string | null; rsvp_deadline: string | null;
-  contact_phone: string | null; cover_monogram_url: string | null;
-}
-
-export interface ThemeConfig {
-  colors?: { primary?: string; primaryLight?: string; primaryDark?: string; background?: string; backgroundLight?: string; surface?: string; text?: string; textMuted?: string; border?: string; accent?: string; success?: string; warning?: string; error?: string; };
-  typography?: { scriptFont?: string; headingFont?: string; bodyFont?: string; uiFont?: string; scriptSize?: string; headingSize?: string; bodySize?: string; letterSpacing?: string; };
-  ui?: { radius?: string; buttonRadius?: string; buttonStyle?: string; };
+export interface LogoConfig {
+  url: string | null;
+  visible: boolean;
+  width: string;
+  height: string;
+  maintainAspectRatio: boolean;
+  position: "top-left" | "top-center" | "top-right" | "center" | "bottom-left" | "bottom-center" | "bottom-right";
+  offsetX: string;
+  offsetY: string;
+  margin: string;
+  padding: string;
+  responsive: {
+    desktop: { width: string; height: string };
+    tablet: { width: string; height: string };
+    mobile: { width: string; height: string };
+  };
+  opacity: number;
+  borderRadius: string;
+  dropShadow: { enabled: boolean; blur: string; color: string; offsetX: string; offsetY: string };
+  glow: { enabled: boolean; color: string; blur: string };
+  rotation: number;
+  maxWidth: string;
+  maxHeight: string;
+  objectFit: "contain" | "cover" | "fill";
+  showOnPages: "cover-only" | "all-pages" | "custom";
+  customPages: string[];
+  showInNavbar: boolean;
 }
 
 export interface CoverConfig {
@@ -43,6 +47,7 @@ export interface CoverConfig {
     logoPosition?: "left" | "center" | "right";
     logoVisible?: boolean;
     divider?: "none" | "line" | "floral" | "ornate";
+    logo?: LogoConfig;
   };
   colors?: {
     primary?: string;
@@ -82,6 +87,12 @@ export interface CoverConfig {
   };
 }
 
+export interface ThemeConfig {
+  colors?: { primary?: string; primaryLight?: string; primaryDark?: string; background?: string; backgroundLight?: string; surface?: string; text?: string; textMuted?: string; border?: string; accent?: string; success?: string; warning?: string; error?: string; };
+  typography?: { scriptFont?: string; headingFont?: string; bodyFont?: string; uiFont?: string; scriptSize?: string; headingSize?: string; bodySize?: string; letterSpacing?: string; };
+  ui?: { radius?: string; buttonRadius?: string; buttonStyle?: string; };
+}
+
 export interface SharingConfig {
   ogTitle?: string;
   ogDescription?: string;
@@ -103,6 +114,25 @@ export interface WeddingContent {
   message_intro?: string; rsvp_intro?: string; rsvp_closing?: string;
   countdown_enabled?: boolean; countdown_label?: string;
   [key: string]: unknown;
+}
+
+export interface Wedding {
+  id: string; slug: string; couple_name_one: string; couple_name_two: string;
+  full_name_one?: string; full_name_two?: string;
+  wedding_date: string | null; location: string | null; hero_image_url: string | null;
+  story: string | null; hashtag: string | null;
+  theme: Record<string, unknown>;
+  theme_config: ThemeConfig | Record<string, never>;
+  draft_theme_config: ThemeConfig | null;
+  cover_config: CoverConfig | Record<string, never>;
+  draft_cover_config: CoverConfig | Record<string, never> | null;
+  sharing_config: SharingConfig | Record<string, never>;
+  qr_token: string | null;
+  is_published: boolean; created_by: string; created_at: string; updated_at: string;
+  content: WeddingContent | Record<string, never>;
+  draft_content: WeddingContent | Record<string, never> | null;
+  signin_helper: string | null; rsvp_deadline: string | null;
+  contact_phone: string | null; cover_monogram_url: string | null;
 }
 
 export interface Guest { id: string; wedding_id: string; full_name: string; email: string | null; phone: string | null; group_label: string | null; tag: string | null; plus_one_allowed: boolean; address: string | null; notes: string | null; invite_code: string; group_id: string | null; username: string; first_name: string | null; last_name: string | null; rsvp_status: string; dietary_requirements: string | null; created_at: string; }

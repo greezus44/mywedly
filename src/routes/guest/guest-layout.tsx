@@ -1,138 +1,136 @@
-import { useState, useEffect, type CSSProperties } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams, Outlet, NavLink } from "react-router-dom";
-import { Menu, X, Globe, Heart } from "lucide-react";
-import { type Wedding } from "../../lib/supabase";
-import { useLang } from "../../lib/lang-context";
+import { Menu, X, Globe } from "lucide-react";
 import { useGuestAuth, GuestAuthProvider } from "../../lib/guest-auth";
-import { themeToCssVars, getTheme, coverToCssVars, getCoverConfig } from "../../lib/theme";
-import { cn } from "../../lib/utils";
+import { useLang } from "../../lib/lang-context";
+import { themeToCssVars, coverToCssVars, getLogoConfig, getLogoStyle, getTheme, getCoverConfig } from "../../lib/theme";
+import { cn, getDeviceType } from "../../lib/utils";
 
 const NAV_ITEMS = [
-  { to: "home", key: "home" as const },
-  { to: "rsvp", key: "rsvp" as const },
-  { to: "doa", key: "doa" as const },
-  { to: "contact", key: "contact" as const },
-  { to: "send-message", key: "sendMessage" as const },
-];
+  { key: "home", path: "" },
+  { key: "rsvp", path: "/rsvp" },
+  { key: "doa", path: "/doa" },
+  { key: "contact", path: "/contact" },
+  { key: "sendMessage", path: "/send-message" },
+] as const;
 
-function GuestLayoutInner() {
-  const navigate = useNavigate();
-  const params = useParams();
-  const slug = params.slug || "";
+export function GuestLayout() {
+  const [mobileOpen, setMobileOpen] = useState(false);
   const { session, loading } = useGuestAuth();
   const { lang, setLang, t } = useLang();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [wedding, setWedding] = useState<Wedding | null>(null);
+  const navigate = useNavigate();
+  const params = useParams<{ slug: string }>();
+  const slug = params.slug || "";
 
   useEffect(() => {
-    if (loading) return;
-    if (!session) {
-      navigate(`/w/${slug}/login`, { replace: true });
-      return;
-    }
-    setWedding(session.wedding);
-  }, [session, loading, slug, navigate]);
+    if (!loading && !session) navigate(`/w/${slug}/login`, { replace: true });
+  }, [loading, session, slug, navigate]);
 
+  if (loading || !session) return null;
+
+  const wedding = session.wedding;
   const theme = getTheme(wedding);
   const cover = getCoverConfig(wedding);
+  const logo = getLogoConfig(wedding);
+  const device = getDeviceType();
 
-  const toggleLang = () => setLang(lang === "en" ? "ms" : "en");
-
-  if (loading) {
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ background: "var(--color-bg)", color: "var(--color-text)" } as CSSProperties}
-      >
-        <Heart size={24} className="animate-pulse" style={{ color: "var(--color-primary)" }} />
-      </div>
-    );
-  }
-
-  if (!session) return null;
+  const base = `/w/${slug}`;
+  const showNavLogo = logo.showInNavbar && logo.visible && logo.url;
 
   return (
     <div
-      className="min-h-screen"
-      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover) } as CSSProperties}
+      className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] font-body"
+      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover) } as React.CSSProperties}
     >
-      {/* Top Nav Bar */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-[var(--color-bg)]/95 backdrop-blur-md border-b border-[var(--color-border)]/15">
-        <div className="flex items-center justify-between px-5 md:px-8 h-16">
-          {/* Hamburger - Left */}
-          <button
-            onClick={() => setMenuOpen(!menuOpen)}
-            className="p-2 -ml-2 text-[var(--color-text)] hover:text-[var(--color-primary)] transition-colors"
-            aria-label="Menu"
-          >
-            {menuOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
-
-          {/* Center monogram */}
-          <div className="font-script text-lg md:text-xl text-[var(--color-primary)] tracking-wide">
-            {wedding?.couple_name_one} <span className="text-[var(--color-text-muted)]">&</span> {wedding?.couple_name_two}
-          </div>
-
-          {/* Language Toggle - Right */}
-          <button
-            onClick={toggleLang}
-            className="flex items-center gap-1.5 px-3 py-2 text-[var(--color-text)] hover:text-[var(--color-primary)] transition-colors font-ui text-xs uppercase tracking-wider-luxe"
-            aria-label="Toggle language"
-          >
-            <Globe size={16} />
-            <span>{lang === "en" ? "EN" : "MS"}</span>
-          </button>
-        </div>
-
-        {/* Slide-down Nav Menu */}
-        <nav
-          className={cn(
-            "overflow-hidden transition-all duration-300 bg-[var(--color-bg)] border-b border-[var(--color-border)]/15",
-            menuOpen ? "max-h-96" : "max-h-0"
-          )}
-        >
-          <div className="px-5 md:px-8 py-4 space-y-1">
-            {NAV_ITEMS.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                onClick={() => setMenuOpen(false)}
-                className={({ isActive }) =>
-                  cn(
-                    "block py-3 px-4 font-ui text-sm uppercase tracking-wider-luxe transition-all rounded-lg",
-                    isActive
-                      ? "text-[var(--color-primary)] bg-[var(--color-primary)]/8 border-l-2 border-[var(--color-primary)]"
-                      : "text-[var(--color-text)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/5"
-                  )
-                }
+      <header className="sticky top-0 z-40 bg-[var(--color-bg)]/90 backdrop-blur-md border-b border-[var(--color-border)]/20">
+        <div className="px-4 md:px-6">
+          <div className="flex items-center justify-between h-14">
+            <div className="flex items-center gap-3">
+              <button
+                className="md:hidden p-1.5 hover:bg-[var(--color-primary)]/10 rounded-lg transition-colors"
+                onClick={() => setMobileOpen(!mobileOpen)}
+                aria-label="Menu"
               >
-                {t(item.key)}
-              </NavLink>
-            ))}
+                {mobileOpen ? <X size={20} className="text-[var(--color-text)]" /> : <Menu size={20} className="text-[var(--color-text)]" />}
+              </button>
+              {showNavLogo && (
+                <img
+                  src={logo.url!}
+                  alt="Logo"
+                  style={getLogoStyle(logo, device)}
+                  className="max-h-8 w-auto"
+                />
+              )}
+            </div>
+
+            <nav className="hidden md:flex items-center gap-1">
+              {NAV_ITEMS.map((item) => (
+                <NavLink
+                  key={item.key}
+                  to={`${base}${item.path}`}
+                  end={item.path === ""}
+                  className={({ isActive }) =>
+                    cn(
+                      "px-3 py-1.5 font-ui text-xs uppercase tracking-wider-luxe rounded-lg transition-all",
+                      isActive
+                        ? "text-[var(--color-primary)]"
+                        : "text-[var(--color-text-muted)] hover:text-[var(--color-primary)]"
+                    )
+                  }
+                >
+                  {t(item.key)}
+                </NavLink>
+              ))}
+            </nav>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setLang(lang === "en" ? "ms" : "en")}
+                className="flex items-center gap-1.5 px-3 py-1.5 font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)] hover:text-[var(--color-primary)] transition-colors rounded-lg"
+                aria-label="Toggle language"
+              >
+                <Globe size={14} />
+                <span>{lang === "en" ? "EN" : "MS"}</span>
+              </button>
+            </div>
           </div>
-        </nav>
+        </div>
       </header>
 
-      {/* Page Content */}
-      <main className="pt-16 min-h-screen">
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-30 bg-black/20" onClick={() => setMobileOpen(false)}>
+          <div
+            className="absolute top-14 left-0 right-0 bg-[var(--color-bg)] border-b border-[var(--color-border)]/20 shadow-lg max-h-[calc(100vh-3.5rem)] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <nav className="p-4 space-y-1">
+              {NAV_ITEMS.map((item) => (
+                <NavLink
+                  key={item.key}
+                  to={`${base}${item.path}`}
+                  end={item.path === ""}
+                  onClick={() => setMobileOpen(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      "block px-3 py-2.5 font-ui text-sm uppercase tracking-wider-luxe rounded-lg transition-all",
+                      isActive
+                        ? "bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
+                        : "text-[var(--color-text-muted)] hover:bg-[var(--color-primary)]/5 hover:text-[var(--color-primary)]"
+                    )
+                  }
+                >
+                  {t(item.key)}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+        </div>
+      )}
+
+      <main className="min-h-[calc(100vh-3.5rem)]">
         <Outlet />
       </main>
-
-      {/* Footer */}
-      <footer className="py-8 px-6 text-center border-t border-[var(--color-border)]/15">
-        <p className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">
-          {wedding?.couple_name_one} & {wedding?.couple_name_two}
-        </p>
-      </footer>
     </div>
-  );
-}
-
-export function GuestLayout() {
-  return (
-    <GuestAuthProvider>
-      <GuestLayoutInner />
-    </GuestAuthProvider>
   );
 }
 

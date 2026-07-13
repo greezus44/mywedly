@@ -18,9 +18,7 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = sessionStorage.getItem("guest-session");
-    if (stored) {
-      try { setSession(JSON.parse(stored)); } catch { sessionStorage.removeItem("guest-session"); }
-    }
+    if (stored) { try { setSession(JSON.parse(stored)); } catch { sessionStorage.removeItem("guest-session"); } }
     setLoading(false);
   }, []);
 

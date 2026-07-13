@@ -6,16 +6,16 @@ import { SplitEditor } from "../../components/preview/SplitEditor";
 import { SendMessagePreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
 import { Textarea } from "../../components/ui/Input";
-import { Card, Toast } from "../../components/ui/index";
+import { Toast } from "../../components/ui/index";
 import { FormField } from "../../components/ui/ImageUpload";
-import { Save, Send } from "lucide-react";
+import { getCoverContent } from "../../lib/theme";
+import { Save, MessageCircle } from "lucide-react";
 
 export function ContentMessagePage() {
   const queryClient = useQueryClient();
-  const [content, setContent] = useState<WeddingContent>({});
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const { data: wedding, isLoading, error } = useQuery<Wedding>({
+  const { data: wedding, isLoading } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -26,104 +26,77 @@ export function ContentMessagePage() {
     },
   });
 
+  const existingContent = wedding ? getCoverContent(wedding) : ({} as WeddingContent);
+  const [content, setContent] = useState<WeddingContent>(existingContent);
+
   useEffect(() => {
-    if (wedding) {
-      const pub = (wedding.content || {}) as WeddingContent;
-      const draft = (wedding.draft_content || {}) as WeddingContent;
-      setContent({ ...pub, ...draft });
+    if (wedding && JSON.stringify(existingContent) !== JSON.stringify(content)) {
+      setContent(existingContent);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wedding]);
 
-  const update = (key: keyof WeddingContent, value: unknown) => setContent((p) => ({ ...p, [key]: value }));
+  const saveDraft = useMutation({
+    mutationFn: async (newContent: WeddingContent) => {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error("Not authenticated");
+      const { error } = await supabase.from("weddings").update({ draft_content: newContent }).eq("created_by", user.user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wedding"] }); setToast("Draft saved"); },
+  });
 
-  const saveDraftMutation = useMutation({
+  const publish = useMutation({
     mutationFn: async () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("weddings").update({ draft_content: content }).eq("created_by", user.user.id);
+      const { error } = await supabase.from("weddings").update({ content: content, draft_content: content }).eq("created_by", user.user.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["wedding"] });
-      setToast({ message: "Draft saved", type: "success" });
-    },
-    onError: () => setToast({ message: "Failed to save draft", type: "error" }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wedding"] }); setToast("Message content published successfully"); },
   });
 
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("weddings").update({ draft_content: content, content: content }).eq("created_by", user.user.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["wedding"] });
-      setToast({ message: "Message content published!", type: "success" });
-    },
-    onError: () => setToast({ message: "Failed to publish", type: "error" }),
-  });
+  const update = (patch: Partial<WeddingContent>) => {
+    const newContent = { ...content, ...patch };
+    setContent(newContent);
+    saveDraft.mutate(newContent);
+  };
 
-  if (isLoading) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-full p-8">
-          <p className="font-ui text-sm text-gray-500">Loading message editor...</p>
-        </div>
-      </AdminLayout>
-    );
-  }
-
-  if (error || !wedding) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-full p-8">
-          <p className="font-ui text-sm text-red-500">Unable to load wedding data.</p>
-        </div>
-      </AdminLayout>
-    );
-  }
+  if (isLoading) return <AdminLayout><div className="flex items-center justify-center h-full"><div className="animate-pulse text-gray-400">Loading...</div></div></AdminLayout>;
+  if (!wedding) return <AdminLayout><div className="p-6 text-gray-500">Wedding not found</div></AdminLayout>;
 
   const previewWedding = { ...wedding, draft_content: content } as Wedding;
 
   return (
     <AdminLayout>
-      <div className="flex flex-col h-full">
-        <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200">
-          <h1 className="font-ui text-base font-semibold text-gray-900">Message Content</h1>
+      <SplitEditor title="Message Editor" preview={<SendMessagePreview wedding={previewWedding} />}>
+        <div className="space-y-6">
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => saveDraftMutation.mutate()} disabled={saveDraftMutation.isPending}>
-              <Save size={14} className="mr-1.5" /> Save Draft
+            <MessageCircle size={18} className="text-indigo-600" />
+            <h2 className="font-ui text-base font-semibold text-gray-900">Message Page Content</h2>
+          </div>
+
+          <FormField label="Message Intro" hint="Text shown above the message form">
+            <Textarea value={content.message_intro || ""} onChange={(e) => update({ message_intro: e.target.value })} placeholder="e.g. Leave your well wishes for the happy couple..." className="!bg-white !border-gray-200 !text-gray-700" />
+          </FormField>
+
+          <FormField label="RSVP Intro" hint="Text shown above the RSVP form">
+            <Textarea value={content.rsvp_intro || ""} onChange={(e) => update({ rsvp_intro: e.target.value })} placeholder="e.g. Please let us know if you can make it" className="!bg-white !border-gray-200 !text-gray-700" />
+          </FormField>
+
+          <FormField label="RSVP Closing" hint="Text shown after RSVP submission">
+            <Textarea value={content.rsvp_closing || ""} onChange={(e) => update({ rsvp_closing: e.target.value })} placeholder="e.g. Thank you for your response!" className="!bg-white !border-gray-200 !text-gray-700" />
+          </FormField>
+
+          {/* Publish button */}
+          <div className="pt-4 border-t border-gray-100">
+            <Button variant="primary" size="md" className="w-full" onClick={() => publish.mutate()} disabled={publish.isPending}>
+              <Save size={14} className="mr-2" /> Publish Message Content
             </Button>
-            <button
-              onClick={() => publishMutation.mutate()}
-              disabled={publishMutation.isPending}
-              className="inline-flex items-center justify-center gap-1.5 px-5 py-2.5 bg-indigo-600 text-white font-ui text-xs font-medium uppercase tracking-wider rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
-            >
-              <Send size={14} /> Publish
-            </button>
           </div>
         </div>
-        <div className="flex-1 overflow-hidden">
-          <SplitEditor title="Message Content" preview={<SendMessagePreview wedding={previewWedding} />}>
-            <Card className="p-5 mb-4">
-              <h3 className="font-ui text-sm font-semibold text-gray-900 mb-4">Message Section</h3>
-              <div className="space-y-4">
-                <FormField label="Message Intro">
-                  <Textarea value={content.message_intro || ""} onChange={(e) => update("message_intro", e.target.value)} placeholder="Leave a message for the happy couple..." />
-                </FormField>
-                <FormField label="RSVP Intro">
-                  <Textarea value={content.rsvp_intro || ""} onChange={(e) => update("rsvp_intro", e.target.value)} placeholder="Please RSVP by [date]..." />
-                </FormField>
-                <FormField label="RSVP Closing">
-                  <Textarea value={content.rsvp_closing || ""} onChange={(e) => update("rsvp_closing", e.target.value)} placeholder="We look forward to celebrating with you!" />
-                </FormField>
-              </div>
-            </Card>
-          </SplitEditor>
-        </div>
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      </div>
+      </SplitEditor>
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </AdminLayout>
   );
 }
