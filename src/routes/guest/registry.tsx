@@ -1,166 +1,155 @@
-import { useEffect, useState } from "react";
-import { Gift, ExternalLink, Heart } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ExternalLink, Gift, Heart, DollarSign } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { RegistryItem } from "@/lib/supabase";
 import { useGuestData } from "@/lib/use-guest-data";
+import { getTheme, themeToCssVars } from "@/lib/theme";
+import type { ThemeConfig } from "@/lib/theme";
 import { Card, EmptyState } from "@/components/ui";
 import { Button } from "@/components/ui/Button";
 
-/* ------------------------------------------------------------------ */
-/* Helpers                                                            */
-/* ------------------------------------------------------------------ */
-
-function formatPrice(cents: number | null): string | null {
-  if (cents === null || cents === undefined) return null;
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  }).format(cents / 100);
-}
-
-/* ------------------------------------------------------------------ */
-/* Component                                                           */
-/* ------------------------------------------------------------------ */
-
 export function GuestRegistry() {
   const { wedding, loading } = useGuestData();
-  const [items, setItems] = useState<RegistryItem[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const theme: ThemeConfig = useMemo(() => getTheme(wedding), [wedding]);
+  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
 
-  useEffect(() => {
-    if (!wedding) return;
-    supabase
+  const [items, setItems] = useState<RegistryItem[]>([]);
+  const [fetching, setFetching] = useState(true);
+
+  const weddingId = wedding?.id ?? "";
+
+  const loadItems = useCallback(async () => {
+    if (!weddingId) { setFetching(false); return; }
+    setFetching(true);
+    const { data } = await supabase
       .from("registry_items")
       .select("*")
-      .eq("wedding_id", wedding.id)
-      .order("sort_order")
-      .then(({ data }) => {
-        setItems((data as RegistryItem[]) || []);
-        setDataLoading(false);
-      });
-  }, [wedding]);
+      .eq("wedding_id", weddingId)
+      .order("sort_order", { ascending: true });
+    if (data) setItems(data as RegistryItem[]);
+    setFetching(false);
+  }, [weddingId]);
 
-  if (loading || dataLoading) {
+  useEffect(() => { if (weddingId) loadItems(); }, [weddingId, loadItems]);
+
+  if (loading || fetching) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-sepia">
-        Loading…
+      <div className="flex items-center justify-center py-24 text-sepia">
+        <div className="animate-pulse">Loading registry…</div>
       </div>
     );
   }
 
   if (!wedding) {
+    return <EmptyState title="No wedding found" />;
+  }
+
+  if (items.length === 0) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-sepia">
-        Wedding not found.
+      <div style={cssVars as React.CSSProperties} className="animate-fade-in px-6 py-12">
+        <div className="max-w-2xl mx-auto">
+          <EmptyState
+            title="Registry coming soon"
+            description="Check back later for our gift registry."
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in">
-      {/* Header */}
-      <header className="text-center mb-12">
-        <div className="flex items-center justify-center gap-3 text-sepia mb-4">
-          <span className="h-px w-12 bg-sand" />
-          <Gift className="w-5 h-5" />
-          <span className="h-px w-12 bg-sand" />
+    <div style={cssVars as React.CSSProperties} className="animate-fade-in px-6 py-12">
+      <div className="max-w-5xl mx-auto">
+        {/* ─── Header ─── */}
+        <div className="text-center mb-12">
+          <Gift className="w-6 h-6 mx-auto mb-3" style={{ color: "var(--c-accent)" }} />
+          <p className="text-xs uppercase tracking-[0.3em] mb-2" style={{ color: "var(--c-textMuted)" }}>
+            With gratitude
+          </p>
+          <h1 className="text-4xl font-serif" style={{ color: "var(--c-text)" }}>
+            Registry
+          </h1>
+          <p className="text-sm mt-3 max-w-lg mx-auto" style={{ color: "var(--c-textMuted)" }}>
+            Your presence is the greatest gift. If you'd like to give something more, here are a few
+            things we'd love.
+          </p>
         </div>
-        <h1 className="font-serif text-3xl md:text-4xl text-onyx mb-3">
-          Registry
-        </h1>
-        <p className="text-sepia text-sm tracking-widest uppercase">
-          Your love is the greatest gift
-        </p>
-      </header>
 
-      {/* Registry grid */}
-      {items.length > 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {items.map((item) => (
-            <RegistryCard key={item.id} item={item} />
-          ))}
+        {/* ─── Registry grid ─── */}
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {items.map((item) => {
+            const price = item.price_cents != null
+              ? `$${(item.price_cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              : null;
+
+            return (
+              <Card key={item.id} className="overflow-hidden flex flex-col">
+                {item.image_url ? (
+                  <div className="relative h-48 overflow-hidden">
+                    <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
+                    {item.is_cash_fund && (
+                      <span
+                        className="absolute top-2 right-2 inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium"
+                        style={{ background: "var(--c-button)", color: "var(--c-buttonText)" }}
+                      >
+                        <DollarSign className="w-3 h-3" /> Cash Fund
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    className="h-32 flex items-center justify-center"
+                    style={{ background: "var(--c-secondary)" }}
+                  >
+                    <Gift className="w-10 h-10" style={{ color: "var(--c-primary)" }} />
+                  </div>
+                )}
+
+                <div className="p-5 flex flex-col flex-1">
+                  <h3 className="text-lg font-serif mb-1" style={{ color: "var(--c-text)" }}>
+                    {item.title}
+                  </h3>
+
+                  {item.description && (
+                    <p className="text-sm mb-3 line-clamp-3" style={{ color: "var(--c-textMuted)" }}>
+                      {item.description}
+                    </p>
+                  )}
+
+                  {price && (
+                    <p className="text-lg font-serif mb-4" style={{ color: "var(--c-primary)" }}>
+                      {price}
+                    </p>
+                  )}
+
+                  <div className="mt-auto pt-2">
+                    {item.url ? (
+                      <a href={item.url} target="_blank" rel="noopener noreferrer" className="block">
+                        <Button variant="primary" className="w-full">
+                          {item.is_cash_fund ? (
+                            <>
+                              <Heart className="w-4 h-4" /> Contribute
+                            </>
+                          ) : (
+                            <>
+                              <ExternalLink className="w-4 h-4" /> View Item
+                            </>
+                          )}
+                        </Button>
+                      </a>
+                    ) : item.is_cash_fund ? (
+                      <Button variant="primary" className="w-full" disabled>
+                        <Heart className="w-4 h-4" /> Contribute
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
         </div>
-      ) : (
-        <EmptyState
-          title="No registry items yet"
-          description="The couple will share their gift registry here soon. Thank you for thinking of them!"
-        />
-      )}
-
-      {/* Decorative footer */}
-      <div className="flex items-center justify-center gap-3 text-sepia mt-12">
-        <span className="h-px w-10 bg-sand" />
-        <Heart className="w-4 h-4" />
-        <span className="h-px w-10 bg-sand" />
       </div>
     </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Registry card                                                       */
-/* ------------------------------------------------------------------ */
-
-function RegistryCard({ item }: { item: RegistryItem }) {
-  const price = formatPrice(item.price_cents);
-  const isCashFund = item.is_cash_fund;
-
-  return (
-    <Card className="flex flex-col h-full p-0 overflow-hidden">
-      {/* Image */}
-      {item.image_url ? (
-        <div className="aspect-[4/3] overflow-hidden bg-mist">
-          <img
-            src={item.image_url}
-            alt={item.title}
-            className="w-full h-full object-cover"
-          />
-        </div>
-      ) : (
-        <div className="aspect-[4/3] bg-mist flex items-center justify-center">
-          <Gift className="w-10 h-10 text-sepia/40" />
-        </div>
-      )}
-
-      {/* Body */}
-      <div className="flex flex-col flex-1 p-5">
-        <h3 className="font-serif text-lg text-onyx mb-1">{item.title}</h3>
-        {item.description && (
-          <p className="text-sepia text-sm leading-relaxed mb-3 line-clamp-3">
-            {item.description}
-          </p>
-        )}
-        {price && (
-          <p className="text-sepia font-medium text-sm mb-4">{price}</p>
-        )}
-
-        {item.url && (
-          <div className="mt-auto pt-2">
-            <a href={item.url} target="_blank" rel="noopener noreferrer">
-              <Button
-                variant={isCashFund ? "primary" : "outline"}
-                size="sm"
-                className="w-full"
-              >
-                {isCashFund ? (
-                  <>
-                    <Heart className="w-3.5 h-3.5" />
-                    Contribute
-                  </>
-                ) : (
-                  <>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    View Item
-                  </>
-                )}
-              </Button>
-            </a>
-          </div>
-        )}
-      </div>
-    </Card>
   );
 }
 

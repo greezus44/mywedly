@@ -1,210 +1,193 @@
-import { useEffect, useState } from "react";
-import {
-  MapPin,
-  ExternalLink,
-  Hotel,
-  Plane,
-  Car,
-  Bus,
-  Sparkles,
-  UtensilsCrossed,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { MapPin, ExternalLink, Plane, Hotel, Car, Utensils, Compass } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { TravelItem, WebsiteContent } from "@/lib/supabase";
 import { useGuestData } from "@/lib/use-guest-data";
+import { getTheme, themeToCssVars } from "@/lib/theme";
+import type { ThemeConfig } from "@/lib/theme";
 import { Card, EmptyState } from "@/components/ui";
-import { Button } from "@/components/ui/Button";
 
-/* ------------------------------------------------------------------ */
-/* Constants                                                           */
-/* ------------------------------------------------------------------ */
-
-type TravelKind =
-  | "hotel"
-  | "airport"
-  | "parking"
-  | "transport"
-  | "attraction"
-  | "restaurant";
-
-const KIND_META: Record<
-  TravelKind,
-  { label: string; icon: React.ComponentType<{ className?: string }> }
-> = {
-  hotel: { label: "Accommodations", icon: Hotel },
-  airport: { label: "Airports", icon: Plane },
-  parking: { label: "Parking", icon: Car },
-  transport: { label: "Transportation", icon: Bus },
-  attraction: { label: "Attractions", icon: Sparkles },
-  restaurant: { label: "Restaurants", icon: UtensilsCrossed },
+const KIND_ICONS: Record<string, React.ReactNode> = {
+  hotel: <Hotel className="w-5 h-5" />,
+  accommodation: <Hotel className="w-5 h-5" />,
+  flight: <Plane className="w-5 h-5" />,
+  transport: <Car className="w-5 h-5" />,
+  restaurant: <Utensils className="w-5 h-5" />,
+  dining: <Utensils className="w-5 h-5" />,
+  attraction: <Compass className="w-5 h-5" />,
+  other: <MapPin className="w-5 h-5" />,
 };
 
-const KIND_ORDER: TravelKind[] = [
-  "hotel",
-  "airport",
-  "parking",
-  "transport",
-  "restaurant",
-  "attraction",
-];
-
-/* ------------------------------------------------------------------ */
-/* Component                                                           */
-/* ------------------------------------------------------------------ */
+const KIND_LABELS: Record<string, string> = {
+  hotel: "Accommodation",
+  accommodation: "Accommodation",
+  flight: "Flights",
+  transport: "Transportation",
+  restaurant: "Dining",
+  dining: "Dining",
+  attraction: "Things to Do",
+  other: "Information",
+};
 
 export function GuestTravel() {
   const { wedding, loading } = useGuestData();
-  const [items, setItems] = useState<TravelItem[]>([]);
+  const theme: ThemeConfig = useMemo(() => getTheme(wedding), [wedding]);
+  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
+
+  const [travelItems, setTravelItems] = useState<TravelItem[]>([]);
   const [content, setContent] = useState<WebsiteContent | null>(null);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [fetching, setFetching] = useState(true);
 
-  useEffect(() => {
-    if (!wedding) return;
-    Promise.all([
-      supabase
-        .from("travel_items")
+  const weddingId = wedding?.id ?? "";
+
+  const loadAll = useCallback(async () => {
+    if (!weddingId) { setFetching(false); return; }
+    setFetching(true);
+    const [items, contentRes] = await Promise.all([
+      supabase.from("travel_items").select("*").eq("wedding_id", weddingId).order("sort_order", { ascending: true }),
+      supabase.from("website_content")
         .select("*")
-        .eq("wedding_id", wedding.id)
-        .order("sort_order"),
-      supabase
-        .from("website_content")
-        .select("*")
-        .eq("wedding_id", wedding.id)
+        .eq("wedding_id", weddingId)
         .eq("section", "travel")
+        .eq("is_published", true)
+        .order("sort_order", { ascending: true })
+        .limit(1)
         .maybeSingle(),
-    ]).then(([itemsRes, contentRes]) => {
-      setItems((itemsRes.data as TravelItem[]) || []);
-      setContent((contentRes.data as WebsiteContent) || null);
-      setDataLoading(false);
-    });
-  }, [wedding]);
+    ]);
+    if (items.data) setTravelItems(items.data as TravelItem[]);
+    if (contentRes.data) setContent(contentRes.data as WebsiteContent);
+    setFetching(false);
+  }, [weddingId]);
 
-  if (loading || dataLoading) {
+  useEffect(() => { if (weddingId) loadAll(); }, [weddingId, loadAll]);
+
+  // ─── Group items by kind ───
+  const groupedItems = useMemo(() => {
+    const map = new Map<string, TravelItem[]>();
+    for (const item of travelItems) {
+      const key = item.kind || "other";
+      const arr = map.get(key) ?? [];
+      arr.push(item);
+      map.set(key, arr);
+    }
+    return map;
+  }, [travelItems]);
+
+  if (loading || fetching) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-sepia">
-        Loading…
+      <div className="flex items-center justify-center py-24 text-sepia">
+        <div className="animate-pulse">Loading travel info…</div>
       </div>
     );
   }
 
   if (!wedding) {
+    return <EmptyState title="No wedding found" />;
+  }
+
+  const hasContent = content?.body || content?.title;
+  const hasItems = travelItems.length > 0;
+
+  if (!hasContent && !hasItems) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-sepia">
-        Wedding not found.
+      <div style={cssVars as React.CSSProperties} className="animate-fade-in px-6 py-12">
+        <div className="max-w-2xl mx-auto">
+          <EmptyState
+            title="Travel info coming soon"
+            description="Check back later for accommodation and travel details."
+          />
+        </div>
       </div>
     );
   }
 
-  // Group items by kind, preserving the canonical order
-  const grouped = KIND_ORDER.map((kind) => ({
-    kind,
-    items: items.filter((i) => i.kind === kind),
-  })).filter((g) => g.items.length > 0);
-
-  const hasItems = grouped.length > 0;
-  const hasContent = Boolean(content && content.body);
-
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in">
-      {/* Header */}
-      <header className="text-center mb-12">
-        <div className="flex items-center justify-center gap-3 text-sepia mb-4">
-          <span className="h-px w-12 bg-sand" />
-          <MapPin className="w-5 h-5" />
-          <span className="h-px w-12 bg-sand" />
-        </div>
-        <h1 className="font-serif text-3xl md:text-4xl text-onyx mb-3">
-          {content?.title || "Travel & Accommodations"}
-        </h1>
-        <p className="text-sepia text-sm tracking-widest uppercase">
-          Everything you need to get here &amp; stay
-        </p>
-      </header>
-
-      {/* Intro content from website_content */}
-      {hasContent && (
-        <div className="mb-12 text-center max-w-2xl mx-auto">
-          <p className="text-ink leading-relaxed whitespace-pre-line font-serif">
-            {content!.body}
+    <div style={cssVars as React.CSSProperties} className="animate-fade-in px-6 py-12">
+      <div className="max-w-4xl mx-auto">
+        {/* ─── Header ─── */}
+        <div className="text-center mb-12">
+          <Plane className="w-6 h-6 mx-auto mb-3" style={{ color: "var(--c-accent)" }} />
+          <p className="text-xs uppercase tracking-[0.3em] mb-2" style={{ color: "var(--c-textMuted)" }}>
+            Plan your trip
           </p>
+          <h1 className="text-4xl font-serif" style={{ color: "var(--c-text)" }}>
+            {content?.title || "Travel & Accommodation"}
+          </h1>
+          {wedding.location && (
+            <p className="text-sm mt-2 flex items-center justify-center gap-1.5" style={{ color: "var(--c-textMuted)" }}>
+              <MapPin className="w-4 h-4" /> {wedding.location}
+            </p>
+          )}
         </div>
-      )}
 
-      {/* Travel items grouped by kind */}
-      {hasItems ? (
-        <div className="space-y-12">
-          {grouped.map(({ kind, items: groupItems }) => {
-            const meta = KIND_META[kind];
-            const Icon = meta.icon;
-            return (
-              <section key={kind}>
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="flex-shrink-0 w-9 h-9 rounded-full bg-mist flex items-center justify-center text-sepia">
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <h2 className="font-serif text-xl text-onyx">{meta.label}</h2>
-                  <span className="flex-1 h-px bg-sand" />
+        {/* ─── Intro content ─── */}
+        {content?.body && (
+          <div className="mb-12 text-center max-w-2xl mx-auto">
+            <p
+              className="whitespace-pre-line text-base leading-relaxed"
+              style={{ color: "var(--c-textMuted)" }}
+            >
+              {content.body}
+            </p>
+          </div>
+        )}
+
+        {/* ─── Travel items grouped by kind ─── */}
+        {hasItems && (
+          <div className="space-y-10">
+            {Array.from(groupedItems.entries()).map(([kind, items]) => (
+              <div key={kind}>
+                <div className="flex items-center gap-2 mb-4">
+                  <span style={{ color: "var(--c-primary)" }}>
+                    {KIND_ICONS[kind] ?? KIND_ICONS.other}
+                  </span>
+                  <h2 className="text-xl font-serif" style={{ color: "var(--c-text)" }}>
+                    {KIND_LABELS[kind] ?? kind}
+                  </h2>
+                  <span className="h-px flex-1" style={{ background: "var(--c-secondary)" }} />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {groupItems.map((item) => (
-                    <TravelCard key={item.id} item={item} />
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {items.map((item) => (
+                    <Card key={item.id} className="p-5 flex flex-col">
+                      <h3 className="text-lg font-serif mb-2" style={{ color: "var(--c-text)" }}>
+                        {item.title}
+                      </h3>
+
+                      {item.description && (
+                        <p className="text-sm mb-3 whitespace-pre-line" style={{ color: "var(--c-textMuted)" }}>
+                          {item.description}
+                        </p>
+                      )}
+
+                      {item.address && (
+                        <div className="flex items-start gap-2 text-sm mb-2" style={{ color: "var(--c-textMuted)" }}>
+                          <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                          <span>{item.address}</span>
+                        </div>
+                      )}
+
+                      {item.url && (
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-sm mt-auto pt-2 transition-colors hover:underline"
+                          style={{ color: "var(--c-link)" }}
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Visit website
+                        </a>
+                      )}
+                    </Card>
                   ))}
                 </div>
-              </section>
-            );
-          })}
-        </div>
-      ) : (
-        !hasContent && (
-          <EmptyState
-            title="No travel details yet"
-            description="Check back soon — the couple will share accommodation, transport, and local recommendations here."
-          />
-        )
-      )}
-
-      {/* Decorative footer */}
-      <div className="flex items-center justify-center gap-3 text-sepia mt-12">
-        <span className="h-px w-10 bg-sand" />
-        <MapPin className="w-4 h-4" />
-        <span className="h-px w-10 bg-sand" />
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Travel card                                                         */
-/* ------------------------------------------------------------------ */
-
-function TravelCard({ item }: { item: TravelItem }) {
-  return (
-    <Card className="flex flex-col h-full">
-      <div className="flex-1">
-        <h3 className="font-serif text-lg text-onyx mb-2">{item.title}</h3>
-        {item.description && (
-          <p className="text-sepia text-sm leading-relaxed mb-3 whitespace-pre-line">
-            {item.description}
-          </p>
-        )}
-        {item.address && (
-          <div className="flex items-start gap-2 text-sepia/80 text-sm mb-3">
-            <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            <span>{item.address}</span>
+              </div>
+            ))}
           </div>
         )}
       </div>
-      {item.url && (
-        <div className="mt-auto pt-2">
-          <a href={item.url} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" size="sm">
-              <ExternalLink className="w-3.5 h-3.5" />
-              Visit Website
-            </Button>
-          </a>
-        </div>
-      )}
-    </Card>
+    </div>
   );
 }
 

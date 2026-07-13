@@ -1,322 +1,265 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Check, X, Clock, Download, MessageSquare, Utensils, Music, Mail,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import type { Rsvp, RsvpStatus } from "@/lib/supabase";
+import type { Guest, WeddingEvent, Rsvp } from "@/lib/supabase";
 import { useHostWedding } from "@/lib/use-host-wedding";
 import { Button } from "@/components/ui/Button";
-import { Card, Badge, EmptyState, SectionTitle } from "@/components/ui";
-import { downloadCsv, formatDate } from "@/lib/utils";
-import { Download, Check, X, Clock, MessageSquare } from "lucide-react";
+import { Select } from "@/components/ui/Input";
+import { Card, Badge, EmptyState, SectionTitle, Toast } from "@/components/ui";
+import { cn, formatDateShort, formatTime, downloadCsv } from "@/lib/utils";
 
-/* ------------------------------------------------------------------ */
-/* Types                                                               */
-/* ------------------------------------------------------------------ */
-
-type RsvpWithJoins = Rsvp & {
-  events: { name: string } | null;
-  guests: { full_name: string } | null;
-};
-
-type StatusMeta = {
+type SummaryCard = {
   label: string;
-  variant: "success" | "danger" | "warning" | "default";
-  icon: typeof Check;
+  value: number;
+  icon: React.ComponentType<{ className?: string }>;
+  accent: string;
+  bg: string;
 };
-
-const STATUS_META: Record<RsvpStatus, StatusMeta> = {
-  accepted: { label: "Attending", variant: "success", icon: Check },
-  declined: { label: "Declined", variant: "danger", icon: X },
-  tentative: { label: "Tentative", variant: "warning", icon: Clock },
-  pending: { label: "Pending", variant: "default", icon: Clock },
-};
-
-const STATUSES: RsvpStatus[] = ["accepted", "declined", "tentative", "pending"];
-
-/* ------------------------------------------------------------------ */
-/* Component                                                           */
-/* ------------------------------------------------------------------ */
 
 export function AdminRsvps() {
   const { wedding, loading } = useHostWedding();
+  const weddingId = wedding?.id ?? "";
 
-  const [rsvps, setRsvps] = useState<RsvpWithJoins[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
-  const [toast, setToast] = useState<string | null>(null);
+  const [guests, setGuests] = useState<Guest[]>([]);
+  const [events, setEvents] = useState<WeddingEvent[]>([]);
+  const [rsvps, setRsvps] = useState<Rsvp[]>([]);
+  const [fetching, setFetching] = useState(true);
+  const [eventFilter, setEventFilter] = useState("all");
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  /* ---------------- fetch ---------------- */
-
-  const fetchRsvps = useCallback(async () => {
-    if (!wedding) return;
-    setDataLoading(true);
-
-    const { data, error } = await supabase
-      .from("rsvps")
-      .select("*, events(name), guests(full_name)")
-      .eq("wedding_id", wedding.id)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Fetch RSVPs error", error);
-    }
-    setRsvps((data as RsvpWithJoins[] | null) ?? []);
-    setDataLoading(false);
-  }, [wedding]);
-
-  useEffect(() => {
-    fetchRsvps();
-  }, [fetchRsvps]);
-
-  /* ---------------- toast ---------------- */
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast(null), 2500);
+  const showToast = (message: string, type: "success" | "error" = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
   };
 
-  /* ---------------- derived data ---------------- */
+  // ─── Load ───
+  const loadAll = useCallback(async () => {
+    if (!weddingId) { setFetching(false); return; }
+    setFetching(true);
+    const [g, ev, r] = await Promise.all([
+      supabase.from("guests").select("*").eq("wedding_id", weddingId).order("created_at", { ascending: false }),
+      supabase.from("events").select("*").eq("wedding_id", weddingId).order("starts_at", { ascending: true }),
+      supabase.from("rsvps").select("*").eq("wedding_id", weddingId).order("created_at", { ascending: false }),
+    ]);
+    if (g.data) setGuests(g.data as Guest[]);
+    if (ev.data) setEvents(ev.data as WeddingEvent[]);
+    if (r.data) setRsvps(r.data as Rsvp[]);
+    setFetching(false);
+  }, [weddingId]);
 
+  useEffect(() => { if (weddingId) loadAll(); }, [weddingId, loadAll]);
+
+  // ─── Derived ───
   const summary = useMemo(() => {
-    const counts: Record<RsvpStatus, number> = {
-      accepted: 0,
-      declined: 0,
-      tentative: 0,
-      pending: 0,
-    };
-    for (const r of rsvps) {
-      counts[r.status] = (counts[r.status] ?? 0) + 1;
-    }
-    return counts;
-  }, [rsvps]);
+    const accepted = rsvps.filter((r) => r.status === "accepted").length;
+    const declined = rsvps.filter((r) => r.status === "declined").length;
+    const tentative = rsvps.filter((r) => r.status === "tentative").length;
+    const pending = guests.length - accepted - declined - tentative;
+    return { total: guests.length, accepted, declined, tentative, pending };
+  }, [rsvps, guests]);
 
-  const perEvent = useMemo(() => {
-    const map = new Map<
-      string,
-      { name: string; accepted: number; declined: number; tentative: number; pending: number; total: number }
-    >();
+  const filteredRsvps = useMemo(() => {
+    if (eventFilter === "all") return rsvps;
+    return rsvps.filter((r) => r.event_id === eventFilter);
+  }, [rsvps, eventFilter]);
 
-    for (const r of rsvps) {
-      const key = r.event_id ?? "unassigned";
-      const name = r.event_id ? (r.events?.name ?? "Unknown Event") : "Unassigned";
-      if (!map.has(key)) {
-        map.set(key, { name, accepted: 0, declined: 0, tentative: 0, pending: 0, total: 0 });
-      }
-      const entry = map.get(key)!;
-      entry[r.status] = (entry[r.status] ?? 0) + 1;
-      entry.total += 1;
-    }
+  // Per-event breakdown
+  const eventBreakdown = useMemo(() => {
+    return events.map((event) => {
+      const eventRsvps = rsvps.filter((r) => r.event_id === event.id);
+      return {
+        event,
+        accepted: eventRsvps.filter((r) => r.status === "accepted").length,
+        declined: eventRsvps.filter((r) => r.status === "declined").length,
+        tentative: eventRsvps.filter((r) => r.status === "tentative").length,
+        total: eventRsvps.length,
+      };
+    });
+  }, [events, rsvps]);
 
-    return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [rsvps]);
+  const eventName = (eventId: string | null) =>
+    events.find((e) => e.id === eventId)?.name ?? "General";
 
-  /* ---------------- CSV export ---------------- */
+  const summaryCards: SummaryCard[] = [
+    { label: "Total", value: summary.total, icon: MessageSquare, accent: "text-onyx", bg: "bg-mist" },
+    { label: "Attending", value: summary.accepted, icon: Check, accent: "text-green-600", bg: "bg-green-50" },
+    { label: "Declined", value: summary.declined, icon: X, accent: "text-red-600", bg: "bg-red-50" },
+    { label: "Tentative", value: summary.tentative, icon: Clock, accent: "text-yellow-600", bg: "bg-yellow-50" },
+  ];
 
+  // ─── CSV export ───
   const exportCsv = () => {
-    if (rsvps.length === 0) {
-      showToast("No RSVPs to export");
-      return;
-    }
     const rows = rsvps.map((r) => ({
       guest_name: r.guest_name,
       guest_email: r.guest_email ?? "",
-      event: r.events?.name ?? "",
-      status: STATUS_META[r.status].label,
+      status: r.status,
+      event: eventName(r.event_id),
       meal_choice: r.meal_choice ?? "",
       dietary_restrictions: r.dietary_restrictions ?? "",
+      song_request: r.song_request ?? "",
       plus_one_name: r.plus_one_name ?? "",
       message: r.message ?? "",
-      date_submitted: r.created_at ? formatDate(r.created_at) : "",
+      submitted_at: formatDateShort(r.created_at),
     }));
     downloadCsv("rsvps.csv", rows);
-    showToast("CSV exported");
+    showToast("RSVPs exported");
   };
 
-  /* ---------------- render ---------------- */
-
-  if (loading) {
+  // ─── Render ───
+  if (loading || fetching) {
     return (
       <div className="flex items-center justify-center py-24 text-sepia">
-        Loading…
+        <div className="animate-pulse">Loading RSVPs…</div>
       </div>
     );
   }
 
   if (!wedding) {
-    return (
-      <EmptyState
-        title="No wedding found"
-        description="Create a wedding to manage RSVPs."
-      />
-    );
+    return <EmptyState title="No wedding found" description="Create a wedding to view RSVPs." />;
   }
 
-  const summaryCards = [
-    {
-      label: "Total RSVPs",
-      value: rsvps.length,
-      icon: MessageSquare,
-      variant: "default" as const,
-      accent: "text-onyx",
-    },
-    {
-      label: "Attending",
-      value: summary.accepted,
-      icon: Check,
-      variant: "success" as const,
-      accent: "text-green-700",
-    },
-    {
-      label: "Declined",
-      value: summary.declined,
-      icon: X,
-      variant: "danger" as const,
-      accent: "text-red-700",
-    },
-    {
-      label: "Tentative / Pending",
-      value: summary.tentative + summary.pending,
-      icon: Clock,
-      variant: "warning" as const,
-      accent: "text-yellow-700",
-    },
-  ];
-
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div>
       <SectionTitle
         title="RSVPs"
-        subtitle="Track responses across all your wedding events."
+        subtitle={`${summary.accepted} attending · ${summary.declined} declined · ${summary.pending} pending`}
         action={
-          <Button variant="outline" size="sm" onClick={exportCsv} disabled={rsvps.length === 0}>
-            <Download className="w-4 h-4" />
-            Export CSV
+          <Button size="sm" variant="outline" onClick={exportCsv} disabled={rsvps.length === 0}>
+            <Download className="w-4 h-4" /> Export CSV
           </Button>
         }
       />
 
-      {/* ---------------- Summary cards ---------------- */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {summaryCards.map((s) => (
-          <Card key={s.label} className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs uppercase tracking-wider text-sepia/70">
-                {s.label}
-              </span>
-              <s.icon className={`w-4 h-4 ${s.accent}`} />
+      {/* ─── Summary cards ─── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {summaryCards.map((card) => (
+          <Card key={card.label} className="p-5">
+            <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center mb-3", card.bg)}>
+              <card.icon className={cn("w-5 h-5", card.accent)} />
             </div>
-            <span className="font-serif text-3xl text-onyx">
-              {dataLoading ? "—" : s.value}
-            </span>
+            <div className="text-3xl font-serif text-onyx">{card.value}</div>
+            <div className="text-xs text-sepia/70 uppercase tracking-widest mt-0.5">{card.label}</div>
           </Card>
         ))}
       </div>
 
-      {/* ---------------- Per-event breakdown ---------------- */}
-      {perEvent.length > 0 && (
-        <div>
-          <h2 className="font-serif text-lg text-onyx mb-4">Per-Event Breakdown</h2>
+      {/* ─── Per-event breakdown ─── */}
+      {events.length > 0 && (
+        <Card className="p-6 mb-8">
+          <h3 className="font-serif text-lg text-onyx mb-4">Per-Event Breakdown</h3>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {perEvent.map((evt) => (
-              <Card key={evt.name} className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-medium text-onyx truncate">{evt.name}</h3>
-                  <Badge variant="default">{evt.total}</Badge>
+            {eventBreakdown.map(({ event, accepted, declined, tentative, total }) => (
+              <div key={event.id} className="p-4 rounded-lg border border-sand bg-mist/30">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-onyx truncate">{event.name}</p>
+                    <p className="text-xs text-sepia/60">{formatDateShort(event.starts_at)}</p>
+                  </div>
+                  <Badge>{event.kind}</Badge>
                 </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Check className="w-3.5 h-3.5 text-green-600" />
-                    <span className="text-sepia">Attending</span>
-                    <span className="ml-auto font-medium text-onyx">{evt.accepted}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <X className="w-3.5 h-3.5 text-red-600" />
-                    <span className="text-sepia">Declined</span>
-                    <span className="ml-auto font-medium text-onyx">{evt.declined}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-3.5 h-3.5 text-yellow-600" />
-                    <span className="text-sepia">Tentative</span>
-                    <span className="ml-auto font-medium text-onyx">{evt.tentative}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-3.5 h-3.5 text-sepia/50" />
-                    <span className="text-sepia">Pending</span>
-                    <span className="ml-auto font-medium text-onyx">{evt.pending}</span>
-                  </div>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="flex items-center gap-1 text-green-600">
+                    <Check className="w-3 h-3" /> {accepted}
+                  </span>
+                  <span className="flex items-center gap-1 text-yellow-600">
+                    <Clock className="w-3 h-3" /> {tentative}
+                  </span>
+                  <span className="flex items-center gap-1 text-red-600">
+                    <X className="w-3 h-3" /> {declined}
+                  </span>
+                  <span className="text-sepia/50 ml-auto">{total} total</span>
                 </div>
-              </Card>
+              </div>
             ))}
           </div>
+        </Card>
+      )}
+
+      {/* ─── Filter ─── */}
+      {events.length > 0 && (
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-sm text-sepia">Filter by event:</span>
+          <Select
+            value={eventFilter}
+            onChange={(e) => setEventFilter(e.target.value)}
+            className="w-auto min-w-[200px]"
+          >
+            <option value="all">All Events</option>
+            {events.map((e) => (
+              <option key={e.id} value={e.id}>{e.name}</option>
+            ))}
+          </Select>
         </div>
       )}
 
-      {/* ---------------- Full RSVP table ---------------- */}
-      <Card className="p-0 overflow-hidden">
-        {dataLoading ? (
-          <div className="p-12 text-center text-sepia text-sm">Loading RSVPs…</div>
-        ) : rsvps.length === 0 ? (
-          <EmptyState
-            title="No RSVPs yet"
-            description="RSVPs from your guests will appear here once they respond."
-          />
-        ) : (
+      {/* ─── RSVP table ─── */}
+      {filteredRsvps.length === 0 ? (
+        <EmptyState
+          title={rsvps.length === 0 ? "No RSVPs yet" : "No RSVPs for this event"}
+          description={rsvps.length === 0 ? "RSVPs will appear here once guests respond." : "Try a different event filter."}
+        />
+      ) : (
+        <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full">
               <thead>
                 <tr className="border-b border-sand bg-mist/50">
-                  <th className="text-left font-medium uppercase tracking-widest text-xs text-sepia px-4 py-3">Guest</th>
-                  <th className="text-left font-medium uppercase tracking-widest text-xs text-sepia px-4 py-3">Event</th>
-                  <th className="text-left font-medium uppercase tracking-widest text-xs text-sepia px-4 py-3">Status</th>
-                  <th className="text-left font-medium uppercase tracking-widest text-xs text-sepia px-4 py-3">Meal</th>
-                  <th className="text-left font-medium uppercase tracking-widest text-xs text-sepia px-4 py-3">Dietary</th>
-                  <th className="text-left font-medium uppercase tracking-widest text-xs text-sepia px-4 py-3">Plus One</th>
-                  <th className="text-left font-medium uppercase tracking-widest text-xs text-sepia px-4 py-3">Message</th>
-                  <th className="text-left font-medium uppercase tracking-widest text-xs text-sepia px-4 py-3">Submitted</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia px-4 py-3">Guest</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia px-4 py-3">Status</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia px-4 py-3 hidden md:table-cell">Event</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia px-4 py-3 hidden lg:table-cell">Meal</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia px-4 py-3 hidden lg:table-cell">+1</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia px-4 py-3 hidden xl:table-cell">Submitted</th>
                 </tr>
               </thead>
               <tbody>
-                {rsvps.map((rsvp) => {
-                  const meta = STATUS_META[rsvp.status];
+                {filteredRsvps.map((rsvp) => {
+                  const variant =
+                    rsvp.status === "accepted" ? "success" :
+                    rsvp.status === "declined" ? "danger" :
+                    rsvp.status === "tentative" ? "warning" : "default";
                   return (
-                    <tr
-                      key={rsvp.id}
-                      className="border-b border-sand/60 last:border-0 hover:bg-mist/40 transition-colors"
-                    >
+                    <tr key={rsvp.id} className="border-b border-sand last:border-0 hover:bg-mist/30 transition-colors">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-onyx">{rsvp.guest_name}</div>
+                        <p className="text-sm font-medium text-onyx">{rsvp.guest_name}</p>
                         {rsvp.guest_email && (
-                          <div className="text-xs text-sepia/60">{rsvp.guest_email}</div>
+                          <p className="text-xs text-sepia/60 flex items-center gap-1 mt-0.5">
+                            <Mail className="w-3 h-3" /> {rsvp.guest_email}
+                          </p>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-sepia">
-                        {rsvp.events?.name ?? (
-                          <span className="text-sepia/40">—</span>
+                        {rsvp.message && (
+                          <p className="text-xs text-sepia/70 italic mt-1 max-w-xs truncate">"{rsvp.message}"</p>
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <Badge variant={meta.variant}>{meta.label}</Badge>
+                        <Badge variant={variant as "success" | "danger" | "warning" | "default"} className="capitalize">
+                          {rsvp.status}
+                        </Badge>
                       </td>
-                      <td className="px-4 py-3 text-sepia">
-                        {rsvp.meal_choice ?? <span className="text-sepia/40">—</span>}
+                      <td className="px-4 py-3 hidden md:table-cell">
+                        <span className="text-sm text-sepia">{eventName(rsvp.event_id)}</span>
                       </td>
-                      <td className="px-4 py-3 text-sepia">
-                        {rsvp.dietary_restrictions ?? <span className="text-sepia/40">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-sepia">
-                        {rsvp.plus_one_name ?? <span className="text-sepia/40">—</span>}
-                      </td>
-                      <td className="px-4 py-3 max-w-xs">
-                        {rsvp.message ? (
-                          <div className="flex items-start gap-1.5 text-sepia">
-                            <MessageSquare className="w-3.5 h-3.5 text-sepia/50 shrink-0 mt-0.5" />
-                            <span className="truncate" title={rsvp.message}>
-                              {rsvp.message}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-sepia/40">—</span>
+                      <td className="px-4 py-3 hidden lg:table-cell">
+                        {rsvp.meal_choice ? (
+                          <span className="text-sm text-sepia flex items-center gap-1.5">
+                            <Utensils className="w-3.5 h-3.5 text-sepia/40" />
+                            {rsvp.meal_choice}
+                          </span>
+                        ) : <span className="text-sepia/40 text-sm">—</span>}
+                        {rsvp.dietary_restrictions && (
+                          <p className="text-xs text-sepia/60 mt-0.5">{rsvp.dietary_restrictions}</p>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sepia whitespace-nowrap text-xs">
-                        {rsvp.created_at ? formatDate(rsvp.created_at) : "—"}
+                      <td className="px-4 py-3 hidden lg:table-cell">
+                        {rsvp.plus_one_name ? (
+                          <span className="text-sm text-sepia">{rsvp.plus_one_name}</span>
+                        ) : <span className="text-sepia/40 text-sm">—</span>}
+                      </td>
+                      <td className="px-4 py-3 hidden xl:table-cell">
+                        <span className="text-xs text-sepia/60">{formatDateShort(rsvp.created_at)}</span>
+                        <p className="text-xs text-sepia/40">{formatTime(rsvp.created_at)}</p>
                       </td>
                     </tr>
                   );
@@ -324,25 +267,10 @@ export function AdminRsvps() {
               </tbody>
             </table>
           </div>
-        )}
-      </Card>
-
-      {/* ---------------- Count footer ---------------- */}
-      {!dataLoading && rsvps.length > 0 && (
-        <p className="text-xs text-sepia/60">
-          {rsvps.length} RSVP{rsvps.length === 1 ? "" : "s"} total
-        </p>
+        </Card>
       )}
 
-      {/* ---------------- Toast ---------------- */}
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-slide-up">
-          <div className="flex items-center gap-2 bg-onyx text-parchment px-4 py-2.5 rounded-md shadow-lg text-sm">
-            <Check className="w-4 h-4" />
-            {toast}
-          </div>
-        </div>
-      )}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }

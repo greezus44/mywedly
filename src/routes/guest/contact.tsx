@@ -1,245 +1,238 @@
-import { useEffect, useState } from "react";
-import { Mail, Phone, MapPin, Heart } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { MapPin, Mail, Phone, Globe, Heart, MessageSquare } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { WebsiteContent } from "@/lib/supabase";
 import { useGuestData } from "@/lib/use-guest-data";
+import { getTheme, themeToCssVars } from "@/lib/theme";
+import type { ThemeConfig } from "@/lib/theme";
 import { Card, EmptyState } from "@/components/ui";
 
-/* ------------------------------------------------------------------ */
-/* Helpers                                                            */
-/* ------------------------------------------------------------------ */
-
 type ContactInfo = {
-  emails?: string[];
-  phones?: string[];
-  addresses?: string[];
+  email?: string;
+  phone?: string;
+  website?: string;
   notes?: string;
 };
 
-/**
- * Parse a contact website_content body into structured info.
- * Recognizes lines prefixed with Email:, Phone:, Address:, or Notes:.
- * Any unlabelled lines are collected as general notes.
- */
-function parseContact(body: string): ContactInfo {
-  const info: ContactInfo = {};
-  const notes: string[] = [];
-
-  for (const raw of body.split("\n")) {
-    const line = raw.trim();
-    if (!line) continue;
-
-    if (/^email\s*[:.]\s*/i.test(line)) {
-      const val = line.replace(/^email\s*[:.]\s*/i, "").trim();
-      if (val) {
-        info.emails = info.emails || [];
-        info.emails.push(val);
-      }
-    } else if (/^phone\s*[:.]\s*/i.test(line)) {
-      const val = line.replace(/^phone\s*[:.]\s*/i, "").trim();
-      if (val) {
-        info.phones = info.phones || [];
-        info.phones.push(val);
-      }
-    } else if (/^address\s*[:.]\s*/i.test(line)) {
-      const val = line.replace(/^address\s*[:.]\s*/i, "").trim();
-      if (val) {
-        info.addresses = info.addresses || [];
-        info.addresses.push(val);
-      }
-    } else if (/^notes?\s*[:.]\s*/i.test(line)) {
-      const val = line.replace(/^notes?\s*[:.]\s*/i, "").trim();
-      if (val) {
-        info.notes = info.notes ? `${info.notes}\n${val}` : val;
-      }
-    } else {
-      notes.push(line);
-    }
-  }
-
-  if (notes.length > 0 && !info.notes) {
-    info.notes = notes.join("\n");
-  }
-
-  return info;
-}
-
-/* ------------------------------------------------------------------ */
-/* Component                                                           */
-/* ------------------------------------------------------------------ */
-
 export function GuestContact() {
   const { wedding, loading } = useGuestData();
-  const [content, setContent] = useState<WebsiteContent | null>(null);
-  const [contentLoading, setContentLoading] = useState(true);
+  const theme: ThemeConfig = useMemo(() => getTheme(wedding), [wedding]);
+  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
 
-  useEffect(() => {
-    if (!wedding) return;
-    supabase
+  const [content, setContent] = useState<WebsiteContent | null>(null);
+  const [fetching, setFetching] = useState(true);
+
+  const weddingId = wedding?.id ?? "";
+
+  const loadContent = useCallback(async () => {
+    if (!weddingId) { setFetching(false); return; }
+    setFetching(true);
+    const { data } = await supabase
       .from("website_content")
       .select("*")
-      .eq("wedding_id", wedding.id)
+      .eq("wedding_id", weddingId)
       .eq("section", "contact")
-      .maybeSingle()
-      .then(({ data }) => {
-        setContent((data as WebsiteContent) || null);
-        setContentLoading(false);
-      });
-  }, [wedding]);
+      .eq("is_published", true)
+      .order("sort_order", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (data) setContent(data as WebsiteContent);
+    setFetching(false);
+  }, [weddingId]);
 
-  if (loading || contentLoading) {
+  useEffect(() => { if (weddingId) loadContent(); }, [weddingId, loadContent]);
+
+  // ─── Parse contact info from body ───
+  const contactInfo = useMemo<ContactInfo>(() => {
+    const body = content?.body ?? "";
+    const info: ContactInfo = {};
+
+    const lines = body.split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      const lower = trimmed.toLowerCase();
+
+      if (lower.startsWith("email:") || lower.startsWith("e-mail:")) {
+        info.email = trimmed.slice(lower.startsWith("e-mail:") ? 7 : 6).trim();
+      } else if (lower.startsWith("phone:") || lower.startsWith("tel:")) {
+        info.phone = trimmed.slice(lower.startsWith("tel:") ? 4 : 6).trim();
+      } else if (lower.startsWith("website:") || lower.startsWith("url:")) {
+        info.website = trimmed.slice(lower.startsWith("url:") ? 4 : 8).trim();
+      } else if (lower.startsWith("notes:") || lower.startsWith("note:")) {
+        info.notes = trimmed.slice(lower.startsWith("note:") ? 5 : 6).trim();
+      }
+    }
+
+    // Also try to extract email/phone from raw text if not explicitly labeled
+    if (!info.email) {
+      const emailMatch = body.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      if (emailMatch) info.email = emailMatch[0];
+    }
+    if (!info.phone) {
+      const phoneMatch = body.match(/(\+?\d[\d\s\-().]{7,}\d)/);
+      if (phoneMatch) info.phone = phoneMatch[0].trim();
+    }
+
+    return info;
+  }, [content]);
+
+  if (loading || fetching) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-sepia">
-        Loading…
+      <div className="flex items-center justify-center py-24 text-sepia">
+        <div className="animate-pulse">Loading…</div>
       </div>
     );
   }
 
   if (!wedding) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center text-sepia">
-        Wedding not found.
-      </div>
-    );
+    return <EmptyState title="No wedding found" />;
   }
 
-  const contact = content?.body ? parseContact(content.body) : {};
-  const title = content?.title || "Get in Touch";
-  const hasContactInfo =
-    Boolean(contact.emails?.length) ||
-    Boolean(contact.phones?.length) ||
-    Boolean(contact.addresses?.length) ||
-    Boolean(contact.notes);
-  const hasWeddingLocation = Boolean(wedding.location);
+  const hasContactInfo = contactInfo.email || contactInfo.phone || contactInfo.website || contactInfo.notes;
+  const hasLocation = wedding.location;
 
-  if (!hasContactInfo && !hasWeddingLocation) {
+  if (!hasContactInfo && !hasLocation && !content?.body) {
     return (
-      <div className="max-w-2xl mx-auto animate-fade-in">
-        <Header title={title} />
-        <EmptyState
-          title="No contact details yet"
-          description="The couple will share their contact information here soon."
-        />
+      <div style={cssVars as React.CSSProperties} className="animate-fade-in px-6 py-12">
+        <div className="max-w-2xl mx-auto">
+          <EmptyState
+            title="Contact info coming soon"
+            description="Check back later for contact details."
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-2xl mx-auto animate-fade-in">
-      <Header title={title} />
+    <div style={cssVars as React.CSSProperties} className="animate-fade-in px-6 py-12">
+      <div className="max-w-2xl mx-auto">
+        {/* ─── Header ─── */}
+        <div className="text-center mb-12">
+          <Heart className="w-6 h-6 mx-auto mb-3" style={{ color: "var(--c-accent)" }} />
+          <p className="text-xs uppercase tracking-[0.3em] mb-2" style={{ color: "var(--c-textMuted)" }}>
+            Get in touch
+          </p>
+          <h1 className="text-4xl font-serif" style={{ color: "var(--c-text)" }}>
+            {content?.title || "Contact"}
+          </h1>
+        </div>
 
-      <div className="space-y-4">
-        {/* Email */}
-        {contact.emails && contact.emails.length > 0 && (
-          <ContactRow icon={Mail} label="Email">
-            {contact.emails.map((email) => (
-              <a
-                key={email}
-                href={`mailto:${email}`}
-                className="block text-onyx hover:text-sepia hover:underline transition-colors"
-              >
-                {email}
-              </a>
-            ))}
-          </ContactRow>
-        )}
-
-        {/* Phone */}
-        {contact.phones && contact.phones.length > 0 && (
-          <ContactRow icon={Phone} label="Phone">
-            {contact.phones.map((phone) => (
-              <a
-                key={phone}
-                href={`tel:${phone.replace(/[^0-9+]/g, "")}`}
-                className="block text-onyx hover:text-sepia hover:underline transition-colors"
-              >
-                {phone}
-              </a>
-            ))}
-          </ContactRow>
-        )}
-
-        {/* Wedding location */}
-        {hasWeddingLocation && (
-          <ContactRow icon={MapPin} label="Venue">
-            <span className="text-onyx">{wedding.location}</span>
-          </ContactRow>
-        )}
-
-        {/* Additional addresses */}
-        {contact.addresses && contact.addresses.length > 0 && (
-          <ContactRow icon={MapPin} label="Address">
-            {contact.addresses.map((addr) => (
-              <span key={addr} className="block text-onyx">
-                {addr}
-              </span>
-            ))}
-          </ContactRow>
-        )}
-
-        {/* Notes / general message */}
-        {contact.notes && (
-          <Card className="bg-mist/40">
-            <p className="text-ink leading-relaxed whitespace-pre-line font-serif text-center">
-              {contact.notes}
+        {/* ─── Location ─── */}
+        {hasLocation && (
+          <Card className="p-6 mb-6 text-center">
+            <MapPin className="w-6 h-6 mx-auto mb-3" style={{ color: "var(--c-primary)" }} />
+            <h2 className="text-xs uppercase tracking-widest mb-2" style={{ color: "var(--c-textMuted)" }}>
+              Wedding Location
+            </h2>
+            <p className="text-lg font-serif" style={{ color: "var(--c-text)" }}>
+              {wedding.location}
             </p>
           </Card>
         )}
-      </div>
 
-      {/* Decorative footer */}
-      <div className="flex items-center justify-center gap-3 text-sepia mt-12">
-        <span className="h-px w-10 bg-sand" />
-        <Heart className="w-4 h-4" />
-        <span className="h-px w-10 bg-sand" />
+        {/* ─── Contact details ─── */}
+        {hasContactInfo && (
+          <Card className="p-6">
+            <div className="space-y-4">
+              {contactInfo.email && (
+                <a
+                  href={`mailto:${contactInfo.email}`}
+                  className="flex items-center gap-3 group transition-colors"
+                >
+                  <span
+                    className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ background: "var(--c-secondary)", color: "var(--c-primary)" }}
+                  >
+                    <Mail className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <p className="text-xs uppercase tracking-widest" style={{ color: "var(--c-textMuted)" }}>
+                      Email
+                    </p>
+                    <p className="text-sm group-hover:underline" style={{ color: "var(--c-link)" }}>
+                      {contactInfo.email}
+                    </p>
+                  </div>
+                </a>
+              )}
+
+              {contactInfo.phone && (
+                <a
+                  href={`tel:${contactInfo.phone.replace(/\s/g, "")}`}
+                  className="flex items-center gap-3 group transition-colors"
+                >
+                  <span
+                    className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ background: "var(--c-secondary)", color: "var(--c-primary)" }}
+                  >
+                    <Phone className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <p className="text-xs uppercase tracking-widest" style={{ color: "var(--c-textMuted)" }}>
+                      Phone
+                    </p>
+                    <p className="text-sm group-hover:underline" style={{ color: "var(--c-link)" }}>
+                      {contactInfo.phone}
+                    </p>
+                  </div>
+                </a>
+              )}
+
+              {contactInfo.website && (
+                <a
+                  href={contactInfo.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 group transition-colors"
+                >
+                  <span
+                    className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{ background: "var(--c-secondary)", color: "var(--c-primary)" }}
+                  >
+                    <Globe className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <p className="text-xs uppercase tracking-widest" style={{ color: "var(--c-textMuted)" }}>
+                      Website
+                    </p>
+                    <p className="text-sm group-hover:underline" style={{ color: "var(--c-link)" }}>
+                      {contactInfo.website}
+                    </p>
+                  </div>
+                </a>
+              )}
+            </div>
+
+            {contactInfo.notes && (
+              <div className="mt-6 pt-6 border-t" style={{ borderColor: "var(--c-secondary)" }}>
+                <div className="flex items-start gap-3">
+                  <MessageSquare className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: "var(--c-textMuted)" }} />
+                  <p
+                    className="text-sm whitespace-pre-line leading-relaxed"
+                    style={{ color: "var(--c-textMuted)" }}
+                  >
+                    {contactInfo.notes}
+                  </p>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* ─── Footer ornament ─── */}
+        <div className="text-center mt-12">
+          <div className="inline-flex items-center gap-3" style={{ color: "var(--c-accent)" }}>
+            <span className="h-px w-12" style={{ background: "var(--c-accent)" }} />
+            <Heart className="w-4 h-4" />
+            <span className="h-px w-12" style={{ background: "var(--c-accent)" }} />
+          </div>
+          <p className="text-xs mt-4" style={{ color: "var(--c-textMuted)" }}>
+            {wedding.couple_name_one} & {wedding.couple_name_two}
+          </p>
+        </div>
       </div>
     </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Sub-components                                                      */
-/* ------------------------------------------------------------------ */
-
-function Header({ title }: { title: string }) {
-  return (
-    <header className="text-center mb-12">
-      <div className="flex items-center justify-center gap-3 text-sepia mb-4">
-        <span className="h-px w-12 bg-sand" />
-        <Mail className="w-5 h-5" />
-        <span className="h-px w-12 bg-sand" />
-      </div>
-      <h1 className="font-serif text-3xl md:text-4xl text-onyx mb-3">
-        {title}
-      </h1>
-      <p className="text-sepia text-sm tracking-widest uppercase">
-        We'd love to hear from you
-      </p>
-    </header>
-  );
-}
-
-function ContactRow({
-  icon: Icon,
-  label,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card className="flex items-start gap-4">
-      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-mist flex items-center justify-center text-sepia">
-        <Icon className="w-4 h-4" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sepia text-xs tracking-widest uppercase mb-1">
-          {label}
-        </p>
-        <div className="text-sm leading-relaxed">{children}</div>
-      </div>
-    </Card>
   );
 }
 

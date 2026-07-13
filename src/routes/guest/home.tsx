@@ -1,185 +1,225 @@
-import { Link } from "react-router-dom";
-import { Calendar, MapPin, Clock, Heart, ChevronRight } from "lucide-react";
+import { useMemo } from "react";
+import { Calendar, MapPin, Clock, Heart, ArrowRight, BookOpen, Images, CalendarDays } from "lucide-react";
 import { useGuestData } from "@/lib/use-guest-data";
-import { formatDate, daysUntil } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { getTheme, themeToCssVars } from "@/lib/theme";
+import type { ThemeConfig } from "@/lib/theme";
+import { formatDate, formatTime, daysUntil, cn } from "@/lib/utils";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui";
 
 export function GuestHome() {
-  const { wedding, guest, loading, slug } = useGuestData();
+  const { wedding, guest, loading } = useGuestData();
+  const theme: ThemeConfig = useMemo(() => getTheme(wedding), [wedding]);
+  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24 text-sepia">
-        Loading…
+        <div className="animate-pulse">Loading…</div>
       </div>
     );
   }
 
   if (!wedding) {
     return (
-      <div className="flex items-center justify-center py-24 text-sepia">
-        Wedding details not found.
+      <div className="flex items-center justify-center py-24 text-center">
+        <p className="text-sepia">Wedding not found.</p>
       </div>
     );
   }
 
   const countdown = daysUntil(wedding.wedding_date);
-  const guestName = guest?.first_name || guest?.full_name || "Guest";
-  const hasHeroImage = Boolean(wedding.hero_image_url);
+  const coupleName = `${wedding.couple_name_one} & ${wedding.couple_name_two}`;
+  const scriptFont = theme.typography.headingFont === "Inter" ? "'Dancing Script', cursive" : `'${theme.typography.headingFont}', serif`;
 
   return (
-    <div className="space-y-12 animate-fade-in">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden rounded-2xl">
-        {hasHeroImage ? (
-          <>
-            <div
-              className="absolute inset-0 bg-cover bg-center"
-              style={{ backgroundImage: `url(${wedding.hero_image_url})` }}
+    <div style={cssVars as React.CSSProperties} className="animate-fade-in">
+      {/* ─── Hero ─── */}
+      <section className="relative overflow-hidden">
+        {wedding.hero_image_url && (
+          <div className="absolute inset-0">
+            <img
+              src={wedding.hero_image_url}
+              alt=""
+              className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-onyx/40" />
-            <div className="relative px-6 py-20 md:py-28 text-center text-cream">
-              <p className="text-xs tracking-[0.3em] uppercase mb-6 opacity-90">
-                We're getting married
-              </p>
-              <h1 className="font-script text-5xl md:text-7xl leading-tight mb-6">
-                {wedding.couple_name_one} & {wedding.couple_name_two}
-              </h1>
-              {wedding.wedding_date && (
-                <div className="flex items-center justify-center gap-3 text-sm md:text-base tracking-widest uppercase mb-2">
-                  <Calendar className="w-4 h-4" />
-                  <span>{formatDate(wedding.wedding_date)}</span>
-                </div>
-              )}
-              {wedding.location && (
-                <div className="flex items-center justify-center gap-3 text-sm md:text-base tracking-widest uppercase">
-                  <MapPin className="w-4 h-4" />
-                  <span>{wedding.location}</span>
-                </div>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="bg-gradient-to-b from-mist to-cream px-6 py-20 md:py-28 text-center rounded-2xl border border-sand">
-            <p className="text-xs tracking-[0.3em] uppercase text-sepia mb-6">
-              We're getting married
-            </p>
-            <h1 className="font-script text-5xl md:text-7xl leading-tight text-onyx mb-6">
-              {wedding.couple_name_one} & {wedding.couple_name_two}
-            </h1>
-            {wedding.wedding_date && (
-              <div className="flex items-center justify-center gap-3 text-sm md:text-base tracking-widest uppercase text-sepia mb-2">
-                <Calendar className="w-4 h-4" />
-                <span>{formatDate(wedding.wedding_date)}</span>
-              </div>
-            )}
-            {wedding.location && (
-              <div className="flex items-center justify-center gap-3 text-sm md:text-base tracking-widest uppercase text-sepia">
-                <MapPin className="w-4 h-4" />
-                <span>{wedding.location}</span>
-              </div>
-            )}
+            <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-black/40" />
           </div>
         )}
-      </section>
 
-      {/* Countdown */}
-      {countdown !== null && countdown >= 0 && (
-        <section className="text-center">
-          <div className="inline-flex flex-col items-center px-8 py-6 bg-card border border-sand rounded-xl">
-            <div className="flex items-center gap-2 text-sepia text-xs tracking-[0.3em] uppercase mb-2">
-              <Clock className="w-4 h-4" />
-              <span>Counting Down</span>
+        <div
+          className={cn(
+            "relative px-6 py-24 sm:py-32 text-center",
+            !wedding.hero_image_url && "bg-[var(--c-background)]"
+          )}
+        >
+          <p
+            className="text-xs sm:text-sm uppercase tracking-[0.3em] mb-6"
+            style={{ color: wedding.hero_image_url ? "#fff" : "var(--c-textMuted)" }}
+          >
+            We're getting married
+          </p>
+
+          <h1
+            className="text-5xl sm:text-6xl md:text-7xl mb-6 leading-tight"
+            style={{
+              fontFamily: scriptFont,
+              color: wedding.hero_image_url ? "#fff" : "var(--c-text)",
+              fontStyle: theme.typography.fontStyle,
+            }}
+          >
+            {coupleName}
+          </h1>
+
+          {wedding.wedding_date && (
+            <div
+              className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 text-sm sm:text-base"
+              style={{ color: wedding.hero_image_url ? "#fff" : "var(--c-textMuted)" }}
+            >
+              <span className="flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                {formatDate(wedding.wedding_date)}
+              </span>
+              {wedding.wedding_date && (
+                <span className="flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  {formatTime(wedding.wedding_date)}
+                </span>
+              )}
+              {wedding.location && (
+                <span className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  {wedding.location}
+                </span>
+              )}
             </div>
-            <p className="font-serif text-4xl md:text-5xl text-onyx">
-              {countdown === 0 ? "Today!" : countdown}
-            </p>
-            {countdown > 0 && (
-              <p className="text-sepia text-sm tracking-widest uppercase mt-1">
-                {countdown === 1 ? "Day to go" : "Days to go"}
+          )}
+
+          {/* Countdown */}
+          {countdown !== null && countdown > 0 && (
+            <div className="mt-12 flex flex-col items-center">
+              <p
+                className="text-xs uppercase tracking-[0.3em] mb-3"
+                style={{ color: wedding.hero_image_url ? "#fff" : "var(--c-textMuted)" }}
+              >
+                Counting down
               </p>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* Personalized Welcome */}
-      <section className="text-center max-w-xl mx-auto">
-        <Heart className="w-6 h-6 text-rose mx-auto mb-4" />
-        <h2 className="font-serif text-2xl md:text-3xl text-onyx mb-3">
-          Welcome, {guestName}!
-        </h2>
-        <p className="text-sepia leading-relaxed">
-          We're so delighted to share our special day with you. Explore the
-          details below and let us know if you'll be joining us.
-        </p>
-      </section>
-
-      {/* Quick Links */}
-      <section>
-        <h3 className="font-serif text-lg text-sepia text-center mb-6 tracking-wide">
-          Explore
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <QuickLink
-            to={`/w/${slug}/events`}
-            icon={Calendar}
-            title="Events"
-            description="View the schedule and RSVP"
-          />
-          <QuickLink
-            to={`/w/${slug}/story`}
-            icon={Heart}
-            title="Our Story"
-            description="How we met and fell in love"
-          />
-          <QuickLink
-            to={`/w/${slug}/gallery`}
-            icon={Heart}
-            title="Gallery"
-            description="Photos of our journey"
-          />
+              <div className="flex items-center gap-4 sm:gap-8">
+                <CountdownUnit value={countdown} label="Days" hero={!!wedding.hero_image_url} />
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
-      {/* Hashtag */}
-      {wedding.hashtag && (
-        <section className="text-center pt-4">
-          <p className="font-script text-3xl text-sepia">{wedding.hashtag}</p>
+      {/* ─── Personalized welcome ─── */}
+      {guest && (
+        <section className="px-6 py-12 text-center" style={{ background: "var(--c-background)" }}>
+          <div className="max-w-2xl mx-auto">
+            <Heart className="w-6 h-6 mx-auto mb-3" style={{ color: "var(--c-accent)" }} />
+            <h2
+              className="text-3xl sm:text-4xl font-serif mb-2"
+              style={{ color: "var(--c-text)" }}
+            >
+              Welcome, {guest.first_name || guest.full_name.split(" ")[0]}!
+            </h2>
+            <p className="text-sm" style={{ color: "var(--c-textMuted)" }}>
+              We're so glad you're here. Explore the details of our special day below.
+            </p>
+          </div>
         </section>
       )}
+
+      {/* ─── Quick links ─── */}
+      <section className="px-6 py-12" style={{ background: "var(--c-background)" }}>
+        <div className="max-w-4xl mx-auto grid gap-6 sm:grid-cols-3">
+          <QuickLink
+            icon={<CalendarDays className="w-6 h-6" />}
+            title="Events"
+            description="View schedule and RSVP"
+            href="#/events"
+            theme={theme}
+          />
+          <QuickLink
+            icon={<BookOpen className="w-6 h-6" />}
+            title="Our Story"
+            description="How we got here"
+            href="#/story"
+            theme={theme}
+          />
+          <QuickLink
+            icon={<Images className="w-6 h-6" />}
+            title="Gallery"
+            description="Moments we've shared"
+            href="#/gallery"
+            theme={theme}
+          />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function CountdownUnit({ value, label, hero }: { value: number; label: string; hero: boolean }) {
+  return (
+    <div className="text-center">
+      <div
+        className={cn(
+          "text-4xl sm:text-5xl font-serif",
+        )}
+        style={{ color: hero ? "#fff" : "var(--c-text)" }}
+      >
+        {value}
+      </div>
+      <div
+        className="text-xs uppercase tracking-widest mt-1"
+        style={{ color: hero ? "#fff" : "var(--c-textMuted)" }}
+      >
+        {label}
+      </div>
     </div>
   );
 }
 
 function QuickLink({
-  to,
-  icon: Icon,
+  icon,
   title,
   description,
+  href,
+  theme,
 }: {
-  to: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ReactNode;
   title: string;
   description: string;
+  href: string;
+  theme: ThemeConfig;
 }) {
   return (
-    <Link
-      to={to}
-      className={cn(
-        "group flex items-center gap-4 p-5 bg-card border border-sand rounded-xl",
-        "hover:border-sepia hover:shadow-sm transition-all"
-      )}
-    >
-      <div className="flex-shrink-0 w-11 h-11 rounded-full bg-mist flex items-center justify-center text-sepia">
-        <Icon className="w-5 h-5" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <h4 className="font-serif text-lg text-onyx leading-tight">{title}</h4>
-        <p className="text-sepia text-sm truncate">{description}</p>
-      </div>
-      <ChevronRight className="w-5 h-5 text-sepia/50 group-hover:text-sepia group-hover:translate-x-0.5 transition-all" />
-    </Link>
+    <a href={href} className="block group">
+      <Card className="p-6 text-center h-full transition-all hover:shadow-md" >
+        <div
+          className="w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-4 transition-colors"
+          style={{ background: "var(--c-secondary)", color: "var(--c-primary)" }}
+        >
+          {icon}
+        </div>
+        <h3
+          className="text-lg font-serif mb-1"
+          style={{ color: "var(--c-text)" }}
+        >
+          {title}
+        </h3>
+        <p className="text-sm" style={{ color: "var(--c-textMuted)" }}>
+          {description}
+        </p>
+        <div
+          className="mt-3 inline-flex items-center gap-1 text-xs uppercase tracking-widest transition-transform group-hover:translate-x-0.5"
+          style={{ color: "var(--c-link)" }}
+        >
+          View <ArrowRight className="w-3 h-3" />
+        </div>
+      </Card>
+    </a>
   );
 }
 

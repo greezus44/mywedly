@@ -1,150 +1,294 @@
-import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
-import type { Wedding, Guest, GuestSession } from "@/lib/supabase";
+import { useEffect, useState, useMemo } from "react";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
+import {
+  Menu, X, Home, Heart, Calendar, Image as ImageIcon,
+  HelpCircle, Gift, Mail, LogOut, ChevronDown,
+} from "lucide-react";
+import { supabase, type Wedding, type Guest } from "@/lib/supabase";
 import { getGuestSession, clearGuestSession } from "@/lib/guest-auth";
-import { daysUntil, formatDate } from "@/lib/utils";
-import { Menu, X, Home, Calendar, Heart, Image as ImageIcon, MapPin, HelpCircle, Gift, Mail, LogOut } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { getTheme, themeToCssVars } from "@/lib/theme";
+import { daysUntil, formatDate, cn } from "@/lib/utils";
 
-const NAV = [
+type NavItem = {
+  path: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
+
+const NAV_ITEMS: NavItem[] = [
   { path: "home", label: "Home", icon: Home },
   { path: "events", label: "Events", icon: Calendar },
   { path: "story", label: "Our Story", icon: Heart },
   { path: "gallery", label: "Gallery", icon: ImageIcon },
-  { path: "travel", label: "Travel", icon: MapPin },
+  { path: "travel", label: "Travel", icon: ChevronDown },
   { path: "faq", label: "FAQ", icon: HelpCircle },
   { path: "registry", label: "Registry", icon: Gift },
   { path: "contact", label: "Contact", icon: Mail },
 ];
 
 export function GuestLayout({ children }: { children: React.ReactNode }) {
-  const { slug } = useParams();
-  const location = useLocation();
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const [session, setSession] = useState<GuestSession | null>(null);
+  const location = useLocation();
+
   const [wedding, setWedding] = useState<Wedding | null>(null);
   const [guest, setGuest] = useState<Guest | null>(null);
+  const [loading, setLoading] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [countdown, setCountdown] = useState<number | null>(null);
 
   useEffect(() => {
-    const s = getGuestSession();
-    if (!s) {
-      navigate(`/w/${slug}`);
+    const session = getGuestSession();
+
+    // No session → redirect to cover
+    if (!session || (slug && session.weddingSlug !== slug)) {
+      if (slug) navigate(`/w/${slug}`, { replace: true });
+      setLoading(false);
       return;
     }
-    setSession(s);
-    supabase.from("weddings").select("*").eq("id", s.weddingId).maybeSingle().then(({ data }) => {
-      if (data) setWedding(data as Wedding);
-    });
-    supabase.from("guests").select("*").eq("id", s.guestId).maybeSingle().then(({ data }) => {
-      if (data) setGuest(data as Guest);
+
+    Promise.all([
+      supabase.from("weddings").select("*").eq("id", session.weddingId).maybeSingle(),
+      supabase.from("guests").select("*").eq("id", session.guestId).maybeSingle(),
+    ]).then(([weddingRes, guestRes]) => {
+      if (weddingRes.data) setWedding(weddingRes.data as Wedding);
+      if (guestRes.data) setGuest(guestRes.data as Guest);
+      setLoading(false);
     });
   }, [slug, navigate]);
 
+  // Close mobile menu on route change
   useEffect(() => {
-    if (wedding?.wedding_date) {
-      const d = daysUntil(wedding.wedding_date);
-      setCountdown(d);
-    }
-  }, [wedding]);
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  const theme = useMemo(() => getTheme(wedding), [wedding]);
+  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
+
+  const dUntil = daysUntil(wedding?.wedding_date ?? null);
+  const coupleNames = wedding
+    ? `${wedding.couple_name_one} & ${wedding.couple_name_two}`
+    : "";
 
   const handleSignOut = () => {
     clearGuestSession();
-    navigate(`/w/${slug}`);
+    if (slug) navigate(`/w/${slug}`, { replace: true });
   };
 
-  if (!session) {
-    return <div className="min-h-screen flex items-center justify-center text-sepia">Redirecting…</div>;
+  // Determine active nav item from current path
+  const currentSegment = location.pathname.split("/").pop() ?? "home";
+  const isActive = (item: NavItem) =>
+    currentSegment === item.path ||
+    (currentSegment === "" && item.path === "home");
+
+  if (loading) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ ...cssVars, background: "var(--c-background)" } as React.CSSProperties}
+      >
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-2 border-[var(--c-textMuted)] border-t-[var(--c-primary)] rounded-full animate-spin" />
+          <p className="text-sm" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
+            Loading…
+          </p>
+        </div>
+      </div>
+    );
   }
 
-  const activePath = location.pathname.split("/").pop();
+  if (!wedding) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center text-center px-6"
+        style={{ ...cssVars, background: "var(--c-background)" } as React.CSSProperties}
+      >
+        <div>
+          <h1
+            className="font-serif text-3xl mb-3"
+            style={{ color: "var(--c-text)", fontFamily: "var(--f-heading)" }}
+          >
+            Wedding Not Found
+          </h1>
+          <p className="text-sm" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
+            The wedding you're looking for doesn't exist or has been removed.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-parchment">
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-parchment/95 backdrop-blur-sm border-b border-sand">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to={`/w/${slug}/home`} className="font-serif text-lg text-onyx">
-            {wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "Wedding"}
-          </Link>
-          <div className="flex items-center gap-4">
-            {countdown !== null && countdown >= 0 && (
-              <span className="hidden sm:block text-xs text-sepia tracking-widest uppercase">
-                {countdown === 0 ? "Today!" : `${countdown} days to go`}
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ ...cssVars, background: "var(--c-background)" } as React.CSSProperties}
+    >
+      {/* ─── Sticky header ─── */}
+      <header
+        className="sticky top-0 z-40 border-b backdrop-blur-md"
+        style={{
+          background: "color-mix(in srgb, var(--c-navBg) 92%, transparent)",
+          borderColor: "var(--c-secondary)",
+        }}
+      >
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between h-16">
+            {/* Couple names + countdown */}
+            <Link
+              to={`/w/${slug}/home`}
+              className="flex flex-col min-w-0"
+            >
+              <span
+                className="font-serif text-lg truncate"
+                style={{ color: "var(--c-navText)", fontFamily: "var(--f-heading)" }}
+              >
+                {coupleNames}
               </span>
-            )}
-            <button onClick={() => setMobileOpen(!mobileOpen)} className="md:hidden text-sepia">
+              {dUntil !== null && dUntil > 0 && (
+                <span
+                  className="text-xs"
+                  style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}
+                >
+                  {dUntil} days to go
+                </span>
+              )}
+            </Link>
+
+            {/* Desktop nav */}
+            <nav className="hidden lg:flex items-center gap-1">
+              {NAV_ITEMS.map((item) => (
+                <Link
+                  key={item.path}
+                  to={`/w/${slug}/${item.path}`}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg transition-colors",
+                    isActive(item) ? "font-medium" : ""
+                  )}
+                  style={{
+                    color: isActive(item) ? "var(--c-navText)" : "color-mix(in srgb, var(--c-navText) 70%, transparent)",
+                    background: isActive(item) ? "color-mix(in srgb, var(--c-navText) 8%, transparent)" : "transparent",
+                  }}
+                >
+                  <item.icon className="w-4 h-4" />
+                  {item.label}
+                </Link>
+              ))}
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg transition-colors hover:opacity-70"
+                style={{ color: "var(--c-navText)" }}
+              >
+                <LogOut className="w-4 h-4" />
+                Sign Out
+              </button>
+            </nav>
+
+            {/* Mobile hamburger */}
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="lg:hidden p-2 rounded-lg transition-colors"
+              style={{ color: "var(--c-navText)" }}
+            >
               {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
-            <button onClick={handleSignOut} className="hidden md:flex items-center gap-1 text-sepia text-sm hover:text-onyx">
-              <LogOut className="w-4 h-4" /> Sign Out
-            </button>
           </div>
+
+          {/* Mobile nav */}
+          {mobileOpen && (
+            <nav className="lg:hidden pb-4 animate-slide-down">
+              <div className="space-y-1">
+                {NAV_ITEMS.map((item) => (
+                  <Link
+                    key={item.path}
+                    to={`/w/${slug}/${item.path}`}
+                    onClick={() => setMobileOpen(false)}
+                    className={cn(
+                      "flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg transition-colors",
+                      isActive(item) ? "font-medium" : ""
+                    )}
+                    style={{
+                      color: isActive(item) ? "var(--c-navText)" : "color-mix(in srgb, var(--c-navText) 70%, transparent)",
+                      background: isActive(item) ? "color-mix(in srgb, var(--c-navText) 8%, transparent)" : "transparent",
+                    }}
+                  >
+                    <item.icon className="w-4 h-4" />
+                    {item.label}
+                  </Link>
+                ))}
+                <button
+                  onClick={() => { setMobileOpen(false); handleSignOut(); }}
+                  className="flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg transition-colors w-full hover:opacity-70"
+                  style={{ color: "var(--c-navText)" }}
+                >
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
+                </button>
+              </div>
+            </nav>
+          )}
         </div>
-        {/* Desktop nav */}
-        <nav className="hidden md:block border-t border-sand/50">
-          <div className="max-w-5xl mx-auto px-4 flex gap-1">
-            {NAV.map((item) => (
-              <Link
-                key={item.path}
-                to={`/w/${slug}/${item.path}`}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-2.5 text-sm transition-colors border-b-2",
-                  activePath === item.path
-                    ? "border-sepia text-onyx font-medium"
-                    : "border-transparent text-sepia hover:text-onyx"
-                )}
-              >
-                <item.icon className="w-3.5 h-3.5" />
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        </nav>
       </header>
 
-      {/* Mobile nav */}
-      {mobileOpen && (
-        <nav className="md:hidden bg-parchment border-b border-sand animate-slide-up">
-          <div className="px-4 py-2 space-y-1">
-            {NAV.map((item) => (
-              <Link
-                key={item.path}
-                to={`/w/${slug}/${item.path}`}
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-md text-sm",
-                  activePath === item.path ? "bg-onyx/5 text-onyx font-medium" : "text-sepia"
-                )}
-              >
-                <item.icon className="w-4 h-4" />
-                {item.label}
-              </Link>
-            ))}
-            <button onClick={handleSignOut} className="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-sepia w-full">
-              <LogOut className="w-4 h-4" /> Sign Out
-            </button>
-          </div>
-        </nav>
-      )}
-
-      {/* Content */}
-      <main className="max-w-5xl mx-auto px-4 py-8 md:py-12 animate-fade-in">
+      {/* ─── Main content ─── */}
+      <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 py-8">
+        {guest && (
+          <p
+            className="text-sm mb-6 text-center"
+            style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}
+          >
+            Welcome, <span style={{ color: "var(--c-text)" }}>{guest.full_name}</span>!
+          </p>
+        )}
         {children}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-sand mt-16 py-8 text-center">
-        {wedding?.hashtag && <p className="font-serif text-lg text-sepia mb-1">{wedding.hashtag}</p>}
-        <p className="text-xs text-sepia/50 uppercase tracking-widest">
-          {wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "Wedding"}
-          {wedding?.wedding_date && ` · ${formatDate(wedding.wedding_date)}`}
-        </p>
+      {/* ─── Footer ─── */}
+      <footer
+        className="border-t"
+        style={{
+          background: "var(--c-footerBg)",
+          borderColor: "color-mix(in srgb, var(--c-footerBg) 80%, var(--c-text))",
+        }}
+      >
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 text-center">
+          {/* Decorative ornament */}
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="h-px w-10" style={{ background: "var(--c-footerText)", opacity: 0.3 }} />
+            <Heart
+              className="w-4 h-4"
+              style={{ color: "var(--c-footerText)", opacity: 0.5 }}
+            />
+            <div className="h-px w-10" style={{ background: "var(--c-footerText)", opacity: 0.3 }} />
+          </div>
+
+          {/* Hashtag */}
+          {wedding.hashtag && (
+            <p
+              className="font-serif text-lg mb-2"
+              style={{ color: "var(--c-footerText)", fontFamily: "var(--f-heading)" }}
+            >
+              {wedding.hashtag}
+            </p>
+          )}
+
+          {/* Couple names */}
+          <p
+            className="text-sm mb-1"
+            style={{ color: "var(--c-footerText)", fontFamily: "var(--f-body)", opacity: 0.9 }}
+          >
+            {coupleNames}
+          </p>
+
+          {/* Wedding date */}
+          {wedding.wedding_date && (
+            <p
+              className="text-xs"
+              style={{ color: "var(--c-footerText)", fontFamily: "var(--f-body)", opacity: 0.6 }}
+            >
+              {formatDate(wedding.wedding_date)}
+            </p>
+          )}
+        </div>
       </footer>
     </div>
   );
 }
-
-export type GuestContext = { wedding: Wedding | null; guest: Guest | null; session: GuestSession | null };

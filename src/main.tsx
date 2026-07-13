@@ -14,6 +14,9 @@ import { AdminRsvps } from "@/routes/admin/rsvps";
 import { AdminContent } from "@/routes/admin/content";
 import { AdminGallery } from "@/routes/admin/gallery";
 import { AdminSettings } from "@/routes/admin/settings";
+import { AdminCoverEditor } from "@/routes/admin/cover-editor";
+import { AdminThemeEditor } from "@/routes/admin/theme-editor";
+import { GuestCover } from "@/routes/guest/cover";
 import { GuestLogin } from "@/routes/guest/guest-login";
 import { GuestLayout } from "@/routes/guest/guest-layout";
 import { GuestHome } from "@/routes/guest/home";
@@ -26,9 +29,7 @@ import { GuestRegistry } from "@/routes/guest/registry";
 import { GuestContact } from "@/routes/guest/contact";
 import { Landing } from "@/routes/landing";
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 1000 * 30, retry: 1 } },
-});
+const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 1000 * 30, retry: 1 } } });
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
   return <AdminLayout>{children}</AdminLayout>;
@@ -42,6 +43,8 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<HostLogin />} />
           <Route path="/admin" element={<AdminRoute><AdminOverview /></AdminRoute>} />
+          <Route path="/admin/cover" element={<AdminRoute><AdminCoverEditor /></AdminRoute>} />
+          <Route path="/admin/theme" element={<AdminRoute><AdminThemeEditor /></AdminRoute>} />
           <Route path="/admin/guests" element={<AdminRoute><AdminGuests /></AdminRoute>} />
           <Route path="/admin/groups" element={<AdminRoute><AdminGroups /></AdminRoute>} />
           <Route path="/admin/events" element={<AdminRoute><AdminEvents /></AdminRoute>} />
@@ -50,7 +53,8 @@ export default function App() {
           <Route path="/admin/content" element={<AdminRoute><AdminContent /></AdminRoute>} />
           <Route path="/admin/gallery" element={<AdminRoute><AdminGallery /></AdminRoute>} />
           <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
-          <Route path="/w/:slug" element={<GuestLogin />} />
+          <Route path="/w/:slug" element={<GuestCover />} />
+          <Route path="/w/:slug/signin" element={<GuestLogin />} />
           <Route path="/w/:slug/home" element={<GuestLayout><GuestHome /></GuestLayout>} />
           <Route path="/w/:slug/events" element={<GuestLayout><GuestEvents /></GuestLayout>} />
           <Route path="/w/:slug/story" element={<GuestLayout><GuestStory /></GuestLayout>} />
@@ -67,7 +71,5 @@ export default function App() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+  <React.StrictMode><App /></React.StrictMode>
 );

@@ -1,321 +1,263 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { X, ChevronLeft, ChevronRight, Image as ImageIcon, Star } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Star, Images as ImagesIcon } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Gallery, GalleryItem } from "@/lib/supabase";
 import { useGuestData } from "@/lib/use-guest-data";
+import { getTheme, themeToCssVars } from "@/lib/theme";
+import type { ThemeConfig } from "@/lib/theme";
+import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui";
-
-/* ------------------------------------------------------------------ */
-/* Types & helpers                                                     */
-/* ------------------------------------------------------------------ */
-
-type GalleryWithItems = Gallery & { items: GalleryItem[] };
-
-/** Group gallery_items under their parent galleries, preserving sort order. */
-function groupItems(galleries: Gallery[], items: GalleryItem[]): GalleryWithItems[] {
-  return galleries.map((g) => ({
-    ...g,
-    items: items
-      .filter((it) => it.gallery_id === g.id)
-      // Featured images first within each gallery, then by created_at desc.
-      .sort((a, b) => (a.is_featured === b.is_featured ? 0 : a.is_featured ? -1 : 1)),
-  }));
-}
-
-/** Flatten all gallery items into a single ordered list for lightbox navigation. */
-function flattenItems(galleries: GalleryWithItems[]): GalleryItem[] {
-  return galleries.flatMap((g) => g.items);
-}
-
-/* ------------------------------------------------------------------ */
-/* Lightbox                                                            */
-/* ------------------------------------------------------------------ */
-
-function Lightbox({
-  items,
-  index,
-  onClose,
-  onPrev,
-  onNext,
-}: {
-  items: GalleryItem[];
-  index: number;
-  onClose: () => void;
-  onPrev: () => void;
-  onNext: () => void;
-}) {
-  const item = items[index];
-
-  // Keyboard navigation
-  useEffect(() => {
-    if (!item) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowLeft") onPrev();
-      if (e.key === "ArrowRight") onNext();
-    };
-    window.addEventListener("keydown", handler);
-    // Prevent body scroll while lightbox is open
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", handler);
-      document.body.style.overflow = prev;
-    };
-  }, [item, onClose, onPrev, onNext]);
-
-  if (!item) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-onyx/80 backdrop-blur-sm" onClick={onClose} />
-
-      {/* Close button */}
-      <button
-        onClick={onClose}
-        className="absolute right-4 top-4 z-20 rounded-full bg-parchment/10 p-2 text-parchment transition-colors hover:bg-parchment/20"
-        aria-label="Close"
-      >
-        <X className="h-6 w-6" />
-      </button>
-
-      {/* Previous */}
-      {items.length > 1 && (
-        <button
-          onClick={onPrev}
-          className="absolute left-2 sm:left-4 z-20 rounded-full bg-parchment/10 p-2 text-parchment transition-colors hover:bg-parchment/20"
-          aria-label="Previous image"
-        >
-          <ChevronLeft className="h-6 w-6" />
-        </button>
-      )}
-
-      {/* Next */}
-      {items.length > 1 && (
-        <button
-          onClick={onNext}
-          className="absolute right-2 sm:right-4 z-20 rounded-full bg-parchment/10 p-2 text-parchment transition-colors hover:bg-parchment/20"
-          aria-label="Next image"
-        >
-          <ChevronRight className="h-6 w-6" />
-        </button>
-      )}
-
-      {/* Image + caption */}
-      <figure className="relative z-10 flex max-h-[90vh] max-w-5xl flex-col items-center">
-        <img
-          src={item.image_url}
-          alt={item.caption ?? ""}
-          className="max-h-[80vh] max-w-full rounded-lg object-contain shadow-2xl"
-        />
-        {(item.caption || item.uploader_name) && (
-          <figcaption className="mt-4 text-center">
-            {item.caption && (
-              <p className="font-serif text-lg text-parchment leading-relaxed">
-                {item.caption}
-              </p>
-            )}
-            {item.uploader_name && (
-              <p className="mt-1 text-sm text-parchment/60 italic">
-                — {item.uploader_name}
-              </p>
-            )}
-          </figcaption>
-        )}
-        {items.length > 1 && (
-          <p className="mt-3 text-xs text-parchment/50 tracking-widest uppercase">
-            {index + 1} / {items.length}
-          </p>
-        )}
-      </figure>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Main component                                                      */
-/* ------------------------------------------------------------------ */
 
 export function GuestGallery() {
   const { wedding, loading } = useGuestData();
+  const theme: ThemeConfig = useMemo(() => getTheme(wedding), [wedding]);
+  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
 
-  const [galleries, setGalleries] = useState<GalleryWithItems[]>([]);
-  const [contentLoading, setContentLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Lightbox state — index into the flattened list of all visible items.
+  const [galleries, setGalleries] = useState<Gallery[]>([]);
+  const [items, setItems] = useState<GalleryItem[]>([]);
+  const [fetching, setFetching] = useState(true);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  const fetchAll = useCallback(async () => {
-    if (!wedding) return;
-    setContentLoading(true);
-    setError(null);
+  const weddingId = wedding?.id ?? "";
 
-    const [gRes, iRes] = await Promise.all([
-      supabase.from("galleries").select("*").eq("wedding_id", wedding.id).order("sort_order"),
-      supabase
-        .from("gallery_items")
+  const loadAll = useCallback(async () => {
+    if (!weddingId) { setFetching(false); return; }
+    setFetching(true);
+    const [gals, its] = await Promise.all([
+      supabase.from("galleries").select("*").eq("wedding_id", weddingId).order("sort_order", { ascending: true }),
+      supabase.from("gallery_items")
         .select("*")
-        .eq("wedding_id", wedding.id)
+        .eq("wedding_id", weddingId)
         .eq("is_approved", true)
         .order("created_at", { ascending: false }),
     ]);
+    if (gals.data) setGalleries(gals.data as Gallery[]);
+    if (its.data) setItems(its.data as GalleryItem[]);
+    setFetching(false);
+  }, [weddingId]);
 
-    if (gRes.error || iRes.error) {
-      setError(gRes.error?.message ?? iRes.error?.message ?? "Failed to load gallery.");
-    } else {
-      setGalleries(
-        groupItems((gRes.data ?? []) as Gallery[], (iRes.data ?? []) as GalleryItem[]),
-      );
-    }
-    setContentLoading(false);
-  }, [wedding]);
+  useEffect(() => { if (weddingId) loadAll(); }, [weddingId, loadAll]);
 
+  // ─── Flat list of all images (featured first) ───
+  const allImages = useMemo(() => {
+    return [...items].sort((a, b) => {
+      if (a.is_featured && !b.is_featured) return -1;
+      if (!a.is_featured && b.is_featured) return 1;
+      return 0;
+    });
+  }, [items]);
+
+  // ─── Lightbox controls ───
+  const closeLightbox = () => setLightboxIndex(null);
+  const prevImage = () => {
+    setLightboxIndex((i) => (i === null ? null : (i - 1 + allImages.length) % allImages.length));
+  };
+  const nextImage = () => {
+    setLightboxIndex((i) => (i === null ? null : (i + 1) % allImages.length));
+  };
+
+  // ─── Keyboard nav ───
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+    if (lightboxIndex === null) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeLightbox();
+      if (e.key === "ArrowLeft") prevImage();
+      if (e.key === "ArrowRight") nextImage();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [lightboxIndex, allImages.length]);
 
-  // Flat list of all items across galleries for lightbox navigation.
-  const allItems = useMemo(() => flattenItems(galleries), [galleries]);
-  const totalPhotos = allItems.length;
-
-  // Lightbox navigation helpers — wrap around the full list.
-  const closeLightbox = useCallback(() => setLightboxIndex(null), []);
-  const prevImage = useCallback(() => {
-    setLightboxIndex((prev) => (prev === null ? null : (prev - 1 + allItems.length) % allItems.length));
-  }, [allItems.length]);
-  const nextImage = useCallback(() => {
-    setLightboxIndex((prev) => (prev === null ? null : (prev + 1) % allItems.length));
-  }, [allItems.length]);
-
-  /* ---------------------------------------------------------------- */
-  /* Render states                                                     */
-  /* ---------------------------------------------------------------- */
-
-  if (loading || contentLoading) {
+  if (loading || fetching) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-sepia">
-        Loading…
+      <div className="flex items-center justify-center py-24 text-sepia">
+        <div className="animate-pulse">Loading gallery…</div>
       </div>
     );
   }
 
   if (!wedding) {
+    return <EmptyState title="No wedding found" />;
+  }
+
+  if (allImages.length === 0) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-sepia">
-        Wedding not found.
+      <div style={cssVars as React.CSSProperties} className="animate-fade-in px-6 py-12">
+        <div className="max-w-2xl mx-auto">
+          <EmptyState
+            title="No photos yet"
+            description="Check back soon for photos from our special moments."
+          />
+        </div>
       </div>
     );
   }
 
+  const currentImage = lightboxIndex !== null ? allImages[lightboxIndex] : null;
+
   return (
-    <div className="max-w-5xl mx-auto animate-fade-in">
-      {/* Header */}
-      <header className="text-center mb-10">
-        <div className="flex items-center justify-center gap-3 text-sepia mb-4">
-          <span className="h-px w-12 bg-sand" />
-          <ImageIcon className="w-5 h-5" />
-          <span className="h-px w-12 bg-sand" />
-        </div>
-        <h1 className="text-4xl md:text-5xl font-script text-onyx mb-2">Gallery</h1>
-        {totalPhotos > 0 && (
-          <p className="text-sepia/70 text-sm tracking-widest uppercase">
-            {totalPhotos} {totalPhotos === 1 ? "Photo" : "Photos"}
+    <div style={cssVars as React.CSSProperties} className="animate-fade-in px-6 py-12">
+      <div className="max-w-5xl mx-auto">
+        {/* ─── Header ─── */}
+        <div className="text-center mb-12">
+          <ImagesIcon className="w-6 h-6 mx-auto mb-3" style={{ color: "var(--c-accent)" }} />
+          <p className="text-xs uppercase tracking-[0.3em] mb-2" style={{ color: "var(--c-textMuted)" }}>
+            Memories
           </p>
-        )}
-      </header>
-
-      {error && (
-        <div className="mb-6 rounded-md border border-rose/40 bg-rose/10 px-4 py-3 text-sm text-rose-700">
-          {error}
+          <h1 className="text-4xl font-serif" style={{ color: "var(--c-text)" }}>
+            Gallery
+          </h1>
+          {galleries.length > 0 && (
+            <p className="text-sm mt-2" style={{ color: "var(--c-textMuted)" }}>
+              {galleries.length} {galleries.length === 1 ? "album" : "albums"} · {allImages.length} photos
+            </p>
+          )}
         </div>
-      )}
 
-      {/* Galleries */}
-      {galleries.length === 0 ? (
-        <EmptyState
-          title="No galleries yet"
-          description="Photos from the celebration will appear here once they're shared."
-        />
-      ) : totalPhotos === 0 ? (
-        <EmptyState
-          title="No photos yet"
-          description="Check back after the celebration to see photos from the big day."
-        />
-      ) : (
-        <div className="space-y-12">
-          {galleries.map((gallery) => {
-            if (gallery.items.length === 0) return null;
-            return (
-              <section key={gallery.id} className="space-y-5">
-                {/* Section header */}
-                <div className="flex items-center gap-3 border-b border-sand pb-3">
-                  <ImageIcon className="w-5 h-5 text-sepia/60" />
-                  <h2 className="font-serif text-2xl text-onyx">{gallery.title}</h2>
-                  <span className="text-sm text-sepia/60">
-                    {gallery.items.length} {gallery.items.length === 1 ? "photo" : "photos"}
+        {/* ─── Gallery sections ─── */}
+        {galleries.length > 0 ? (
+          <div className="space-y-12">
+            {galleries.map((gallery) => {
+              const galleryItems = allImages.filter((i) => i.gallery_id === gallery.id);
+              if (galleryItems.length === 0) return null;
+
+              return (
+                <div key={gallery.id}>
+                  <h2 className="text-xl font-serif mb-4" style={{ color: "var(--c-text)" }}>
+                    {gallery.title}
+                  </h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {galleryItems.map((item) => {
+                      const globalIndex = allImages.findIndex((i) => i.id === item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setLightboxIndex(globalIndex)}
+                          className="relative aspect-square overflow-hidden rounded-lg group"
+                          style={{ borderRadius: "var(--ui-radius)" }}
+                        >
+                          <img
+                            src={item.image_url}
+                            alt={item.caption ?? ""}
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                          {item.is_featured && (
+                            <span
+                              className="absolute top-2 left-2 p-1 rounded-full"
+                              style={{ background: "var(--c-button)", color: "var(--c-buttonText)" }}
+                              title="Featured"
+                            >
+                              <Star className="w-3 h-3 fill-current" />
+                            </span>
+                          )}
+                          {item.caption && (
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <p className="text-xs text-white truncate">{item.caption}</p>
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          /* ─── No galleries — show all images ─── */
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {allImages.map((item, index) => (
+              <button
+                key={item.id}
+                onClick={() => setLightboxIndex(index)}
+                className="relative aspect-square overflow-hidden rounded-lg group"
+                style={{ borderRadius: "var(--ui-radius)" }}
+              >
+                <img
+                  src={item.image_url}
+                  alt={item.caption ?? ""}
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+                {item.is_featured && (
+                  <span
+                    className="absolute top-2 left-2 p-1 rounded-full"
+                    style={{ background: "var(--c-button)", color: "var(--c-buttonText)" }}
+                    title="Featured"
+                  >
+                    <Star className="w-3 h-3 fill-current" />
                   </span>
-                </div>
-
-                {/* Responsive image grid */}
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-                  {gallery.items.map((item) => {
-                    const flatIdx = allItems.findIndex((it) => it.id === item.id);
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => setLightboxIndex(flatIdx)}
-                        className="group relative aspect-square overflow-hidden rounded-lg border border-sand bg-mist focus:outline-none focus:ring-2 focus:ring-sepia/40"
-                      >
-                        <img
-                          src={item.image_url}
-                          alt={item.caption ?? ""}
-                          loading="lazy"
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-
-                        {/* Featured star indicator */}
-                        {item.is_featured && (
-                          <div className="absolute left-2 top-2 rounded-full bg-onyx/70 p-1 text-parchment shadow-sm backdrop-blur-sm">
-                            <Star className="h-3.5 w-3.5 fill-current" />
-                          </div>
-                        )}
-
-                        {/* Caption overlay on hover */}
-                        {item.caption && (
-                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-onyx/70 to-transparent p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                            <p className="line-clamp-2 text-left text-xs text-parchment leading-snug">
-                              {item.caption}
-                            </p>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Decorative footer */}
-      <div className="flex items-center justify-center gap-3 text-sepia mt-12">
-        <span className="h-px w-10 bg-sand" />
-        <ImageIcon className="w-4 h-4" />
-        <span className="h-px w-10 bg-sand" />
+                )}
+                {item.caption && (
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <p className="text-xs text-white truncate">{item.caption}</p>
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Lightbox */}
-      {lightboxIndex !== null && allItems.length > 0 && (
-        <Lightbox
-          items={allItems}
-          index={Math.min(lightboxIndex, allItems.length - 1)}
-          onClose={closeLightbox}
-          onPrev={prevImage}
-          onNext={nextImage}
-        />
+      {/* ─── Lightbox ─── */}
+      {currentImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 animate-fade-in"
+          onClick={closeLightbox}
+        >
+          {/* Close button */}
+          <button
+            onClick={closeLightbox}
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          {/* Prev */}
+          {allImages.length > 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); prevImage(); }}
+              className="absolute left-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10"
+            >
+              <ChevronLeft className="w-8 h-8" />
+            </button>
+          )}
+
+          {/* Image */}
+          <div className="max-w-4xl max-h-[85vh] px-16" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={currentImage.image_url}
+              alt={currentImage.caption ?? ""}
+              className="max-w-full max-h-[80vh] object-contain rounded-lg"
+            />
+            {currentImage.caption && (
+              <p className="text-center text-sm text-white/80 mt-4">{currentImage.caption}</p>
+            )}
+            {currentImage.is_featured && (
+              <div className="flex justify-center mt-2">
+                <span className="inline-flex items-center gap-1 text-xs text-white/60">
+                  <Star className="w-3 h-3 fill-current" /> Featured
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Next */}
+          {allImages.length > 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); nextImage(); }}
+              className="absolute right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10"
+            >
+              <ChevronRight className="w-8 h-8" />
+            </button>
+          )}
+
+          {/* Counter */}
+          {allImages.length > 1 && (
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm text-white/60">
+              {(lightboxIndex ?? 0) + 1} / {allImages.length}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

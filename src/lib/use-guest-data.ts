@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import type { Wedding, Guest, GuestSession } from "@/lib/supabase";
 import { getGuestSession } from "@/lib/guest-auth";
 
 export function useGuestData() {
-  const { slug } = useParams();
   const [session, setSession] = useState<GuestSession | null>(null);
   const [wedding, setWedding] = useState<Wedding | null>(null);
   const [guest, setGuest] = useState<Guest | null>(null);
@@ -25,5 +23,5 @@ export function useGuestData() {
     });
   }, []);
 
-  return { session, wedding, guest, loading, slug };
+  return { session, wedding, guest, loading, slug: session?.weddingSlug };
 }

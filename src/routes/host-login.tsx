@@ -24,10 +24,7 @@ export function HostLogin() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  if (session) {
-    navigate("/admin");
-    return null;
-  }
+  if (session) { navigate("/admin"); return null; }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,9 +48,8 @@ export function HostLogin() {
       <div className="w-full max-w-sm">
         <h1 className="text-center text-3xl font-serif text-onyx mb-2">Wedding Studio</h1>
         <p className="text-center text-sepia text-sm mb-8">Host dashboard login</p>
-        <button onClick={google} className="w-full flex items-center justify-center gap-3 border border-sand bg-white py-3 text-sm text-onyx rounded-md hover:bg-mist transition-colors mb-4">
-          <GoogleIcon />
-          Continue with Google
+        <button onClick={google} className="w-full flex items-center justify-center gap-3 border border-sand bg-white py-3 text-sm text-onyx rounded-lg hover:bg-mist transition-colors mb-4">
+          <GoogleIcon /> Continue with Google
         </button>
         <div className="flex items-center gap-3 my-4">
           <div className="flex-1 h-px bg-sand" />
@@ -61,18 +57,10 @@ export function HostLogin() {
           <div className="flex-1 h-px bg-sand" />
         </div>
         <form onSubmit={submit} className="space-y-4">
-          <div>
-            <Label>Email</Label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" />
-          </div>
-          <div>
-            <Label>Password</Label>
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
-          </div>
+          <div><Label>Email</Label><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" /></div>
+          <div><Label>Password</Label><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" /></div>
           {error && <p className="text-red-600 text-sm">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Please wait…" : mode === "signin" ? "Sign In" : "Sign Up"}
-          </Button>
+          <Button type="submit" className="w-full" disabled={loading}>{loading ? "Please wait…" : mode === "signin" ? "Sign In" : "Sign Up"}</Button>
         </form>
         <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")} className="w-full text-center text-sepia text-sm mt-4 hover:text-onyx">
           {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
