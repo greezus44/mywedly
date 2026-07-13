@@ -1,919 +1,883 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
+    PostgrestVersion: "14.5";
+  };
   public: {
     Tables: {
       budget_items: {
         Row: {
-          actual_cents: number
-          category: string
-          created_at: string
-          estimated_cents: number
-          id: string
-          is_paid: boolean
-          label: string
-          wedding_id: string
-        }
+          actual_cents: number;
+          category: string;
+          created_at: string;
+          estimated_cents: number;
+          id: string;
+          is_paid: boolean;
+          label: string;
+          wedding_id: string;
+        };
         Insert: {
-          actual_cents?: number
-          category: string
-          created_at?: string
-          estimated_cents?: number
-          id?: string
-          is_paid?: boolean
-          label: string
-          wedding_id: string
-        }
+          actual_cents?: number;
+          category: string;
+          created_at?: string;
+          estimated_cents?: number;
+          id?: string;
+          is_paid?: boolean;
+          label: string;
+          wedding_id: string;
+        };
         Update: {
-          actual_cents?: number
-          category?: string
-          created_at?: string
-          estimated_cents?: number
-          id?: string
-          is_paid?: boolean
-          label?: string
-          wedding_id?: string
-        }
+          actual_cents?: number;
+          category?: string;
+          created_at?: string;
+          estimated_cents?: number;
+          id?: string;
+          is_paid?: boolean;
+          label?: string;
+          wedding_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "budget_items_wedding_id_fkey"
-            columns: ["wedding_id"]
-            isOneToOne: false
-            referencedRelation: "weddings"
-            referencedColumns: ["id"]
+            foreignKeyName: "budget_items_wedding_id_fkey";
+            columns: ["wedding_id"];
+            isOneToOne: false;
+            referencedRelation: "weddings";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       checklist_tasks: {
         Row: {
-          category: string | null
-          created_at: string
-          due_date: string | null
-          id: string
-          is_done: boolean
-          sort_order: number
-          title: string
-          wedding_id: string
-        }
+          category: string | null;
+          created_at: string;
+          due_date: string | null;
+          id: string;
+          is_done: boolean;
+          sort_order: number;
+          title: string;
+          wedding_id: string;
+        };
         Insert: {
-          category?: string | null
-          created_at?: string
-          due_date?: string | null
-          id?: string
-          is_done?: boolean
-          sort_order?: number
-          title: string
-          wedding_id: string
-        }
+          category?: string | null;
+          created_at?: string;
+          due_date?: string | null;
+          id?: string;
+          is_done?: boolean;
+          sort_order?: number;
+          title: string;
+          wedding_id: string;
+        };
         Update: {
-          category?: string | null
-          created_at?: string
-          due_date?: string | null
-          id?: string
-          is_done?: boolean
-          sort_order?: number
-          title?: string
-          wedding_id?: string
-        }
+          category?: string | null;
+          created_at?: string;
+          due_date?: string | null;
+          id?: string;
+          is_done?: boolean;
+          sort_order?: number;
+          title?: string;
+          wedding_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "checklist_tasks_wedding_id_fkey"
-            columns: ["wedding_id"]
-            isOneToOne: false
-            referencedRelation: "weddings"
-            referencedColumns: ["id"]
+            foreignKeyName: "checklist_tasks_wedding_id_fkey";
+            columns: ["wedding_id"];
+            isOneToOne: false;
+            referencedRelation: "weddings";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       custom_pages: {
         Row: {
-          body: string
-          cover_image_url: string | null
-          created_at: string
-          id: string
-          inline_image_url: string | null
-          is_published: boolean
-          slug: string
-          sort_order: number
-          title: string
-          updated_at: string
-          wedding_id: string
-        }
+          body: string;
+          cover_image_url: string | null;
+          created_at: string;
+          id: string;
+          inline_image_url: string | null;
+          is_published: boolean;
+          slug: string;
+          sort_order: number;
+          title: string;
+          updated_at: string;
+          wedding_id: string;
+        };
         Insert: {
-          body?: string
-          cover_image_url?: string | null
-          created_at?: string
-          id?: string
-          inline_image_url?: string | null
-          is_published?: boolean
-          slug: string
-          sort_order?: number
-          title: string
-          updated_at?: string
-          wedding_id: string
-        }
+          body?: string;
+          cover_image_url?: string | null;
+          created_at?: string;
+          id?: string;
+          inline_image_url?: string | null;
+          is_published?: boolean;
+          slug: string;
+          sort_order?: number;
+          title: string;
+          updated_at?: string;
+          wedding_id: string;
+        };
         Update: {
-          body?: string
-          cover_image_url?: string | null
-          created_at?: string
-          id?: string
-          inline_image_url?: string | null
-          is_published?: boolean
-          slug?: string
-          sort_order?: number
-          title?: string
-          updated_at?: string
-          wedding_id?: string
-        }
+          body?: string;
+          cover_image_url?: string | null;
+          created_at?: string;
+          id?: string;
+          inline_image_url?: string | null;
+          is_published?: boolean;
+          slug?: string;
+          sort_order?: number;
+          title?: string;
+          updated_at?: string;
+          wedding_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "custom_pages_wedding_id_fkey"
-            columns: ["wedding_id"]
-            isOneToOne: false
-            referencedRelation: "weddings"
-            referencedColumns: ["id"]
+            foreignKeyName: "custom_pages_wedding_id_fkey";
+            columns: ["wedding_id"];
+            isOneToOne: false;
+            referencedRelation: "weddings";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       events: {
         Row: {
-          created_at: string
-          dress_code: string | null
-          id: string
-          kind: Database["public"]["Enums"]["event_kind"]
-          name: string
-          notes: string | null
-          sort_order: number
-          starts_at: string | null
-          venue_address: string | null
-          venue_name: string | null
-          visibility: Database["public"]["Enums"]["event_visibility"]
-          wedding_id: string
-        }
+          created_at: string;
+          dress_code: string | null;
+          id: string;
+          kind: Database["public"]["Enums"]["event_kind"];
+          name: string;
+          notes: string | null;
+          sort_order: number;
+          starts_at: string | null;
+          venue_address: string | null;
+          venue_name: string | null;
+          visibility: Database["public"]["Enums"]["event_visibility"];
+          wedding_id: string;
+        };
         Insert: {
-          created_at?: string
-          dress_code?: string | null
-          id?: string
-          kind?: Database["public"]["Enums"]["event_kind"]
-          name: string
-          notes?: string | null
-          sort_order?: number
-          starts_at?: string | null
-          venue_address?: string | null
-          venue_name?: string | null
-          visibility?: Database["public"]["Enums"]["event_visibility"]
-          wedding_id: string
-        }
+          created_at?: string;
+          dress_code?: string | null;
+          id?: string;
+          kind?: Database["public"]["Enums"]["event_kind"];
+          name: string;
+          notes?: string | null;
+          sort_order?: number;
+          starts_at?: string | null;
+          venue_address?: string | null;
+          venue_name?: string | null;
+          visibility?: Database["public"]["Enums"]["event_visibility"];
+          wedding_id: string;
+        };
         Update: {
-          created_at?: string
-          dress_code?: string | null
-          id?: string
-          kind?: Database["public"]["Enums"]["event_kind"]
-          name?: string
-          notes?: string | null
-          sort_order?: number
-          starts_at?: string | null
-          venue_address?: string | null
-          venue_name?: string | null
-          visibility?: Database["public"]["Enums"]["event_visibility"]
-          wedding_id?: string
-        }
+          created_at?: string;
+          dress_code?: string | null;
+          id?: string;
+          kind?: Database["public"]["Enums"]["event_kind"];
+          name?: string;
+          notes?: string | null;
+          sort_order?: number;
+          starts_at?: string | null;
+          venue_address?: string | null;
+          venue_name?: string | null;
+          visibility?: Database["public"]["Enums"]["event_visibility"];
+          wedding_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "events_wedding_id_fkey"
-            columns: ["wedding_id"]
-            isOneToOne: false
-            referencedRelation: "weddings"
-            referencedColumns: ["id"]
+            foreignKeyName: "events_wedding_id_fkey";
+            columns: ["wedding_id"];
+            isOneToOne: false;
+            referencedRelation: "weddings";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       gallery_items: {
         Row: {
-          caption: string | null
-          created_at: string
-          id: string
-          image_url: string
-          is_approved: boolean
-          is_featured: boolean
-          uploader_name: string | null
-          wedding_id: string
-        }
+          caption: string | null;
+          created_at: string;
+          id: string;
+          image_url: string;
+          is_approved: boolean;
+          is_featured: boolean;
+          uploader_name: string | null;
+          wedding_id: string;
+        };
         Insert: {
-          caption?: string | null
-          created_at?: string
-          id?: string
-          image_url: string
-          is_approved?: boolean
-          is_featured?: boolean
-          uploader_name?: string | null
-          wedding_id: string
-        }
+          caption?: string | null;
+          created_at?: string;
+          id?: string;
+          image_url: string;
+          is_approved?: boolean;
+          is_featured?: boolean;
+          uploader_name?: string | null;
+          wedding_id: string;
+        };
         Update: {
-          caption?: string | null
-          created_at?: string
-          id?: string
-          image_url?: string
-          is_approved?: boolean
-          is_featured?: boolean
-          uploader_name?: string | null
-          wedding_id?: string
-        }
+          caption?: string | null;
+          created_at?: string;
+          id?: string;
+          image_url?: string;
+          is_approved?: boolean;
+          is_featured?: boolean;
+          uploader_name?: string | null;
+          wedding_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "gallery_items_wedding_id_fkey"
-            columns: ["wedding_id"]
-            isOneToOne: false
-            referencedRelation: "weddings"
-            referencedColumns: ["id"]
+            foreignKeyName: "gallery_items_wedding_id_fkey";
+            columns: ["wedding_id"];
+            isOneToOne: false;
+            referencedRelation: "weddings";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       group_event_invites: {
         Row: {
-          created_at: string
-          event_id: string
-          group_id: string
-        }
+          created_at: string;
+          event_id: string;
+          group_id: string;
+        };
         Insert: {
-          created_at?: string
-          event_id: string
-          group_id: string
-        }
+          created_at?: string;
+          event_id: string;
+          group_id: string;
+        };
         Update: {
-          created_at?: string
-          event_id?: string
-          group_id?: string
-        }
+          created_at?: string;
+          event_id?: string;
+          group_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "group_event_invites_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
+            foreignKeyName: "group_event_invites_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "group_event_invites_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "guest_groups"
-            referencedColumns: ["id"]
+            foreignKeyName: "group_event_invites_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "guest_groups";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       guest_event_invites: {
         Row: {
-          created_at: string
-          event_id: string
-          guest_id: string
-        }
+          created_at: string;
+          event_id: string;
+          guest_id: string;
+        };
         Insert: {
-          created_at?: string
-          event_id: string
-          guest_id: string
-        }
+          created_at?: string;
+          event_id: string;
+          guest_id: string;
+        };
         Update: {
-          created_at?: string
-          event_id?: string
-          guest_id?: string
-        }
+          created_at?: string;
+          event_id?: string;
+          guest_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "guest_event_invites_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
+            foreignKeyName: "guest_event_invites_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "guest_event_invites_guest_id_fkey"
-            columns: ["guest_id"]
-            isOneToOne: false
-            referencedRelation: "guests"
-            referencedColumns: ["id"]
+            foreignKeyName: "guest_event_invites_guest_id_fkey";
+            columns: ["guest_id"];
+            isOneToOne: false;
+            referencedRelation: "guests";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       guest_groups: {
         Row: {
-          created_at: string
-          id: string
-          name: string
-          sort_order: number
-          updated_at: string
-          wedding_id: string
-        }
+          created_at: string;
+          id: string;
+          name: string;
+          sort_order: number;
+          updated_at: string;
+          wedding_id: string;
+        };
         Insert: {
-          created_at?: string
-          id?: string
-          name: string
-          sort_order?: number
-          updated_at?: string
-          wedding_id: string
-        }
+          created_at?: string;
+          id?: string;
+          name: string;
+          sort_order?: number;
+          updated_at?: string;
+          wedding_id: string;
+        };
         Update: {
-          created_at?: string
-          id?: string
-          name?: string
-          sort_order?: number
-          updated_at?: string
-          wedding_id?: string
-        }
+          created_at?: string;
+          id?: string;
+          name?: string;
+          sort_order?: number;
+          updated_at?: string;
+          wedding_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "guest_groups_wedding_id_fkey"
-            columns: ["wedding_id"]
-            isOneToOne: false
-            referencedRelation: "weddings"
-            referencedColumns: ["id"]
+            foreignKeyName: "guest_groups_wedding_id_fkey";
+            columns: ["wedding_id"];
+            isOneToOne: false;
+            referencedRelation: "weddings";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       guestbook_entries: {
         Row: {
-          author_name: string
-          created_at: string
-          id: string
-          is_approved: boolean
-          message: string
-          wedding_id: string
-        }
+          author_name: string;
+          created_at: string;
+          id: string;
+          is_approved: boolean;
+          message: string;
+          wedding_id: string;
+        };
         Insert: {
-          author_name: string
-          created_at?: string
-          id?: string
-          is_approved?: boolean
-          message: string
-          wedding_id: string
-        }
+          author_name: string;
+          created_at?: string;
+          id?: string;
+          is_approved?: boolean;
+          message: string;
+          wedding_id: string;
+        };
         Update: {
-          author_name?: string
-          created_at?: string
-          id?: string
-          is_approved?: boolean
-          message?: string
-          wedding_id?: string
-        }
+          author_name?: string;
+          created_at?: string;
+          id?: string;
+          is_approved?: boolean;
+          message?: string;
+          wedding_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "guestbook_entries_wedding_id_fkey"
-            columns: ["wedding_id"]
-            isOneToOne: false
-            referencedRelation: "weddings"
-            referencedColumns: ["id"]
+            foreignKeyName: "guestbook_entries_wedding_id_fkey";
+            columns: ["wedding_id"];
+            isOneToOne: false;
+            referencedRelation: "weddings";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       guests: {
         Row: {
-          address: string | null
-          created_at: string
-          email: string | null
-          full_name: string
-          group_id: string | null
-          group_label: string | null
-          id: string
-          invite_code: string | null
-          notes: string | null
-          phone: string | null
-          plus_one_allowed: boolean
-          tag: string | null
-          wedding_id: string
-        }
+          address: string | null;
+          created_at: string;
+          email: string | null;
+          full_name: string;
+          group_id: string | null;
+          group_label: string | null;
+          id: string;
+          invite_code: string | null;
+          notes: string | null;
+          phone: string | null;
+          plus_one_allowed: boolean;
+          tag: string | null;
+          username: string | null;
+          wedding_id: string;
+        };
         Insert: {
-          address?: string | null
-          created_at?: string
-          email?: string | null
-          full_name: string
-          group_id?: string | null
-          group_label?: string | null
-          id?: string
-          invite_code?: string | null
-          notes?: string | null
-          phone?: string | null
-          plus_one_allowed?: boolean
-          tag?: string | null
-          wedding_id: string
-        }
+          address?: string | null;
+          created_at?: string;
+          email?: string | null;
+          full_name: string;
+          group_id?: string | null;
+          group_label?: string | null;
+          id?: string;
+          invite_code?: string | null;
+          notes?: string | null;
+          phone?: string | null;
+          plus_one_allowed?: boolean;
+          tag?: string | null;
+          username?: string | null;
+          wedding_id: string;
+        };
         Update: {
-          address?: string | null
-          created_at?: string
-          email?: string | null
-          full_name?: string
-          group_id?: string | null
-          group_label?: string | null
-          id?: string
-          invite_code?: string | null
-          notes?: string | null
-          phone?: string | null
-          plus_one_allowed?: boolean
-          tag?: string | null
-          wedding_id?: string
-        }
+          address?: string | null;
+          created_at?: string;
+          email?: string | null;
+          full_name?: string;
+          group_id?: string | null;
+          group_label?: string | null;
+          id?: string;
+          invite_code?: string | null;
+          notes?: string | null;
+          phone?: string | null;
+          plus_one_allowed?: boolean;
+          tag?: string | null;
+          username?: string | null;
+          wedding_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "guests_group_id_fkey"
-            columns: ["group_id"]
-            isOneToOne: false
-            referencedRelation: "guest_groups"
-            referencedColumns: ["id"]
+            foreignKeyName: "guests_group_id_fkey";
+            columns: ["group_id"];
+            isOneToOne: false;
+            referencedRelation: "guest_groups";
+            referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "guests_wedding_id_fkey"
-            columns: ["wedding_id"]
-            isOneToOne: false
-            referencedRelation: "weddings"
-            referencedColumns: ["id"]
+            foreignKeyName: "guests_wedding_id_fkey";
+            columns: ["wedding_id"];
+            isOneToOne: false;
+            referencedRelation: "weddings";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       profiles: {
         Row: {
-          avatar_url: string | null
-          created_at: string
-          display_name: string | null
-          id: string
-          updated_at: string
-        }
+          avatar_url: string | null;
+          created_at: string;
+          display_name: string | null;
+          id: string;
+          updated_at: string;
+        };
         Insert: {
-          avatar_url?: string | null
-          created_at?: string
-          display_name?: string | null
-          id: string
-          updated_at?: string
-        }
+          avatar_url?: string | null;
+          created_at?: string;
+          display_name?: string | null;
+          id: string;
+          updated_at?: string;
+        };
         Update: {
-          avatar_url?: string | null
-          created_at?: string
-          display_name?: string | null
-          id?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
+          avatar_url?: string | null;
+          created_at?: string;
+          display_name?: string | null;
+          id?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       registry_items: {
         Row: {
-          created_at: string
-          description: string | null
-          id: string
-          image_url: string | null
-          is_cash_fund: boolean
-          price_cents: number | null
-          sort_order: number
-          title: string
-          url: string | null
-          wedding_id: string
-        }
+          created_at: string;
+          description: string | null;
+          id: string;
+          image_url: string | null;
+          is_cash_fund: boolean;
+          price_cents: number | null;
+          sort_order: number;
+          title: string;
+          url: string | null;
+          wedding_id: string;
+        };
         Insert: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          image_url?: string | null
-          is_cash_fund?: boolean
-          price_cents?: number | null
-          sort_order?: number
-          title: string
-          url?: string | null
-          wedding_id: string
-        }
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          image_url?: string | null;
+          is_cash_fund?: boolean;
+          price_cents?: number | null;
+          sort_order?: number;
+          title: string;
+          url?: string | null;
+          wedding_id: string;
+        };
         Update: {
-          created_at?: string
-          description?: string | null
-          id?: string
-          image_url?: string | null
-          is_cash_fund?: boolean
-          price_cents?: number | null
-          sort_order?: number
-          title?: string
-          url?: string | null
-          wedding_id?: string
-        }
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          image_url?: string | null;
+          is_cash_fund?: boolean;
+          price_cents?: number | null;
+          sort_order?: number;
+          title?: string;
+          url?: string | null;
+          wedding_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "registry_items_wedding_id_fkey"
-            columns: ["wedding_id"]
-            isOneToOne: false
-            referencedRelation: "weddings"
-            referencedColumns: ["id"]
+            foreignKeyName: "registry_items_wedding_id_fkey";
+            columns: ["wedding_id"];
+            isOneToOne: false;
+            referencedRelation: "weddings";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       rsvps: {
         Row: {
-          created_at: string
-          dietary_restrictions: string | null
-          event_id: string | null
-          guest_email: string | null
-          guest_id: string | null
-          guest_name: string
-          id: string
-          meal_choice: string | null
-          message: string | null
-          plus_one_name: string | null
-          song_request: string | null
-          status: Database["public"]["Enums"]["rsvp_status"]
-          updated_at: string
-          wedding_id: string
-        }
+          created_at: string;
+          dietary_restrictions: string | null;
+          event_id: string | null;
+          guest_email: string | null;
+          guest_id: string | null;
+          guest_name: string;
+          id: string;
+          meal_choice: string | null;
+          message: string | null;
+          plus_one_name: string | null;
+          song_request: string | null;
+          status: Database["public"]["Enums"]["rsvp_status"];
+          updated_at: string;
+          wedding_id: string;
+        };
         Insert: {
-          created_at?: string
-          dietary_restrictions?: string | null
-          event_id?: string | null
-          guest_email?: string | null
-          guest_id?: string | null
-          guest_name: string
-          id?: string
-          meal_choice?: string | null
-          message?: string | null
-          plus_one_name?: string | null
-          song_request?: string | null
-          status?: Database["public"]["Enums"]["rsvp_status"]
-          updated_at?: string
-          wedding_id: string
-        }
+          created_at?: string;
+          dietary_restrictions?: string | null;
+          event_id?: string | null;
+          guest_email?: string | null;
+          guest_id?: string | null;
+          guest_name: string;
+          id?: string;
+          meal_choice?: string | null;
+          message?: string | null;
+          plus_one_name?: string | null;
+          song_request?: string | null;
+          status?: Database["public"]["Enums"]["rsvp_status"];
+          updated_at?: string;
+          wedding_id: string;
+        };
         Update: {
-          created_at?: string
-          dietary_restrictions?: string | null
-          event_id?: string | null
-          guest_email?: string | null
-          guest_id?: string | null
-          guest_name?: string
-          id?: string
-          meal_choice?: string | null
-          message?: string | null
-          plus_one_name?: string | null
-          song_request?: string | null
-          status?: Database["public"]["Enums"]["rsvp_status"]
-          updated_at?: string
-          wedding_id?: string
-        }
+          created_at?: string;
+          dietary_restrictions?: string | null;
+          event_id?: string | null;
+          guest_email?: string | null;
+          guest_id?: string | null;
+          guest_name?: string;
+          id?: string;
+          meal_choice?: string | null;
+          message?: string | null;
+          plus_one_name?: string | null;
+          song_request?: string | null;
+          status?: Database["public"]["Enums"]["rsvp_status"];
+          updated_at?: string;
+          wedding_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "rsvps_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
+            foreignKeyName: "rsvps_event_id_fkey";
+            columns: ["event_id"];
+            isOneToOne: false;
+            referencedRelation: "events";
+            referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "rsvps_guest_id_fkey"
-            columns: ["guest_id"]
-            isOneToOne: false
-            referencedRelation: "guests"
-            referencedColumns: ["id"]
+            foreignKeyName: "rsvps_guest_id_fkey";
+            columns: ["guest_id"];
+            isOneToOne: false;
+            referencedRelation: "guests";
+            referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "rsvps_wedding_id_fkey"
-            columns: ["wedding_id"]
-            isOneToOne: false
-            referencedRelation: "weddings"
-            referencedColumns: ["id"]
+            foreignKeyName: "rsvps_wedding_id_fkey";
+            columns: ["wedding_id"];
+            isOneToOne: false;
+            referencedRelation: "weddings";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       travel_items: {
         Row: {
-          address: string | null
-          created_at: string
-          description: string | null
-          id: string
-          kind: Database["public"]["Enums"]["travel_kind"]
-          sort_order: number
-          title: string
-          url: string | null
-          wedding_id: string
-        }
+          address: string | null;
+          created_at: string;
+          description: string | null;
+          id: string;
+          kind: Database["public"]["Enums"]["travel_kind"];
+          sort_order: number;
+          title: string;
+          url: string | null;
+          wedding_id: string;
+        };
         Insert: {
-          address?: string | null
-          created_at?: string
-          description?: string | null
-          id?: string
-          kind?: Database["public"]["Enums"]["travel_kind"]
-          sort_order?: number
-          title: string
-          url?: string | null
-          wedding_id: string
-        }
+          address?: string | null;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          kind?: Database["public"]["Enums"]["travel_kind"];
+          sort_order?: number;
+          title: string;
+          url?: string | null;
+          wedding_id: string;
+        };
         Update: {
-          address?: string | null
-          created_at?: string
-          description?: string | null
-          id?: string
-          kind?: Database["public"]["Enums"]["travel_kind"]
-          sort_order?: number
-          title?: string
-          url?: string | null
-          wedding_id?: string
-        }
+          address?: string | null;
+          created_at?: string;
+          description?: string | null;
+          id?: string;
+          kind?: Database["public"]["Enums"]["travel_kind"];
+          sort_order?: number;
+          title?: string;
+          url?: string | null;
+          wedding_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "travel_items_wedding_id_fkey"
-            columns: ["wedding_id"]
-            isOneToOne: false
-            referencedRelation: "weddings"
-            referencedColumns: ["id"]
+            foreignKeyName: "travel_items_wedding_id_fkey";
+            columns: ["wedding_id"];
+            isOneToOne: false;
+            referencedRelation: "weddings";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       wedding_members: {
         Row: {
-          created_at: string
-          id: string
-          role: Database["public"]["Enums"]["wedding_role"]
-          user_id: string
-          wedding_id: string
-        }
+          created_at: string;
+          id: string;
+          role: Database["public"]["Enums"]["wedding_role"];
+          user_id: string;
+          wedding_id: string;
+        };
         Insert: {
-          created_at?: string
-          id?: string
-          role?: Database["public"]["Enums"]["wedding_role"]
-          user_id: string
-          wedding_id: string
-        }
+          created_at?: string;
+          id?: string;
+          role?: Database["public"]["Enums"]["wedding_role"];
+          user_id: string;
+          wedding_id: string;
+        };
         Update: {
-          created_at?: string
-          id?: string
-          role?: Database["public"]["Enums"]["wedding_role"]
-          user_id?: string
-          wedding_id?: string
-        }
+          created_at?: string;
+          id?: string;
+          role?: Database["public"]["Enums"]["wedding_role"];
+          user_id?: string;
+          wedding_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "wedding_members_wedding_id_fkey"
-            columns: ["wedding_id"]
-            isOneToOne: false
-            referencedRelation: "weddings"
-            referencedColumns: ["id"]
+            foreignKeyName: "wedding_members_wedding_id_fkey";
+            columns: ["wedding_id"];
+            isOneToOne: false;
+            referencedRelation: "weddings";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       weddings: {
         Row: {
-          content: Json
-          couple_name_one: string
-          couple_name_two: string
-          created_at: string
-          created_by: string
-          hashtag: string | null
-          hero_image_url: string | null
-          id: string
-          is_published: boolean
-          location: string | null
-          signin_helper: string | null
-          slug: string
-          story: string | null
-          theme: Json
-          updated_at: string
-          wedding_date: string | null
-        }
+          content: Json;
+          couple_name_one: string;
+          couple_name_two: string;
+          created_at: string;
+          created_by: string;
+          hashtag: string | null;
+          hero_image_url: string | null;
+          id: string;
+          is_published: boolean;
+          location: string | null;
+          signin_helper: string | null;
+          slug: string;
+          story: string | null;
+          theme: Json;
+          updated_at: string;
+          wedding_date: string | null;
+        };
         Insert: {
-          content?: Json
-          couple_name_one: string
-          couple_name_two: string
-          created_at?: string
-          created_by: string
-          hashtag?: string | null
-          hero_image_url?: string | null
-          id?: string
-          is_published?: boolean
-          location?: string | null
-          signin_helper?: string | null
-          slug: string
-          story?: string | null
-          theme?: Json
-          updated_at?: string
-          wedding_date?: string | null
-        }
+          content?: Json;
+          couple_name_one: string;
+          couple_name_two: string;
+          created_at?: string;
+          created_by: string;
+          hashtag?: string | null;
+          hero_image_url?: string | null;
+          id?: string;
+          is_published?: boolean;
+          location?: string | null;
+          signin_helper?: string | null;
+          slug: string;
+          story?: string | null;
+          theme?: Json;
+          updated_at?: string;
+          wedding_date?: string | null;
+        };
         Update: {
-          content?: Json
-          couple_name_one?: string
-          couple_name_two?: string
-          created_at?: string
-          created_by?: string
-          hashtag?: string | null
-          hero_image_url?: string | null
-          id?: string
-          is_published?: boolean
-          location?: string | null
-          signin_helper?: string | null
-          slug?: string
-          story?: string | null
-          theme?: Json
-          updated_at?: string
-          wedding_date?: string | null
-        }
-        Relationships: []
-      }
-    }
+          content?: Json;
+          couple_name_one?: string;
+          couple_name_two?: string;
+          created_at?: string;
+          created_by?: string;
+          hashtag?: string | null;
+          hero_image_url?: string | null;
+          id?: string;
+          is_published?: boolean;
+          location?: string | null;
+          signin_helper?: string | null;
+          slug?: string;
+          story?: string | null;
+          theme?: Json;
+          updated_at?: string;
+          wedding_date?: string | null;
+        };
+        Relationships: [];
+      };
+    };
     Views: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     Functions: {
       guest_events: {
-        Args: { p_guest_id: string }
+        Args: { p_guest_id: string };
         Returns: {
-          dress_code: string
-          id: string
-          name: string
-          notes: string
-          rsvp_status: string
-          starts_at: string
-          venue_address: string
-          venue_name: string
-        }[]
-      }
+          dress_code: string;
+          id: string;
+          name: string;
+          notes: string;
+          rsvp_status: string;
+          starts_at: string;
+          venue_address: string;
+          venue_name: string;
+        }[];
+      };
       guest_rsvp: {
-        Args: { p_event_id: string; p_guest_id: string; p_status: string }
-        Returns: undefined
-      }
+        Args: { p_event_id: string; p_guest_id: string; p_status: string };
+        Returns: undefined;
+      };
       guest_signin: {
-        Args: { p_name: string; p_slug: string }
+        Args: { p_slug: string; p_username: string };
         Returns: {
-          full_name: string
-          group_id: string
-          guest_id: string
-          wedding_id: string
-        }[]
-      }
-    }
+          out_full_name: string;
+          group_id: string;
+          guest_id: string;
+          wedding_id: string;
+        }[];
+      };
+    };
     Enums: {
       event_kind:
-        | "ceremony"
-        | "reception"
-        | "welcome"
-        | "rehearsal"
-        | "brunch"
-        | "cultural"
-        | "other"
-      event_visibility: "public" | "private"
-      rsvp_status: "pending" | "accepted" | "declined" | "tentative"
-      travel_kind:
-        | "hotel"
-        | "airport"
-        | "parking"
-        | "transport"
-        | "attraction"
-        | "restaurant"
-      wedding_role: "owner" | "planner" | "viewer"
-    }
+        "ceremony" | "reception" | "welcome" | "rehearsal" | "brunch" | "cultural" | "other";
+      event_visibility: "public" | "private";
+      rsvp_status: "pending" | "accepted" | "declined" | "tentative";
+      travel_kind: "hotel" | "airport" | "parking" | "transport" | "attraction" | "restaurant";
+      wedding_role: "owner" | "planner" | "viewer";
+    };
     CompositeTypes: {
-      [_ in never]: never
-    }
-  }
-}
+      [_ in never]: never;
+    };
+  };
+};
 
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">];
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
       DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R
+      Row: infer R;
     }
     ? R
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] & DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R;
       }
       ? R
       : never
-    : never
+    : never;
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
+      Insert: infer I;
     }
     ? I
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
     ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
+        Insert: infer I;
       }
       ? I
       : never
-    : never
+    : never;
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
+      Update: infer U;
     }
     ? U
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
     ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
+        Update: infer U;
       }
       ? U
       : never
-    : never
+    : never;
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
+    : never;
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    keyof DefaultSchema["CompositeTypes"] | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
+    : never;
 
 export const Constants = {
   public: {
     Enums: {
-      event_kind: [
-        "ceremony",
-        "reception",
-        "welcome",
-        "rehearsal",
-        "brunch",
-        "cultural",
-        "other",
-      ],
+      event_kind: ["ceremony", "reception", "welcome", "rehearsal", "brunch", "cultural", "other"],
       event_visibility: ["public", "private"],
       rsvp_status: ["pending", "accepted", "declined", "tentative"],
-      travel_kind: [
-        "hotel",
-        "airport",
-        "parking",
-        "transport",
-        "attraction",
-        "restaurant",
-      ],
+      travel_kind: ["hotel", "airport", "parking", "transport", "attraction", "restaurant"],
       wedding_role: ["owner", "planner", "viewer"],
     },
   },
-} as const
+} as const;

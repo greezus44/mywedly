@@ -15,12 +15,20 @@ export async function parseFile(file: File): Promise<{ headers: string[]; rows: 
   const first = wb.SheetNames[0];
   if (!first) return { headers: [], rows: [] };
   const sheet = wb.Sheets[first];
-  const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: "" });
+  const rows: any[][] = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    blankrows: false,
+    defval: "",
+  });
   if (rows.length === 0) return { headers: [], rows: [] };
-  const headers = rows[0].map((h: any) => String(h ?? "").trim() || `Column ${rows[0].indexOf(h) + 1}`);
+  const headers = rows[0].map(
+    (h: any) => String(h ?? "").trim() || `Column ${rows[0].indexOf(h) + 1}`,
+  );
   const out: ParsedRow[] = rows.slice(1).map((r) => {
     const obj: ParsedRow = {};
-    headers.forEach((h, i) => { obj[h] = String(r[i] ?? "").trim(); });
+    headers.forEach((h, i) => {
+      obj[h] = String(r[i] ?? "").trim();
+    });
     return obj;
   });
   return { headers, rows: out.filter((r) => Object.values(r).some((v) => v)) };
@@ -39,20 +47,31 @@ export function parsePastedTable(text: string): { headers: string[]; rows: Parse
     let inQ = false;
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
-      if (c === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
-      else if (c === "," && !inQ) { out.push(cur); cur = ""; }
-      else cur += c;
+      if (c === '"') {
+        if (inQ && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else inQ = !inQ;
+      } else if (c === "," && !inQ) {
+        out.push(cur);
+        cur = "";
+      } else cur += c;
     }
     out.push(cur);
     return out;
   };
   const headers = split(lines[0]).map((h) => h.trim() || "Column");
-  const rows: ParsedRow[] = lines.slice(1).map((line) => {
-    const cells = split(line);
-    const obj: ParsedRow = {};
-    headers.forEach((h, i) => { obj[h] = (cells[i] ?? "").trim(); });
-    return obj;
-  }).filter((r) => Object.values(r).some((v) => v));
+  const rows: ParsedRow[] = lines
+    .slice(1)
+    .map((line) => {
+      const cells = split(line);
+      const obj: ParsedRow = {};
+      headers.forEach((h, i) => {
+        obj[h] = (cells[i] ?? "").trim();
+      });
+      return obj;
+    })
+    .filter((r) => Object.values(r).some((v) => v));
   return { headers, rows };
 }
 

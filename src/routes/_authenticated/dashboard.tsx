@@ -7,10 +7,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
-    meta: [
-      { title: "Dashboard — Aethel" },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: "Dashboard — Aethel" }, { name: "robots", content: "noindex" }],
   }),
   component: DashboardPage,
 });
@@ -35,10 +32,17 @@ function DashboardPage() {
   return (
     <div className="min-h-screen bg-parchment text-onyx">
       <nav className="flex justify-between items-center px-6 md:px-10 py-6 border-b border-onyx/5">
-        <Link to="/" className="serif-italic text-2xl">Aethel</Link>
+        <Link to="/" className="serif-italic text-2xl">
+          Aethel
+        </Link>
         <div className="flex items-center gap-6">
-          <Link to="/dashboard" className="eyebrow text-onyx">Weddings</Link>
-          <button onClick={handleSignOut} className="text-xs uppercase tracking-widest text-onyx/60 hover:text-onyx">
+          <Link to="/dashboard" className="eyebrow text-onyx">
+            Weddings
+          </Link>
+          <button
+            onClick={handleSignOut}
+            className="text-xs uppercase tracking-widest text-onyx/60 hover:text-onyx"
+          >
             Sign out
           </button>
         </div>
@@ -103,7 +107,8 @@ function WeddingCard({ wedding }: { wedding: Wedding }) {
     : "Date not set";
   const days = wedding.wedding_date
     ? Math.ceil(
-        (new Date(wedding.wedding_date + "T00:00:00").getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+        (new Date(wedding.wedding_date + "T00:00:00").getTime() - Date.now()) /
+          (1000 * 60 * 60 * 24),
       )
     : null;
   return (
@@ -177,9 +182,9 @@ function CreateWeddingModal({ onClose }: { onClose: () => void }) {
         { title: "Send save-the-dates", category: "Invitations" },
         { title: "Book photographer", category: "Vendors" },
       ];
-      await supabase.from("checklist_tasks").insert(
-        startTasks.map((t, i) => ({ ...t, wedding_id: data.id, sort_order: i })),
-      );
+      await supabase
+        .from("checklist_tasks")
+        .insert(startTasks.map((t, i) => ({ ...t, wedding_id: data.id, sort_order: i })));
       return data as Wedding;
     },
     onSuccess: (data) => {

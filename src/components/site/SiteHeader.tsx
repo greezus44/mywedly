@@ -24,10 +24,18 @@ export function SiteHeader() {
         Aethel
       </Link>
       <div className="hidden md:flex gap-10 text-xs uppercase tracking-widest font-semibold text-onyx/60">
-        <a href="/#builder" className="hover:text-onyx transition-colors">The Builder</a>
-        <a href="/#showcase" className="hover:text-onyx transition-colors">Showcase</a>
-        <a href="/#pricing" className="hover:text-onyx transition-colors">Pricing</a>
-        <a href="/#craft" className="hover:text-onyx transition-colors">Craft</a>
+        <a href="/#builder" className="hover:text-onyx transition-colors">
+          The Builder
+        </a>
+        <a href="/#showcase" className="hover:text-onyx transition-colors">
+          Showcase
+        </a>
+        <a href="/#pricing" className="hover:text-onyx transition-colors">
+          Pricing
+        </a>
+        <a href="/#craft" className="hover:text-onyx transition-colors">
+          Craft
+        </a>
       </div>
       <div className="flex items-center gap-3">
         {session ? (

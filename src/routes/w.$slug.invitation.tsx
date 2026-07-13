@@ -17,8 +17,13 @@ export const Route = createFileRoute("/w/$slug/invitation")({
 function InvitationPage() {
   const { wedding } = Route.useLoaderData();
   return (
-    <GuestLayout requireSignIn slug={wedding.slug} weddingId={wedding.id} theme={wedding.theme}
-      couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}>
+    <GuestLayout
+      requireSignIn
+      slug={wedding.slug}
+      weddingId={wedding.id}
+      theme={wedding.theme}
+      couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}
+    >
       <Body wedding={wedding} />
     </GuestLayout>
   );
@@ -30,32 +35,59 @@ function Body({ wedding }: { wedding: Wedding }) {
   const invitationTitle = (content.invitation_heading as string | undefined) ?? "";
   const bismillah = (content.invitation_bismillah as string | undefined) ?? "";
   const parentsBlock = (content.parents as string | undefined) ?? "";
-  const invitationText = (content.invitation_text as string | undefined) ??
-    t("With the utmost respect and joy, we cordially invite you to celebrate the wedding of our beloved children.",
-      "Dengan penuh hormat dan takzim sukacita menjunjung / mempersilakan hadir ke Majlis Perkahwinan bagi anakanda kami.");
-  const closingText = (content.closing_text as string | undefined) ??
-    t("On your gracious attendance, we extend our deepest thanks.",
-      "Di atas kehadiran para tetamu, terlebih dahulu kami mengucapkan ribuan terima kasih.");
+  const invitationText =
+    (content.invitation_text as string | undefined) ??
+    t(
+      "With the utmost respect and joy, we cordially invite you to celebrate the wedding of our beloved children.",
+      "Dengan penuh hormat dan takzim sukacita menjunjung / mempersilakan hadir ke Majlis Perkahwinan bagi anakanda kami.",
+    );
+  const closingText =
+    (content.closing_text as string | undefined) ??
+    t(
+      "On your gracious attendance, we extend our deepest thanks.",
+      "Di atas kehadiran para tetamu, terlebih dahulu kami mengucapkan ribuan terima kasih.",
+    );
   const ctaLabel = (content.invitation_cta_label as string | undefined) ?? "RSVP";
 
   return (
     <div className="max-w-2xl mx-auto px-6 md:px-10 py-10 md:py-16 text-center text-sepia">
       {bismillah && (
-        <div className="text-4xl md:text-5xl mb-4" style={{ fontFamily: "var(--font-serif)", direction: "rtl", ...styleFor(getStyle(content, "invitation_bismillah")) }}>
+        <div
+          className="text-4xl md:text-5xl mb-4"
+          style={{
+            fontFamily: "var(--font-serif)",
+            direction: "rtl",
+            ...styleFor(getStyle(content, "invitation_bismillah")),
+          }}
+        >
           {bismillah}
         </div>
       )}
       {invitationTitle && (
-        <p className="text-sepia text-sm tracking-[0.22em] font-medium mb-10" style={styleFor(getStyle(content, "invitation_heading"))}>{invitationTitle}</p>
+        <p
+          className="text-sepia text-sm tracking-[0.22em] font-medium mb-10"
+          style={styleFor(getStyle(content, "invitation_heading"))}
+        >
+          {invitationTitle}
+        </p>
       )}
 
       {parentsBlock ? (
-        <div className="whitespace-pre-line text-[11px] md:text-xs tracking-[0.18em] leading-[2.2] font-medium mb-10" style={styleFor(getStyle(content, "parents"))}>
+        <div
+          className="whitespace-pre-line text-[11px] md:text-xs tracking-[0.18em] leading-[2.2] font-medium mb-10"
+          style={styleFor(getStyle(content, "parents"))}
+        >
           {parentsBlock}
         </div>
       ) : null}
 
-      <p className="text-sm italic leading-relaxed mb-10 max-w-lg mx-auto" style={{ fontFamily: "var(--font-serif)", ...styleFor(getStyle(content, "invitation_text")) }}>
+      <p
+        className="text-sm italic leading-relaxed mb-10 max-w-lg mx-auto"
+        style={{
+          fontFamily: "var(--font-serif)",
+          ...styleFor(getStyle(content, "invitation_text")),
+        }}
+      >
         {invitationText}
       </p>
 
@@ -71,7 +103,10 @@ function Body({ wedding }: { wedding: Wedding }) {
         </p>
       </div>
 
-      <p className="text-sm italic leading-relaxed my-10 max-w-lg mx-auto" style={{ fontFamily: "var(--font-serif)", ...styleFor(getStyle(content, "closing_text")) }}>
+      <p
+        className="text-sm italic leading-relaxed my-10 max-w-lg mx-auto"
+        style={{ fontFamily: "var(--font-serif)", ...styleFor(getStyle(content, "closing_text")) }}
+      >
         {closingText}
       </p>
 

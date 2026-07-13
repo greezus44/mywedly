@@ -13,7 +13,10 @@ export const Route = createFileRoute("/w/$slug/")({
     return {
       meta: [
         { title },
-        { name: "description", content: `The wedding of ${w.couple_name_one} & ${w.couple_name_two}.` },
+        {
+          name: "description",
+          content: `The wedding of ${w.couple_name_one} & ${w.couple_name_two}.`,
+        },
         { property: "og:title", content: title },
         ...(w.hero_image_url ? [{ property: "og:image", content: w.hero_image_url }] : []),
       ],
@@ -30,8 +33,12 @@ export const Route = createFileRoute("/w/$slug/")({
 function CoverPage() {
   const { wedding } = Route.useLoaderData();
   return (
-    <GuestLayout slug={wedding.slug} weddingId={wedding.id} theme={wedding.theme}
-      couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}>
+    <GuestLayout
+      slug={wedding.slug}
+      weddingId={wedding.id}
+      theme={wedding.theme}
+      couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}
+    >
       <Cover wedding={wedding} />
     </GuestLayout>
   );
@@ -41,7 +48,9 @@ function Cover({ wedding }: { wedding: Wedding }) {
   const content = (wedding.content ?? {}) as Record<string, any>;
   const bg = content.cover_background_url as string | undefined;
   const logo = content.cover_logo_url as string | undefined;
-  const heading = (content.cover_heading as string | undefined) || `${wedding.couple_name_one} & ${wedding.couple_name_two}`;
+  const heading =
+    (content.cover_heading as string | undefined) ||
+    `${wedding.couple_name_one} & ${wedding.couple_name_two}`;
   const subtitle = content.cover_subtitle as string | undefined;
   const welcome = content.cover_welcome as string | undefined;
   const ctaLabel = (content.cover_cta_label as string | undefined) || "OPEN INVITATION";
@@ -49,7 +58,9 @@ function Cover({ wedding }: { wedding: Wedding }) {
   const date = wedding.wedding_date ? new Date(wedding.wedding_date + "T00:00:00") : null;
   const monthYear = date
     ? date.toLocaleDateString("en-US", { month: "long", year: "numeric" }).toUpperCase()
-    : (subtitle ? subtitle.toUpperCase() : "COMING SOON");
+    : subtitle
+      ? subtitle.toUpperCase()
+      : "COMING SOON";
   const [month, year] = monthYear.split(" ");
 
   const headingStyle = getStyle(content, "cover_heading");
@@ -57,12 +68,20 @@ function Cover({ wedding }: { wedding: Wedding }) {
   const welcomeStyle = getStyle(content, "cover_welcome");
   const ctaStyle = getStyle(content, "cover_cta");
 
-  const initialsStyle = { fontFamily: "var(--font-serif)", fontStyle: "italic", fontWeight: 500 } as React.CSSProperties;
+  const initialsStyle = {
+    fontFamily: "var(--font-serif)",
+    fontStyle: "italic",
+    fontWeight: 500,
+  } as React.CSSProperties;
 
   return (
     <div
       className="min-h-[80vh] flex flex-col items-center justify-center px-6 py-16 text-sepia relative"
-      style={bg ? { backgroundImage: `url(${bg})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
+      style={
+        bg
+          ? { backgroundImage: `url(${bg})`, backgroundSize: "cover", backgroundPosition: "center" }
+          : undefined
+      }
     >
       {bg && <div className="absolute inset-0 bg-parchment/70" aria-hidden />}
       <div className="relative">
@@ -75,7 +94,10 @@ function Cover({ wedding }: { wedding: Wedding }) {
           {logo ? (
             <img src={logo} alt="" className="max-h-40 md:max-h-56 object-contain" />
           ) : (
-            <div className="text-[140px] md:text-[180px] leading-none tracking-tight text-sepia relative" style={initialsStyle}>
+            <div
+              className="text-[140px] md:text-[180px] leading-none tracking-tight text-sepia relative"
+              style={initialsStyle}
+            >
               <span className="relative inline-block">
                 {wedding.couple_name_one[0]}
                 <span className="absolute left-1/2 top-1/2 -translate-x-[35%] -translate-y-[45%] opacity-95">
@@ -102,8 +124,17 @@ function Cover({ wedding }: { wedding: Wedding }) {
           transition={{ duration: 0.8, delay: 1 }}
           className="text-center mb-8"
         >
-          <p className="text-sepia text-sm tracking-[0.35em] leading-loose font-medium" style={styleFor(subtitleStyle)}>
-            {month}{year ? <><br />{year}</> : null}
+          <p
+            className="text-sepia text-sm tracking-[0.35em] leading-loose font-medium"
+            style={styleFor(subtitleStyle)}
+          >
+            {month}
+            {year ? (
+              <>
+                <br />
+                {year}
+              </>
+            ) : null}
           </p>
         </motion.div>
 

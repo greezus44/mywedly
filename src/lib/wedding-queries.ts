@@ -11,9 +11,9 @@ export function slugify(input: string): string {
 }
 
 export type WeddingTheme = {
-  accent?: string;    // css color, applied to --sepia
-  bg?: string;        // css color, applied to --parchment
-  serif?: string;     // css font family (string)
+  accent?: string; // css color, applied to --sepia
+  bg?: string; // css color, applied to --parchment
+  serif?: string; // css font family (string)
   sans?: string;
 };
 
@@ -33,8 +33,6 @@ export type Wedding = {
   created_at: string;
   updated_at: string;
   content?: Record<string, any> | null;
-  guest_password?: string | null;
-  password_mode?: "shared" | "per_guest" | "none";
   signin_helper?: string | null;
 };
 

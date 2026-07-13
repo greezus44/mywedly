@@ -92,9 +92,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "MyWedly — Editorial wedding planning & websites" },
-      { name: "twitter:description", content: "The modern curator's platform for weddings. Build an editorial wedding website, manage guests and RSVPs, and host every event with quiet precision." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/897c7115-f7c8-4156-8f2f-f64560f35ca3/id-preview-fc586491--73a0769b-88d4-48e0-815d-a3e494a0c61b.lovable.app-1783647429553.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/897c7115-f7c8-4156-8f2f-f64560f35ca3/id-preview-fc586491--73a0769b-88d4-48e0-815d-a3e494a0c61b.lovable.app-1783647429553.png" },
+      {
+        name: "twitter:description",
+        content:
+          "The modern curator's platform for weddings. Build an editorial wedding website, manage guests and RSVPs, and host every event with quiet precision.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/897c7115-f7c8-4156-8f2f-f64560f35ca3/id-preview-fc586491--73a0769b-88d4-48e0-815d-a3e494a0c61b.lovable.app-1783647429553.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/897c7115-f7c8-4156-8f2f-f64560f35ca3/id-preview-fc586491--73a0769b-88d4-48e0-815d-a3e494a0c61b.lovable.app-1783647429553.png",
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },

@@ -1,8 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import heroPavilion from "@/assets/hero-pavilion.jpg";
-import couplePortrait from "@/assets/couple-portrait.jpg";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteFooter } from "@/components/site/SiteFooter";
+
+const heroPavilion =
+  "https://images.pexels.com/photos/169198/pexels-photo-169198.jpeg?auto=compress&cs=tinysrgb&w=1600";
+const couplePortrait =
+  "https://images.pexels.com/photos/1024993/pexels-photo-1024993.jpeg?auto=compress&cs=tinysrgb&w=1200";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -160,9 +163,9 @@ function LandingPage() {
               An <em className="italic">editorial</em> record of the day.
             </h3>
             <p className="text-onyx/70 leading-relaxed mb-4">
-              Aethel is a wedding platform for couples who value restraint. No florid animations,
-              no pastel gradients. Just a working room for guests, a stage for photography, and a
-              site that reads like a small monograph.
+              Aethel is a wedding platform for couples who value restraint. No florid animations, no
+              pastel gradients. Just a working room for guests, a stage for photography, and a site
+              that reads like a small monograph.
             </p>
             <p className="text-onyx/70 leading-relaxed">
               Built for weddings held in gardens, warehouses, temples, and villas. Designed by
@@ -245,7 +248,15 @@ const FEATURES = [
   "AI drafting",
 ];
 
-function GuestRow({ name, tag, tone }: { name: string; tag: string; tone: "success" | "warning" | "neutral" }) {
+function GuestRow({
+  name,
+  tag,
+  tone,
+}: {
+  name: string;
+  tag: string;
+  tone: "success" | "warning" | "neutral";
+}) {
   const cls =
     tone === "success"
       ? "bg-success/10 text-success"
@@ -272,7 +283,17 @@ function ScheduleBlock({ time, label, body }: { time: string; label: string; bod
   );
 }
 
-function ModuleCard({ n, title, body, dark }: { n: string; title: string; body: string; dark?: boolean }) {
+function ModuleCard({
+  n,
+  title,
+  body,
+  dark,
+}: {
+  n: string;
+  title: string;
+  body: string;
+  dark?: boolean;
+}) {
   return (
     <div
       className={
@@ -283,7 +304,9 @@ function ModuleCard({ n, title, body, dark }: { n: string; title: string; body: 
       <span className={"text-4xl serif-italic " + (dark ? "" : "text-sepia")}>{n}</span>
       <div>
         <h5 className="text-sm font-semibold mb-2">{title}</h5>
-        <p className={"text-[11px] leading-relaxed " + (dark ? "text-parchment/60" : "text-onyx/60")}>
+        <p
+          className={"text-[11px] leading-relaxed " + (dark ? "text-parchment/60" : "text-onyx/60")}
+        >
           {body}
         </p>
       </div>
@@ -313,7 +336,11 @@ function PricingCard({
     >
       <p className={"eyebrow mb-6 " + (featured ? "text-parchment/70" : "")}>{tier}</p>
       <p className="font-serif text-5xl mb-4">{price}</p>
-      <p className={"text-sm leading-relaxed mb-8 " + (featured ? "text-parchment/70" : "text-onyx/60")}>
+      <p
+        className={
+          "text-sm leading-relaxed mb-8 " + (featured ? "text-parchment/70" : "text-onyx/60")
+        }
+      >
         {body}
       </p>
       <Link

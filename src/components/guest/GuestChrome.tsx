@@ -46,7 +46,9 @@ export function GuestLayout({
 
   const setLang = (l: Lang) => {
     setLangState(l);
-    try { localStorage.setItem(STORAGE, l); } catch {}
+    try {
+      localStorage.setItem(STORAGE, l);
+    } catch {}
   };
 
   const t = (en: string, ms: string) => (lang === "ms" ? ms : en);
@@ -59,7 +61,10 @@ export function GuestLayout({
 
   return (
     <LangContext.Provider value={{ lang, setLang, t }}>
-      <div className="min-h-screen bg-parchment text-sepia" style={{ fontFamily: "var(--font-sans)", ...themeStyle }}>
+      <div
+        className="min-h-screen bg-parchment text-sepia"
+        style={{ fontFamily: "var(--font-sans)", ...themeStyle }}
+      >
         {showChrome && <GuestHeader slug={slug} couple={couple} weddingId={weddingId} />}
         <AnimatePresence mode="wait">
           <motion.main
@@ -77,7 +82,15 @@ export function GuestLayout({
   );
 }
 
-function GuestHeader({ slug, couple, weddingId }: { slug: string; couple: { one: string; two: string }; weddingId?: string }) {
+function GuestHeader({
+  slug,
+  couple,
+  weddingId,
+}: {
+  slug: string;
+  couple: { one: string; two: string };
+  weddingId?: string;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -92,7 +105,14 @@ function GuestHeader({ slug, couple, weddingId }: { slug: string; couple: { one:
         <LangToggle />
       </header>
       <AnimatePresence>
-        {open && <MenuOverlay slug={slug} couple={couple} weddingId={weddingId} onClose={() => setOpen(false)} />}
+        {open && (
+          <MenuOverlay
+            slug={slug}
+            couple={couple}
+            weddingId={weddingId}
+            onClose={() => setOpen(false)}
+          />
+        )}
       </AnimatePresence>
     </>
   );
@@ -106,14 +126,17 @@ function LangToggle() {
       if (s === "ms" || s === "en") setLangState(s);
     } catch {}
     const on = (e: StorageEvent) => {
-      if (e.key === STORAGE && (e.newValue === "ms" || e.newValue === "en")) setLangState(e.newValue);
+      if (e.key === STORAGE && (e.newValue === "ms" || e.newValue === "en"))
+        setLangState(e.newValue);
     };
     window.addEventListener("storage", on);
     return () => window.removeEventListener("storage", on);
   }, []);
   const set = (l: Lang) => {
     setLangState(l);
-    try { localStorage.setItem(STORAGE, l); } catch {}
+    try {
+      localStorage.setItem(STORAGE, l);
+    } catch {}
     window.dispatchEvent(new StorageEvent("storage", { key: STORAGE, newValue: l }));
     location.reload();
   };
@@ -129,15 +152,32 @@ function LangToggle() {
         onClick={() => set("ms")}
         className={`px-4 py-2 leading-tight text-left transition-colors border-l-2 border-sepia/70 ${lang === "ms" ? "bg-sepia/10 text-sepia" : "text-sepia/60 hover:text-sepia"}`}
       >
-        BAHASA<br />MELAYU
+        BAHASA
+        <br />
+        MELAYU
       </button>
     </div>
   );
 }
 
-function MenuOverlay({ slug, couple, weddingId, onClose }: { slug: string; couple: { one: string; two: string }; weddingId?: string; onClose: () => void }) {
+function MenuOverlay({
+  slug,
+  couple,
+  weddingId,
+  onClose,
+}: {
+  slug: string;
+  couple: { one: string; two: string };
+  weddingId?: string;
+  onClose: () => void;
+}) {
   const [lang, setLang] = useState<Lang>("en");
-  useEffect(() => { try { const s = localStorage.getItem(STORAGE); if (s === "ms" || s === "en") setLang(s); } catch {} }, []);
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem(STORAGE);
+      if (s === "ms" || s === "en") setLang(s);
+    } catch {}
+  }, []);
 
   const { data: pages } = useQuery({
     queryKey: ["custom-pages-nav", weddingId],
@@ -162,10 +202,16 @@ function MenuOverlay({ slug, couple, weddingId, onClose }: { slug: string; coupl
     >
       <div className="flex justify-between items-start px-6 md:px-14 pt-8">
         <div className="border-2 border-sepia/70 rounded-md p-3">
-          <button onClick={onClose} aria-label="Close" className="block"><X className="w-6 h-6 text-sepia" strokeWidth={2.5} /></button>
+          <button onClick={onClose} aria-label="Close" className="block">
+            <X className="w-6 h-6 text-sepia" strokeWidth={2.5} />
+          </button>
         </div>
         <button
-          onClick={() => { clearGuestName(slug); onClose(); location.href = `/w/${slug}/signin`; }}
+          onClick={() => {
+            clearGuestName(slug);
+            onClose();
+            location.href = `/w/${slug}/signin`;
+          }}
           className="text-[11px] tracking-[0.18em] text-sepia/60 hover:text-sepia py-3"
         >
           {lang === "ms" ? "LOG KELUAR" : "SIGN OUT"}
@@ -176,7 +222,9 @@ function MenuOverlay({ slug, couple, weddingId, onClose }: { slug: string; coupl
           className="text-sepia text-6xl md:text-7xl mb-8"
           style={{ fontFamily: "var(--font-serif)", fontStyle: "italic", fontWeight: 500 }}
         >
-          {couple.one[0]}<span className="opacity-60 mx-2">&</span>{couple.two[0]}
+          {couple.one[0]}
+          <span className="opacity-60 mx-2">&</span>
+          {couple.two[0]}
         </div>
         {coreLinks.map((l) => (
           <Link

@@ -1,6 +1,5 @@
 import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
 import { GuestLayout } from "@/components/guest/GuestChrome";
 import { setGuestSession } from "@/lib/wedding-guest";
 import { getWeddingBySlug, type Wedding } from "@/lib/wedding-queries";
@@ -21,56 +20,63 @@ export const Route = createFileRoute("/w/$slug/signin")({
 function SignInPage() {
   const { wedding } = Route.useLoaderData();
   return (
-    <GuestLayout slug={wedding.slug} weddingId={wedding.id} theme={wedding.theme} couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}>
+    <GuestLayout
+      slug={wedding.slug}
+      weddingId={wedding.id}
+      theme={wedding.theme}
+      couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}
+    >
       <SignInInner wedding={wedding} />
     </GuestLayout>
   );
 }
 
 function SignInInner({ wedding }: { wedding: Wedding }) {
-  const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
-  const [show, setShow] = useState(false);
+  const [username, setUsername] = useState("");
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
-  const lang = (typeof window !== "undefined" && localStorage.getItem("mywedly:lang")) === "ms" ? "ms" : "en";
+  const lang =
+    (typeof window !== "undefined" && localStorage.getItem("mywedly:lang")) === "ms" ? "ms" : "en";
   const t = (en: string, ms: string) => (lang === "ms" ? ms : en);
-  const needsPw = wedding.password_mode !== "none";
 
   const content = (wedding.content ?? {}) as Record<string, any>;
   const heading = (content.signin_heading as string | undefined) || t("SIGN IN", "DAFTAR MASUK");
-  const namePh = (content.signin_name_placeholder as string | undefined) || t("ENTER YOUR NAME", "MASUKKAN NAMA ANDA");
-  const pwPh = (content.signin_password_placeholder as string | undefined) || t("PASSWORD", "KATA LALUAN");
-  const helper = (wedding.signin_helper && wedding.signin_helper.trim())
-    || (content.signin_helper as string | undefined)
-    || t("AS STATED ON YOUR INVITATION", "SEPERTI TERTERA PADA JEMPUTAN");
+  const usernamePh =
+    (content.signin_name_placeholder as string | undefined) ||
+    t("ENTER YOUR USERNAME", "MASUKKAN NAMA PENGGUNA");
+  const helper =
+    (wedding.signin_helper && wedding.signin_helper.trim()) ||
+    (content.signin_helper as string | undefined) ||
+    t("AS STATED ON YOUR INVITATION", "SEPERTI TERTERA PADA JEMPUTAN");
 
   const headingStyle = getStyle(content, "signin_heading");
   const helperStyle = getStyle(content, "signin_helper");
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanName = name.trim();
-    const cleanPw = password.trim();
-    if (!cleanName || (needsPw && !cleanPw)) return;
+    const cleanUsername = username.trim();
+    if (!cleanUsername) return;
     setBusy(true);
     try {
       const { data, error } = await supabase.rpc("guest_signin", {
         p_slug: wedding.slug,
-        p_name: cleanName,
-        p_password: cleanPw,
+        p_username: cleanUsername,
       });
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : null;
       if (!row) {
-        toast.error(t("Name or password not recognised. Please try again.", "Nama atau kata laluan tidak sah. Sila cuba lagi."));
+        toast.error(
+          t(
+            "Username not recognised. Please try again.",
+            "Nama pengguna tidak sah. Sila cuba lagi.",
+          ),
+        );
         return;
       }
       setGuestSession(wedding.slug, {
         guestId: row.guest_id,
         weddingId: row.wedding_id,
-        name: row.full_name,
-        password: cleanPw,
+        name: row.out_full_name,
       });
       nav({ to: "/w/$slug/invitation", params: { slug: wedding.slug } });
     } catch (err) {
@@ -90,32 +96,12 @@ function SignInInner({ wedding }: { wedding: Wedding }) {
       </h2>
       <form onSubmit={submit} className="w-full max-w-md flex flex-col items-center gap-4">
         <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={namePh}
-          autoComplete="name"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder={usernamePh}
+          autoComplete="username"
           className="w-full border-2 border-sepia/70 rounded-md bg-transparent text-sepia placeholder:text-sepia/50 text-center py-4 px-6 text-sm tracking-[0.15em] outline-none focus:border-sepia transition-colors"
         />
-        {needsPw && (
-          <div className="w-full relative">
-            <input
-              type={show ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={pwPh}
-              autoComplete="current-password"
-              className="w-full border-2 border-sepia/70 rounded-md bg-transparent text-sepia placeholder:text-sepia/50 text-center py-4 px-12 text-sm tracking-[0.15em] outline-none focus:border-sepia transition-colors"
-            />
-            <button
-              type="button"
-              onClick={() => setShow((s) => !s)}
-              aria-label={show ? t("Hide password", "Sembunyi kata laluan") : t("Show password", "Tunjuk kata laluan")}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-sepia/70 hover:text-sepia p-1"
-            >
-              {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-            </button>
-          </div>
-        )}
         <p
           className="text-sepia text-[11px] tracking-[0.18em] mt-2 mb-10 font-medium text-center max-w-sm"
           style={styleFor(helperStyle)}
@@ -124,7 +110,7 @@ function SignInInner({ wedding }: { wedding: Wedding }) {
         </p>
         <button
           type="submit"
-          disabled={busy || !name.trim() || (needsPw && !password.trim())}
+          disabled={busy || !username.trim()}
           className="inline-flex items-center justify-center border-2 border-sepia/70 rounded-md w-24 h-14 text-sepia text-2xl hover:bg-sepia hover:text-parchment transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-sepia"
         >
           &gt;

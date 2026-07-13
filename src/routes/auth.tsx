@@ -97,7 +97,9 @@ function AuthPage() {
 
       <main className="flex flex-col justify-center px-6 md:px-16 py-16">
         <div className="lg:hidden mb-10">
-          <Link to="/" className="serif-italic text-2xl">Aethel</Link>
+          <Link to="/" className="serif-italic text-2xl">
+            Aethel
+          </Link>
         </div>
         <p className="eyebrow mb-4">{mode === "signup" ? "Create account" : "Welcome back"}</p>
         <h1 className="font-serif text-5xl italic mb-2">

@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Clock } from "lucide-react";
 import { GuestLayout } from "@/components/guest/GuestChrome";
-import { getGuestSession, useLang, formatEventDate, formatEventTime, type GuestSession } from "@/lib/wedding-guest";
+import {
+  getGuestSession,
+  useLang,
+  formatEventDate,
+  formatEventTime,
+  type GuestSession,
+} from "@/lib/wedding-guest";
 import { getWeddingBySlug, type Wedding } from "@/lib/wedding-queries";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -33,7 +39,13 @@ type EventRow = {
 function EventsPage() {
   const { wedding } = Route.useLoaderData();
   return (
-    <GuestLayout requireSignIn slug={wedding.slug} weddingId={wedding.id} theme={wedding.theme} couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}>
+    <GuestLayout
+      requireSignIn
+      slug={wedding.slug}
+      weddingId={wedding.id}
+      theme={wedding.theme}
+      couple={{ one: wedding.couple_name_one, two: wedding.couple_name_two }}
+    >
       <Inner wedding={wedding} />
     </GuestLayout>
   );
@@ -42,7 +54,9 @@ function EventsPage() {
 function Inner({ wedding }: { wedding: Wedding }) {
   const { t, lang } = useLang();
   const [session, setSession] = useState<GuestSession | null>(null);
-  useEffect(() => { setSession(getGuestSession(wedding.slug)); }, [wedding.slug]);
+  useEffect(() => {
+    setSession(getGuestSession(wedding.slug));
+  }, [wedding.slug]);
 
   const { data: events } = useQuery({
     queryKey: ["guest-events", session?.guestId],
@@ -50,7 +64,6 @@ function Inner({ wedding }: { wedding: Wedding }) {
     queryFn: async (): Promise<EventRow[]> => {
       const { data, error } = await supabase.rpc("guest_events", {
         p_guest_id: session!.guestId,
-        p_password: session!.password,
       });
       if (error) throw error;
       return (data ?? []) as EventRow[];
@@ -65,7 +78,14 @@ function Inner({ wedding }: { wedding: Wedding }) {
         <h1 className="text-sepia text-3xl md:text-4xl tracking-[0.2em] font-medium mb-2">RSVP</h1>
         {rsvpDeadline && (
           <p className="text-sepia text-[11px] tracking-[0.22em] font-medium">
-            {t("BEFORE", "SEBELUM")} {new Date(rsvpDeadline + "T00:00:00").toLocaleDateString(lang === "ms" ? "ms-MY" : "en-GB", { day: "2-digit", month: "long", year: "numeric" }).toUpperCase()}
+            {t("BEFORE", "SEBELUM")}{" "}
+            {new Date(rsvpDeadline + "T00:00:00")
+              .toLocaleDateString(lang === "ms" ? "ms-MY" : "en-GB", {
+                day: "2-digit",
+                month: "long",
+                year: "numeric",
+              })
+              .toUpperCase()}
           </p>
         )}
       </div>
@@ -90,7 +110,10 @@ function Inner({ wedding }: { wedding: Wedding }) {
           </motion.div>
         ))}
         {events && events.length === 0 && (
-          <p className="text-center text-sepia/60 italic py-16" style={{ fontFamily: "var(--font-serif)" }}>
+          <p
+            className="text-center text-sepia/60 italic py-16"
+            style={{ fontFamily: "var(--font-serif)" }}
+          >
             {t("You have no events to RSVP to yet.", "Tiada majlis untuk anda pada masa ini.")}
           </p>
         )}
@@ -110,7 +133,6 @@ function EventCard({ event, session }: { event: EventRow; session: GuestSession 
       if (!session) throw new Error("Sign in first");
       const { error } = await supabase.rpc("guest_rsvp", {
         p_guest_id: session.guestId,
-        p_password: session.password,
         p_event_id: event.id,
         p_status: status,
       });
@@ -166,7 +188,10 @@ function EventCard({ event, session }: { event: EventRow; session: GuestSession 
         )}
 
         {event.notes && (
-          <p className="text-sepia/80 text-xs italic leading-relaxed mb-4" style={{ fontFamily: "var(--font-serif)" }}>
+          <p
+            className="text-sepia/80 text-xs italic leading-relaxed mb-4"
+            style={{ fontFamily: "var(--font-serif)" }}
+          >
             {event.notes}
           </p>
         )}

@@ -13,6 +13,9 @@
 @import "@fontsource/outfit/600.css";
 @import "@fontsource/outfit/700.css";
 
+/* Google Fonts for typography selector */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Imperial+Script&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Lora:ital,wght@0,400;0,500;1,400&family=Montserrat:wght@300;400;500;600&family=Roboto:wght@300;400;500&family=Open+Sans:wght@300;400;500;600&family=Dancing+Script:wght@400;600&family=Great+Vibes&family=Sacramento&family=Parisienne&display=swap");
+
 @custom-variant dark (&:is(.dark *));
 
 /*
@@ -22,7 +25,7 @@
 
 @theme inline {
   --font-serif: "Cormorant Garamond", ui-serif, Georgia, serif;
-  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", "Outfit", ui-sans-serif, system-ui, sans-serif;
 
   --radius-sm: 2px;
   --radius-md: 3px;
@@ -81,11 +84,11 @@
   --radius: 3px;
 
   /* Brand primitives */
-  --onyx: oklch(0.15 0.005 60);          /* #121212-ish deep charcoal */
-  --parchment: oklch(0.985 0.006 85);    /* #FDFCF9 warm paper */
-  --sepia: oklch(0.58 0.03 70);          /* #8C7E6A muted sepia */
-  --mist: oklch(0.94 0.005 80);          /* soft warm gray */
-  --ink: oklch(0.28 0.008 60);           /* rich dark ink */
+  --onyx: oklch(0.15 0.005 60); /* #121212-ish deep charcoal */
+  --parchment: oklch(0.985 0.006 85); /* #FDFCF9 warm paper */
+  --sepia: oklch(0.58 0.03 70); /* #8C7E6A muted sepia */
+  --mist: oklch(0.94 0.005 80); /* soft warm gray */
+  --ink: oklch(0.28 0.008 60); /* rich dark ink */
 
   --background: var(--parchment);
   --foreground: var(--onyx);
@@ -105,7 +108,7 @@
   --destructive: oklch(0.55 0.19 25);
   --destructive-foreground: var(--parchment);
 
-  --border: oklch(0.15 0.005 60 / 0.10);
+  --border: oklch(0.15 0.005 60 / 0.1);
   --input: oklch(0.15 0.005 60 / 0.15);
   --ring: var(--sepia);
 
@@ -143,7 +146,7 @@
   --muted-foreground: oklch(0.68 0.01 60);
   --accent: var(--sepia);
   --accent-foreground: var(--parchment);
-  --border: oklch(1 0 0 / 0.10);
+  --border: oklch(1 0 0 / 0.1);
   --input: oklch(1 0 0 / 0.15);
   --ring: var(--sepia);
 }
@@ -152,14 +155,19 @@
   * {
     border-color: var(--color-border);
   }
-  html, body {
+  html,
+  body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-feature-settings: "ss01", "ss02";
     -webkit-font-smoothing: antialiased;
   }
-  h1, h2, h3, h4, h5 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5 {
     font-family: var(--font-serif);
     letter-spacing: -0.01em;
   }
