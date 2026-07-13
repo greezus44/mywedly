@@ -8,12 +8,10 @@ export function GuestInfo() {
   const { wedding, loading, error } = useWedding(slug);
   if (loading) return <div className="min-h-screen flex items-center justify-center text-sepia">Loading…</div>;
   if (error || !wedding) return <div className="min-h-screen flex items-center justify-center text-red-600">{error ?? "Not found"}</div>;
-
   const content = (wedding.content ?? {}) as WeddingContent;
   const heading = (content.info_heading as string) ?? "Information";
   const body = (content.info_body as string) ?? "";
   const image = (content.info_image_url as string) ?? null;
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-center text-center px-6 py-16 bg-parchment">
       <div className="max-w-2xl">

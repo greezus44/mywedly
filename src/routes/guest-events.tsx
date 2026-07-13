@@ -8,15 +8,9 @@ export function GuestEvents() {
   const slug = location.pathname.split("/")[2];
   const { wedding, loading, error } = useWedding(slug);
   const [events, setEvents] = useState<GuestEvent[]>([]);
-
-  useEffect(() => {
-    if (!wedding) return;
-    supabase.from("events").select("*").eq("wedding_id", wedding.id).order("sort_order", { ascending: true }).then(({ data }) => setEvents((data as GuestEvent[]) ?? []));
-  }, [wedding]);
-
+  useEffect(() => { if (!wedding) return; supabase.from("events").select("*").eq("wedding_id", wedding.id).order("sort_order", { ascending: true }).then(({ data }) => setEvents((data as GuestEvent[]) ?? [])); }, [wedding]);
   if (loading) return <div className="min-h-screen flex items-center justify-center text-sepia">Loading…</div>;
   if (error || !wedding) return <div className="min-h-screen flex items-center justify-center text-red-600">{error ?? "Not found"}</div>;
-
   return (
     <div className="min-h-screen flex flex-col items-center px-6 py-16 bg-parchment">
       <div className="max-w-2xl w-full">

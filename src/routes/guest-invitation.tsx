@@ -9,12 +9,10 @@ export function GuestInvitation() {
   const { wedding, loading, error } = useWedding(slug);
   if (loading) return <div className="min-h-screen flex items-center justify-center text-sepia">Loading…</div>;
   if (error || !wedding) return <div className="min-h-screen flex items-center justify-center text-red-600">{error ?? "Not found"}</div>;
-
   const content = (wedding.content ?? {}) as WeddingContent;
   const parents = (content.parents as string) ?? "";
   const invitationText = (content.invitation_text as string) ?? "Together with their families, we invite you to celebrate our wedding.";
   const closingText = (content.closing_text as string) ?? "We look forward to sharing this special day with you.";
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-center text-center px-6 py-16 bg-parchment">
       <div className="max-w-lg">

@@ -10,7 +10,6 @@ export function GuestSignin() {
   const [username, setUsername] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!wedding) return;
@@ -20,10 +19,8 @@ export function GuestSignin() {
     if (error) { setErr(error); return; }
     if (session) navigate(`/w/${slug}`);
   };
-
   if (loading) return <div className="min-h-screen flex items-center justify-center text-sepia">Loading…</div>;
   if (error || !wedding) return <div className="min-h-screen flex items-center justify-center text-red-600">{error ?? "Not found"}</div>;
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-mist px-4">
       <div className="w-full max-w-sm">

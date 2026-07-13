@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase, type Wedding, type WeddingContent, type GuestEvent, type Guest, type GuestGroup, type CustomPage, type Rsvp } from "@/lib/supabase";
 import { useWedding } from "@/lib/use-wedding";
-import { styleFor, getStyle, FONT_OPTIONS, THEME_PRESETS } from "@/lib/text-styles";
+import { FONT_OPTIONS, THEME_PRESETS } from "@/lib/text-styles";
 import { formatEventDate, formatEventTime } from "@/lib/wedding-guest";
 import { ImageUpload } from "@/components/dashboard/ImageUpload";
 import { TimePicker12 } from "@/components/dashboard/TimePicker12";
@@ -27,16 +27,11 @@ export function ManagePage() {
   const { wedding, loading, error } = useWedding(slug);
   const [sub, setSub] = useState<SubKey>("overview");
   const [openTab, setOpenTab] = useState<string | null>("web");
-
-  const previewMap: Partial<Record<SubKey, "cover" | "invitation" | "info" | "events">> = {
-    "web-cover": "cover", "web-invitation": "invitation", "web-info": "info", "ev-list": "events", "ev-rsvp": "events", "ap-appearance": "cover",
-  };
+  const previewMap: Partial<Record<SubKey, "cover" | "invitation" | "info" | "events">> = { "web-cover": "cover", "web-invitation": "invitation", "web-info": "info", "ev-list": "events", "ev-rsvp": "events", "ap-appearance": "cover" };
   const previewPage = previewMap[sub];
   const showPreview = !!previewPage;
-
   if (loading) return <div className="min-h-screen flex items-center justify-center text-sepia">Loading…</div>;
   if (error || !wedding) return <div className="min-h-screen flex items-center justify-center text-red-600">{error ?? "Not found"}</div>;
-
   return (
     <div className="min-h-screen bg-mist">
       <header className="border-b border-onyx/10 bg-parchment px-6 py-4 flex items-center justify-between sticky top-0 z-40">
@@ -49,9 +44,7 @@ export function ManagePage() {
           <button onClick={() => setSub("overview")} className={`w-full text-left px-3 py-2 text-sm rounded ${sub === "overview" ? "bg-onyx/5 text-onyx font-medium" : "text-sepia"}`}>Overview</button>
           {TABS.map((tab) => (
             <div key={tab.key} className="mt-1">
-              <button onClick={() => setOpenTab(openTab === tab.key ? null : tab.key)} className="w-full text-left px-3 py-2 text-sm text-onyx/70 font-medium flex items-center gap-1">
-                {openTab === tab.key ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}{tab.label}
-              </button>
+              <button onClick={() => setOpenTab(openTab === tab.key ? null : tab.key)} className="w-full text-left px-3 py-2 text-sm text-onyx/70 font-medium flex items-center gap-1">{openTab === tab.key ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}{tab.label}</button>
               {openTab === tab.key && <div className="ml-3">{tab.subs.map((s) => <button key={s.key} onClick={() => setSub(s.key)} className={`w-full text-left px-3 py-1.5 text-sm rounded ${sub === s.key ? "bg-onyx/5 text-onyx" : "text-sepia/70"}`}>{s.label}</button>)}</div>}
             </div>
           ))}
@@ -84,7 +77,6 @@ export function ManagePage() {
 function saveContent(weddingId: string, content: Record<string, unknown>, qc: ReturnType<typeof useQueryClient>) {
   supabase.from("weddings").update({ content }).eq("id", weddingId).then(({ error }) => { if (error) console.error(error.message); else qc.invalidateQueries({ queryKey: ["weddings"] }); });
 }
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><label className="text-xs uppercase tracking-widest text-sepia">{label}</label><div className="mt-1">{children}</div></div>;
 }
@@ -339,13 +331,13 @@ function SiteTab({ wedding }: { wedding: Wedding }) {
   const [name1, setName1] = useState(wedding.couple_name_one);
   const [name2, setName2] = useState(wedding.couple_name_two);
   const [date, setDate] = useState(wedding.wedding_date ?? "");
-  const [location, setLocation] = useState(wedding.location ?? "");
+  const [loc, setLoc] = useState(wedding.location ?? "");
   const [heroUrl, setHeroUrl] = useState(wedding.hero_image_url ?? "");
   const [story, setStory] = useState(wedding.story ?? "");
   const [hashtag, setHashtag] = useState(wedding.hashtag ?? "");
   const [published, setPublished] = useState(wedding.is_published);
   const save = async () => {
-    await supabase.from("weddings").update({ couple_name_one: name1, couple_name_two: name2, wedding_date: date || null, location: location || null, hero_image_url: heroUrl || null, story: story || null, is_published: published, hashtag: hashtag || null }).eq("id", wedding.id);
+    await supabase.from("weddings").update({ couple_name_one: name1, couple_name_two: name2, wedding_date: date || null, location: loc || null, hero_image_url: heroUrl || null, story: story || null, is_published: published, hashtag: hashtag || null }).eq("id", wedding.id);
     qc.invalidateQueries({ queryKey: ["weddings"] });
   };
   return (
@@ -357,7 +349,7 @@ function SiteTab({ wedding }: { wedding: Wedding }) {
           <Field label="Name Two"><input value={name2} onChange={(e) => setName2(e.target.value)} className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx" /></Field>
         </div>
         <Field label="Wedding Date"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx" /></Field>
-        <Field label="Location"><input value={location} onChange={(e) => setLocation(e.target.value)} className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx" /></Field>
+        <Field label="Location"><input value={loc} onChange={(e) => setLoc(e.target.value)} className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx" /></Field>
         <div><label className="text-xs uppercase tracking-widest text-sepia">Hero Image</label><ImageUpload weddingId={wedding.id} value={heroUrl || null} onChange={(url) => setHeroUrl(url ?? "")} /></div>
         <Field label="Story"><textarea value={story} onChange={(e) => setStory(e.target.value)} rows={4} className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx" /></Field>
         <Field label="Hashtag"><input value={hashtag} onChange={(e) => setHashtag(e.target.value)} className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx" /></Field>

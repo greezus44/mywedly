@@ -4,12 +4,8 @@ export default {
   theme: {
     extend: {
       colors: {
-        parchment: "#fdfcf9",
-        sepia: "#8c7e6a",
-        onyx: "#1a1a1a",
-        ink: "#2a2a2a",
-        mist: "#f5f2ee",
-        card: "#ffffff",
+        parchment: "#fdfcf9", sepia: "#8c7e6a", onyx: "#1a1a1a",
+        ink: "#2a2a2a", mist: "#f5f2ee", card: "#ffffff",
       },
       fontFamily: {
         serif: ["Cormorant Garamond", "Georgia", "serif"],
