@@ -648,8 +648,7 @@ function GuestsTab({ wedding }: { wedding: Wedding }) {
             <p className="eyebrow">{editing ? "Edit guest" : "Add guest"}</p>
             <button type="button" onClick={() => setShowImport(true)} className="text-xs flex items-center gap-1 text-onyx/60 hover:text-onyx"><Upload className="w-3 h-3" />Import</button>
           </div>
-          <input required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Full name" className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx" />
-          <input value={form.access_code} onChange={(e) => setForm({ ...form, access_code: e.target.value })} placeholder="Password / access code" className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx" />
+          <input required value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} placeholder="Full name (unique per wedding)" className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx" />
           <select value={form.group_id} onChange={(e) => setForm({ ...form, group_id: e.target.value })} className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx">
             <option value="">No group</option>
             {(groups ?? []).map((g: any) => <option key={g.id} value={g.id}>{g.name}</option>)}
