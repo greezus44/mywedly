@@ -1,27 +1,23 @@
-import { lazy, Suspense, useEffect, useState } from "react";
-import type { ReactNode } from "react";
-import { createRoot } from "react-dom/client";
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  useNavigate,
-  useParams,
-  useLocation,
-} from "react-router-dom";
+import "./index.css";
+import { Suspense, lazy, useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation, Outlet, useParams } from "react-router-dom";
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
-import { ErrorBoundary } from "./components/ErrorBoundary";
-import { GuestAuthProvider } from "./lib/guest-auth";
 import { supabase, type UserEvent } from "./lib/supabase";
-import EventLayout from "./routes/event/event-layout";
-import GuestLayout from "./routes/guest/guest-layout";
-import { RustyLayout } from "./routes/rusty/rusty-layout";
+import { GuestAuthProvider } from "./lib/guest-auth";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { Loader2 } from "lucide-react";
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 } },
+});
 
 const Landing = lazy(() => import("./routes/landing"));
 const Auth = lazy(() => import("./routes/auth"));
 const Dashboard = lazy(() => import("./routes/dashboard"));
+
+const EventLayout = lazy(() => import("./routes/event/event-layout"));
+const GuestLayout = lazy(() => import("./routes/guest/guest-layout"));
+const RustyLayout = lazy(() => import("./routes/rusty/rusty-layout"));
 
 const CoverEditor = lazy(() => import("./routes/event/cover-editor"));
 const LoginEditor = lazy(() => import("./routes/event/login-editor"));
@@ -29,7 +25,7 @@ const HomeEditor = lazy(() => import("./routes/event/home-editor"));
 const ThemeEditor = lazy(() => import("./routes/event/theme-editor"));
 const Branding = lazy(() => import("./routes/event/branding"));
 const Guests = lazy(() => import("./routes/event/guests"));
-const RsvpEditor = lazy(() => import("./routes/event/rsvp"));
+const EventRsvpEditor = lazy(() => import("./routes/event/rsvp"));
 const Timeline = lazy(() => import("./routes/event/timeline"));
 const Sharing = lazy(() => import("./routes/event/sharing"));
 const Analytics = lazy(() => import("./routes/event/analytics"));
@@ -49,68 +45,71 @@ const RustyRsvp = lazy(() => import("./routes/rusty/rusty-rsvp"));
 const RustyInfo = lazy(() => import("./routes/rusty/rusty-info"));
 const RustyMessage = lazy(() => import("./routes/rusty/rusty-message"));
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { staleTime: 30000, retry: 1 },
-  },
-});
-
 function LoadingSpinner() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+      <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
     </div>
   );
 }
 
 function EventNotFound() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <div className="max-w-md w-full text-center">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="text-center px-6">
         <h1 className="text-2xl font-semibold text-slate-900 mb-2">Event Not Found</h1>
         <p className="text-sm text-slate-500 mb-6">The event you are looking for does not exist or has been removed.</p>
-        <a href="/" className="inline-flex items-center justify-center px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800">
-          Go to home
+        <a href="/" className="inline-block px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800">
+          Go Home
         </a>
       </div>
     </div>
   );
 }
 
-function ProtectedRoute({ children }: { children: ReactNode }) {
+function ProtectedRoute() {
+  const navigate = useNavigate();
   const [checking, setChecking] = useState(true);
   const [allowed, setAllowed] = useState(false);
-  const navigate = useNavigate();
 
   useEffect(() => {
-    let mounted = true;
-    supabase.auth.getUser().then(({ data }) => {
-      if (!mounted) return;
-      if (data.user) {
+    let active = true;
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!active) return;
+      if (user) {
         setAllowed(true);
       } else {
         navigate("/login", { replace: true });
       }
       setChecking(false);
     });
-    return () => { mounted = false; };
+    return () => { active = false; };
   }, [navigate]);
 
-  if (checking) return <LoadingSpinner />;
-  if (!allowed) return null;
-  return <>{children}</>;
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
+      </div>
+    );
+  }
+
+  return allowed ? <Outlet /> : null;
 }
 
 function AccountPage() {
-  const [user, setUser] = useState<{ email?: string } | null>(null);
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
+    let active = true;
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!active) return;
+      if (user) setEmail(user.email || "");
       setLoading(false);
     });
+    return () => { active = false; };
   }, []);
 
   const handleSignOut = async () => {
@@ -118,286 +117,293 @@ function AccountPage() {
     navigate("/login", { replace: true });
   };
 
-  if (loading) return <LoadingSpinner />;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <div className="max-w-md w-full bg-white rounded-xl border border-slate-200 shadow-sm p-8">
-        <h1 className="text-xl font-semibold text-slate-900 mb-4">Account</h1>
-        <p className="text-sm text-slate-600 mb-1">Signed in as</p>
-        <p className="text-sm font-medium text-slate-900 mb-6">{user?.email || "Unknown"}</p>
-        <div className="flex flex-col gap-2">
-          <button onClick={() => navigate("/dashboard")} className="w-full px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800">
-            Go to dashboard
-          </button>
-          <button onClick={handleSignOut} className="w-full px-4 py-2 bg-slate-100 text-slate-900 rounded-lg text-sm font-medium hover:bg-slate-200 border border-slate-200">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+          <span className="text-xl font-bold tracking-tight">Eventful</span>
+          <button onClick={handleSignOut} className="text-sm text-slate-600 hover:text-slate-900">Sign out</button>
+        </div>
+      </header>
+      <main className="flex-1 flex items-center justify-center px-6 py-12">
+        <div className="w-full max-w-md bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+          <h1 className="text-xl font-semibold text-slate-900 mb-2">Account</h1>
+          <p className="text-sm text-slate-500 mb-6">Signed in as</p>
+          <p className="text-sm font-medium text-slate-900 mb-6">{email}</p>
+          <button
+            onClick={handleSignOut}
+            className="w-full px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800"
+          >
             Sign out
           </button>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
 
-function useSlugResolve(slug: string | undefined) {
-  return useQuery<UserEvent | null>({
-    queryKey: ["slug-resolve", slug],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("slug", slug!)
-        .maybeSingle();
-      if (error) throw error;
-      if (data) return data as UserEvent;
-      const { data: redirect, error: redErr } = await supabase
-        .from("event_slug_redirects")
-        .select("*")
-        .eq("slug", slug!)
-        .maybeSingle();
-      if (redErr) throw redErr;
-      if (!redirect) return null;
-      const { data: evt, error: evtErr } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("id", redirect.event_id)
-        .maybeSingle();
-      if (evtErr) throw evtErr;
-      return (evt as UserEvent) || null;
-    },
-    enabled: !!slug,
-  });
+function resolveSlug(slug: string): Promise<UserEvent | null> {
+  return (async () => {
+    const { data, error } = await supabase
+      .from("user_events")
+      .select("*")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) return data as UserEvent;
+
+    const { data: redirect } = await supabase
+      .from("event_slug_redirects")
+      .select("*")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (!redirect) return null;
+
+    const { data: redirected, error: redirectError } = await supabase
+      .from("user_events")
+      .select("*")
+      .eq("id", redirect.event_id)
+      .maybeSingle();
+    if (redirectError) throw redirectError;
+    return (redirected as UserEvent) || null;
+  })();
 }
 
-function useEventById(eventId: string | undefined) {
-  return useQuery<UserEvent | null>({
-    queryKey: ["public-event", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("id", eventId!)
-        .maybeSingle();
-      if (error) throw error;
-      return (data as UserEvent) || null;
-    },
-    enabled: !!eventId,
+function useSyntheticEvent(slug: string | undefined, enabled: boolean) {
+  const { data: event, isLoading, isError } = useQuery<UserEvent | null, Error>({
+    queryKey: ["public-event-slug", slug],
+    enabled: enabled && !!slug,
+    queryFn: () => resolveSlug(slug!),
   });
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (event) {
+      queryClient.setQueryData(["public-event", event.id], event);
+    }
+  }, [event, queryClient]);
+  return { event, isLoading, isError };
 }
 
 function SlugCoverRouter() {
   const { slug } = useParams<{ slug: string }>();
-  const queryClient = useQueryClient();
-  const { data: event, isLoading, isError } = useSlugResolve(slug);
+  const { event, isLoading, isError } = useSyntheticEvent(slug, true);
+  const location = useLocation();
 
   if (isLoading) return <LoadingSpinner />;
   if (isError || !event) return <EventNotFound />;
 
-  queryClient.setQueryData(["public-event", event.id], event);
-  const Cover = event.template_id === "rusty" ? RustyCover : GuestCover;
+  const syntheticPathname = location.pathname.replace(`/e/${slug}`, `/${event.id}`);
+  const syntheticLocation = { ...location, pathname: syntheticPathname };
+
   return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <Cover />
-    </Suspense>
+    <Routes location={syntheticLocation}>
+      <Route path={`/${event.id}`} element={<GuestCover />} />
+      <Route path="*" element={<Navigate to={`/${event.id}`} replace />} />
+    </Routes>
   );
 }
 
 function SlugLoginRouter() {
   const { slug } = useParams<{ slug: string }>();
-  const queryClient = useQueryClient();
-  const { data: event, isLoading, isError } = useSlugResolve(slug);
+  const { event, isLoading, isError } = useSyntheticEvent(slug, true);
+  const location = useLocation();
 
   if (isLoading) return <LoadingSpinner />;
   if (isError || !event) return <EventNotFound />;
 
-  queryClient.setQueryData(["public-event", event.id], event);
-  const Login = event.template_id === "rusty" ? RustyLogin : GuestLogin;
+  const syntheticPathname = location.pathname.replace(`/e/${slug}`, `/${event.id}`);
+  const syntheticLocation = { ...location, pathname: syntheticPathname };
+
   return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <Login />
-    </Suspense>
+    <Routes location={syntheticLocation}>
+      <Route path={`/${event.id}/login`} element={<GuestLogin />} />
+      <Route path="*" element={<Navigate to={`/${event.id}/login`} replace />} />
+    </Routes>
   );
 }
 
 function SlugHomeRouter() {
   const { slug } = useParams<{ slug: string }>();
+  const { event, isLoading, isError } = useSyntheticEvent(slug, true);
   const location = useLocation();
-  const queryClient = useQueryClient();
-  const { data: event, isLoading, isError } = useSlugResolve(slug);
 
   if (isLoading) return <LoadingSpinner />;
   if (isError || !event) return <EventNotFound />;
 
-  queryClient.setQueryData(["public-event", event.id], event);
-
-  const syntheticLocation = {
-    ...location,
-    pathname: location.pathname.replace(`/e/${slug}`, `/${event.id}`),
-  };
+  const syntheticPathname = location.pathname.replace(`/e/${slug}`, `/${event.id}`);
+  const syntheticLocation = { ...location, pathname: syntheticPathname };
 
   return (
-    <SyntheticRouter syntheticLocation={syntheticLocation} eventId={event.id} templateId={event.template_id} />
-  );
-}
-
-function SyntheticRouter({ syntheticLocation, eventId, templateId }: { syntheticLocation: ReturnType<typeof useLocation>; eventId: string; templateId: string }) {
-  const path = syntheticLocation.pathname;
-  const base = `/${eventId}`;
-  const rest = path.startsWith(base) ? path.slice(base.length) : "/";
-  const child = rest === "" || rest === "/" ? "home" : rest.replace(/^\//, "").split("/")[0];
-
-  const isRusty = templateId === "rusty";
-  let element: ReactNode;
-  if (isRusty) {
-    switch (child) {
-      case "rsvp": element = <RustyRsvp />; break;
-      case "info": element = <RustyInfo />; break;
-      case "message": element = <RustyMessage />; break;
-      case "wishes": element = <GuestWishes />; break;
-      case "contact": element = <GuestContact />; break;
-      default: element = <RustyHome />;
-    }
-  } else {
-    switch (child) {
-      case "rsvp": element = <GuestRsvp />; break;
-      case "info": element = <GuestHome />; break;
-      case "message": case "contact": element = <GuestContact />; break;
-      case "wishes": element = <GuestWishes />; break;
-      default: element = <GuestHome />;
-    }
-  }
-
-  const Layout = isRusty ? RustyLayout : GuestLayout;
-  return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <Layout>{element}</Layout>
-    </Suspense>
+    <Routes location={syntheticLocation}>
+      <Route path={`/${event.id}/home`} element={<GuestLayout />}>
+        <Route index element={<GuestHome />} />
+        <Route path="rsvp" element={<GuestRsvp />} />
+        <Route path="info" element={<GuestHome />} />
+        <Route path="message" element={<GuestWishes />} />
+        <Route path="wishes" element={<GuestWishes />} />
+        <Route path="contact" element={<GuestContact />} />
+      </Route>
+      <Route path="*" element={<Navigate to={`/${event.id}/home`} replace />} />
+    </Routes>
   );
 }
 
 function TemplateCoverRouter() {
   const { eventId } = useParams<{ eventId: string }>();
-  const queryClient = useQueryClient();
-  const { data: event, isLoading, isError } = useEventById(eventId);
+  const { data: event, isLoading, isError } = useQuery<UserEvent | null, Error>({
+    queryKey: ["public-event", eventId],
+    enabled: !!eventId,
+    queryFn: async () => {
+      if (!eventId) throw new Error("No event ID");
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("id", eventId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as UserEvent | null;
+    },
+  });
 
   if (isLoading) return <LoadingSpinner />;
   if (isError || !event) return <EventNotFound />;
 
-  queryClient.setQueryData(["public-event", event.id], event);
-  const Cover = event.template_id === "rusty" ? RustyCover : GuestCover;
-  return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <Cover />
-    </Suspense>
-  );
+  if (event.template_id === "rusty") {
+    return <RustyCover />;
+  }
+  return <GuestCover />;
 }
 
 function TemplateLoginRouter() {
   const { eventId } = useParams<{ eventId: string }>();
-  const queryClient = useQueryClient();
-  const { data: event, isLoading, isError } = useEventById(eventId);
+  const { data: event, isLoading, isError } = useQuery<UserEvent | null, Error>({
+    queryKey: ["public-event", eventId],
+    enabled: !!eventId,
+    queryFn: async () => {
+      if (!eventId) throw new Error("No event ID");
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("id", eventId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as UserEvent | null;
+    },
+  });
 
   if (isLoading) return <LoadingSpinner />;
   if (isError || !event) return <EventNotFound />;
 
-  queryClient.setQueryData(["public-event", event.id], event);
-  const Login = event.template_id === "rusty" ? RustyLogin : GuestLogin;
-  return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <Login />
-    </Suspense>
-  );
+  if (event.template_id === "rusty") {
+    return <RustyLogin />;
+  }
+  return <GuestLogin />;
 }
 
 function TemplateHomeRouter() {
   const { eventId } = useParams<{ eventId: string }>();
-  const location = useLocation();
-  const queryClient = useQueryClient();
-  const { data: event, isLoading, isError } = useEventById(eventId);
+  const { data: event, isLoading, isError } = useQuery<UserEvent | null, Error>({
+    queryKey: ["public-event", eventId],
+    enabled: !!eventId,
+    queryFn: async () => {
+      if (!eventId) throw new Error("No event ID");
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("id", eventId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as UserEvent | null;
+    },
+  });
 
   if (isLoading) return <LoadingSpinner />;
   if (isError || !event) return <EventNotFound />;
 
-  queryClient.setQueryData(["public-event", event.id], event);
-
-  const base = `/${eventId}`;
-  const rest = location.pathname.startsWith(base) ? location.pathname.slice(base.length) : "/";
-  const child = rest === "" || rest === "/" ? "home" : rest.replace(/^\//, "").split("/")[0];
-
-  const isRusty = event.template_id === "rusty";
-  let element: ReactNode;
-  if (isRusty) {
-    switch (child) {
-      case "rsvp": element = <RustyRsvp />; break;
-      case "info": element = <RustyInfo />; break;
-      case "message": element = <RustyMessage />; break;
-      case "wishes": element = <GuestWishes />; break;
-      case "contact": element = <GuestContact />; break;
-      default: element = <RustyHome />;
-    }
-  } else {
-    switch (child) {
-      case "rsvp": element = <GuestRsvp />; break;
-      case "info": element = <GuestHome />; break;
-      case "message": case "contact": element = <GuestContact />; break;
-      case "wishes": element = <GuestWishes />; break;
-      default: element = <GuestHome />;
-    }
+  if (event.template_id === "rusty") {
+    return (
+      <Routes>
+        <Route path={`/${eventId}/home`} element={<RustyLayout lang="en" setLang={() => {}} />}>
+          <Route index element={<RustyHome />} />
+          <Route path="rsvp" element={<RustyRsvp />} />
+          <Route path="info" element={<RustyInfo />} />
+          <Route path="message" element={<RustyMessage />} />
+        </Route>
+        <Route path="*" element={<Navigate to={`/${eventId}/home`} replace />} />
+      </Routes>
+    );
   }
 
-  const Layout = isRusty ? RustyLayout : GuestLayout;
   return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <Layout>{element}</Layout>
-    </Suspense>
+    <Routes>
+      <Route path={`/${eventId}/home`} element={<GuestLayout />}>
+        <Route index element={<GuestHome />} />
+        <Route path="rsvp" element={<GuestRsvp />} />
+        <Route path="wishes" element={<GuestWishes />} />
+        <Route path="contact" element={<GuestContact />} />
+      </Route>
+      <Route path="*" element={<Navigate to={`/${eventId}/home`} replace />} />
+    </Routes>
   );
 }
 
-function App() {
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<Suspense fallback={<LoadingSpinner />}><Landing /></Suspense>} />
+      <Route path="/login" element={<Suspense fallback={<LoadingSpinner />}><Auth /></Suspense>} />
+
+      <Route element={<ProtectedRoute />}>
+        <Route path="/dashboard" element={<Suspense fallback={<LoadingSpinner />}><Dashboard /></Suspense>} />
+        <Route path="/account" element={<AccountPage />} />
+      </Route>
+
+      <Route path="/event/:eventId" element={<Suspense fallback={<LoadingSpinner />}><EventLayout /></Suspense>}>
+        <Route index element={<Navigate to="cover" replace />} />
+        <Route path="cover" element={<Suspense fallback={<LoadingSpinner />}><CoverEditor /></Suspense>} />
+        <Route path="login" element={<Suspense fallback={<LoadingSpinner />}><LoginEditor /></Suspense>} />
+        <Route path="home" element={<Suspense fallback={<LoadingSpinner />}><HomeEditor /></Suspense>} />
+        <Route path="theme" element={<Suspense fallback={<LoadingSpinner />}><ThemeEditor /></Suspense>} />
+        <Route path="branding" element={<Suspense fallback={<LoadingSpinner />}><Branding /></Suspense>} />
+        <Route path="guests" element={<Suspense fallback={<LoadingSpinner />}><Guests /></Suspense>} />
+        <Route path="rsvp" element={<Suspense fallback={<LoadingSpinner />}><EventRsvpEditor /></Suspense>} />
+        <Route path="timeline" element={<Suspense fallback={<LoadingSpinner />}><Timeline /></Suspense>} />
+        <Route path="sharing" element={<Suspense fallback={<LoadingSpinner />}><Sharing /></Suspense>} />
+        <Route path="analytics" element={<Suspense fallback={<LoadingSpinner />}><Analytics /></Suspense>} />
+        <Route path="settings" element={<Suspense fallback={<LoadingSpinner />}><Settings /></Suspense>} />
+      </Route>
+
+      <Route path="/e/:slug" element={<Suspense fallback={<LoadingSpinner />}><SlugCoverRouter /></Suspense>} />
+      <Route path="/e/:slug/login" element={<Suspense fallback={<LoadingSpinner />}><SlugLoginRouter /></Suspense>} />
+      <Route path="/e/:slug/home/*" element={<Suspense fallback={<LoadingSpinner />}><SlugHomeRouter /></Suspense>} />
+
+      <Route path="/:eventId" element={<Suspense fallback={<LoadingSpinner />}><TemplateCoverRouter /></Suspense>} />
+      <Route path="/:eventId/login" element={<Suspense fallback={<LoadingSpinner />}><TemplateLoginRouter /></Suspense>} />
+      <Route path="/:eventId/home/*" element={<Suspense fallback={<LoadingSpinner />}><TemplateHomeRouter /></Suspense>} />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+export default function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <GuestAuthProvider>
           <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Suspense fallback={<LoadingSpinner />}><Landing /></Suspense>} />
-              <Route path="/login" element={<Suspense fallback={<LoadingSpinner />}><Auth /></Suspense>} />
-              <Route path="/dashboard" element={<ProtectedRoute><Suspense fallback={<LoadingSpinner />}><Dashboard /></Suspense></ProtectedRoute>} />
-              <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
-
-              <Route path="/event/:eventId" element={<EventLayout />}>
-                <Route index element={<Navigate to="cover" replace />} />
-                <Route path="cover" element={<Suspense fallback={<LoadingSpinner />}><CoverEditor /></Suspense>} />
-                <Route path="login" element={<Suspense fallback={<LoadingSpinner />}><LoginEditor /></Suspense>} />
-                <Route path="home" element={<Suspense fallback={<LoadingSpinner />}><HomeEditor /></Suspense>} />
-                <Route path="theme" element={<Suspense fallback={<LoadingSpinner />}><ThemeEditor /></Suspense>} />
-                <Route path="branding" element={<Suspense fallback={<LoadingSpinner />}><Branding /></Suspense>} />
-                <Route path="guests" element={<Suspense fallback={<LoadingSpinner />}><Guests /></Suspense>} />
-                <Route path="rsvp" element={<Suspense fallback={<LoadingSpinner />}><RsvpEditor /></Suspense>} />
-                <Route path="timeline" element={<Suspense fallback={<LoadingSpinner />}><Timeline /></Suspense>} />
-                <Route path="sharing" element={<Suspense fallback={<LoadingSpinner />}><Sharing /></Suspense>} />
-                <Route path="analytics" element={<Suspense fallback={<LoadingSpinner />}><Analytics /></Suspense>} />
-                <Route path="settings" element={<Suspense fallback={<LoadingSpinner />}><Settings /></Suspense>} />
-              </Route>
-
-              <Route path="/e/:slug" element={<SlugCoverRouter />} />
-              <Route path="/e/:slug/login" element={<SlugLoginRouter />} />
-              <Route path="/e/:slug/home" element={<SlugHomeRouter />} />
-              <Route path="/e/:slug/home/*" element={<SlugHomeRouter />} />
-
-              <Route path="/:eventId" element={<TemplateCoverRouter />} />
-              <Route path="/:eventId/login" element={<TemplateLoginRouter />} />
-              <Route path="/:eventId/home" element={<TemplateHomeRouter />} />
-              <Route path="/:eventId/home/*" element={<TemplateHomeRouter />} />
-
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <AppRoutes />
           </BrowserRouter>
         </GuestAuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );
 }
-
-const root = createRoot(document.getElementById("root")!);
-root.render(<App />);

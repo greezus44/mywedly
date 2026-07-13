@@ -1,264 +1,263 @@
 import { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { CSSProperties, FormEvent } from "react";
-import { supabase, type UserEvent, type EventMessage } from "../../lib/supabase";
+import { useOutletContext, useParams } from "react-router-dom";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { supabase, type EventMessage } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { Button } from "../../components/ui/Button";
+import { Textarea } from "../../components/ui/Input";
+import { EmptyState } from "../../components/ui/index";
 import { formatDate } from "../../lib/utils";
 import type { Lang } from "./rusty-layout";
+import type { RustyOutletContext } from "./rusty-layout";
+import type { CSSProperties, FormEvent } from "react";
 
-const CREAM = "#F5ECD7";
-const CREAM_LIGHT = "#FAF3E0";
-const GOLD = "#B8962E";
-const TEXT = "#3D3528";
-const TEXT_MUTED = "#8B7355";
-const BORDER = "#D4C695";
+const translations = {
+  en: {
+    title: "Leave a Message",
+    subtitle: "Share your well wishes with us",
+    yourName: "Your Name",
+    message: "Message",
+    messagePlaceholder: "Write your message here...",
+    send: "Send",
+    sending: "Sending...",
+    success: "Thank you! Your message has been sent.",
+    error: "Failed to send message. Please try again.",
+    empty: "No messages yet",
+    emptyDesc: "Be the first to leave a well wish.",
+    recent: "Recent Messages",
+    charsRemaining: "characters remaining",
+  },
+  bm: {
+    title: "Tinggalkan Mesej",
+    subtitle: "Kongsi ucapan tahniah anda",
+    yourName: "Nama Anda",
+    message: "Mesej",
+    messagePlaceholder: "Tulis mesej anda di sini...",
+    send: "Hantar",
+    sending: "Menghantar...",
+    success: "Terima kasih! Mesej anda telah dihantar.",
+    error: "Gagal menghantar mesej. Sila cuba lagi.",
+    empty: "Belum ada mesej",
+    emptyDesc: "Jadilah yang pertama meninggalkan ucapan.",
+    recent: "Mesej Terkini",
+    charsRemaining: "aksara lagi",
+  },
+};
+
 const MAX_CHARS = 500;
 
-interface OutletContext {
-  event: UserEvent;
-  eventId: string;
-}
-
-export function RustyMessage() {
-  const { eventId } = useOutletContext<OutletContext>();
+export default function RustyMessage() {
+  const { event, lang } = useOutletContext<RustyOutletContext>();
+  const { eventId } = useParams<{ eventId: string }>();
   const { guestName } = useGuestAuth();
-  const queryClient = useQueryClient();
-  const [lang, setLang] = useState<Lang>("en");
-  const [message, setMessage] = useState("");
-  const [sent, setSent] = useState(false);
+  const t = translations[lang];
 
-  const { data: messages, isLoading, isError } = useQuery<EventMessage[]>({
-    queryKey: ["event-messages", eventId],
+  const [name, setName] = useState(guestName || "");
+  const [message, setMessage] = useState("");
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  useEffect(() => {
+    if (guestName) setName(guestName);
+  }, [guestName]);
+
+  const { data: messages, isLoading, refetch } = useQuery<EventMessage[], Error>({
+    queryKey: ["rusty-messages", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_messages")
         .select("*")
-        .eq("event_id", eventId)
+        .eq("event_id", eventId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data || []) as EventMessage[];
     },
+    enabled: !!eventId,
   });
 
   const mutation = useMutation<void, Error>({
     mutationFn: async () => {
+      if (!eventId || !name.trim() || !message.trim()) throw new Error("Missing fields");
       const { error } = await supabase.from("event_messages").insert({
         event_id: eventId,
-        guest_name: guestName,
-        message,
+        guest_name: name.trim(),
+        message: message.trim(),
       });
       if (error) throw error;
     },
     onSuccess: () => {
       setMessage("");
-      setSent(true);
-      queryClient.invalidateQueries({ queryKey: ["event-messages", eventId] });
+      setSubmitSuccess(true);
+      refetch();
+      setTimeout(() => setSubmitSuccess(false), 5000);
     },
   });
 
-  useEffect(() => {
-    if (sent) {
-      const timer = setTimeout(() => setSent(false), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [sent]);
-
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const trimmed = message.trim();
-    if (!trimmed) return;
+    if (!message.trim() || !name.trim()) return;
     mutation.mutate();
   };
 
-  const t = {
-    en: {
-      title: "Messages",
-      subtitle: "Share your wishes with us",
-      placeholder: "Write your message...",
-      send: "Send",
-      sent: "Thank you for your message",
-      noMessages: "No messages yet. Be the first to share your wishes.",
-      from: "From",
-    },
-    bm: {
-      title: "Mesej",
-      subtitle: "Kongsi ucapan anda dengan kami",
-      placeholder: "Tulis mesej anda...",
-      send: "Hantar",
-      sent: "Terima kasih atas mesej anda",
-      noMessages: "Belum ada mesej. Jadilah yang pertama berkongsi ucapan.",
-      from: "Daripada",
-    },
-  }[lang];
+  const charsRemaining = MAX_CHARS - message.length;
 
-  const dividerStyle: CSSProperties = {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "0.75rem",
-  };
+  if (!event) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <p className="font-serif text-lg text-[#8B7355]">{t.empty}</p>
+      </div>
+    );
+  }
+
+  const cssVars = {} as CSSProperties;
 
   return (
-    <div className="max-w-2xl mx-auto py-6" style={{ fontFamily: '"Cormorant Garamond", serif', color: TEXT }}>
-      <div className="flex justify-end mb-4">
-        <div className="flex gap-2">
-          {(["en", "bm"] as Lang[]).map((l) => (
-            <button
-              key={l}
-              onClick={() => setLang(l)}
-              className="px-3 py-1 text-xs tracking-wider uppercase transition-all"
-              style={{
-                fontFamily: '"Inter", sans-serif',
-                color: lang === l ? CREAM : GOLD,
-                backgroundColor: lang === l ? GOLD : "transparent",
-                border: `1px solid ${GOLD}`,
-              }}
-            >
-              {l}
-            </button>
-          ))}
+    <div style={cssVars} className="animate-fade-in px-6 py-10 max-w-2xl mx-auto">
+      <div className="text-center mb-10">
+        <div className="flex items-center justify-center gap-4 mb-6">
+          <div className="h-px w-12" style={{ backgroundColor: "#B8962E" }} />
+          <div className="w-2 h-2 rotate-45" style={{ backgroundColor: "#B8962E" }} />
+          <div className="h-px w-12" style={{ backgroundColor: "#B8962E" }} />
         </div>
-      </div>
-
-      <section className="text-center mb-8">
-        <div style={dividerStyle} className="mb-4">
-          <span className="block h-px w-12" style={{ backgroundColor: GOLD }} />
-          <span className="text-xs tracking-[0.3em] uppercase" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
-            {t.title}
-          </span>
-          <span className="block h-px w-12" style={{ backgroundColor: GOLD }} />
-        </div>
-        <p className="text-lg italic" style={{ color: TEXT_MUTED }}>
+        <h1
+          className="font-serif text-4xl font-light mb-2"
+          style={{ color: "#3D3528", fontFamily: '"Cormorant Garamond", serif' }}
+        >
+          {t.title}
+        </h1>
+        <p className="text-sm" style={{ color: "#8B7355" }}>
           {t.subtitle}
         </p>
-      </section>
+      </div>
 
-      {sent && (
-        <div
-          className="text-center py-3 px-6 mb-6 rounded-sm"
-          style={{ backgroundColor: CREAM_LIGHT, border: `1px solid ${GOLD}` }}
-        >
-          <p className="text-base" style={{ color: GOLD, fontFamily: '"Cormorant Garamond", serif' }}>
-            {t.sent}
-          </p>
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="mb-10">
-        <div className="mb-3">
-          <label className="block text-sm tracking-[0.2em] uppercase mb-2" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
-            {t.from}
+      <form onSubmit={handleSubmit} className="space-y-5 mb-12">
+        <div>
+          <label
+            className="block font-serif text-sm tracking-[0.15em] uppercase mb-2"
+            style={{ color: "#B8962E" }}
+          >
+            {t.yourName}
           </label>
           <input
             type="text"
-            value={guestName || ""}
-            disabled
-            className="w-full px-3 py-2 text-sm rounded-lg border bg-white text-slate-900 disabled:opacity-70"
-            style={{
-              fontFamily: '"Cormorant Garamond", serif',
-              fontSize: "1rem",
-              backgroundColor: CREAM_LIGHT,
-              borderColor: BORDER,
-              color: TEXT,
-            }}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            className="w-full px-3 py-2.5 text-sm rounded-lg border bg-white/60 focus:outline-none focus:ring-2 focus:ring-[#B8962E]/20 focus:border-[#B8962E] transition-colors"
+            style={{ borderColor: "#D4C695", color: "#3D3528" }}
           />
         </div>
 
-        <div className="mb-3">
-          <textarea
+        <div>
+          <label
+            className="block font-serif text-sm tracking-[0.15em] uppercase mb-2"
+            style={{ color: "#B8962E" }}
+          >
+            {t.message}
+          </label>
+          <Textarea
             value={message}
-            onChange={(e) => setMessage(e.target.value.slice(0, MAX_CHARS))}
-            placeholder={t.placeholder}
-            rows={4}
-            className="w-full px-3 py-2 text-sm rounded-lg border bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition-colors resize-y min-h-[100px]"
-            style={{
-              fontFamily: '"Cormorant Garamond", serif',
-              fontSize: "1rem",
-              backgroundColor: CREAM_LIGHT,
-              borderColor: BORDER,
-              color: TEXT,
+            onChange={(e) => {
+              if (e.target.value.length <= MAX_CHARS) setMessage(e.target.value);
             }}
+            placeholder={t.messagePlaceholder}
+            required
+            rows={5}
+            className="border-[#D4C695] bg-white/60 focus:border-[#B8962E]"
+            style={{ color: "#3D3528" }}
           />
-          <div className="text-right mt-1">
-            <span className="text-xs" style={{ color: TEXT_MUTED, fontFamily: '"Inter", sans-serif' }}>
-              {message.length} / {MAX_CHARS}
+          <div className="flex justify-end mt-1">
+            <span className="text-xs" style={{ color: charsRemaining < 50 ? "#B8962E" : "#8B7355" }}>
+              {charsRemaining} {t.charsRemaining}
             </span>
           </div>
         </div>
 
-        {(mutation as any).error && (
-          <p className="text-sm mb-3" style={{ color: "#dc2626" }}>
-            {(mutation as any).error.message}
-          </p>
+        {submitSuccess && (
+          <div
+            className="text-center py-4 px-4 rounded-lg border animate-fade-in"
+            style={{ backgroundColor: "#FAF3E0", borderColor: "#B8962E" }}
+          >
+            <p className="font-serif text-lg" style={{ color: "#B8962E" }}>
+              {t.success}
+            </p>
+          </div>
         )}
 
-        <div className="text-center">
+        {(mutation as any).error && (
+          <div
+            className="text-center py-4 px-4 rounded-lg border"
+            style={{ backgroundColor: "#FAF3E0", borderColor: "#dc2626" }}
+          >
+            <p className="text-sm" style={{ color: "#dc2626" }}>
+              {t.error}
+            </p>
+          </div>
+        )}
+
+        <div className="text-center pt-2">
           <Button
             type="submit"
+            disabled={!message.trim() || !name.trim() || mutation.isPending}
             loading={mutation.isPending}
-            disabled={!message.trim()}
-            className="px-10"
+            size="lg"
+            className="px-16 py-4 font-serif text-lg tracking-[0.3em] uppercase"
             style={{
-              backgroundColor: GOLD,
-              color: CREAM,
-              fontFamily: '"Inter", sans-serif',
-              letterSpacing: "0.2em",
-              textTransform: "uppercase",
-              fontSize: "0.8rem",
-              padding: "0.75rem 2.5rem",
-              border: `1px solid ${GOLD}`,
+              backgroundColor: "#B8962E",
+              color: "#FAF3E0",
+              border: "1px solid #B8962E",
             }}
           >
-            {t.send}
+            {mutation.isPending ? t.sending : t.send}
           </Button>
         </div>
       </form>
 
       <section>
-        <div style={dividerStyle} className="mb-6">
-          <span className="block h-px w-8" style={{ backgroundColor: GOLD }} />
-          <span className="text-xs tracking-[0.3em] uppercase" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
-            {t.title}
-          </span>
-          <span className="block h-px w-8" style={{ backgroundColor: GOLD }} />
+        <div className="flex items-center justify-center gap-4 mb-6">
+          <div className="h-px w-12" style={{ backgroundColor: "#B8962E", opacity: 0.5 }} />
+          <h2
+            className="font-serif text-xl font-light tracking-wide"
+            style={{ color: "#3D3528", fontFamily: '"Cormorant Garamond", serif' }}
+          >
+            {t.recent}
+          </h2>
+          <div className="h-px w-12" style={{ backgroundColor: "#B8962E", opacity: 0.5 }} />
         </div>
 
         {isLoading ? (
-          <div className="text-center py-8">
-            <p className="text-base" style={{ color: TEXT_MUTED }}>Loading...</p>
-          </div>
-        ) : isError ? (
-          <div className="text-center py-8">
-            <p className="text-base" style={{ color: "#dc2626" }}>Failed to load messages</p>
+          <div className="flex justify-center py-8">
+            <div className="w-8 h-8 border-2 border-[#B8962E] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : !messages || messages.length === 0 ? (
-          <div className="text-center py-12">
-            <span className="block h-px w-12 mx-auto mb-4" style={{ backgroundColor: GOLD, opacity: 0.3 }} />
-            <p className="text-base" style={{ color: TEXT_MUTED, fontFamily: '"Cormorant Garamond", serif' }}>
-              {t.noMessages}
-            </p>
-          </div>
+          <EmptyState title={t.empty} description={t.emptyDesc} />
         ) : (
           <div className="space-y-4">
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className="p-5 rounded-sm"
-                style={{ backgroundColor: CREAM_LIGHT, border: `1px solid ${BORDER}` }}
+                className="rounded-lg p-5 border"
+                style={{
+                  backgroundColor: "#FAF3E0",
+                  borderColor: "#D4C695",
+                }}
               >
-                <p className="text-base leading-relaxed mb-3" style={{ color: TEXT, fontFamily: '"Cormorant Garamond", serif' }}>
+                <div className="flex items-center justify-between mb-2">
+                  <p
+                    className="font-serif text-lg"
+                    style={{ color: "#3D3528", fontFamily: '"Cormorant Garamond", serif' }}
+                  >
+                    {msg.guest_name}
+                  </p>
+                  <p className="text-xs" style={{ color: "#8B7355" }}>
+                    {formatDate(msg.created_at)}
+                  </p>
+                </div>
+                <p
+                  className="text-sm leading-relaxed whitespace-pre-line"
+                  style={{ color: "#3D3528" }}
+                >
                   {msg.message}
                 </p>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm" style={{ color: GOLD, fontFamily: '"Cormorant Garamond", serif' }}>
-                    — {msg.guest_name}
-                  </span>
-                  <span className="text-xs" style={{ color: TEXT_MUTED, fontFamily: '"Inter", sans-serif' }}>
-                    {formatDate(msg.created_at)}
-                  </span>
-                </div>
               </div>
             ))}
           </div>
@@ -267,5 +266,3 @@ export function RustyMessage() {
     </div>
   );
 }
-
-export default RustyMessage;

@@ -1,140 +1,155 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventGuest } from "../../lib/supabase";
-import { Card, Badge, EmptyState, ErrorState, Skeleton, Toast, Toggle, FormField, Modal } from "../../components/ui";
+import { Card, Badge, EmptyState, ErrorState, Skeleton, Toast, Modal } from "../../components/ui";
+import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
-import { Users, Plus, Search, ArrowUpDown, Download, Upload, Trash2, Pencil, Mail, Phone } from "lucide-react";
+import {
+  Users, Plus, Search, ArrowUpDown, Download, Upload, Trash2, Pencil, X, Loader2,
+} from "lucide-react";
 
-type SortField = "name" | "table_number" | "group_name" | "rsvp_status" | "created_at" | "plus_ones";
+type SortKey = "name" | "group_name" | "table_number" | "plus_ones" | "created_at";
 type SortDir = "asc" | "desc";
 
 interface GuestInput {
   name: string;
   email: string;
   phone: string;
+  group_name: string;
+  side: string;
   table_number: string;
   plus_ones: number;
-  group_name: string;
 }
 
-const emptyGuest: GuestInput = { name: "", email: "", phone: "", table_number: "", plus_ones: 0, group_name: "" };
+const emptyGuest: GuestInput = {
+  name: "", email: "", phone: "", group_name: "", side: "", table_number: "", plus_ones: 0,
+};
 
-function toCsv(guests: EventGuest[]): string {
-  const headers = ["Name", "Email", "Phone", "Table", "Plus Ones", "Group", "RSVP Status", "Created At"];
-  const rows = guests.map((g) => [
-    g.name, g.email, g.phone, g.table_number || "", String(g.plus_ones), g.group_name, g.rsvp_status, new Date(g.created_at).toISOString(),
-  ]);
-  return [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-}
-
-function downloadCsv(filename: string, csv: string) {
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function parseCsv(text: string): GuestInput[] {
-  const lines = text.trim().split("\n").filter(Boolean);
-  if (lines.length < 2) return [];
-  const result: GuestInput[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].match(/("([^"]|"")*"|[^,]*)(,|$)/g)?.map((m) => m.replace(/,$/, "").replace(/^"|"$/g, "").replace(/""/g, '"')) || [];
-    if (cells.length >= 1) {
-      result.push({
-        name: cells[0] || "",
-        email: cells[1] || "",
-        phone: cells[2] || "",
-        table_number: cells[3] || "",
-        plus_ones: parseInt(cells[4] || "0", 10) || 0,
-        group_name: cells[5] || "",
-      });
-    }
-  }
-  return result;
-}
-
-export default function GuestsPage() {
+export default function Guests() {
   const { event } = useOutletContext<{ event: UserEvent | null }>();
   const { eventId } = useParams<{ eventId: string }>();
   const queryClient = useQueryClient();
-
   const [search, setSearch] = useState("");
-  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<EventGuest | null>(null);
-  const [formData, setFormData] = useState<GuestInput>(emptyGuest);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<GuestInput>(emptyGuest);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
-  const { data: guests, isLoading, isError, refetch } = useQuery({
+  const { data: guests, isLoading, error, refetch } = useQuery<EventGuest[], Error>({
     queryKey: ["guests", eventId],
     queryFn: async () => {
-      if (!eventId) return [];
-      const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId).order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("event_guests")
+        .select("*")
+        .eq("event_id", eventId!)
+        .order(sortKey, { ascending: sortDir === "asc" });
       if (error) throw error;
-      return data as EventGuest[];
+      return data || [];
     },
     enabled: !!eventId,
   });
 
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
+  }, [sortKey, sortDir, eventId, queryClient]);
+
+  const filtered = useMemo(() => {
+    if (!guests) return [];
+    const q = search.toLowerCase().trim();
+    if (!q) return guests;
+    return guests.filter((g) =>
+      g.name.toLowerCase().includes(q) ||
+      g.group_name.toLowerCase().includes(q) ||
+      g.table_number?.toLowerCase().includes(q) ||
+      g.email.toLowerCase().includes(q)
+    );
+  }, [guests, search]);
+
+  const summary = useMemo(() => {
+    const total = guests?.length || 0;
+    const attending = guests?.filter((g) => g.rsvp_status === "attending").length || 0;
+    const declined = guests?.filter((g) => g.rsvp_status === "declined").length || 0;
+    const pending = guests?.filter((g) => g.rsvp_status === "pending").length || 0;
+    const totalPlusOnes = guests?.reduce((sum, g) => sum + (g.plus_ones || 0), 0) || 0;
+    return { total, attending, declined, pending, totalPlusOnes };
+  }, [guests]);
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const openAdd = () => {
+    setForm(emptyGuest);
+    setEditingId(null);
+    setModalOpen(true);
+  };
+
+  const openEdit = (g: EventGuest) => {
+    setForm({
+      name: g.name, email: g.email, phone: g.phone, group_name: g.group_name,
+      side: g.side, table_number: g.table_number || "", plus_ones: g.plus_ones,
+    });
+    setEditingId(g.id);
+    setModalOpen(true);
+  };
+
   const createMutation = useMutation<void, Error, GuestInput>({
-    mutationFn: async (input: GuestInput) => {
-      if (!eventId) throw new Error("No event ID");
-      const { error } = await supabase.from("event_guests").insert({ ...input, event_id: eventId, rsvp_status: "pending", token: crypto.randomUUID() });
+    mutationFn: async (input) => {
+      const { error } = await supabase.from("event_guests").insert({
+        ...input,
+        event_id: eventId!,
+        rsvp_status: "pending",
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
       setModalOpen(false);
-      setFormData(emptyGuest);
       setToast({ message: "Guest added", type: "success" });
     },
-    onError: (err) => setToast({ message: err.message, type: "error" }),
+    onError: () => setToast({ message: "Failed to add guest", type: "error" }),
   });
 
-  const updateMutation = useMutation<void, Error, { id: string; data: Partial<GuestInput> }>({
-    mutationFn: async ({ id, data }) => {
-      const { error } = await supabase.from("event_guests").update(data).eq("id", id);
+  const updateMutation = useMutation<void, Error, { id: string; input: GuestInput }>({
+    mutationFn: async ({ id, input }) => {
+      const { error } = await supabase.from("event_guests").update(input).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
       setModalOpen(false);
-      setEditing(null);
-      setFormData(emptyGuest);
       setToast({ message: "Guest updated", type: "success" });
     },
-    onError: (err) => setToast({ message: err.message, type: "error" }),
+    onError: () => setToast({ message: "Failed to update guest", type: "error" }),
   });
 
   const deleteMutation = useMutation<void, Error, string>({
-    mutationFn: async (id: string) => {
+    mutationFn: async (id) => {
       const { error } = await supabase.from("event_guests").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
-      setDeleteId(null);
       setToast({ message: "Guest deleted", type: "success" });
     },
-    onError: (err) => setToast({ message: err.message, type: "error" }),
+    onError: () => setToast({ message: "Failed to delete guest", type: "error" }),
   });
 
-  const bulkImportMutation = useMutation<void, Error, GuestInput[]>({
-    mutationFn: async (inputs: GuestInput[]) => {
-      if (!eventId) throw new Error("No event ID");
-      const rows = inputs.map((input) => ({ ...input, event_id: eventId, rsvp_status: "pending", token: crypto.randomUUID() }));
-      const { error } = await supabase.from("event_guests").insert(rows);
+  const importMutation = useMutation<void, Error, GuestInput[]>({
+    mutationFn: async (rows) => {
+      const { error } = await supabase.from("event_guests").insert(
+        rows.map((r) => ({ ...r, event_id: eventId!, rsvp_status: "pending" }))
+      );
       if (error) throw error;
     },
     onSuccess: () => {
@@ -143,209 +158,194 @@ export default function GuestsPage() {
       setImportText("");
       setToast({ message: "Guests imported", type: "success" });
     },
-    onError: (err) => setToast({ message: err.message, type: "error" }),
+    onError: () => setToast({ message: "Failed to import guests", type: "error" }),
   });
 
-  const filtered = useMemo(() => {
-    if (!guests) return [];
-    const sorted = [...guests].sort((a, b) => {
-      let av: string | number = a[sortField] || "";
-      let bv: string | number = b[sortField] || "";
-      if (sortField === "plus_ones" || sortField === "created_at") {
-        av = sortField === "created_at" ? new Date(a.created_at).getTime() : a.plus_ones;
-        bv = sortField === "created_at" ? new Date(b.created_at).getTime() : b.plus_ones;
-      }
-      if (av < bv) return sortDir === "asc" ? -1 : 1;
-      if (av > bv) return sortDir === "asc" ? 1 : -1;
-      return 0;
-    });
-    if (!search.trim()) return sorted;
-    const q = search.toLowerCase();
-    return sorted.filter((g) =>
-      g.name.toLowerCase().includes(q) ||
-      g.email.toLowerCase().includes(q) ||
-      g.group_name.toLowerCase().includes(q) ||
-      (g.table_number || "").toLowerCase().includes(q)
-    );
-  }, [guests, search, sortField, sortDir]);
-
-  const summary = useMemo(() => {
-    if (!guests) return { total: 0, attending: 0, declined: 0, pending: 0 };
-    return {
-      total: guests.length,
-      attending: guests.filter((g) => g.rsvp_status === "attending").length,
-      declined: guests.filter((g) => g.rsvp_status === "declined").length,
-      pending: guests.filter((g) => g.rsvp_status === "pending").length,
-    };
-  }, [guests]);
-
-  const toggleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortDir("asc");
-    }
-  };
-
-  const openAdd = () => {
-    setEditing(null);
-    setFormData(emptyGuest);
-    setModalOpen(true);
-  };
-
-  const openEdit = (guest: EventGuest) => {
-    setEditing(guest);
-    setFormData({ name: guest.name, email: guest.email, phone: guest.phone, table_number: guest.table_number || "", plus_ones: guest.plus_ones, group_name: guest.group_name });
-    setModalOpen(true);
-  };
-
   const handleSubmit = () => {
-    if (!formData.name.trim()) {
+    if (!form.name.trim()) {
       setToast({ message: "Name is required", type: "error" });
       return;
     }
-    if (editing) {
-      updateMutation.mutate({ id: editing.id, data: formData });
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, input: form });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(form);
     }
   };
 
   const handleExport = () => {
-    if (!guests || guests.length === 0) {
-      setToast({ message: "No guests to export", type: "error" });
+    if (!guests || guests.length === 0) return;
+    const headers = ["name", "email", "phone", "group_name", "side", "table_number", "plus_ones", "rsvp_status"];
+    const rows = guests.map((g) =>
+      [g.name, g.email, g.phone, g.group_name, g.side, g.table_number || "", g.plus_ones, g.rsvp_status]
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .join(",")
+    );
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `guests-${eventId}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = () => {
+    const lines = importText.trim().split("\n");
+    if (lines.length < 2) {
+      setToast({ message: "CSV must have a header row and at least one data row", type: "error" });
       return;
     }
-    downloadCsv(`guests-${event?.draft_name || event?.name || "event"}.csv`, toCsv(guests));
-  };
-
-  const handleFileImport = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      setImportText(text);
-      setImportOpen(true);
-    };
-    reader.readAsText(file);
-  };
-
-  const handleBulkImport = () => {
-    const parsed = parseCsv(importText);
-    if (parsed.length === 0) {
+    const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+    const rows: GuestInput[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(",").map((v) => v.trim().replace(/^"|"$/g, ""));
+      const row: Record<string, string> = {};
+      headers.forEach((h, idx) => { row[h] = values[idx] || ""; });
+      rows.push({
+        name: row.name || "",
+        email: row.email || "",
+        phone: row.phone || "",
+        group_name: row.group_name || "",
+        side: row.side || "",
+        table_number: row.table_number || "",
+        plus_ones: parseInt(row.plus_ones || "0", 10) || 0,
+      });
+    }
+    const valid = rows.filter((r) => r.name.trim());
+    if (valid.length === 0) {
       setToast({ message: "No valid rows found", type: "error" });
       return;
     }
-    bulkImportMutation.mutate(parsed);
+    importMutation.mutate(valid);
+  };
+
+  const rsvpBadge = (status: string) => {
+    if (status === "attending") return <Badge variant="success">Attending</Badge>;
+    if (status === "declined") return <Badge variant="error">Declined</Badge>;
+    return <Badge variant="warning">Pending</Badge>;
   };
 
   if (!event) {
     return (
-      <div className="p-6">
-        <Skeleton className="h-8 w-48 mb-4" />
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24" />)}
-        </div>
-        <Skeleton className="h-96 w-full" />
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
       </div>
     );
   }
 
-  const rsvpBadge = (status: string) => {
-    const variant = status === "attending" ? "success" : status === "declined" ? "error" : "warning";
-    return <Badge variant={variant as "success" | "error" | "warning"}>{status}</Badge>;
-  };
-
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div>
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Guests</h1>
-          <p className="text-sm text-slate-500">Manage your event guest list</p>
+          <p className="text-sm text-slate-500">Manage your event guest list.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={handleExport}><Download className="w-4 h-4" /> Export</Button>
-          <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()}><Upload className="w-4 h-4" /> Import</Button>
-          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileImport(f); e.target.value = ""; }} />
-          <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4" /> Add Guest</Button>
+          <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
+            <Upload className="w-4 h-4" /> Import
+          </Button>
+          <Button variant="secondary" size="sm" onClick={handleExport} disabled={!guests || guests.length === 0}>
+            <Download className="w-4 h-4" /> Export
+          </Button>
+          <Button size="sm" onClick={openAdd}>
+            <Plus className="w-4 h-4" /> Add Guest
+          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
         <Card className="p-4">
-          <div className="flex items-center gap-2 text-slate-500 mb-1"><Users className="w-4 h-4" /><span className="text-xs font-medium">Total</span></div>
-          <p className="text-2xl font-bold text-slate-900">{summary.total}</p>
+          <div className="flex items-center gap-2 text-slate-400 mb-1"><Users className="w-4 h-4" /><span className="text-xs">Total</span></div>
+          <div className="text-2xl font-bold text-slate-900">{summary.total}</div>
         </Card>
         <Card className="p-4">
-          <div className="flex items-center gap-2 text-green-600 mb-1"><span className="text-xs font-medium">Attending</span></div>
-          <p className="text-2xl font-bold text-green-600">{summary.attending}</p>
+          <div className="text-xs text-slate-400 mb-1">Attending</div>
+          <div className="text-2xl font-bold text-green-600">{summary.attending}</div>
         </Card>
         <Card className="p-4">
-          <div className="flex items-center gap-2 text-red-600 mb-1"><span className="text-xs font-medium">Declined</span></div>
-          <p className="text-2xl font-bold text-red-600">{summary.declined}</p>
+          <div className="text-xs text-slate-400 mb-1">Declined</div>
+          <div className="text-2xl font-bold text-red-600">{summary.declined}</div>
         </Card>
         <Card className="p-4">
-          <div className="flex items-center gap-2 text-amber-600 mb-1"><span className="text-xs font-medium">Pending</span></div>
-          <p className="text-2xl font-bold text-amber-600">{summary.pending}</p>
+          <div className="text-xs text-slate-400 mb-1">Pending</div>
+          <div className="text-2xl font-bold text-amber-600">{summary.pending}</div>
+        </Card>
+        <Card className="p-4">
+          <div className="text-xs text-slate-400 mb-1">Plus Ones</div>
+          <div className="text-2xl font-bold text-slate-900">{summary.totalPlusOnes}</div>
         </Card>
       </div>
 
-      <Card className="p-4 mb-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, email, group, or table..." className="pl-10" />
+      <Card className="overflow-hidden">
+        <div className="p-4 border-b border-slate-100">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search guests..."
+              className="pl-9"
+            />
+          </div>
         </div>
-      </Card>
 
-      <Card>
         {isLoading ? (
           <div className="p-4 space-y-3">
-            {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+            {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
           </div>
-        ) : isError ? (
-          <ErrorState message="Failed to load guests" onRetry={() => refetch()} />
+        ) : (error as any) ? (
+          <ErrorState message={(error as any).message || "Failed to load guests"} onRetry={() => refetch()} />
         ) : filtered.length === 0 ? (
-          <EmptyState icon={<Users className="w-12 h-12" />} title={search ? "No matching guests" : "No guests yet"} description={search ? "Try a different search" : "Add your first guest to get started"} action={!search && <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4" /> Add Guest</Button>} />
+          <EmptyState
+            icon={<Users className="w-10 h-10" />}
+            title={search ? "No matching guests" : "No guests yet"}
+            description={search ? "Try a different search term." : "Add your first guest to get started."}
+            action={!search ? <Button size="sm" onClick={openAdd}><Plus className="w-4 h-4" /> Add Guest</Button> : undefined}
+          />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-slate-100">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 cursor-pointer hover:text-slate-700" onClick={() => toggleSort("name")}>
-                    <span className="flex items-center gap-1">Name <ArrowUpDown className="w-3 h-3" /></span>
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500">Contact</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 cursor-pointer hover:text-slate-700" onClick={() => toggleSort("table_number")}>
-                    <span className="flex items-center gap-1">Table <ArrowUpDown className="w-3 h-3" /></span>
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500">Plus Ones</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 cursor-pointer hover:text-slate-700" onClick={() => toggleSort("group_name")}>
-                    <span className="flex items-center gap-1">Group <ArrowUpDown className="w-3 h-3" /></span>
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 cursor-pointer hover:text-slate-700" onClick={() => toggleSort("rsvp_status")}>
-                    <span className="flex items-center gap-1">RSVP <ArrowUpDown className="w-3 h-3" /></span>
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-medium text-slate-500">Actions</th>
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  {([
+                    { key: "name", label: "Name" },
+                    { key: "group_name", label: "Group" },
+                    { key: "table_number", label: "Table" },
+                    { key: "plus_ones", label: "+1s" },
+                  ] as { key: SortKey; label: string }[]).map((col) => (
+                    <th key={col.key} className="px-4 py-3 text-left font-medium text-slate-600">
+                      <button onClick={() => toggleSort(col.key)} className="flex items-center gap-1 hover:text-slate-900">
+                        {col.label} <ArrowUpDown className="w-3 h-3" />
+                      </button>
+                    </th>
+                  ))}
+                  <th className="px-4 py-3 text-left font-medium text-slate-600">RSVP</th>
+                  <th className="px-4 py-3 text-right font-medium text-slate-600">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-50">
                 {filtered.map((g) => (
-                  <tr key={g.id} className="border-b border-slate-50 hover:bg-slate-50">
-                    <td className="px-4 py-3 text-sm font-medium text-slate-900">{g.name}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">
-                      <div className="flex flex-col gap-0.5">
-                        {g.email && <span className="flex items-center gap-1 text-xs"><Mail className="w-3 h-3" />{g.email}</span>}
-                        {g.phone && <span className="flex items-center gap-1 text-xs"><Phone className="w-3 h-3" />{g.phone}</span>}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{g.table_number || "—"}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{g.plus_ones}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{g.group_name || "—"}</td>
+                  <tr key={g.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3 font-medium text-slate-900">{g.name}</td>
+                    <td className="px-4 py-3 text-slate-600">{g.group_name || "—"}</td>
+                    <td className="px-4 py-3 text-slate-600">{g.table_number || "—"}</td>
+                    <td className="px-4 py-3 text-slate-600">{g.plus_ones}</td>
                     <td className="px-4 py-3">{rsvpBadge(g.rsvp_status)}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => openEdit(g)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600"><Pencil className="w-4 h-4" /></button>
-                        <button onClick={() => setDeleteId(g.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-600"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => openEdit(g)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500">
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Delete ${g.name}?`)) deleteMutation.mutate(g.id);
+                          }}
+                          className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -356,52 +356,68 @@ export default function GuestsPage() {
         )}
       </Card>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? "Edit Guest" : "Add Guest"}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingId ? "Edit Guest" : "Add Guest"}>
         <div className="space-y-4">
-          <FormField label="Name">
-            <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="Full name" />
-          </FormField>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField label="Email">
-              <Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="email@example.com" />
-            </FormField>
-            <FormField label="Phone">
-              <Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="Phone number" />
-            </FormField>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Name *</label>
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Guest name" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField label="Table Number">
-              <Input value={formData.table_number} onChange={(e) => setFormData({ ...formData, table_number: e.target.value })} placeholder="Table 1" />
-            </FormField>
-            <FormField label="Plus Ones">
-              <Input type="number" min={0} value={formData.plus_ones} onChange={(e) => setFormData({ ...formData, plus_ones: Number(e.target.value) })} />
-            </FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Phone number" />
+            </div>
           </div>
-          <FormField label="Group Name">
-            <Input value={formData.group_name} onChange={(e) => setFormData({ ...formData, group_name: e.target.value })} placeholder="Family, Friends, etc." />
-          </FormField>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Group</label>
+              <Input value={form.group_name} onChange={(e) => setForm({ ...form, group_name: e.target.value })} placeholder="Group name" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Table Number</label>
+              <Input value={form.table_number} onChange={(e) => setForm({ ...form, table_number: e.target.value })} placeholder="Table" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Side</label>
+              <Input value={form.side} onChange={(e) => setForm({ ...form, side: e.target.value })} placeholder="Bride / Groom / etc" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Plus Ones</label>
+              <Input type="number" min={0} value={form.plus_ones} onChange={(e) => setForm({ ...form, plus_ones: parseInt(e.target.value, 10) || 0 })} />
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSubmit} loading={createMutation.isPending || updateMutation.isPending}>{editing ? "Save" : "Add"}</Button>
+            <Button
+              onClick={handleSubmit}
+              loading={createMutation.isPending || updateMutation.isPending}
+            >
+              {editingId ? "Save Changes" : "Add Guest"}
+            </Button>
           </div>
         </div>
       </Modal>
 
-      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Delete Guest">
-        <p className="text-sm text-slate-600 mb-4">Are you sure you want to delete this guest? This action cannot be undone.</p>
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => setDeleteId(null)}>Cancel</Button>
-          <Button variant="danger" onClick={() => deleteId && deleteMutation.mutate(deleteId)} loading={deleteMutation.isPending}>Delete</Button>
-        </div>
-      </Modal>
-
-      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Import Guests from CSV">
+      <Modal open={importOpen} onClose={() => setImportOpen(false)} title="Import Guests (CSV)">
         <div className="space-y-4">
-          <p className="text-sm text-slate-600">Review the CSV data below. Columns: Name, Email, Phone, Table, Plus Ones, Group.</p>
-          <Textarea value={importText} onChange={(e) => setImportText(e.target.value)} className="min-h-[200px] font-mono text-xs" />
-          <div className="flex justify-end gap-2">
+          <p className="text-sm text-slate-500">
+            Paste CSV data below. Required columns: name. Optional: email, phone, group_name, side, table_number, plus_ones.
+          </p>
+          <textarea
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 font-mono min-h-[160px] resize-y"
+            placeholder={'name,email,phone,group_name,side,table_number,plus_ones\nJohn Doe,john@example.com,555-0100,Family,Groom,1,0'}
+          />
+          <div className="flex items-center justify-end gap-2">
             <Button variant="secondary" onClick={() => setImportOpen(false)}>Cancel</Button>
-            <Button onClick={handleBulkImport} loading={bulkImportMutation.isPending}>Import</Button>
+            <Button onClick={handleImport} loading={importMutation.isPending}>Import</Button>
           </div>
         </div>
       </Modal>

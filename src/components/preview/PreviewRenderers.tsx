@@ -2,7 +2,6 @@ import type { UserEvent } from "../../lib/supabase";
 import { DEFAULT_THEME, themeToCssVars } from "../../lib/theme";
 import { formatDate, formatTime, getCountdown } from "../../lib/utils";
 import type { CSSProperties } from "react";
-
 export function CoverPreview({ event }: { event: UserEvent | null }) {
   if (!event) return <div className="p-8 text-center text-slate-400">No event data</div>;
   const config = event.draft_cover_config || event.cover_config || {};
@@ -28,7 +27,6 @@ export function CoverPreview({ event }: { event: UserEvent | null }) {
     </div>
   );
 }
-
 export function LoginPreview({ event }: { event: UserEvent | null }) {
   if (!event) return <div className="p-8 text-center text-slate-400">No event data</div>;
   const config = event.draft_login_config || event.login_config || {};
@@ -46,7 +44,6 @@ export function LoginPreview({ event }: { event: UserEvent | null }) {
     </div>
   );
 }
-
 export function HomePreview({ event }: { event: UserEvent | null }) {
   if (!event) return <div className="p-8 text-center text-slate-400">No event data</div>;
   const content = event.draft_content || event.content || {};
@@ -69,7 +66,6 @@ export function HomePreview({ event }: { event: UserEvent | null }) {
     </div>
   );
 }
-
 export function RsvpPreview({ event }: { event: UserEvent | null }) {
   if (!event) return <div className="p-8 text-center text-slate-400">No event data</div>;
   const theme = event.draft_theme || event.theme || DEFAULT_THEME;

@@ -1,69 +1,72 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
+import { useMutation } from "@tanstack/react-query";
 import { supabase, type UserEvent, type ThemeConfig } from "../../lib/supabase";
-import { DEFAULT_THEME, THEME_PRESETS, FONT_OPTIONS } from "../../lib/theme";
-import { debounce } from "../../lib/utils";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
-import { ColorInput, RangeInput, Toggle, FormField, Toast, Skeleton } from "../../components/ui";
+import { ColorInput, RangeInput, FormField, Toggle, Toast } from "../../components/ui";
 import { Select } from "../../components/ui/Input";
+import { Loader2 } from "lucide-react";
+import { DEFAULT_THEME, THEME_PRESETS, FONT_OPTIONS } from "../../lib/theme";
+import { debounce } from "../../lib/utils";
 
-export default function ThemeEditorPage() {
+export default function ThemeEditor() {
   const { event } = useOutletContext<{ event: UserEvent | null }>();
   const { eventId } = useParams<{ eventId: string }>();
-
   const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [saving, setSaving] = useState(false);
   const initialized = useRef(false);
 
   useEffect(() => {
-    if (!event) return;
-    setTheme(event.draft_theme || event.theme || DEFAULT_THEME);
-    initialized.current = true;
+    if (event && !initialized.current) {
+      setTheme(event.draft_theme || event.theme || DEFAULT_THEME);
+      initialized.current = true;
+    }
   }, [event]);
 
-  const save = useCallback(async (data: ThemeConfig) => {
-    if (!eventId) return;
-    setSaving(true);
-    try {
-      const updateData: Record<string, unknown> = { draft_theme: data };
-      if (data.applyToAll) {
-        updateData.cover_config = { ...(event?.draft_cover_config || event?.cover_config || {}), bgColor: data.bgColor, textColor: data.textColor, buttonColor: data.primaryColor };
-        updateData.login_config = { ...(event?.draft_login_config || event?.login_config || {}), bgColor: data.bgColor, textColor: data.textColor, buttonColor: data.primaryColor };
-      }
-      const { error } = await supabase.from("events").update(updateData).eq("id", eventId);
+  const saveMutation = useMutation<void, Error, ThemeConfig>({
+    mutationFn: async (t) => {
+      setSaving(true);
+      const { error } = await supabase
+        .from("events")
+        .update({ draft_theme: t })
+        .eq("id", eventId!);
       if (error) throw error;
-      setToast({ message: "Saved", type: "success" });
-    } catch (err) {
-      setToast({ message: err instanceof Error ? err.message : "Save failed", type: "error" });
-    } finally {
-      setSaving(false);
+    },
+    onSuccess: () => setToast({ message: "Saved", type: "success" }),
+    onError: () => setToast({ message: "Failed to save", type: "error" }),
+    onSettled: () => setSaving(false),
+  });
+
+  const debouncedSave = useRef(
+    debounce((t: ThemeConfig) => {
+      saveMutation.mutate(t);
+    }, 800)
+  ).current;
+
+  const update = useCallback(
+    (patch: Partial<ThemeConfig>) => {
+      const next = { ...theme, ...patch };
+      setTheme(next);
+      debouncedSave(next);
+    },
+    [theme, debouncedSave]
+  );
+
+  const applyPreset = (presetKey: string) => {
+    const preset = THEME_PRESETS[presetKey];
+    if (preset) {
+      const next = { ...preset, applyToAll: theme.applyToAll };
+      setTheme(next);
+      debouncedSave(next);
     }
-  }, [eventId, event]);
-
-  const debouncedSave = useRef(debounce(save, 800)).current;
-
-  const update = (patch: Partial<ThemeConfig>) => {
-    setTheme((prev) => {
-      const next = { ...prev, ...patch };
-      if (initialized.current) debouncedSave(next);
-      return next;
-    });
-  };
-
-  const applyPreset = (presetName: string) => {
-    const preset = THEME_PRESETS[presetName];
-    if (!preset) return;
-    setTheme(preset);
-    if (initialized.current) debouncedSave(preset);
   };
 
   if (!event) {
     return (
-      <div className="p-6">
-        <Skeleton className="h-8 w-48 mb-4" />
-        <Skeleton className="h-96 w-full" />
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
       </div>
     );
   }
@@ -71,26 +74,45 @@ export default function ThemeEditorPage() {
   const previewEvent: UserEvent = { ...event, draft_theme: theme };
 
   return (
-    <div className="p-6">
-      <div className="mb-4 flex items-center justify-between">
+    <div>
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">Theme Editor</h1>
-          <p className="text-sm text-slate-500">Customize colors, fonts, and layout</p>
+          <p className="text-sm text-slate-500">Customize colors, fonts, and layout.</p>
         </div>
-        {saving && <span className="text-sm text-slate-500">Saving...</span>}
+        {saving && (
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <Loader2 className="w-4 h-4 animate-spin" /> Saving...
+          </div>
+        )}
       </div>
       <SplitEditor preview={<HomePreview event={previewEvent} />}>
         <div className="space-y-5">
-          <FormField label="Preset">
-            <Select value={theme.preset || "classic"} onChange={(e) => applyPreset(e.target.value)}>
-              {Object.entries(THEME_PRESETS).map(([key, val]) => (
-                <option key={key} value={key}>{(val.preset || key).charAt(0).toUpperCase() + (val.preset || key).slice(1)}</option>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">Preset</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(THEME_PRESETS).map(([key, preset]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => applyPreset(key)}
+                  className={`flex items-center gap-2 p-2 rounded-lg border text-sm transition-colors ${
+                    theme.preset === key ? "border-slate-900 bg-slate-50" : "border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex gap-1">
+                    <span className="w-4 h-4 rounded-full" style={{ backgroundColor: preset.primaryColor }} />
+                    <span className="w-4 h-4 rounded-full" style={{ backgroundColor: preset.accentColor }} />
+                    <span className="w-4 h-4 rounded-full" style={{ backgroundColor: preset.bgColor }} />
+                  </div>
+                  <span className="capitalize text-slate-700">{key}</span>
+                </button>
               ))}
-            </Select>
-          </FormField>
+            </div>
+          </div>
 
-          <div className="pt-4 border-t border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-900 mb-4">Colors</h2>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">Colors</h3>
             <div className="space-y-3">
               <ColorInput label="Primary Color" value={theme.primaryColor || "#0f172a"} onChange={(v) => update({ primaryColor: v })} />
               <ColorInput label="Secondary Color" value={theme.secondaryColor || "#334155"} onChange={(v) => update({ secondaryColor: v })} />
@@ -98,26 +120,24 @@ export default function ThemeEditorPage() {
               <ColorInput label="Background Color" value={theme.bgColor || "#ffffff"} onChange={(v) => update({ bgColor: v })} />
               <ColorInput label="Background Subtle" value={theme.bgSubtleColor || "#f8fafc"} onChange={(v) => update({ bgSubtleColor: v })} />
               <ColorInput label="Text Color" value={theme.textColor || "#1e293b"} onChange={(v) => update({ textColor: v })} />
-              <ColorInput label="Text Muted" value={theme.textMutedColor || "#64748b"} onChange={(v) => update({ textMutedColor: v })} />
+              <ColorInput label="Text Muted Color" value={theme.textMutedColor || "#64748b"} onChange={(v) => update({ textMutedColor: v })} />
               <ColorInput label="Border Color" value={theme.borderColor || "#e2e8f0"} onChange={(v) => update({ borderColor: v })} />
             </div>
           </div>
 
-          <div className="pt-4 border-t border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-900 mb-4">Fonts</h2>
-            <FormField label="Heading Font">
-              <Select value={theme.headingFont || "Inter"} onChange={(e) => update({ headingFont: e.target.value })}>
-                {FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-              </Select>
-            </FormField>
-            <div className="mt-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">Fonts</h3>
+            <div className="space-y-3">
+              <FormField label="Heading Font">
+                <Select value={theme.headingFont || "Inter"} onChange={(e) => update({ headingFont: e.target.value })}>
+                  {FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                </Select>
+              </FormField>
               <FormField label="Body Font">
                 <Select value={theme.bodyFont || "Inter"} onChange={(e) => update({ bodyFont: e.target.value })}>
                   {FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
                 </Select>
               </FormField>
-            </div>
-            <div className="mt-3">
               <FormField label="Script Font">
                 <Select value={theme.scriptFont || "Cormorant Garamond"} onChange={(e) => update({ scriptFont: e.target.value })}>
                   {FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
@@ -126,19 +146,21 @@ export default function ThemeEditorPage() {
             </div>
           </div>
 
-          <div className="pt-4 border-t border-slate-100">
-            <h2 className="text-sm font-semibold text-slate-900 mb-4">Layout</h2>
-            <RangeInput label="Button Radius" value={theme.buttonRadius ?? 8} min={0} max={24} step={1} onChange={(v) => update({ buttonRadius: v })} />
-            <div className="mt-3">
-              <RangeInput label="Section Padding" value={theme.sectionPadding ?? 64} min={16} max={128} step={4} onChange={(v) => update({ sectionPadding: v })} />
-            </div>
-            <div className="mt-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900 mb-3">Layout</h3>
+            <div className="space-y-3">
+              <RangeInput label="Button Radius" value={theme.buttonRadius ?? 8} min={0} max={24} step={1} onChange={(v) => update({ buttonRadius: v })} />
+              <RangeInput label="Section Padding" value={theme.sectionPadding ?? 64} min={32} max={128} step={4} onChange={(v) => update({ sectionPadding: v })} />
               <RangeInput label="Max Width" value={theme.maxWidth ?? 1200} min={600} max={1600} step={50} onChange={(v) => update({ maxWidth: v })} />
             </div>
           </div>
 
-          <div className="pt-4 border-t border-slate-100">
-            <Toggle checked={theme.applyToAll ?? false} onChange={(v) => update({ applyToAll: v })} label="Apply theme to all pages" />
+          <div className="border-t border-slate-100 pt-4">
+            <Toggle
+              checked={theme.applyToAll ?? false}
+              onChange={(v) => update({ applyToAll: v })}
+              label="Apply theme to all sections"
+            />
           </div>
         </div>
       </SplitEditor>

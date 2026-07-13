@@ -1,11 +1,10 @@
-import { useState, type FormEvent } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { Calendar, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
-import { supabase } from "../lib/supabase";
 
-export default function Auth() {
+export default function AuthPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -13,7 +12,7 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -22,50 +21,39 @@ export default function Auth() {
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        navigate("/dashboard");
       } else {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
+        navigate("/dashboard");
       }
-      navigate("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleMode = () => {
-    setMode(mode === "signin" ? "signup" : "signin");
-    setError(null);
-  };
-
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-white text-slate-900 flex flex-col">
       <header className="border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-6 py-4">
-          <Link to="/" className="flex items-center gap-2 w-fit">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-lg font-semibold tracking-tight text-slate-900">Eventful</span>
-          </Link>
+          <span className="text-xl font-bold tracking-tight">Eventful</span>
         </div>
       </header>
 
-      <main className="flex-1 flex items-center justify-center px-6 py-12">
+      <div className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              {mode === "signin" ? "Welcome back" : "Create your account"}
-            </h1>
-            <p className="mt-2 text-sm text-slate-600">
-              {mode === "signin"
-                ? "Sign in to manage your events"
-                : "Start building beautiful event websites"}
-            </p>
-          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-center">
+            {mode === "signin" ? "Welcome back" : "Create your account"}
+          </h1>
+          <p className="mt-2 text-sm text-slate-500 text-center">
+            {mode === "signin"
+              ? "Sign in to manage your events"
+              : "Start creating beautiful event websites"}
+          </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
               <Input
@@ -91,28 +79,32 @@ export default function Auth() {
             </div>
 
             {error && (
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200">
-                <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 flex-shrink-0" />
+              <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3">
                 <p className="text-sm text-red-700">{error}</p>
               </div>
             )}
 
-            <Button type="submit" size="lg" loading={loading} className="w-full">
+            <Button type="submit" size="lg" className="w-full" loading={loading}>
               {mode === "signin" ? "Sign in" : "Sign up"}
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-slate-600">
-            {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
+          <div className="mt-6 text-center">
             <button
-              onClick={toggleMode}
-              className="font-medium text-slate-900 underline underline-offset-2 hover:text-slate-700"
+              type="button"
+              onClick={() => {
+                setMode(mode === "signin" ? "signup" : "signin");
+                setError(null);
+              }}
+              className="text-sm text-slate-600 hover:text-slate-900 transition-colors"
             >
-              {mode === "signin" ? "Sign up" : "Sign in"}
+              {mode === "signin"
+                ? "Don't have an account? Sign up"
+                : "Already have an account? Sign in"}
             </button>
-          </p>
+          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

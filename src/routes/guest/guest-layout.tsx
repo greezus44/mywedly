@@ -1,115 +1,109 @@
 import { useEffect } from "react";
-import type { CSSProperties, ReactNode } from "react";
-import { Outlet, useNavigate, useParams, Navigate } from "react-router-dom";
+import { Outlet, useNavigate, useParams, NavLink, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Home, CalendarCheck, MessageSquare, Phone } from "lucide-react";
+import { Home, CalendarCheck, MessageSquare, Mail } from "lucide-react";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { DEFAULT_THEME, themeToCssVars } from "../../lib/theme";
+import { themeToCssVars, DEFAULT_THEME } from "../../lib/theme";
 import { cn } from "../../lib/utils";
+import type { CSSProperties } from "react";
 
 export interface GuestLayoutContext {
   event: UserEvent;
 }
 
 const NAV_ITEMS = [
-  { key: "home", label: "Home", icon: Home, path: "/home" },
-  { key: "rsvp", label: "RSVP", icon: CalendarCheck, path: "/rsvp" },
-  { key: "wishes", label: "Wishes", icon: MessageSquare, path: "/wishes" },
-  { key: "contact", label: "Contact", icon: Phone, path: "/contact" },
+  { label: "Home", icon: Home, to: "home" },
+  { label: "RSVP", icon: CalendarCheck, to: "rsvp" },
+  { label: "Wishes", icon: MessageSquare, to: "wishes" },
+  { label: "Contact", icon: Mail, to: "contact" },
 ] as const;
 
-export default function GuestLayout({ children }: { children?: ReactNode }) {
+export default function GuestLayout() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated, eventId: authEventId } = useGuestAuth();
+  const location = useLocation();
+  const { isAuthenticated } = useGuestAuth();
 
-  const { data: event, isLoading, isError } = useQuery<UserEvent>({
+  const { data: event, isLoading, isError } = useQuery<UserEvent | null, Error>({
     queryKey: ["public-event", eventId],
+    enabled: !!eventId,
     queryFn: async () => {
+      if (!eventId) throw new Error("No event ID");
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("id", eventId!)
-        .single();
+        .eq("id", eventId)
+        .maybeSingle();
       if (error) throw error;
-      return data as UserEvent;
+      return data as UserEvent | null;
     },
-    enabled: !!eventId,
   });
 
-  const theme = event?.theme || DEFAULT_THEME;
-  const cssVars = themeToCssVars(theme) as CSSProperties;
+  const isLoginRoute = location.pathname.endsWith("/login");
+  const isCoverRoute = location.pathname === `/${eventId}`;
 
   useEffect(() => {
-    if (!isAuthenticated || (authEventId && eventId && authEventId !== eventId)) {
+    if (!isAuthenticated && eventId && !isLoginRoute && !isCoverRoute) {
       navigate(`/${eventId}/login`, { replace: true });
     }
-  }, [isAuthenticated, authEventId, eventId, navigate]);
+  }, [isAuthenticated, eventId, isLoginRoute, isCoverRoute, navigate]);
 
-  if (!eventId) return <Navigate to="/" replace />;
-  if (!isAuthenticated) return <Navigate to={`/${eventId}/login`} replace />;
+  const theme = event?.theme || event?.draft_theme || DEFAULT_THEME;
+  const cssVars = themeToCssVars(theme) as CSSProperties;
 
   if (isLoading) {
     return (
-      <div style={{ ...cssVars, backgroundColor: "var(--color-bg-subtle)" }} className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse text-lg" style={{ color: "var(--color-text-muted)" }}>
-          Loading...
-        </div>
+      <div style={{ ...cssVars, backgroundColor: "var(--color-bg)" }} className="min-h-screen flex items-center justify-center">
+        <div className="w-10 h-10 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin" />
       </div>
     );
   }
 
   if (isError || !event) {
     return (
-      <div style={{ ...cssVars, backgroundColor: "var(--color-bg-subtle)" }} className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-lg" style={{ color: "var(--color-text)" }}>
-            Event not found
-          </p>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center max-w-sm px-6">
+          <p className="text-xl font-semibold text-slate-900 mb-2">Event not found</p>
+          <p className="text-sm text-slate-500">The event you are looking for could not be loaded.</p>
         </div>
       </div>
     );
   }
 
-  const currentPath = window.location.pathname;
-  const basePath = `/${eventId}`;
+  const showNav = isAuthenticated && !isCoverRoute && !isLoginRoute;
 
   return (
-    <div
-      style={{ ...cssVars, backgroundColor: "var(--color-bg)", color: "var(--color-text)", fontFamily: "var(--font-body)" }}
-      className="min-h-screen pb-20"
-    >
-      <main className="mx-auto" style={{ maxWidth: "var(--max-width)" }}>
-        {children ?? <Outlet context={{ event } satisfies GuestLayoutContext} />}
+    <div style={{ ...cssVars, backgroundColor: "var(--color-bg)" }} className="min-h-screen flex flex-col">
+      <main className="flex-1 pb-20">
+        <Outlet context={{ event } satisfies GuestLayoutContext} />
       </main>
 
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-50"
-        style={{ backgroundColor: "var(--color-bg)", borderTop: "1px solid var(--color-border)" }}
-      >
-        <div className="mx-auto max-w-md flex items-stretch justify-around">
-          {NAV_ITEMS.map((item) => {
-            const fullPath = `${basePath}${item.path}`;
-            const isActive = currentPath === fullPath;
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.key}
-                onClick={() => navigate(fullPath)}
-                className={cn("flex flex-col items-center gap-1 py-3 px-2 flex-1 transition-colors")}
-                style={{ color: isActive ? "var(--color-primary)" : "var(--color-text-muted)" }}
-              >
-                <Icon className="w-5 h-5" style={{ color: isActive ? "var(--color-primary)" : "var(--color-text-muted)" }} />
-                <span className="text-xs" style={{ color: isActive ? "var(--color-primary)" : "var(--color-text-muted)" }}>
-                  {item.label}
-                </span>
-                {isActive && <span className="block h-0.5 w-6 rounded-full" style={{ backgroundColor: "var(--color-primary)" }} />}
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      {showNav && (
+        <nav className="fixed bottom-0 inset-x-0 z-30 border-t" style={{ backgroundColor: "var(--color-bg)", borderColor: "var(--color-border)" }}>
+          <div className="max-w-2xl mx-auto px-4 py-2 flex items-center justify-around">
+            {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={`/${eventId}/${item.to}`}
+                  className={({ isActive }) =>
+                    cn(
+                      "flex flex-col items-center gap-1 px-3 py-1.5 rounded-lg transition-colors",
+                      isActive ? "text-slate-900" : "text-slate-400 hover:text-slate-700"
+                    )
+                  }
+                  style={({ isActive }) => (isActive ? { color: "var(--color-primary)" } : undefined)}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span className="text-[10px] font-medium uppercase tracking-wider">{item.label}</span>
+                </NavLink>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

@@ -1,144 +1,176 @@
-import { useState } from "react";
-import { useNavigate, useParams, Navigate } from "react-router-dom";
-import type { CSSProperties, FormEvent } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { themeToCssVars, RUSTY_THEME, RUSTY_LOGIN_CONFIG } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
-import type { Lang } from "./rusty-layout";
+import type { CSSProperties, FormEvent } from "react";
 
-const CREAM = "#FAF3E0";
-const GOLD = "#B8962E";
-const TEXT = "#3D3528";
-const TEXT_MUTED = "#8B7355";
-const BORDER = "#D4C695";
+export async function fetchLoginEvent(eventId: string): Promise<UserEvent | null> {
+  const { data, error } = await supabase
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (error) throw error;
+  return data as UserEvent | null;
+}
 
-export function RustyLogin() {
+export default function RustyLogin() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const { signIn, isAuthenticated, eventId: authEventId } = useGuestAuth();
   const [name, setName] = useState("");
-  const [lang, setLang] = useState<Lang>("en");
+  const [submitting, setSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  if (!eventId) return <Navigate to="/" replace />;
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 50);
+    return () => clearTimeout(t);
+  }, []);
 
-  if (isAuthenticated && authEventId === eventId) {
-    return <Navigate to={`/${eventId}`} replace />;
-  }
+  const { data: event, isLoading } = useQuery<UserEvent | null, Error>({
+    queryKey: ["public-event", eventId],
+    queryFn: () => fetchLoginEvent(eventId!),
+    enabled: !!eventId,
+  });
+
+  useEffect(() => {
+    if (isAuthenticated && eventId && authEventId === eventId) {
+      navigate(`/${eventId}`, { replace: true });
+    }
+  }, [isAuthenticated, authEventId, eventId, navigate]);
+
+  const theme = event?.theme || event?.draft_theme || RUSTY_THEME;
+  const cssVars = themeToCssVars(theme) as CSSProperties;
+  const config = event?.login_config || event?.draft_login_config || RUSTY_LOGIN_CONFIG;
+  const eventName = event?.draft_name || event?.name || "";
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    signIn(trimmed, eventId);
-    navigate(`/${eventId}`, { replace: true });
+    if (!name.trim() || !eventId) return;
+    setSubmitting(true);
+    signIn(name.trim(), eventId);
+    setTimeout(() => {
+      navigate(`/${eventId}`, { replace: true });
+    }, 100);
   };
 
-  const t = {
-    en: {
-      heading: "Welcome",
-      subheading: "Please enter your name to continue",
-      placeholder: "Your full name",
-      buttonText: "Continue",
-    },
-    bm: {
-      heading: "Selamat Datang",
-      subheading: "Sila masukkan nama anda untuk meneruskan",
-      placeholder: "Nama penuh anda",
-      buttonText: "Teruskan",
-    },
-  }[lang];
-
-  const containerStyle: CSSProperties = {
-    backgroundColor: CREAM,
-    color: TEXT,
-    fontFamily: '"Cormorant Garamond", serif',
-  };
+  if (isLoading) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ backgroundColor: config.bgColor || "#FAF3E0" }}
+      >
+        <div className="w-10 h-10 border-2 border-[#B8962E] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div style={containerStyle} className="relative min-h-screen flex flex-col items-center justify-center px-6 overflow-hidden">
-      <div className="absolute top-0 left-0 right-0 h-1" style={{ backgroundColor: GOLD }} />
+    <div
+      style={{ ...cssVars, backgroundColor: config.bgColor || "#FAF3E0" }}
+      className="relative min-h-screen flex items-center justify-center overflow-hidden px-6"
+    >
+      <div className="absolute left-6 top-0 bottom-0 w-px" style={{ backgroundColor: "#B8962E", opacity: 0.3 }} />
+      <div className="absolute right-6 top-0 bottom-0 w-px" style={{ backgroundColor: "#B8962E", opacity: 0.3 }} />
 
-      <div className="absolute top-6 right-6 flex gap-2">
-        {(["en", "bm"] as Lang[]).map((l) => (
-          <button
+      <div className="absolute top-6 right-8 flex items-center gap-1 text-xs">
+        {(["EN", "BM"] as const).map((l) => (
+          <span
             key={l}
-            onClick={() => setLang(l)}
-            className="px-3 py-1 text-xs tracking-wider uppercase transition-all"
+            className="px-2 py-0.5 font-medium tracking-wider"
             style={{
-              fontFamily: '"Inter", sans-serif',
-              color: lang === l ? CREAM : GOLD,
-              backgroundColor: lang === l ? GOLD : "transparent",
-              border: `1px solid ${GOLD}`,
+              color: l === "EN" ? "#B8962E" : "#8B7355",
+              opacity: l === "EN" ? 1 : 0.5,
             }}
           >
             {l}
-          </button>
+          </span>
         ))}
       </div>
 
-      <div className="absolute left-1/2 top-0 bottom-0 -translate-x-1/2" style={{ width: "1px", backgroundColor: GOLD, opacity: 0.2 }} />
+      <div
+        className={`relative z-10 w-full max-w-md transition-all duration-1000 ${
+          mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
+        }`}
+      >
+        <div
+          className="text-center mb-10"
+        >
+          <div className="flex items-center justify-center gap-4 mb-6">
+            <div className="h-px w-12" style={{ backgroundColor: "#B8962E" }} />
+            <div className="w-2 h-2 rotate-45" style={{ backgroundColor: "#B8962E" }} />
+            <div className="h-px w-12" style={{ backgroundColor: "#B8962E" }} />
+          </div>
 
-      <div className="relative z-10 w-full max-w-sm text-center">
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <span className="block h-px w-10" style={{ backgroundColor: GOLD }} />
-          <span className="text-xs tracking-[0.3em] uppercase" style={{ color: GOLD, fontFamily: '"Inter", sans-serif' }}>
-            Invitation
-          </span>
-          <span className="block h-px w-10" style={{ backgroundColor: GOLD }} />
+          {eventName && (
+            <p
+              className="font-serif italic text-lg mb-2"
+              style={{ color: "#8B7355", fontFamily: '"Cormorant Garamond", serif' }}
+            >
+              {eventName}
+            </p>
+          )}
+
+          {config.heading && (
+            <h1
+              className="font-serif text-4xl md:text-5xl font-light mb-3"
+              style={{
+                color: config.textColor || "#3D3528",
+                fontFamily: '"Cormorant Garamond", serif',
+              }}
+            >
+              {config.heading}
+            </h1>
+          )}
+
+          {config.subheading && (
+            <p
+              className="text-sm tracking-wide"
+              style={{ color: "#8B7355" }}
+            >
+              {config.subheading}
+            </p>
+          )}
         </div>
 
-        <h2 className="text-3xl md:text-4xl mb-2" style={{ fontFamily: '"Cormorant Garamond", serif', color: TEXT }}>
-          {t.heading}
-        </h2>
-        <p className="text-base mb-8" style={{ fontFamily: '"Cormorant Garamond", serif', color: TEXT_MUTED }}>
-          {t.subheading}
-        </p>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="relative">
+            <Input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={config.inputPlaceholder || "Your full name"}
+              required
+              autoFocus
+              className="text-center font-serif text-lg py-3.5 border-[#D4C695] bg-white/60 focus:border-[#B8962E] focus:ring-[#B8962E]/20"
+              style={{ color: "#3D3528" }}
+            />
+          </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t.placeholder}
-            autoFocus
-            style={{
-              textAlign: "center",
-              fontFamily: '"Cormorant Garamond", serif',
-              fontSize: "1.1rem",
-              padding: "0.75rem 1rem",
-              backgroundColor: CREAM,
-              borderColor: BORDER,
-              color: TEXT,
-            }}
-          />
           <Button
             type="submit"
-            disabled={!name.trim()}
-            className="w-full"
+            disabled={!name.trim() || submitting}
+            loading={submitting}
+            className="w-full py-3.5 font-serif text-lg tracking-[0.2em] uppercase"
             style={{
-              backgroundColor: GOLD,
-              color: CREAM,
-              fontFamily: '"Inter", sans-serif',
-              letterSpacing: "0.2em",
-              textTransform: "uppercase",
-              fontSize: "0.8rem",
-              padding: "0.75rem 1.5rem",
-              border: `1px solid ${GOLD}`,
+              backgroundColor: config.buttonColor || "#B8962E",
+              color: "#FAF3E0",
+              border: `1px solid ${config.buttonColor || "#B8962E"}`,
             }}
           >
-            {t.buttonText}
+            {config.buttonText || "Continue"}
           </Button>
         </form>
-      </div>
 
-      <div className="absolute bottom-8 left-0 right-0 text-center">
-        <span className="block h-px w-16 mx-auto mb-3" style={{ backgroundColor: GOLD, opacity: 0.4 }} />
-        <p className="text-xs tracking-[0.2em] uppercase" style={{ color: TEXT_MUTED, fontFamily: '"Inter", sans-serif' }}>
-          With Love
-        </p>
+        <div className="flex items-center justify-center gap-4 mt-10">
+          <div className="h-px w-16" style={{ backgroundColor: "#B8962E", opacity: 0.5 }} />
+          <div className="h-px w-16" style={{ backgroundColor: "#B8962E", opacity: 0.5 }} />
+        </div>
       </div>
     </div>
   );
 }
-
-export default RustyLogin;
