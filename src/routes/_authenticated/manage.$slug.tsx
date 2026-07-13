@@ -726,7 +726,6 @@ function BulkImportModal({ wedding, groups, onClose, onDone }: { wedding: Weddin
     mutationFn: async () => {
       const nameCol = Object.entries(mapping).find(([, v]) => v === "full_name")?.[0];
       if (!nameCol) throw new Error("Map a column to Guest name");
-      const codeCol = Object.entries(mapping).find(([, v]) => v === "access_code")?.[0];
       const groupCol = Object.entries(mapping).find(([, v]) => v === "group_name")?.[0];
 
       // ensure groups exist
@@ -749,14 +748,13 @@ function BulkImportModal({ wedding, groups, onClose, onDone }: { wedding: Weddin
       for (const r of rows) {
         const name = (r[nameCol] ?? "").trim();
         if (!name) continue;
-        const code = codeCol ? (r[codeCol] ?? "").trim() || null : null;
         const gname = groupCol ? (r[groupCol] ?? "").trim() : "";
         const groupId = gname ? groupIdByName.get(gname.toLowerCase()) ?? null : (defaultGroup || null);
         const existingId = existingByName.get(name.toLowerCase());
         if (existingId) {
-          if (duplicates === "update") updates.push({ id: existingId, patch: { access_code: code, group_id: groupId } });
+          if (duplicates === "update") updates.push({ id: existingId, patch: { group_id: groupId } });
         } else {
-          inserts.push({ wedding_id: wedding.id, full_name: name, access_code: code, group_id: groupId });
+          inserts.push({ wedding_id: wedding.id, full_name: name, group_id: groupId });
         }
       }
       if (inserts.length) {
