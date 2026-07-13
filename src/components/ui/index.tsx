@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
-export function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("rounded-xl border border-sand bg-card shadow-sm", className)}>{children}</div>;
+export function Card({ children, className, style }: { children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
+  return <div className={cn("rounded-xl border border-sand bg-card shadow-sm", className)} style={style}>{children}</div>;
 }
 
 export function Badge({ children, variant = "default", className }: { children: React.ReactNode; variant?: "default" | "success" | "warning" | "danger" | "info"; className?: string }) {
@@ -62,25 +62,6 @@ export function Toast({ message, type = "success", onClose }: { message: string;
         <span className="text-sm">{message}</span>
         <button onClick={onClose} className="opacity-60 hover:opacity-100">&times;</button>
       </div>
-    </div>
-  );
-}
-
-export function Tabs({ tabs, active, onChange }: { tabs: { key: string; label: string }[]; active: string; onChange: (key: string) => void }) {
-  return (
-    <div className="flex gap-1 border-b border-sand mb-4">
-      {tabs.map((tab) => (
-        <button
-          key={tab.key}
-          onClick={() => onChange(tab.key)}
-          className={cn(
-            "px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px",
-            active === tab.key ? "border-sepia text-onyx" : "border-transparent text-sepia hover:text-onyx"
-          )}
-        >
-          {tab.label}
-        </button>
-      ))}
     </div>
   );
 }

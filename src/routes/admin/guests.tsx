@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Plus, Search, Edit2, Trash2, Upload, Download, Users, Mail, Phone, X,
+  Plus, Pencil, Trash2, Save, X, Search, Download, Upload,
+  Users, Mail, Phone, User,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Guest, GuestGroup } from "@/lib/supabase";
 import { useHostWedding } from "@/lib/use-host-wedding";
+import { generateUsername, downloadCsv, parseCsv, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Label, Select, Toggle } from "@/components/ui/Input";
 import { Card, Badge, Modal, EmptyState, SectionTitle, Toast } from "@/components/ui";
-import { cn, generateUsername, downloadCsv, parseCsv } from "@/lib/utils";
 
 type GuestForm = {
   first_name: string;
@@ -16,56 +17,69 @@ type GuestForm = {
   username: string;
   email: string;
   phone: string;
-  group_id: string;
   plus_one_allowed: boolean;
   notes: string;
+  group_id: string;
 };
 
-const emptyForm: GuestForm = {
-  first_name: "",
-  last_name: "",
-  username: "",
-  email: "",
-  phone: "",
-  group_id: "",
-  plus_one_allowed: false,
-  notes: "",
-};
+function emptyForm(): GuestForm {
+  return {
+    first_name: "",
+    last_name: "",
+    username: "",
+    email: "",
+    phone: "",
+    plus_one_allowed: false,
+    notes: "",
+    group_id: "",
+  };
+}
 
-const rsvpVariant = (status: string | null) => {
-  if (status === "accepted") return "success" as const;
-  if (status === "declined") return "danger" as const;
-  if (status === "tentative") return "warning" as const;
-  return "default" as const;
-};
+function toForm(guest: Guest): GuestForm {
+  return {
+    first_name: guest.first_name ?? "",
+    last_name: guest.last_name ?? "",
+    username: guest.username ?? "",
+    email: guest.email ?? "",
+    phone: guest.phone ?? "",
+    plus_one_allowed: guest.plus_one_allowed,
+    notes: guest.notes ?? "",
+    group_id: guest.group_id ?? "",
+  };
+}
+
+function fullName(form: GuestForm): string {
+  return [form.first_name, form.last_name].filter(Boolean).join(" ").trim();
+}
+
+function rsvpBadgeVariant(status: string | null): "default" | "success" | "warning" | "danger" | "info" {
+  if (status === "accepted" || status === "attending") return "success";
+  if (status === "declined") return "danger";
+  if (status === "tentative") return "warning";
+  return "default";
+}
 
 export function AdminGuests() {
   const { wedding, loading } = useHostWedding();
-  const weddingId = wedding?.id ?? "";
 
   const [guests, setGuests] = useState<Guest[]>([]);
   const [groups, setGroups] = useState<GuestGroup[]>([]);
   const [fetching, setFetching] = useState(true);
   const [search, setSearch] = useState("");
-  const [rsvpFilter, setRsvpFilter] = useState("all");
-  const [groupFilter, setGroupFilter] = useState("all");
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
-  const [form, setForm] = useState<GuestForm>(emptyForm);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [form, setForm] = useState<GuestForm>(emptyForm());
   const [saving, setSaving] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Guest | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Guest | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+  const weddingId = wedding?.id ?? null;
 
-  // ─── Load guests + groups ───
-  const loadAll = useCallback(async () => {
-    if (!weddingId) { setFetching(false); return; }
+  const fetchGuests = useCallback(async () => {
+    if (!weddingId) return;
     setFetching(true);
     const [g, gr] = await Promise.all([
       supabase.from("guests").select("*").eq("wedding_id", weddingId).order("created_at", { ascending: false }),
@@ -76,310 +90,192 @@ export function AdminGuests() {
     setFetching(false);
   }, [weddingId]);
 
-  useEffect(() => { if (weddingId) loadAll(); }, [weddingId, loadAll]);
-
-  // ─── Derived ───
-  const filtered = useMemo(() => {
-    return guests.filter((g) => {
-      const q = search.toLowerCase().trim();
-      const matchesSearch = !q ||
-        g.full_name.toLowerCase().includes(q) ||
-        (g.email ?? "").toLowerCase().includes(q) ||
-        (g.username ?? "").toLowerCase().includes(q);
-      const matchesRsvp = rsvpFilter === "all" || (g.rsvp_status ?? "pending") === rsvpFilter;
-      const matchesGroup = groupFilter === "all" || g.group_id === groupFilter;
-      return matchesSearch && matchesRsvp && matchesGroup;
-    });
-  }, [guests, search, rsvpFilter, groupFilter]);
-
-  const groupName = (groupId: string | null) => groups.find((g) => g.id === groupId)?.name ?? "Ungrouped";
-
-  // ─── Modal helpers ───
-  const openAdd = () => {
-    setEditingGuest(null);
-    setForm(emptyForm);
-    setModalOpen(true);
-  };
-
-  const openEdit = (guest: Guest) => {
-    setEditingGuest(guest);
-    setForm({
-      first_name: guest.first_name ?? "",
-      last_name: guest.last_name ?? "",
-      username: guest.username ?? "",
-      email: guest.email ?? "",
-      phone: guest.phone ?? "",
-      group_id: guest.group_id ?? "",
-      plus_one_allowed: guest.plus_one_allowed,
-      notes: guest.notes ?? "",
-    });
-    setModalOpen(true);
-  };
-
-  const closeModal = () => { setModalOpen(false); setEditingGuest(null); setForm(emptyForm); };
-
-  // Auto-generate username from first+last name when both present and username empty
   useEffect(() => {
-    if (!modalOpen || editingGuest) return;
-    if (!form.username && (form.first_name || form.last_name)) {
-      const name = `${form.first_name}${form.last_name}`.trim();
-      if (name) setForm((f) => ({ ...f, username: generateUsername(name) }));
-    }
-  }, [form.first_name, form.last_name, modalOpen, editingGuest, form.username]);
+    if (weddingId) fetchGuests();
+  }, [weddingId, fetchGuests]);
 
-  // ─── Save ───
+  // ─── Filtered guests ───
+  const filtered = guests.filter((g) => {
+    const q = search.toLowerCase().trim();
+    const matchesSearch =
+      !q ||
+      g.full_name.toLowerCase().includes(q) ||
+      (g.email ?? "").toLowerCase().includes(q) ||
+      (g.username ?? "").toLowerCase().includes(q) ||
+      (g.phone ?? "").toLowerCase().includes(q);
+    const matchesStatus =
+      statusFilter === "all" ||
+      (g.rsvp_status ?? "pending") === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  // ─── CRUD ───
+  const startCreate = () => {
+    setIsCreating(true);
+    setEditingId(null);
+    setForm(emptyForm());
+  };
+
+  const startEdit = (guest: Guest) => {
+    setEditingId(guest.id);
+    setIsCreating(false);
+    setForm(toForm(guest));
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setIsCreating(false);
+    setForm(emptyForm());
+  };
+
   const save = async () => {
     if (!weddingId) return;
-    if (!form.first_name.trim() && !form.last_name.trim()) {
-      showToast("Enter at least a first or last name", "error");
+    const name = fullName(form);
+    if (!name.trim()) {
+      setToast({ message: "First or last name is required", type: "error" });
       return;
     }
     setSaving(true);
-    const full_name = `${form.first_name} ${form.last_name}`.trim();
-    const payload = {
+    const username = form.username || generateUsername(name);
+    const row = {
       wedding_id: weddingId,
-      full_name,
-      first_name: form.first_name.trim() || null,
-      last_name: form.last_name.trim() || null,
-      username: form.username.trim() || generateUsername(full_name),
-      email: form.email.trim() || null,
-      phone: form.phone.trim() || null,
-      group_id: form.group_id || null,
+      full_name: name,
+      first_name: form.first_name || null,
+      last_name: form.last_name || null,
+      username,
+      email: form.email || null,
+      phone: form.phone || null,
       plus_one_allowed: form.plus_one_allowed,
-      notes: form.notes.trim() || null,
+      notes: form.notes || null,
+      group_id: form.group_id || null,
     };
-    let error: { message: string } | null = null;
-    if (editingGuest) {
-      ({ error } = await supabase.from("guests").update(payload).eq("id", editingGuest.id));
-    } else {
-      ({ error } = await supabase.from("guests").insert(payload));
+
+    if (isCreating) {
+      const { error } = await supabase.from("guests").insert(row);
+      setSaving(false);
+      if (error) {
+        setToast({ message: "Failed to add guest", type: "error" });
+      } else {
+        setToast({ message: "Guest added", type: "success" });
+        cancelEdit();
+        await fetchGuests();
+      }
+    } else if (editingId) {
+      const { error } = await supabase.from("guests").update(row).eq("id", editingId);
+      setSaving(false);
+      if (error) {
+        setToast({ message: "Failed to save guest", type: "error" });
+      } else {
+        setToast({ message: "Guest saved", type: "success" });
+        cancelEdit();
+        await fetchGuests();
+      }
     }
-    setSaving(false);
-    if (error) { showToast(`Save failed: ${error.message}`, "error"); return; }
-    showToast(editingGuest ? "Guest updated" : "Guest added");
-    closeModal();
-    await loadAll();
   };
 
-  // ─── Delete ───
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
-    const { error } = await supabase.from("guests").delete().eq("id", deleteTarget.id);
-    if (error) { showToast(`Delete failed: ${error.message}`, "error"); return; }
-    showToast("Guest deleted");
+  const deleteGuest = async (guest: Guest) => {
+    const { error } = await supabase.from("guests").delete().eq("id", guest.id);
     setDeleteTarget(null);
-    await loadAll();
+    if (error) {
+      setToast({ message: "Failed to delete guest", type: "error" });
+    } else {
+      setToast({ message: "Guest deleted", type: "success" });
+      if (editingId === guest.id) cancelEdit();
+      await fetchGuests();
+    }
   };
 
-  // ─── CSV export ───
+  // ─── CSV Export ───
   const exportCsv = () => {
     const rows = guests.map((g) => ({
       first_name: g.first_name ?? "",
       last_name: g.last_name ?? "",
+      full_name: g.full_name,
       username: g.username ?? "",
       email: g.email ?? "",
       phone: g.phone ?? "",
-      group: groupName(g.group_id),
       rsvp_status: g.rsvp_status ?? "pending",
-      plus_one_allowed: g.plus_one_allowed ? "yes" : "no",
+      plus_one_allowed: g.plus_one_allowed,
       notes: g.notes ?? "",
     }));
     downloadCsv("guests.csv", rows);
+    setToast({ message: "CSV exported", type: "success" });
   };
 
-  // ─── CSV import ───
-  const importCsv = async (file: File) => {
+  // ─── CSV Import ───
+  const handleImportFile = async (file: File) => {
     if (!weddingId) return;
     const text = await file.text();
     const rows = parseCsv(text);
-    if (rows.length === 0) { showToast("CSV is empty or invalid", "error"); return; }
-    const payload = rows.map((row) => {
-      const firstName = row.first_name ?? row.firstname ?? "";
-      const lastName = row.last_name ?? row.lastname ?? "";
-      const fullName = `${firstName} ${lastName}`.trim() || row.name || row.full_name || "";
+    if (rows.length === 0) {
+      setToast({ message: "No rows found in CSV", type: "error" });
+      return;
+    }
+
+    const toInsert = rows.map((row) => {
+      const firstName = row["first_name"] ?? "";
+      const lastName = row["last_name"] ?? "";
+      const fullName = [firstName, lastName].filter(Boolean).join(" ").trim() || row["name"] || row["full_name"] || "Unknown";
       return {
         wedding_id: weddingId,
         full_name: fullName,
         first_name: firstName || null,
         last_name: lastName || null,
-        username: (row.username ?? "").trim() || generateUsername(fullName),
-        email: (row.email ?? "").trim() || null,
-        phone: (row.phone ?? "").trim() || null,
-        plus_one_allowed: (row.plus_one_allowed ?? "").toLowerCase() === "yes",
-        notes: (row.notes ?? "").trim() || null,
+        username: row["username"] || generateUsername(fullName),
+        email: row["email"] || null,
+        phone: row["phone"] || null,
+        plus_one_allowed: row["plus_one_allowed"] === "true" || row["plus_one_allowed"] === "1",
+        notes: row["notes"] || null,
       };
     });
-    const { error } = await supabase.from("guests").insert(payload);
-    if (error) { showToast(`Import failed: ${error.message}`, "error"); return; }
-    showToast(`${payload.length} guests imported`);
-    await loadAll();
+
+    const { error } = await supabase.from("guests").insert(toInsert);
+    setShowImport(false);
+    if (fileRef.current) fileRef.current.value = "";
+    if (error) {
+      setToast({ message: `Import failed: ${error.message}`, type: "error" });
+    } else {
+      setToast({ message: `Imported ${toInsert.length} guests`, type: "success" });
+      await fetchGuests();
+    }
   };
 
-  // ─── Render ───
   if (loading || fetching) {
-    return (
-      <div className="flex items-center justify-center py-24 text-sepia">
-        <div className="animate-pulse">Loading guests…</div>
-      </div>
-    );
+    return <div className="flex items-center justify-center py-24 text-sepia">Loading guests…</div>;
   }
 
   if (!wedding) {
     return <EmptyState title="No wedding found" description="Create a wedding to manage guests." />;
   }
 
+  const isEditing = isCreating || editingId !== null;
+
   return (
     <div>
       <SectionTitle
         title="Guests"
-        subtitle={`${guests.length} total · ${guests.filter((g) => g.rsvp_status === "accepted").length} attending`}
+        subtitle="Manage your guest list, import in bulk, and track RSVPs."
         action={
-          <div className="flex items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) importCsv(f); e.target.value = ""; }}
-            />
-            <Button variant="outline" size="sm" onClick={exportCsv}>
-              <Download className="w-4 h-4" /> Export
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-              <Upload className="w-4 h-4" /> Import
-            </Button>
-            <Button size="sm" onClick={openAdd}>
-              <Plus className="w-4 h-4" /> Add Guest
-            </Button>
-          </div>
+          !isEditing && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+                <Upload className="w-4 h-4" /> Import
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportCsv} disabled={guests.length === 0}>
+                <Download className="w-4 h-4" /> Export
+              </Button>
+              <Button size="sm" onClick={startCreate}>
+                <Plus className="w-4 h-4" /> Add Guest
+              </Button>
+            </div>
+          )
         }
       />
 
-      {/* ─── Filters ─── */}
-      <Card className="p-4 mb-6">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sepia/40" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, email, or username…"
-              className="pl-9"
-            />
-          </div>
-          <Select
-            value={rsvpFilter}
-            onChange={(e) => setRsvpFilter(e.target.value)}
-            className="sm:w-40"
-          >
-            <option value="all">All RSVP</option>
-            <option value="pending">Pending</option>
-            <option value="accepted">Accepted</option>
-            <option value="declined">Declined</option>
-            <option value="tentative">Tentative</option>
-          </Select>
-          <Select
-            value={groupFilter}
-            onChange={(e) => setGroupFilter(e.target.value)}
-            className="sm:w-40"
-          >
-            <option value="all">All Groups</option>
-            {groups.map((g) => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </Select>
-        </div>
-      </Card>
-
-      {/* ─── Table ─── */}
-      {filtered.length === 0 ? (
-        <EmptyState
-          title={guests.length === 0 ? "No guests yet" : "No matches"}
-          description={guests.length === 0 ? "Add your first guest or import a CSV." : "Try adjusting your search or filters."}
-          action={guests.length === 0 ? <Button onClick={openAdd}><Plus className="w-4 h-4" /> Add Guest</Button> : undefined}
-        />
-      ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-sand bg-mist/50">
-                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia px-4 py-3">Name</th>
-                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia px-4 py-3">Username</th>
-                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia px-4 py-3 hidden md:table-cell">Email</th>
-                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia px-4 py-3 hidden lg:table-cell">Phone</th>
-                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia px-4 py-3">RSVP</th>
-                  <th className="text-right text-xs font-medium uppercase tracking-widest text-sepia px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((guest) => (
-                  <tr key={guest.id} className="border-b border-sand last:border-0 hover:bg-mist/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-mist flex items-center justify-center flex-shrink-0">
-                          <Users className="w-4 h-4 text-sepia/60" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-onyx truncate">{guest.full_name}</p>
-                          <p className="text-xs text-sepia/60 truncate">{groupName(guest.group_id)}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <code className="text-xs text-sepia bg-mist px-2 py-0.5 rounded">{guest.username ?? "—"}</code>
-                    </td>
-                    <td className="px-4 py-3 hidden md:table-cell">
-                      {guest.email ? (
-                        <span className="text-sm text-sepia flex items-center gap-1.5">
-                          <Mail className="w-3.5 h-3.5 text-sepia/40" />
-                          <span className="truncate max-w-[200px]">{guest.email}</span>
-                        </span>
-                      ) : <span className="text-sepia/40 text-sm">—</span>}
-                    </td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
-                      {guest.phone ? (
-                        <span className="text-sm text-sepia flex items-center gap-1.5">
-                          <Phone className="w-3.5 h-3.5 text-sepia/40" />
-                          {guest.phone}
-                        </span>
-                      ) : <span className="text-sepia/40 text-sm">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge variant={rsvpVariant(guest.rsvp_status)} className="capitalize">
-                        {guest.rsvp_status ?? "pending"}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => openEdit(guest)}
-                          className="p-1.5 rounded-lg text-sepia hover:bg-mist hover:text-onyx transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteTarget(guest)}
-                          className="p-1.5 rounded-lg text-sepia/50 hover:bg-red-50 hover:text-red-600 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {/* ─── Add/Edit modal ─── */}
-      <Modal open={modalOpen} onClose={closeModal} title={editingGuest ? "Edit Guest" : "Add Guest"}>
+      {/* ─── Edit / Create modal ─── */}
+      <Modal open={isEditing} onClose={cancelEdit} title={isCreating ? "Add Guest" : "Edit Guest"}>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>First Name</Label>
               <Input
@@ -402,26 +298,28 @@ export function AdminGuests() {
             <Input
               value={form.username}
               onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-              placeholder="Auto-generated from name"
+              placeholder={form.first_name ? `Auto: ${generateUsername(fullName(form))}` : "Auto-generated from name"}
             />
-            <p className="text-xs text-sepia/60 mt-1.5">Used for guest sign-in. Auto-generated if left blank.</p>
+            <p className="text-xs text-sepia/50 mt-1">Leave blank to auto-generate from the guest's name.</p>
           </div>
-          <div>
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              placeholder="jane@example.com"
-            />
-          </div>
-          <div>
-            <Label>Phone</Label>
-            <Input
-              value={form.phone}
-              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-              placeholder="+1 555 000 0000"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="jane@example.com"
+              />
+            </div>
+            <div>
+              <Label>Phone</Label>
+              <Input
+                value={form.phone}
+                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                placeholder="+1 555 000 0000"
+              />
+            </div>
           </div>
           <div>
             <Label>Group</Label>
@@ -435,55 +333,203 @@ export function AdminGuests() {
               ))}
             </Select>
           </div>
-          <div className="flex items-center justify-between pt-2 border-t border-sand">
-            <div>
-              <Label>Plus One Allowed</Label>
-              <p className="text-xs text-sepia/60 -mt-1">Allow this guest to bring a guest.</p>
-            </div>
+          <div>
             <Toggle
               checked={form.plus_one_allowed}
               onChange={(v) => setForm((f) => ({ ...f, plus_one_allowed: v }))}
-              label={form.plus_one_allowed ? "Yes" : "No"}
+              label="Plus-one allowed"
             />
           </div>
           <div>
             <Label>Notes</Label>
             <Textarea
-              rows={3}
               value={form.notes}
               onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              placeholder="Dietary needs, seating preferences, etc."
+              placeholder="Internal notes about this guest…"
+              rows={3}
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={closeModal}>Cancel</Button>
-            <Button onClick={save} disabled={saving}>
-              {saving ? "Saving…" : editingGuest ? "Save Changes" : "Add Guest"}
+            <Button variant="outline" size="sm" onClick={cancelEdit} disabled={saving}>Cancel</Button>
+            <Button size="sm" onClick={save} disabled={saving}>
+              <Save className="w-4 h-4" /> {saving ? "Saving…" : "Save"}
             </Button>
           </div>
         </div>
       </Modal>
+
+      {/* ─── Import modal ─── */}
+      <Modal open={showImport} onClose={() => setShowImport(false)} title="Import Guests from CSV">
+        <div className="space-y-4">
+          <p className="text-sm text-sepia">
+            Upload a CSV file with columns: <code className="text-xs bg-mist px-1.5 py-0.5 rounded">first_name, last_name, email, phone, username, plus_one_allowed, notes</code>.
+          </p>
+          <div
+            onClick={() => fileRef.current?.click()}
+            className="border-2 border-dashed border-sand rounded-lg p-8 text-center cursor-pointer hover:border-sepia/40 transition-colors"
+          >
+            <Upload className="w-8 h-8 text-sepia/40 mx-auto mb-2" />
+            <p className="text-sm text-sepia">Click to choose a CSV file</p>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleImportFile(f);
+            }}
+          />
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => setShowImport(false)}>Cancel</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ─── Search & filter ─── */}
+      {guests.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-sepia/40" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, email, username, phone…"
+              className="pl-9"
+            />
+          </div>
+          <Select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="sm:w-44"
+          >
+            <option value="all">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="accepted">Accepted</option>
+            <option value="attending">Attending</option>
+            <option value="declined">Declined</option>
+            <option value="tentative">Tentative</option>
+          </Select>
+        </div>
+      )}
+
+      {/* ─── Guest table ─── */}
+      {filtered.length === 0 && guests.length === 0 ? (
+        <EmptyState
+          title="No guests yet"
+          description="Add guests one by one or import a CSV to get started."
+          action={
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowImport(true)}>
+                <Upload className="w-4 h-4" /> Import CSV
+              </Button>
+              <Button size="sm" onClick={startCreate}>
+                <Plus className="w-4 h-4" /> Add Guest
+              </Button>
+            </div>
+          }
+        />
+      ) : filtered.length === 0 ? (
+        <EmptyState title="No matches" description="Try adjusting your search or filter." />
+      ) : (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-sand bg-mist/30">
+                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia/60 px-4 py-3">Name</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia/60 px-4 py-3">Username</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia/60 px-4 py-3 hidden md:table-cell">Contact</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-widest text-sepia/60 px-4 py-3">RSVP</th>
+                  <th className="text-right text-xs font-medium uppercase tracking-widest text-sepia/60 px-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((guest) => (
+                  <tr key={guest.id} className="border-b border-sand/50 last:border-0 hover:bg-mist/20 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-full bg-mist flex items-center justify-center shrink-0">
+                          <User className="w-4 h-4 text-sepia/60" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-onyx truncate">{guest.full_name}</p>
+                          {guest.plus_one_allowed && (
+                            <span className="text-xs text-sepia/50">+1 allowed</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm text-sepia/70 font-mono">{guest.username ?? "—"}</span>
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <div className="space-y-0.5">
+                        {guest.email && (
+                          <div className="flex items-center gap-1.5 text-xs text-sepia/70">
+                            <Mail className="w-3 h-3 shrink-0" />
+                            <span className="truncate max-w-[180px]">{guest.email}</span>
+                          </div>
+                        )}
+                        {guest.phone && (
+                          <div className="flex items-center gap-1.5 text-xs text-sepia/70">
+                            <Phone className="w-3 h-3 shrink-0" />
+                            <span>{guest.phone}</span>
+                          </div>
+                        )}
+                        {!guest.email && !guest.phone && <span className="text-xs text-sepia/40">—</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant={rsvpBadgeVariant(guest.rsvp_status)}>
+                        {guest.rsvp_status ?? "pending"}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => startEdit(guest)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteTarget(guest)}
+                          className="text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-4 py-3 border-t border-sand bg-mist/20 text-xs text-sepia/60">
+            Showing {filtered.length} of {guests.length} guests
+          </div>
+        </Card>
+      )}
 
       {/* ─── Delete confirm ─── */}
       <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Guest">
-        <div className="space-y-4">
-          <p className="text-sm text-sepia">
-            Are you sure you want to delete{" "}
-            <span className="font-medium text-onyx">{deleteTarget?.full_name}</span>?
-            This will also remove their RSVPs. This action cannot be undone.
-          </p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button variant="danger" onClick={confirmDelete}>
-              <Trash2 className="w-4 h-4" /> Delete
-            </Button>
-          </div>
+        <p className="text-sm text-sepia mb-6">
+          Are you sure you want to delete{" "}
+          <span className="font-medium text-onyx">{deleteTarget?.full_name}</span>? This cannot be undone.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button variant="danger" onClick={() => deleteTarget && deleteGuest(deleteTarget)}>
+            <Trash2 className="w-4 h-4" /> Delete
+          </Button>
         </div>
       </Modal>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {/* ─── Toast ─── */}
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }
-
-export default AdminGuests;

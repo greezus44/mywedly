@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Edit2, Save, Send, Eye, Calendar, Clock, MapPin, Users } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Plus, Pencil, Trash2, Save, X, Calendar, Clock, MapPin } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { WeddingEvent } from "@/lib/supabase";
 import { useHostWedding } from "@/lib/use-host-wedding";
 import { getDraftTheme } from "@/lib/theme";
-import type { ThemeConfig } from "@/lib/theme";
-import { formatDate, formatTime, formatDateShort } from "@/lib/utils";
+import { formatDate, formatTime } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Label, Select } from "@/components/ui/Input";
 import { Card, Badge, Modal, EmptyState, SectionTitle, Toast } from "@/components/ui";
@@ -13,30 +12,25 @@ import { ImageUpload } from "@/components/ui/ImageUpload";
 import { SplitEditor } from "@/components/preview/SplitEditor";
 import { EventCardPreview } from "@/components/preview/PreviewRenderers";
 
-// ─── Event kinds ───
 const EVENT_KINDS = [
   "ceremony",
   "reception",
   "rehearsal",
   "brunch",
-  "cocktail",
-  "after-party",
+  "party",
   "other",
 ] as const;
 
-const kindBadgeVariant = (kind: string): "default" | "success" | "warning" | "danger" | "info" => {
-  switch (kind) {
-    case "ceremony": return "info";
-    case "reception": return "success";
-    case "rehearsal": return "warning";
-    case "cocktail":
-    case "after-party": return "danger";
-    default: return "default";
-  }
+const KIND_COLORS: Record<string, "success" | "info" | "warning" | "default" | "danger"> = {
+  ceremony: "info",
+  reception: "success",
+  rehearsal: "warning",
+  brunch: "default",
+  party: "danger",
+  other: "default",
 };
 
-// ─── Form state ───
-type FormState = {
+type EventForm = {
   name: string;
   kind: string;
   starts_at: string;
@@ -51,55 +45,76 @@ type FormState = {
   notes: string;
 };
 
-const emptyForm: FormState = {
-  name: "",
-  kind: "ceremony",
-  starts_at: "",
-  venue_name: "",
-  venue_address: "",
-  maps_url: "",
-  dress_code: "",
-  description: "",
-  image_url: null,
-  rsvp_deadline: "",
-  capacity: "",
-  notes: "",
-};
+function emptyForm(): EventForm {
+  return {
+    name: "",
+    kind: "ceremony",
+    starts_at: "",
+    venue_name: "",
+    venue_address: "",
+    maps_url: "",
+    dress_code: "",
+    description: "",
+    image_url: null,
+    rsvp_deadline: "",
+    capacity: "",
+    notes: "",
+  };
+}
 
-const toForm = (e: WeddingEvent): FormState => ({
-  name: e.name ?? "",
-  kind: e.kind ?? "other",
-  starts_at: e.starts_at ? new Date(e.starts_at).toISOString().slice(0, 16) : "",
-  venue_name: e.venue_name ?? "",
-  venue_address: e.venue_address ?? "",
-  maps_url: e.maps_url ?? "",
-  dress_code: e.dress_code ?? "",
-  description: e.description ?? "",
-  image_url: e.image_url,
-  rsvp_deadline: e.rsvp_deadline ? e.rsvp_deadline.slice(0, 10) : "",
-  capacity: e.capacity != null ? String(e.capacity) : "",
-  notes: e.notes ?? "",
-});
+function toForm(event: WeddingEvent): EventForm {
+  return {
+    name: event.name,
+    kind: event.kind,
+    starts_at: event.starts_at ? new Date(event.starts_at).toISOString().slice(0, 16) : "",
+    venue_name: event.venue_name ?? "",
+    venue_address: event.venue_address ?? "",
+    maps_url: event.maps_url ?? "",
+    dress_code: event.dress_code ?? "",
+    description: event.description ?? "",
+    image_url: event.image_url,
+    rsvp_deadline: event.rsvp_deadline ? new Date(event.rsvp_deadline).toISOString().slice(0, 16) : "",
+    capacity: event.capacity != null ? String(event.capacity) : "",
+    notes: event.notes ?? "",
+  };
+}
 
-// ─── Component ───
+function toRow(form: EventForm, weddingId: string, sortOrder: number) {
+  return {
+    wedding_id: weddingId,
+    name: form.name,
+    kind: form.kind,
+    starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : null,
+    venue_name: form.venue_name || null,
+    venue_address: form.venue_address || null,
+    maps_url: form.maps_url || null,
+    dress_code: form.dress_code || null,
+    description: form.description || null,
+    image_url: form.image_url,
+    rsvp_deadline: form.rsvp_deadline ? new Date(form.rsvp_deadline).toISOString() : null,
+    capacity: form.capacity ? parseInt(form.capacity, 10) : null,
+    notes: form.notes || null,
+    sort_order: sortOrder,
+  };
+}
+
 export function AdminEvents() {
   const { wedding, loading } = useHostWedding();
-  const theme: ThemeConfig = useMemo(() => getDraftTheme(wedding), [wedding]);
+  const theme = getDraftTheme(wedding);
 
   const [events, setEvents] = useState<WeddingEvent[]>([]);
   const [fetching, setFetching] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState<FormState>(emptyForm);
+  const [isCreating, setIsCreating] = useState(false);
+  const [form, setForm] = useState<EventForm>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WeddingEvent | null>(null);
 
-  const weddingId = wedding?.id ?? "";
+  const weddingId = wedding?.id ?? null;
 
-  // ─── Load events ───
-  const loadEvents = useCallback(async () => {
-    if (!weddingId) { setEvents([]); setFetching(false); return; }
+  const fetchEvents = useCallback(async () => {
+    if (!weddingId) return;
     setFetching(true);
     const { data, error } = await supabase
       .from("events")
@@ -110,158 +125,149 @@ export function AdminEvents() {
     setFetching(false);
   }, [weddingId]);
 
-  useEffect(() => { if (weddingId) loadEvents(); }, [weddingId, loadEvents]);
-
-  // ─── Helpers ───
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const editingEvent = useMemo(
-    () => events.find((e) => e.id === editingId) ?? null,
-    [events, editingId]
-  );
-
-  const startEdit = (e: WeddingEvent) => {
-    setForm(toForm(e));
-    setEditingId(e.id);
-    setCreating(false);
-  };
+  useEffect(() => {
+    if (weddingId) fetchEvents();
+  }, [weddingId, fetchEvents]);
 
   const startCreate = () => {
-    setForm(emptyForm);
-    setCreating(true);
+    setIsCreating(true);
     setEditingId(null);
+    setForm(emptyForm());
   };
 
-  const cancel = () => {
+  const startEdit = (event: WeddingEvent) => {
+    setEditingId(event.id);
+    setIsCreating(false);
+    setForm(toForm(event));
+  };
+
+  const cancelEdit = () => {
     setEditingId(null);
-    setCreating(false);
-    setForm(emptyForm);
+    setIsCreating(false);
+    setForm(emptyForm());
   };
 
-  // ─── Persist ───
-  const buildPayload = () => ({
-    wedding_id: weddingId,
-    name: form.name.trim(),
-    kind: form.kind,
-    starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : null,
-    venue_name: form.venue_name.trim() || null,
-    venue_address: form.venue_address.trim() || null,
-    maps_url: form.maps_url.trim() || null,
-    dress_code: form.dress_code.trim() || null,
-    description: form.description.trim() || null,
-    image_url: form.image_url,
-    rsvp_deadline: form.rsvp_deadline || null,
-    capacity: form.capacity ? Number(form.capacity) : null,
-    notes: form.notes.trim() || null,
-  });
-
-  const saveDraft = async () => {
-    if (!weddingId) return;
-    if (!form.name.trim()) { showToast("Event name is required", "error"); return; }
-    setSaving(true);
-    let error: { message: string } | null = null;
-    if (editingId) {
-      ({ error } = await supabase.from("events").update(buildPayload()).eq("id", editingId));
-    } else {
-      const sortMax = events.reduce((mx, e) => Math.max(mx, e.sort_order), -1);
-      ({ error } = await supabase.from("events").insert({ ...buildPayload(), sort_order: sortMax + 1 }).select().single());
+  const save = async () => {
+    if (!weddingId || !form.name.trim() || !form.starts_at) {
+      setToast({ message: "Name and start time are required", type: "error" });
+      return;
     }
-    setSaving(false);
-    if (error) { showToast(`Save failed: ${error.message}`, "error"); return; }
-    showToast("Event saved");
-    await loadEvents();
-  };
-
-  const publish = async () => {
-    if (!weddingId) return;
-    if (!form.name.trim()) { showToast("Event name is required", "error"); return; }
     setSaving(true);
-    let error: { message: string } | null = null;
-    const payload = { ...buildPayload(), visibility: "public" };
-    if (editingId) {
-      ({ error } = await supabase.from("events").update(payload).eq("id", editingId));
-    } else {
-      const sortMax = events.reduce((mx, e) => Math.max(mx, e.sort_order), -1);
-      ({ error } = await supabase.from("events").insert({ ...payload, sort_order: sortMax + 1 }).select().single());
+    if (isCreating) {
+      const maxSort = events.reduce((max, e) => Math.max(max, e.sort_order), -1);
+      const { error } = await supabase.from("events").insert(toRow(form, weddingId, maxSort + 1));
+      setSaving(false);
+      if (error) {
+        setToast({ message: "Failed to create event", type: "error" });
+      } else {
+        setToast({ message: "Event created", type: "success" });
+        cancelEdit();
+        await fetchEvents();
+      }
+    } else if (editingId) {
+      const existing = events.find((e) => e.id === editingId);
+      const sortOrder = existing?.sort_order ?? 0;
+      const { error } = await supabase
+        .from("events")
+        .update(toRow(form, weddingId, sortOrder))
+        .eq("id", editingId);
+      setSaving(false);
+      if (error) {
+        setToast({ message: "Failed to save event", type: "error" });
+      } else {
+        setToast({ message: "Event saved", type: "success" });
+        cancelEdit();
+        await fetchEvents();
+      }
     }
-    setSaving(false);
-    if (error) { showToast(`Publish failed: ${error.message}`, "error"); return; }
-    showToast("Event published");
-    await loadEvents();
-    cancel();
   };
 
-  const deleteEvent = async (e: WeddingEvent) => {
-    const { error } = await supabase.from("events").delete().eq("id", e.id);
-    if (error) { showToast(`Delete failed: ${error.message}`, "error"); return; }
-    showToast("Event deleted");
+  const deleteEvent = async (event: WeddingEvent) => {
+    const { error } = await supabase.from("events").delete().eq("id", event.id);
     setDeleteTarget(null);
-    await loadEvents();
+    if (error) {
+      setToast({ message: "Failed to delete event", type: "error" });
+    } else {
+      setToast({ message: "Event deleted", type: "success" });
+      if (editingId === event.id) cancelEdit();
+      await fetchEvents();
+    }
   };
 
-  // ─── Render ───
   if (loading || fetching) {
-    return (
-      <div className="flex items-center justify-center py-24 text-sepia">
-        <div className="animate-pulse">Loading events…</div>
-      </div>
-    );
+    return <div className="flex items-center justify-center py-24 text-sepia">Loading events…</div>;
   }
 
   if (!wedding) {
     return <EmptyState title="No wedding found" description="Create a wedding to manage events." />;
   }
 
-  // ─── Edit / Create view (SplitEditor with live preview) ───
-  if (editingId || creating) {
-    const isEditing = !!editingId;
-    const previewEvent = {
-      name: form.name || "Untitled Event",
-      kind: form.kind,
-      starts_at: form.starts_at || new Date().toISOString(),
-      venue_name: form.venue_name || null,
-      venue_address: form.venue_address || null,
-      dress_code: form.dress_code || null,
-      description: form.description || null,
-      maps_url: form.maps_url || null,
-      image_url: form.image_url,
-      rsvp_deadline: form.rsvp_deadline || null,
-    };
+  const isEditing = isCreating || editingId !== null;
 
-    return (
-      <div>
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={cancel}
-              className="text-sepia hover:text-onyx text-sm flex items-center gap-1.5 transition-colors"
-            >
-              ← Back to events
-            </button>
-            <span className="text-sepia/30">/</span>
-            <h1 className="text-xl font-serif text-onyx">
-              {isEditing ? "Edit Event" : "New Event"}
-            </h1>
-            {isEditing && <Badge variant={kindBadgeVariant(form.kind)}>{form.kind}</Badge>}
+  // Live preview event object derived from form
+  const previewEvent = {
+    name: form.name || "Untitled Event",
+    kind: form.kind,
+    starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : new Date().toISOString(),
+    venue_name: form.venue_name || null,
+    venue_address: form.venue_address || null,
+    dress_code: form.dress_code || null,
+    description: form.description || null,
+    maps_url: form.maps_url || null,
+    image_url: form.image_url,
+    rsvp_deadline: form.rsvp_deadline ? new Date(form.rsvp_deadline).toISOString() : null,
+  };
+
+  return (
+    <div>
+      <SectionTitle
+        title="Events"
+        subtitle="Manage the events that make up your wedding weekend."
+        action={
+          !isEditing && (
+            <Button onClick={startCreate}>
+              <Plus className="w-4 h-4" /> New Event
+            </Button>
+          )
+        }
+      />
+
+      {/* ─── Editing / Creating mode ─── */}
+      {isEditing ? (
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-serif text-onyx">
+              {isCreating ? "Create Event" : "Edit Event"}
+            </h2>
+            <Button variant="ghost" size="sm" onClick={cancelEdit}>
+              <X className="w-4 h-4" /> Close
+            </Button>
           </div>
-        </div>
 
-        <SplitEditor
-          editor={
-            <div className="space-y-5">
-              <Card className="p-5 space-y-5">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label>Event Name</Label>
-                    <Input
-                      value={form.name}
-                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                      placeholder="e.g. Wedding Ceremony"
-                    />
-                  </div>
+          <SplitEditor
+            previewLabel="Event Preview"
+            draftData={{ theme }}
+            actions={
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={cancelEdit} disabled={saving}>
+                  Cancel
+                </Button>
+                <Button variant="primary" size="sm" onClick={save} disabled={saving}>
+                  <Save className="w-4 h-4" /> Save
+                </Button>
+              </div>
+            }
+            editor={
+              <div className="space-y-5">
+                <div>
+                  <Label>Event Name</Label>
+                  <Input
+                    value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. Wedding Ceremony"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Kind</Label>
                     <Select
@@ -275,249 +281,209 @@ export function AdminEvents() {
                       ))}
                     </Select>
                   </div>
+                  <div>
+                    <Label>Starts At</Label>
+                    <Input
+                      type="datetime-local"
+                      value={form.starts_at}
+                      onChange={(e) => setForm((f) => ({ ...f, starts_at: e.target.value }))}
+                    />
+                  </div>
                 </div>
-
                 <div>
-                  <Label>Starts At</Label>
+                  <Label>Venue Name</Label>
                   <Input
-                    type="datetime-local"
-                    value={form.starts_at}
-                    onChange={(e) => setForm((f) => ({ ...f, starts_at: e.target.value }))}
+                    value={form.venue_name}
+                    onChange={(e) => setForm((f) => ({ ...f, venue_name: e.target.value }))}
+                    placeholder="e.g. St. Mary's Church"
                   />
                 </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <Label>Venue Name</Label>
-                    <Input
-                      value={form.venue_name}
-                      onChange={(e) => setForm((f) => ({ ...f, venue_name: e.target.value }))}
-                      placeholder="e.g. St. Mary's Church"
-                    />
-                  </div>
-                  <div>
-                    <Label>Venue Address</Label>
-                    <Input
-                      value={form.venue_address}
-                      onChange={(e) => setForm((f) => ({ ...f, venue_address: e.target.value }))}
-                      placeholder="123 Main St, City"
-                    />
-                  </div>
-                </div>
-
                 <div>
-                  <Label>Maps URL</Label>
+                  <Label>Venue Address</Label>
+                  <Input
+                    value={form.venue_address}
+                    onChange={(e) => setForm((f) => ({ ...f, venue_address: e.target.value }))}
+                    placeholder="123 Main Street, City"
+                  />
+                </div>
+                <div>
+                  <Label>Google Maps URL</Label>
                   <Input
                     value={form.maps_url}
                     onChange={(e) => setForm((f) => ({ ...f, maps_url: e.target.value }))}
                     placeholder="https://maps.google.com/…"
                   />
                 </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Dress Code</Label>
                     <Input
                       value={form.dress_code}
                       onChange={(e) => setForm((f) => ({ ...f, dress_code: e.target.value }))}
-                      placeholder="e.g. Black Tie"
+                      placeholder="Black Tie"
                     />
                   </div>
                   <div>
                     <Label>Capacity</Label>
                     <Input
                       type="number"
-                      min={0}
+                      min="0"
                       value={form.capacity}
                       onChange={(e) => setForm((f) => ({ ...f, capacity: e.target.value }))}
-                      placeholder="e.g. 150"
+                      placeholder="100"
                     />
                   </div>
                 </div>
-
                 <div>
                   <Label>RSVP Deadline</Label>
                   <Input
-                    type="date"
+                    type="datetime-local"
                     value={form.rsvp_deadline}
                     onChange={(e) => setForm((f) => ({ ...f, rsvp_deadline: e.target.value }))}
                   />
                 </div>
-
                 <div>
                   <Label>Description</Label>
                   <Textarea
-                    rows={4}
                     value={form.description}
                     onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                    placeholder="A short description of this event…"
+                    placeholder="Tell guests what to expect…"
+                    rows={4}
                   />
                 </div>
-
                 <div>
                   <Label>Event Image</Label>
                   <ImageUpload
-                    weddingId={weddingId}
+                    weddingId={wedding.id}
                     value={form.image_url}
                     onChange={(url) => setForm((f) => ({ ...f, image_url: url }))}
+                    label="Event image"
                   />
                 </div>
-
                 <div>
                   <Label>Notes (internal)</Label>
                   <Textarea
-                    rows={3}
                     value={form.notes}
                     onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                    placeholder="Internal notes, not shown to guests…"
+                    placeholder="Private notes not shown to guests…"
+                    rows={3}
                   />
                 </div>
-              </Card>
-            </div>
-          }
-          preview={
-            <EventCardPreview event={previewEvent} theme={theme} />
-          }
-          previewLabel="Guest Preview"
-          actions={
-            <>
-              <Button variant="outline" onClick={cancel}>Cancel</Button>
-              <Button variant="secondary" onClick={saveDraft} disabled={saving}>
-                <Save className="w-4 h-4" /> Save Draft
-              </Button>
-              <Button onClick={publish} disabled={saving}>
-                <Send className="w-4 h-4" /> Publish
-              </Button>
-            </>
-          }
-        />
-
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      </div>
-    );
-  }
-
-  // ─── List view ───
-  return (
-    <div>
-      <SectionTitle
-        title="Events"
-        subtitle="Manage the events that appear on your wedding website."
-        action={
-          <Button onClick={startCreate}>
-            <Plus className="w-4 h-4" /> New Event
-          </Button>
-        }
-      />
-
-      {events.length === 0 ? (
-        <EmptyState
-          title="No events yet"
-          description="Create your first event to share details with your guests."
-          action={
-            <Button onClick={startCreate}>
-              <Plus className="w-4 h-4" /> Create Event
-            </Button>
-          }
-        />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {events.map((e) => (
-            <Card key={e.id} className="overflow-hidden flex flex-col">
-              {e.image_url ? (
-                <div className="relative h-32 overflow-hidden">
-                  <img src={e.image_url} alt="" className="w-full h-full object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/20" />
-                  <Badge
-                    variant={kindBadgeVariant(e.kind)}
-                    className="absolute top-2 right-2 bg-white/90"
-                  >
-                    {e.kind}
-                  </Badge>
-                </div>
-              ) : (
-                <div className="h-20 bg-mist flex items-center justify-center">
-                  <Badge variant={kindBadgeVariant(e.kind)}>{e.kind}</Badge>
-                </div>
-              )}
-
-              <div className="p-5 flex flex-col flex-1">
-                <h3 className="font-serif text-lg text-onyx mb-2 truncate">{e.name}</h3>
-
-                <div className="space-y-1.5 text-sm text-sepia/80 flex-1">
-                  {e.starts_at && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 text-sepia/50" />
-                      <span>{formatDateShort(e.starts_at)}</span>
-                      <Clock className="w-3.5 h-3.5 text-sepia/50 ml-1" />
-                      <span>{formatTime(e.starts_at)}</span>
-                    </div>
-                  )}
-                  {e.venue_name && (
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-sepia/50" />
-                      <span className="truncate">{e.venue_name}</span>
-                    </div>
-                  )}
-                  {e.dress_code && (
-                    <div className="flex items-center gap-2">
-                      <span className="w-3.5 h-3.5 text-sepia/50 text-xs">◈</span>
-                      <span className="truncate">{e.dress_code}</span>
-                    </div>
-                  )}
-                  {e.capacity != null && (
-                    <div className="flex items-center gap-2">
-                      <Users className="w-3.5 h-3.5 text-sepia/50" />
-                      <span>{e.capacity} guests</span>
-                    </div>
-                  )}
-                </div>
-
-                {e.description && (
-                  <p className="text-sm text-sepia/60 line-clamp-2 mt-3">{e.description}</p>
-                )}
-
-                <div className="flex items-center gap-2 mt-4 pt-4 border-t border-sand">
-                  <Button size="sm" variant="outline" onClick={() => startEdit(e)}>
-                    <Edit2 className="w-3.5 h-3.5" /> Edit
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => startEdit(e)}>
-                    <Eye className="w-3.5 h-3.5" /> Preview
-                  </Button>
-                  <button
-                    onClick={() => setDeleteTarget(e)}
-                    className="ml-auto text-sepia/50 hover:text-red-600 transition-colors p-1.5 rounded-lg hover:bg-red-50"
-                    title="Delete event"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
               </div>
-            </Card>
-          ))}
-        </div>
+            }
+            preview={
+              <EventCardPreview event={previewEvent} theme={theme} />
+            }
+          />
+        </Card>
+      ) : (
+        /* ─── Grid mode ─── */
+        <>
+          {events.length === 0 ? (
+            <EmptyState
+              title="No events yet"
+              description="Add your ceremony, reception, and other events for guests to see."
+              action={
+                <Button onClick={startCreate}>
+                  <Plus className="w-4 h-4" /> New Event
+                </Button>
+              }
+            />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {events.map((event) => (
+                <Card key={event.id} className="overflow-hidden flex flex-col">
+                  {event.image_url ? (
+                    <div className="relative h-36 overflow-hidden">
+                      <img src={event.image_url} alt="" className="w-full h-full object-cover" />
+                      <div className="absolute top-2 right-2">
+                        <Badge variant={KIND_COLORS[event.kind] ?? "default"}>
+                          {event.kind}
+                        </Badge>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative h-36 bg-gradient-to-br from-mist to-sand/40 flex items-center justify-center">
+                      <Calendar className="w-8 h-8 text-sepia/40" />
+                      <div className="absolute top-2 right-2">
+                        <Badge variant={KIND_COLORS[event.kind] ?? "default"}>
+                          {event.kind}
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-4 flex-1 flex flex-col">
+                    <h3 className="font-serif text-base text-onyx mb-2">{event.name}</h3>
+                    <div className="space-y-1.5 text-sm text-sepia/70 flex-1">
+                      {event.starts_at && (
+                        <div className="flex items-center gap-2">
+                          <Calendar className="w-3.5 h-3.5 shrink-0" />
+                          <span>{formatDate(event.starts_at)}</span>
+                        </div>
+                      )}
+                      {event.starts_at && (
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-3.5 h-3.5 shrink-0" />
+                          <span>{formatTime(event.starts_at)}</span>
+                        </div>
+                      )}
+                      {event.venue_name && (
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{event.venue_name}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-sand">
+                      <span className="text-xs text-sepia/50">
+                        {event.capacity != null ? `${event.capacity} guests` : "No limit"}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => startEdit(event)}>
+                          <Pencil className="w-3.5 h-3.5" /> Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteTarget(event)}
+                          className="text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      {/* ─── Delete confirmation modal ─── */}
+      {/* ─── Delete confirm modal ─── */}
       <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Event">
-        <div className="space-y-4">
-          <p className="text-sm text-sepia">
-            Are you sure you want to delete{" "}
-            <span className="font-medium text-onyx">{deleteTarget?.name}</span>?
-            This action cannot be undone.
-          </p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button variant="danger" onClick={() => deleteTarget && deleteEvent(deleteTarget)}>
-              <Trash2 className="w-4 h-4" /> Delete
-            </Button>
-          </div>
+        <p className="text-sm text-sepia mb-6">
+          Are you sure you want to delete{" "}
+          <span className="font-medium text-onyx">{deleteTarget?.name}</span>? This cannot be undone.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button variant="danger" onClick={() => deleteTarget && deleteEvent(deleteTarget)}>
+            <Trash2 className="w-4 h-4" /> Delete
+          </Button>
         </div>
       </Modal>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {/* ─── Toast ─── */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }
-
-export default AdminEvents;

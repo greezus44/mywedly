@@ -1,168 +1,166 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MapPin, ExternalLink, Plane, Hotel, Car, Utensils, Compass } from "lucide-react";
+import { Hotel, Plane, Car, Bus, MapPin, ExternalLink, Compass, Utensils } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { TravelItem, WebsiteContent } from "@/lib/supabase";
 import { useGuestData } from "@/lib/use-guest-data";
 import { getTheme, themeToCssVars } from "@/lib/theme";
-import type { ThemeConfig } from "@/lib/theme";
 import { Card, EmptyState } from "@/components/ui";
 
-const KIND_ICONS: Record<string, React.ReactNode> = {
-  hotel: <Hotel className="w-5 h-5" />,
-  accommodation: <Hotel className="w-5 h-5" />,
-  flight: <Plane className="w-5 h-5" />,
-  transport: <Car className="w-5 h-5" />,
-  restaurant: <Utensils className="w-5 h-5" />,
-  dining: <Utensils className="w-5 h-5" />,
-  attraction: <Compass className="w-5 h-5" />,
-  other: <MapPin className="w-5 h-5" />,
+const KIND_META: Record<string, { label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }> = {
+  hotel: { label: "Accommodation", icon: Hotel },
+  airport: { label: "Airport", icon: Plane },
+  parking: { label: "Parking", icon: Car },
+  transport: { label: "Transportation", icon: Bus },
+  attraction: { label: "Attractions", icon: Compass },
+  restaurant: { label: "Dining", icon: Utensils },
 };
 
-const KIND_LABELS: Record<string, string> = {
-  hotel: "Accommodation",
-  accommodation: "Accommodation",
-  flight: "Flights",
-  transport: "Transportation",
-  restaurant: "Dining",
-  dining: "Dining",
-  attraction: "Things to Do",
-  other: "Information",
-};
+const KIND_ORDER = ["hotel", "airport", "parking", "transport", "restaurant", "attraction"];
 
 export function GuestTravel() {
   const { wedding, loading } = useGuestData();
-  const theme: ThemeConfig = useMemo(() => getTheme(wedding), [wedding]);
-  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
 
   const [travelItems, setTravelItems] = useState<TravelItem[]>([]);
   const [content, setContent] = useState<WebsiteContent | null>(null);
   const [fetching, setFetching] = useState(true);
 
-  const weddingId = wedding?.id ?? "";
+  const theme = useMemo(() => getTheme(wedding), [wedding]);
+  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
 
-  const loadAll = useCallback(async () => {
-    if (!weddingId) { setFetching(false); return; }
+  const weddingId = wedding?.id ?? null;
+
+  const fetchAll = useCallback(async () => {
+    if (!weddingId) return;
     setFetching(true);
-    const [items, contentRes] = await Promise.all([
+    const [tRes, cRes] = await Promise.all([
       supabase.from("travel_items").select("*").eq("wedding_id", weddingId).order("sort_order", { ascending: true }),
-      supabase.from("website_content")
-        .select("*")
-        .eq("wedding_id", weddingId)
-        .eq("section", "travel")
-        .eq("is_published", true)
-        .order("sort_order", { ascending: true })
-        .limit(1)
-        .maybeSingle(),
+      supabase.from("website_content").select("*").eq("wedding_id", weddingId).eq("section", "travel").maybeSingle(),
     ]);
-    if (items.data) setTravelItems(items.data as TravelItem[]);
-    if (contentRes.data) setContent(contentRes.data as WebsiteContent);
+    setTravelItems((tRes.data ?? []) as TravelItem[]);
+    setContent((cRes.data as WebsiteContent) ?? null);
     setFetching(false);
   }, [weddingId]);
 
-  useEffect(() => { if (weddingId) loadAll(); }, [weddingId, loadAll]);
-
-  // ─── Group items by kind ───
-  const groupedItems = useMemo(() => {
-    const map = new Map<string, TravelItem[]>();
-    for (const item of travelItems) {
-      const key = item.kind || "other";
-      const arr = map.get(key) ?? [];
-      arr.push(item);
-      map.set(key, arr);
-    }
-    return map;
-  }, [travelItems]);
+  useEffect(() => {
+    if (weddingId) fetchAll();
+  }, [weddingId, fetchAll]);
 
   if (loading || fetching) {
     return (
-      <div className="flex items-center justify-center py-24 text-sepia">
-        <div className="animate-pulse">Loading travel info…</div>
+      <div className="flex items-center justify-center py-24 text-sepia animate-fade-in">
+        Loading travel info…
       </div>
     );
   }
 
   if (!wedding) {
-    return <EmptyState title="No wedding found" />;
+    return <EmptyState title="Wedding Not Found" description="We couldn't find the wedding you're looking for." />;
   }
 
-  const hasContent = content?.body || content?.title;
-  const hasItems = travelItems.length > 0;
+  // Group items by kind
+  const grouped = travelItems.reduce<Record<string, TravelItem[]>>((acc, item) => {
+    (acc[item.kind] ??= []).push(item);
+    return acc;
+  }, {});
 
-  if (!hasContent && !hasItems) {
+  const sectionTitle = content?.title ?? "Travel & Accommodation";
+  const sectionBody = content?.body ?? null;
+
+  if (travelItems.length === 0 && !sectionBody) {
     return (
-      <div style={cssVars as React.CSSProperties} className="animate-fade-in px-6 py-12">
-        <div className="max-w-2xl mx-auto">
+      <div style={cssVars as React.CSSProperties} className="animate-fade-in">
+        <section className="px-6 py-24 text-center" style={{ background: "var(--c-background)" }}>
           <EmptyState
             title="Travel info coming soon"
             description="Check back later for accommodation and travel details."
           />
-        </div>
+        </section>
       </div>
     );
   }
 
   return (
-    <div style={cssVars as React.CSSProperties} className="animate-fade-in px-6 py-12">
-      <div className="max-w-4xl mx-auto">
-        {/* ─── Header ─── */}
-        <div className="text-center mb-12">
-          <Plane className="w-6 h-6 mx-auto mb-3" style={{ color: "var(--c-accent)" }} />
-          <p className="text-xs uppercase tracking-[0.3em] mb-2" style={{ color: "var(--c-textMuted)" }}>
-            Plan your trip
-          </p>
-          <h1 className="text-4xl font-serif" style={{ color: "var(--c-text)" }}>
-            {content?.title || "Travel & Accommodation"}
-          </h1>
-          {wedding.location && (
-            <p className="text-sm mt-2 flex items-center justify-center gap-1.5" style={{ color: "var(--c-textMuted)" }}>
-              <MapPin className="w-4 h-4" /> {wedding.location}
-            </p>
-          )}
+    <div style={cssVars as React.CSSProperties} className="animate-fade-in">
+      {/* ── Header ── */}
+      <section className="px-6 pt-16 pb-8 text-center" style={{ background: "var(--c-background)" }}>
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-4" style={{ background: "var(--c-secondary)" }}>
+          <MapPin className="w-6 h-6" style={{ color: "var(--c-accent)" }} />
         </div>
+        <p className="text-xs uppercase tracking-[0.3em] mb-3" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
+          Plan your trip
+        </p>
+        <h1 className="text-4xl md:text-5xl font-serif" style={{ color: "var(--c-text)", fontFamily: "var(--f-heading)", fontStyle: "var(--f-style)" }}>
+          {sectionTitle}
+        </h1>
+      </section>
 
-        {/* ─── Intro content ─── */}
-        {content?.body && (
-          <div className="mb-12 text-center max-w-2xl mx-auto">
+      {/* ── Intro body ── */}
+      {sectionBody && (
+        <section className="px-6 pb-8" style={{ background: "var(--c-background)" }}>
+          <div className="max-w-2xl mx-auto text-center">
             <p
-              className="whitespace-pre-line text-base leading-relaxed"
-              style={{ color: "var(--c-textMuted)" }}
+              className="text-base leading-relaxed whitespace-pre-line"
+              style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}
             >
-              {content.body}
+              {sectionBody}
             </p>
           </div>
-        )}
+        </section>
+      )}
 
-        {/* ─── Travel items grouped by kind ─── */}
-        {hasItems && (
-          <div className="space-y-10">
-            {Array.from(groupedItems.entries()).map(([kind, items]) => (
-              <div key={kind}>
-                <div className="flex items-center gap-2 mb-4">
-                  <span style={{ color: "var(--c-primary)" }}>
-                    {KIND_ICONS[kind] ?? KIND_ICONS.other}
-                  </span>
-                  <h2 className="text-xl font-serif" style={{ color: "var(--c-text)" }}>
-                    {KIND_LABELS[kind] ?? kind}
+      {/* ── Travel items grouped by kind ── */}
+      <section className="px-6 pb-16 md:pb-24" style={{ background: "var(--c-background)" }}>
+        <div className="max-w-5xl mx-auto space-y-10">
+          {KIND_ORDER.filter((kind) => grouped[kind]?.length).map((kind) => {
+            const meta = KIND_META[kind];
+            const items = grouped[kind];
+            const Icon = meta.icon;
+
+            return (
+              <div key={kind} className="animate-fade-in">
+                {/* Kind header */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center"
+                    style={{ background: "var(--c-secondary)" }}
+                  >
+                    <Icon className="w-5 h-5" style={{ color: "var(--c-primary)" }} />
+                  </div>
+                  <h2
+                    className="text-2xl font-serif"
+                    style={{ color: "var(--c-text)", fontFamily: "var(--f-heading)" }}
+                  >
+                    {meta.label}
                   </h2>
-                  <span className="h-px flex-1" style={{ background: "var(--c-secondary)" }} />
                 </div>
 
+                {/* Items grid */}
                 <div className="grid gap-4 sm:grid-cols-2">
                   {items.map((item) => (
-                    <Card key={item.id} className="p-5 flex flex-col">
-                      <h3 className="text-lg font-serif mb-2" style={{ color: "var(--c-text)" }}>
+                    <Card
+                      key={item.id}
+                      className="p-5 flex flex-col"
+                      style={{ borderColor: "var(--c-secondary)", background: "var(--c-card)" } as React.CSSProperties}
+                    >
+                      <h3
+                        className="text-lg font-serif mb-2"
+                        style={{ color: "var(--c-text)", fontFamily: "var(--f-heading)" }}
+                      >
                         {item.title}
                       </h3>
 
                       {item.description && (
-                        <p className="text-sm mb-3 whitespace-pre-line" style={{ color: "var(--c-textMuted)" }}>
+                        <p
+                          className="text-sm leading-relaxed mb-3 flex-1"
+                          style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}
+                        >
                           {item.description}
                         </p>
                       )}
 
                       {item.address && (
-                        <div className="flex items-start gap-2 text-sm mb-2" style={{ color: "var(--c-textMuted)" }}>
-                          <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <div className="flex items-start gap-2 text-sm mb-2" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
+                          <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
                           <span>{item.address}</span>
                         </div>
                       )}
@@ -172,8 +170,8 @@ export function GuestTravel() {
                           href={item.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-sm mt-auto pt-2 transition-colors hover:underline"
-                          style={{ color: "var(--c-link)" }}
+                          className="inline-flex items-center gap-1 text-sm hover:underline mt-auto"
+                          style={{ color: "var(--c-link)", fontFamily: "var(--f-body)" }}
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
                           Visit website
@@ -183,12 +181,10 @@ export function GuestTravel() {
                   ))}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }
-
-export default GuestTravel;

@@ -1,7 +1,8 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Calendar, MapPin, ChevronDown } from "lucide-react";
-import { supabase, type Wedding } from "@/lib/supabase";
+import { Calendar, MapPin } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import type { Wedding } from "@/lib/supabase";
 import { getTheme, getCoverContent, themeToCssVars } from "@/lib/theme";
 import { daysUntil, formatDate, cn } from "@/lib/utils";
 
@@ -12,14 +13,10 @@ export function GuestCover() {
   const [wedding, setWedding] = useState<Wedding | null>(null);
   const [loading, setLoading] = useState(true);
   const [scrollY, setScrollY] = useState(0);
-  const [mounted, setMounted] = useState(false);
 
+  // ── Fetch wedding by slug ──
   useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!slug) { setLoading(false); return; }
+    if (!slug) return;
     supabase
       .from("weddings")
       .select("*")
@@ -31,7 +28,7 @@ export function GuestCover() {
       });
   }, [slug]);
 
-  // Parallax scroll effect
+  // ── Parallax scroll listener ──
   useEffect(() => {
     const onScroll = () => setScrollY(window.scrollY);
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -42,71 +39,57 @@ export function GuestCover() {
   const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
   const content = useMemo(() => getCoverContent(wedding), [wedding]);
 
-  const bgUrl = content.cover_background_url || wedding?.hero_image_url;
-  const videoUrl = content.cover_background_video_url;
+  const bgUrl = content.cover_background_url || wedding?.hero_image_url || null;
+  const videoUrl = content.cover_background_video_url || null;
   const overlay = content.cover_overlay_opacity ?? 0.3;
   const textAlign = content.cover_text_align ?? "center";
   const logoVisible = content.cover_logo_visible !== false;
-  const logoUrl = content.cover_logo_url;
+  const logoUrl = content.cover_logo_url || null;
   const logoSize = content.cover_logo_size ?? "80px";
   const logoPos = content.cover_logo_position ?? "center";
   const countdownEnabled = content.cover_countdown_enabled !== false;
-  const heading =
-    content.cover_heading ||
-    (wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "");
-  const subtitle = content.cover_subtitle;
-  const welcome = content.cover_welcome;
+  const heading = content.cover_heading || (wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "");
+  const subtitle = content.cover_subtitle || null;
+  const welcome = content.cover_welcome || null;
   const buttonText = content.cover_button_text || "Enter Website";
-  const mainHeading = content.cover_main_heading;
+  const mainHeading = content.cover_main_heading || null;
   const dUntil = daysUntil(wedding?.wedding_date ?? null);
-
-  const alignClass =
-    textAlign === "left"
-      ? "items-start text-left"
-      : textAlign === "right"
-        ? "items-end text-right"
-        : "items-center text-center";
-
-  const logoAlign =
-    logoPos === "left"
-      ? "self-start"
-      : logoPos === "right"
-        ? "self-end"
-        : "self-center";
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-onyx">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          <p className="text-sm text-white/60" style={{ fontFamily: "var(--f-body, sans-serif)" }}>
-            Loading…
-          </p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--c-background, #fdfcf9)" }}>
+        <p className="text-sm tracking-widest uppercase animate-pulse" style={{ color: "var(--c-textMuted, #8c7e6a)", fontFamily: "var(--f-body, sans-serif)" }}>
+          Loading…
+        </p>
       </div>
     );
   }
 
   if (!wedding) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-onyx text-center px-6">
-        <div>
-          <h1 className="font-serif text-3xl text-white mb-3">Wedding Not Found</h1>
-          <p className="text-white/60 text-sm">The wedding you're looking for doesn't exist or has been removed.</p>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--c-background, #fdfcf9)" }}>
+        <div className="text-center px-6">
+          <h1 className="text-3xl mb-2" style={{ fontFamily: "var(--f-heading, serif)" }}>Wedding Not Found</h1>
+          <p className="text-sm" style={{ color: "var(--c-textMuted, #8c7e6a)", fontFamily: "var(--f-body, sans-serif)" }}>
+            We couldn't find the wedding you're looking for.
+          </p>
         </div>
       </div>
     );
   }
+
+  const alignClass = textAlign === "left" ? "items-start text-left" : textAlign === "right" ? "items-end text-right" : "items-center text-center";
+  const logoAlign = logoPos === "left" ? "self-start" : logoPos === "right" ? "self-end" : "self-center";
 
   return (
     <div
       className="relative min-h-screen w-full overflow-hidden"
       style={cssVars as React.CSSProperties}
     >
-      {/* ─── Background layer (parallax) ─── */}
+      {/* ── Background layer with parallax ── */}
       <div
-        className="absolute inset-0 z-0"
-        style={{ transform: `translateY(${scrollY * 0.4}px)`, willChange: "transform" }}
+        className="absolute inset-0 will-change-transform"
+        style={{ transform: `translateY(${scrollY * 0.4}px) scale(1.1)` }}
       >
         {videoUrl ? (
           <video
@@ -122,95 +105,82 @@ export function GuestCover() {
             src={bgUrl}
             alt=""
             className="absolute inset-0 w-full h-full object-cover"
-            style={{ transform: `scale(1.1)` }}
           />
         ) : (
           <div
             className="absolute inset-0"
-            style={{
-              background: `linear-gradient(135deg, var(--c-secondary), var(--c-accent))`,
-            }}
+            style={{ background: "linear-gradient(135deg, var(--c-secondary), var(--c-accent))" }}
           />
         )}
       </div>
 
-      {/* ─── Overlay ─── */}
+      {/* ── Overlay ── */}
       <div
-        className="absolute inset-0 z-10"
+        className="absolute inset-0"
         style={{ background: `rgba(0,0,0,${overlay})` }}
       />
 
-      {/* ─── Content ─── */}
+      {/* ── Content ── */}
       <div
-        className={cn(
-          "relative z-20 flex flex-col justify-center min-h-screen px-6 py-20",
-          alignClass,
-          mounted && "animate-fade-in"
-        )}
-        style={{ maxWidth: "640px", margin: textAlign === "center" ? "0 auto" : textAlign === "right" ? "0 0 0 auto" : "0 auto 0 0" }}
+        className={cn("relative z-10 flex flex-col justify-center min-h-screen px-6 py-20 animate-fade-in", alignClass)}
+        style={{ maxWidth: "42rem", margin: "0 auto" }}
       >
-        {/* Logo / monogram */}
         {logoVisible && logoUrl && (
           <img
             src={logoUrl}
             alt="monogram"
-            className={cn("mb-6", logoAlign)}
+            className={cn("mb-6 animate-slide-up", logoAlign)}
             style={{ width: logoSize, maxWidth: "120px", height: "auto" }}
           />
         )}
 
-        {/* Main heading (e.g. "We're getting married") */}
         {mainHeading && (
           <p
-            className="text-xs uppercase tracking-[0.3em] mb-4"
-            style={{ color: "rgba(255,255,255,0.8)", fontFamily: "var(--f-body)" }}
+            className="text-xs uppercase tracking-[0.3em] mb-4 animate-slide-up"
+            style={{ color: "rgba(255,255,255,0.8)", fontFamily: "var(--f-body)", animationDelay: "0.1s", opacity: 0 }}
           >
             {mainHeading}
           </p>
         )}
 
-        {/* Couple names in script font */}
         <h1
-          className="font-script leading-tight mb-3"
+          className="leading-tight mb-3 animate-slide-up"
           style={{
             color: "white",
             fontSize: "clamp(2.5rem, 7vw, 4.5rem)",
             fontFamily: "var(--f-heading)",
             fontStyle: "var(--f-style)",
             textShadow: "0 2px 20px rgba(0,0,0,0.3)",
+            animationDelay: "0.2s",
+            opacity: 0,
           }}
         >
           {heading}
         </h1>
 
-        {/* Subtitle */}
         {subtitle && (
           <p
-            className="text-base mb-4"
-            style={{ color: "rgba(255,255,255,0.85)", fontFamily: "var(--f-body)" }}
+            className="text-base mb-4 animate-slide-up"
+            style={{ color: "rgba(255,255,255,0.85)", fontFamily: "var(--f-body)", animationDelay: "0.3s", opacity: 0 }}
           >
             {subtitle}
           </p>
         )}
 
-        {/* Wedding date */}
-        {wedding.wedding_date && (
-          <div
-            className="flex items-center gap-2 mb-2"
-            style={{ color: "rgba(255,255,255,0.9)" }}
-          >
-            <Calendar className="w-4 h-4" />
-            <span className="text-sm" style={{ fontFamily: "var(--f-body)" }}>
-              {formatDate(wedding.wedding_date)}
-            </span>
-          </div>
-        )}
+        <div
+          className="flex items-center gap-2 mb-2 animate-slide-up"
+          style={{ color: "rgba(255,255,255,0.9)", animationDelay: "0.4s", opacity: 0, justifyContent: textAlign === "left" ? "flex-start" : textAlign === "right" ? "flex-end" : "center" }}
+        >
+          <Calendar className="w-4 h-4" />
+          <span className="text-sm" style={{ fontFamily: "var(--f-body)" }}>
+            {formatDate(wedding.wedding_date)}
+          </span>
+        </div>
 
-        {/* Location */}
         {wedding.location && (
           <div
-            className="flex items-center gap-2 mb-4"
-            style={{ color: "rgba(255,255,255,0.9)" }}
+            className="flex items-center gap-2 mb-5 animate-slide-up"
+            style={{ color: "rgba(255,255,255,0.9)", animationDelay: "0.5s", opacity: 0, justifyContent: textAlign === "left" ? "flex-start" : textAlign === "right" ? "flex-end" : "center" }}
           >
             <MapPin className="w-4 h-4" />
             <span className="text-sm" style={{ fontFamily: "var(--f-body)" }}>
@@ -219,58 +189,55 @@ export function GuestCover() {
           </div>
         )}
 
-        {/* Welcome message */}
         {welcome && (
           <p
-            className="text-sm max-w-md mb-6 leading-relaxed"
-            style={{ color: "rgba(255,255,255,0.8)", fontFamily: "var(--f-body)" }}
+            className="text-sm max-w-md mb-6 animate-slide-up"
+            style={{ color: "rgba(255,255,255,0.8)", fontFamily: "var(--f-body)", lineHeight: 1.7, animationDelay: "0.6s", opacity: 0, textAlign }}
           >
             {welcome}
           </p>
         )}
 
-        {/* Countdown timer */}
         {countdownEnabled && dUntil !== null && dUntil > 0 && (
           <div
-            className="mb-6 inline-flex items-baseline gap-2 px-5 py-2.5 rounded-full"
+            className="mb-6 inline-flex items-baseline gap-1 px-5 py-2.5 rounded-full animate-slide-up"
             style={{
               background: "rgba(255,255,255,0.15)",
-              color: "white",
               backdropFilter: "blur(8px)",
+              color: "white",
+              animationDelay: "0.7s",
+              opacity: 0,
+              alignSelf: textAlign === "left" ? "flex-start" : textAlign === "right" ? "flex-end" : "center",
             }}
           >
-            <span
-              className="text-2xl font-serif"
-              style={{ fontFamily: "var(--f-heading)" }}
-            >
-              {dUntil}
-            </span>
-            <span className="text-xs uppercase tracking-widest" style={{ fontFamily: "var(--f-body)" }}>
-              days to go
-            </span>
+            <span className="text-2xl" style={{ fontFamily: "var(--f-heading)" }}>{dUntil}</span>
+            <span className="text-xs ml-1" style={{ fontFamily: "var(--f-body)" }}>days to go</span>
           </div>
         )}
 
-        {/* Enter Website button */}
         <button
           onClick={() => navigate(`/w/${slug}/signin`)}
-          className="group inline-flex items-center gap-2 px-8 py-3 text-sm font-medium tracking-wide transition-all duration-300 hover:scale-105"
+          className="px-8 py-3 text-sm font-medium tracking-wide transition-all duration-300 hover:scale-105 animate-slide-up"
           style={{
             background: "rgba(255,255,255,0.95)",
             color: "var(--c-text)",
             borderRadius: "var(--ui-radius)",
             fontFamily: "var(--f-body)",
             boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
+            animationDelay: "0.8s",
+            opacity: 0,
+            alignSelf: textAlign === "left" ? "flex-start" : textAlign === "right" ? "flex-end" : "center",
           }}
         >
           {buttonText}
-          <ChevronDown className="w-4 h-4 transition-transform group-hover:translate-y-0.5" />
         </button>
       </div>
 
-      {/* ─── Scroll indicator ─── */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 animate-bounce">
-        <ChevronDown className="w-6 h-6 text-white/50" />
+      {/* ── Scroll indicator ── */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 animate-bounce">
+        <div className="w-6 h-10 rounded-full border-2 border-white/50 flex items-start justify-center p-1">
+          <div className="w-1 h-2 rounded-full bg-white/70" />
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Palette, Check, Save, RotateCcw, Type, Square, Layers, Send } from "lucide-react";
+import { useState, useMemo, useCallback } from "react";
+import { Palette, Check, Save, RotateCcw, Send } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Wedding } from "@/lib/supabase";
 import { useHostWedding } from "@/lib/use-host-wedding";
@@ -7,17 +7,10 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label, Select } from "@/components/ui/Input";
 import { Card, SectionTitle, Toast, Badge } from "@/components/ui";
 import { SplitEditor } from "@/components/preview/SplitEditor";
+import { NavPreview, HomePreview, FooterPreview } from "@/components/preview/PreviewRenderers";
 import {
-  HomePreview,
-  NavPreview,
-  FooterPreview,
-} from "@/components/preview/PreviewRenderers";
-import {
-  type ThemeConfig,
-  DEFAULT_THEME,
-  THEME_PRESETS,
-  FONT_OPTIONS,
-  getDraftTheme,
+  type ThemeConfig, DEFAULT_THEME, THEME_PRESETS, FONT_OPTIONS,
+  getDraftTheme, themeToCssVars,
 } from "@/lib/theme";
 
 // ─── Color field metadata ───
@@ -31,182 +24,161 @@ const COLOR_FIELDS: { key: keyof ThemeConfig["colors"]; label: string }[] = [
   { key: "buttonText", label: "Button Text" },
   { key: "link", label: "Link" },
   { key: "text", label: "Text" },
-  { key: "textMuted", label: "Text Muted" },
+  { key: "textMuted", label: "Muted Text" },
   { key: "navBg", label: "Nav Background" },
   { key: "navText", label: "Nav Text" },
   { key: "footerBg", label: "Footer Background" },
   { key: "footerText", label: "Footer Text" },
 ];
 
-const WEIGHT_OPTIONS = ["300", "400", "500", "600", "700"];
-const SHADOW_OPTIONS: { value: ThemeConfig["ui"]["shadowIntensity"]; label: string }[] = [
-  { value: "none", label: "None" },
-  { value: "soft", label: "Soft" },
-  { value: "medium", label: "Medium" },
-  { value: "strong", label: "Strong" },
-];
+const HEADING_WEIGHTS = ["300", "400", "500", "600", "700"];
+const BODY_WEIGHTS = ["300", "400", "500", "600"];
+const SHADOW_OPTIONS: ThemeConfig["ui"]["shadowIntensity"][] = ["none", "soft", "medium", "strong"];
+const RADIUS_OPTIONS = ["0rem", "0.25rem", "0.375rem", "0.5rem", "0.75rem", "1rem", "1.5rem"];
+const SPACING_OPTIONS = ["2rem", "3rem", "4rem", "5rem", "6rem", "8rem"];
 
 export function AdminThemeEditor() {
   const { wedding, loading, setWedding } = useHostWedding();
-
-  // Local theme state — initialized from the wedding's draft (or published) theme.
-  const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
+  const [theme, setTheme] = useState<ThemeConfig>(() => getDraftTheme(wedding));
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<"draft" | "publish" | null>(null);
 
-  // Initialize theme once the wedding loads.
-  useEffect(() => {
-    if (wedding) setTheme(getDraftTheme(wedding));
-  }, [wedding?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Re-init theme once wedding loads
+  const loadedKey = wedding?.id;
+  const [initKey, setInitKey] = useState<string | undefined>(undefined);
+  if (loadedKey && initKey !== loadedKey) {
+    setInitKey(loadedKey);
+    setTheme(getDraftTheme(wedding));
+  }
 
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+  const coupleNames = useMemo(() => {
+    if (!wedding) return "Our Wedding";
+    return `${wedding.couple_name_one} & ${wedding.couple_name_two}`;
+  }, [wedding]);
 
-  // ─── Mutators ───
-  const setColor = (key: keyof ThemeConfig["colors"], value: string) =>
+  // ─── Update helpers ───
+  const updateColor = useCallback((key: keyof ThemeConfig["colors"], value: string) => {
     setTheme((t) => ({ ...t, colors: { ...t.colors, [key]: value }, preset: undefined }));
+  }, []);
 
-  const setTypo = <K extends keyof ThemeConfig["typography"]>(key: K, value: ThemeConfig["typography"][K]) =>
+  const updateTypography = useCallback(<K extends keyof ThemeConfig["typography"]>(
+    key: K, value: ThemeConfig["typography"][K],
+  ) => {
     setTheme((t) => ({ ...t, typography: { ...t.typography, [key]: value }, preset: undefined }));
+  }, []);
 
-  const setUi = <K extends keyof ThemeConfig["ui"]>(key: K, value: ThemeConfig["ui"][K]) =>
+  const updateUi = useCallback(<K extends keyof ThemeConfig["ui"]>(
+    key: K, value: ThemeConfig["ui"][K],
+  ) => {
     setTheme((t) => ({ ...t, ui: { ...t.ui, [key]: value }, preset: undefined }));
+  }, []);
 
-  const applyPreset = (presetKey: string) => {
+  const applyPreset = useCallback((presetKey: string) => {
     const preset = THEME_PRESETS.find((p) => p.key === presetKey);
-    if (preset) setTheme({ ...preset.theme, preset: preset.key });
-  };
+    if (preset) setTheme({ ...preset.theme, preset: presetKey });
+  }, []);
 
-  const resetTheme = () => setTheme({ ...DEFAULT_THEME });
+  const resetTheme = useCallback(() => {
+    setTheme({ ...DEFAULT_THEME, preset: "classic-white" });
+    setToast({ message: "Theme reset to default", type: "success" });
+  }, []);
 
-  // Strip the runtime-only `preset` marker before persisting? No — keep it so we
-  // can highlight the active preset on reload. Supabase jsonb accepts it.
-  const themeToPersist = (t: ThemeConfig): Record<string, unknown> => t as unknown as Record<string, unknown>;
-
-  // ─── Save Draft ───
-  const saveDraft = async () => {
-    if (!wedding) return;
-    setSaving(true);
-    const payload = themeToPersist(theme);
+  // ─── Persist helpers ───
+  const updateWedding = useCallback(async (patch: Partial<Wedding>) => {
+    if (!wedding) return false;
     const { data, error } = await supabase
       .from("weddings")
-      .update({ draft_theme_config: payload })
+      .update(patch)
       .eq("id", wedding.id)
       .select()
       .single();
-    setSaving(false);
-    if (error) { showToast("Failed to save draft", "error"); return; }
-    if (data) setWedding(data as Wedding);
-    showToast("Draft saved");
-  };
+    if (error || !data) {
+      setToast({ message: "Failed to save theme", type: "error" });
+      return false;
+    }
+    setWedding(data as Wedding);
+    return true;
+  }, [wedding, setWedding]);
 
-  // ─── Publish ───
-  const publish = async () => {
-    if (!wedding) return;
-    setSaving(true);
-    const payload = themeToPersist(theme);
-    const { data, error } = await supabase
-      .from("weddings")
-      .update({ theme_config: payload, draft_theme_config: null })
-      .eq("id", wedding.id)
-      .select()
-      .single();
-    setSaving(false);
-    if (error) { showToast("Failed to publish", "error"); return; }
-    if (data) setWedding(data as Wedding);
-    showToast("Theme published");
-  };
+  const handleSaveDraft = useCallback(async () => {
+    setSaving("draft");
+    const ok = await updateWedding({ draft_theme_config: theme as unknown as Record<string, unknown> });
+    setSaving(null);
+    if (ok) setToast({ message: "Draft saved", type: "success" });
+  }, [theme, updateWedding]);
 
-  // ─── Preview node ───
-  const preview = useMemo(() => {
-    if (!wedding) return null;
-    return (
-      <div className="w-full">
-        <NavPreview theme={theme} items={["Home", "Events", "Story", "Gallery"]} />
-        <HomePreview wedding={wedding} theme={theme} />
-        <FooterPreview theme={theme} hashtag={wedding.hashtag} date={wedding.wedding_date} />
-      </div>
-    );
-  }, [theme, wedding]);
+  const handlePublish = useCallback(async () => {
+    setSaving("publish");
+    const ok = await updateWedding({
+      theme_config: theme as unknown as Record<string, unknown>,
+      draft_theme_config: null,
+    });
+    setSaving(null);
+    if (ok) setToast({ message: "Theme published", type: "success" });
+  }, [theme, updateWedding]);
 
-  // ─── Loading / empty state ───
+  // ─── Loading / empty guards ───
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <p className="text-sm text-sepia/70">Loading theme editor…</p>
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center text-sepia">Loading…</div>;
   }
   if (!wedding) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <p className="text-sm text-sepia/70">No wedding found.</p>
+      <div className="flex items-center justify-center py-24 text-sepia">
+        No wedding found.
       </div>
     );
   }
 
-  // ─── Editor (left panel) ───
+  // ─── Editor panel ───
   const editor = (
     <div className="space-y-6">
-      <SectionTitle
-        title="Theme Editor"
-        subtitle="Customize your wedding website's appearance. Changes preview instantly."
-        action={
-          <Button variant="ghost" size="sm" onClick={resetTheme} className="gap-1.5">
-            <RotateCcw className="w-3.5 h-3.5" /> Reset
-          </Button>
-        }
-      />
-
-      {/* 1. Presets */}
+      {/* Presets */}
       <Card className="p-5">
         <div className="flex items-center gap-2 mb-4">
           <Palette className="w-4 h-4 text-sepia" />
-          <h3 className="text-sm font-medium text-onyx">Theme Presets</h3>
+          <h2 className="text-sm font-semibold text-onyx uppercase tracking-widest">Presets</h2>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {THEME_PRESETS.map((preset) => {
-            const isActive = theme.preset === preset.key;
+            const active = theme.preset === preset.key;
+            const swatches = [
+              preset.theme.colors.primary, preset.theme.colors.background,
+              preset.theme.colors.accent, preset.theme.colors.footerBg,
+            ];
             return (
               <button
                 key={preset.key}
                 onClick={() => applyPreset(preset.key)}
-                className={`relative text-left rounded-lg border p-3 transition-all hover:shadow-sm ${
-                  isActive ? "border-sepia ring-2 ring-sepia/20 bg-mist/50" : "border-sand bg-white"
+                className={`relative rounded-lg border p-3 text-left transition-all hover:shadow-md ${
+                  active ? "border-onyx ring-2 ring-onyx/10" : "border-sand hover:border-sepia/40"
                 }`}
               >
-                {/* Swatches */}
                 <div className="flex gap-1 mb-2">
-                  {(["primary", "secondary", "accent", "background"] as const).map((c) => (
-                    <span
-                      key={c}
-                      className="w-5 h-5 rounded-full border border-onyx/10"
-                      style={{ background: preset.theme.colors[c] }}
-                    />
+                  {swatches.map((c, i) => (
+                    <div key={i} className="w-5 h-5 rounded-full border border-black/10" style={{ background: c }} />
                   ))}
                 </div>
-                <p className="text-xs font-medium text-onyx truncate">{preset.name}</p>
-                {isActive && (
-                  <span className="absolute top-2 right-2 flex items-center justify-center w-5 h-5 rounded-full bg-sepia text-parchment">
-                    <Check className="w-3 h-3" />
+                <span className="text-xs font-medium text-onyx block leading-tight">{preset.name}</span>
+                {active && (
+                  <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-onyx flex items-center justify-center">
+                    <Check className="w-3 h-3 text-parchment" />
                   </span>
                 )}
               </button>
             );
           })}
         </div>
+        {theme.preset && (
+          <div className="mt-3">
+            <Badge variant="info">Active: {THEME_PRESETS.find((p) => p.key === theme.preset)?.name ?? theme.preset}</Badge>
+          </div>
+        )}
       </Card>
 
-      {/* 2. Custom Colors */}
+      {/* Custom Colors */}
       <Card className="p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Square className="w-4 h-4 text-sepia" />
-          <h3 className="text-sm font-medium text-onyx">Custom Colors</h3>
-          {!theme.preset && <Badge variant="info" className="ml-auto">Custom</Badge>}
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+        <h2 className="text-sm font-semibold text-onyx uppercase tracking-widest mb-4">Custom Colors</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {COLOR_FIELDS.map(({ key, label }) => (
             <div key={key}>
               <Label>{label}</Label>
@@ -214,15 +186,16 @@ export function AdminThemeEditor() {
                 <input
                   type="color"
                   value={theme.colors[key]}
-                  onChange={(e) => setColor(key, e.target.value)}
-                  className="w-9 h-9 rounded-md border border-sand cursor-pointer bg-white p-0.5 shrink-0"
-                  aria-label={`${label} color picker`}
+                  onChange={(e) => updateColor(key, e.target.value)}
+                  className="w-10 h-10 shrink-0 rounded-lg border border-sand cursor-pointer bg-white p-1"
+                  title={label}
                 />
                 <Input
+                  type="text"
                   value={theme.colors[key]}
-                  onChange={(e) => setColor(key, e.target.value)}
+                  onChange={(e) => updateColor(key, e.target.value)}
                   className="font-mono text-xs uppercase"
-                  spellCheck={false}
+                  maxLength={7}
                 />
               </div>
             </div>
@@ -230,50 +203,57 @@ export function AdminThemeEditor() {
         </div>
       </Card>
 
-      {/* 3. Typography */}
+      {/* Typography */}
       <Card className="p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Type className="w-4 h-4 text-sepia" />
-          <h3 className="text-sm font-medium text-onyx">Typography</h3>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+        <h2 className="text-sm font-semibold text-onyx uppercase tracking-widest mb-4">Typography</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label>Heading Font</Label>
-            <Select value={theme.typography.headingFont} onChange={(e) => setTypo("headingFont", e.target.value)}>
-              {FONT_OPTIONS.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
+            <Select value={theme.typography.headingFont} onChange={(e) => updateTypography("headingFont", e.target.value)}>
+              {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
             </Select>
           </div>
           <div>
             <Label>Body Font</Label>
-            <Select value={theme.typography.bodyFont} onChange={(e) => setTypo("bodyFont", e.target.value)}>
-              {FONT_OPTIONS.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
+            <Select value={theme.typography.bodyFont} onChange={(e) => updateTypography("bodyFont", e.target.value)}>
+              {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
             </Select>
           </div>
           <div>
             <Label>Heading Weight</Label>
-            <Select value={theme.typography.headingWeight} onChange={(e) => setTypo("headingWeight", e.target.value)}>
-              {WEIGHT_OPTIONS.map((w) => (
-                <option key={w} value={w}>{w}</option>
-              ))}
+            <Select value={theme.typography.headingWeight} onChange={(e) => updateTypography("headingWeight", e.target.value)}>
+              {HEADING_WEIGHTS.map((w) => <option key={w} value={w}>{w}</option>)}
             </Select>
           </div>
           <div>
             <Label>Body Weight</Label>
-            <Select value={theme.typography.bodyWeight} onChange={(e) => setTypo("bodyWeight", e.target.value)}>
-              {WEIGHT_OPTIONS.map((w) => (
-                <option key={w} value={w}>{w}</option>
-              ))}
+            <Select value={theme.typography.bodyWeight} onChange={(e) => updateTypography("bodyWeight", e.target.value)}>
+              {BODY_WEIGHTS.map((w) => <option key={w} value={w}>{w}</option>)}
             </Select>
+          </div>
+          <div>
+            <Label>Heading Size</Label>
+            <Input
+              type="text"
+              value={theme.typography.headingSize}
+              onChange={(e) => updateTypography("headingSize", e.target.value)}
+              placeholder="1rem"
+            />
+          </div>
+          <div>
+            <Label>Body Size</Label>
+            <Input
+              type="text"
+              value={theme.typography.bodySize}
+              onChange={(e) => updateTypography("bodySize", e.target.value)}
+              placeholder="1rem"
+            />
           </div>
           <div className="sm:col-span-2">
             <Label>Font Style</Label>
             <Select
               value={theme.typography.fontStyle}
-              onChange={(e) => setTypo("fontStyle", e.target.value as "normal" | "italic")}
+              onChange={(e) => updateTypography("fontStyle", e.target.value as "normal" | "italic")}
             >
               <option value="normal">Normal</option>
               <option value="italic">Italic</option>
@@ -282,64 +262,97 @@ export function AdminThemeEditor() {
         </div>
       </Card>
 
-      {/* 4. UI */}
+      {/* UI Controls */}
       <Card className="p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <Layers className="w-4 h-4 text-sepia" />
-          <h3 className="text-sm font-medium text-onyx">UI</h3>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4">
+        <h2 className="text-sm font-semibold text-onyx uppercase tracking-widest mb-4">UI</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <Label>Border Radius</Label>
-            <Input
-              value={theme.ui.borderRadius}
-              onChange={(e) => setUi("borderRadius", e.target.value)}
-              placeholder="0.5rem"
-            />
+            <Select value={theme.ui.borderRadius} onChange={(e) => updateUi("borderRadius", e.target.value)}>
+              {RADIUS_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </Select>
           </div>
           <div>
             <Label>Shadow Intensity</Label>
             <Select
               value={theme.ui.shadowIntensity}
-              onChange={(e) => setUi("shadowIntensity", e.target.value as ThemeConfig["ui"]["shadowIntensity"])}
+              onChange={(e) => updateUi("shadowIntensity", e.target.value as ThemeConfig["ui"]["shadowIntensity"])}
             >
-              {SHADOW_OPTIONS.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
+              {SHADOW_OPTIONS.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
             </Select>
           </div>
           <div>
             <Label>Section Spacing</Label>
-            <Input
-              value={theme.ui.sectionSpacing}
-              onChange={(e) => setUi("sectionSpacing", e.target.value)}
-              placeholder="4rem"
-            />
+            <Select value={theme.ui.sectionSpacing} onChange={(e) => updateUi("sectionSpacing", e.target.value)}>
+              {SPACING_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+            </Select>
           </div>
         </div>
       </Card>
     </div>
   );
 
+  // ─── Preview panel ───
+  const preview = (
+    <div>
+      <NavPreview theme={theme} coupleNames={coupleNames} items={["Home", "Events", "Story", "Gallery"]} />
+      <HomePreview wedding={wedding} theme={theme} />
+      <FooterPreview theme={theme} hashtag={wedding.hashtag} date={wedding.wedding_date} />
+    </div>
+  );
+
+  // ─── Actions ───
+  const actions = (
+    <div className="flex items-center gap-2">
+      <Button variant="outline" size="sm" onClick={resetTheme} title="Reset to default">
+        <RotateCcw className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">Reset</span>
+      </Button>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={handleSaveDraft}
+        disabled={saving !== null}
+      >
+        <Save className="w-3.5 h-3.5" />
+        {saving === "draft" ? "Saving…" : "Save Draft"}
+      </Button>
+      <Button
+        variant="primary"
+        size="sm"
+        onClick={handlePublish}
+        disabled={saving !== null}
+      >
+        <Send className="w-3.5 h-3.5" />
+        {saving === "publish" ? "Publishing…" : "Publish"}
+      </Button>
+    </div>
+  );
+
   return (
-    <>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <SectionTitle
+        title="Theme Editor"
+        subtitle="Design your wedding website. Changes preview instantly — save as draft or publish live."
+        action={null}
+      />
+
       <SplitEditor
         editor={editor}
         preview={preview}
         previewLabel="Live Preview"
-        actions={
-          <>
-            <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving} className="gap-1.5">
-              <Save className="w-3.5 h-3.5" /> Save Draft
-            </Button>
-            <Button variant="primary" size="sm" onClick={publish} disabled={saving} className="gap-1.5">
-              <Send className="w-3.5 h-3.5" /> Publish
-            </Button>
-          </>
-        }
+        actions={actions}
+        draftData={{ theme }}
       />
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </>
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+    </div>
   );
 }
 

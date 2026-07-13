@@ -1,10 +1,11 @@
-import { useState, useMemo, type ReactNode } from "react";
+import { useState, useMemo } from "react";
 import {
-  Save, Eye, Image as ImageIcon, Music, Clock,
-  AlignLeft, AlignCenter, AlignRight, Upload, Send, FileEdit,
+  Save, Eye, Image as ImageIcon, Music,
+  AlignLeft, AlignCenter, AlignRight, Send,
   ChevronDown,
 } from "lucide-react";
-import { supabase, type Wedding, type CoverContent } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
+import type { Wedding, CoverContent } from "@/lib/supabase";
 import { useHostWedding } from "@/lib/use-host-wedding";
 import { getDraftTheme } from "@/lib/theme";
 import { Button } from "@/components/ui/Button";
@@ -17,22 +18,19 @@ import { cn } from "@/lib/utils";
 
 // ─── Accordion section ───
 function AccordionSection({
-  title,
-  icon: Icon,
-  defaultOpen = false,
-  children,
+  title, icon: Icon, defaultOpen = false, children,
 }: {
   title: string;
   icon: React.ComponentType<{ className?: string }>;
   defaultOpen?: boolean;
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <Card className="overflow-hidden">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(!open)}
         className="flex items-center justify-between w-full px-5 py-4 text-left hover:bg-mist/50 transition-colors"
       >
         <span className="flex items-center gap-2.5">
@@ -40,131 +38,131 @@ function AccordionSection({
           <span className="text-sm font-medium text-onyx">{title}</span>
         </span>
         <ChevronDown
-          className={cn("w-4 h-4 text-sepia/60 transition-transform", open && "rotate-180")}
+          className={cn("w-4 h-4 text-sepia transition-transform", open && "rotate-180")}
         />
       </button>
-      {open && <div className="px-5 pb-5 pt-1 space-y-4">{children}</div>}
+      {open && (
+        <div className="px-5 pb-5 pt-1 space-y-4 border-t border-sand/50">
+          {children}
+        </div>
+      )}
     </Card>
-  );
-}
-
-// ─── Text alignment button group ───
-function TextAlignButtons({
-  value,
-  onChange,
-}: {
-  value: "left" | "center" | "right";
-  onChange: (v: "left" | "center" | "right") => void;
-}) {
-  const opts: { key: "left" | "center" | "right"; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
-    { key: "left", icon: AlignLeft, label: "Left" },
-    { key: "center", icon: AlignCenter, label: "Center" },
-    { key: "right", icon: AlignRight, label: "Right" },
-  ];
-  return (
-    <div className="inline-flex items-center gap-1 bg-mist rounded-lg p-1">
-      {opts.map((o) => (
-        <button
-          key={o.key}
-          type="button"
-          title={o.label}
-          onClick={() => onChange(o.key)}
-          className={cn(
-            "flex items-center justify-center w-9 h-8 rounded-md transition-colors",
-            value === o.key ? "bg-card text-onyx shadow-sm" : "text-sepia hover:text-onyx"
-          )}
-        >
-          <o.icon className="w-4 h-4" />
-        </button>
-      ))}
-    </div>
   );
 }
 
 // ─── Main component ───
 export function AdminCoverEditor() {
   const { wedding, loading, setWedding } = useHostWedding();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  // Initialize form state from draft_content (fallback to content)
-  const initialContent = useMemo<CoverContent>(
-    () =>
-      ((wedding?.draft_content && Object.keys(wedding.draft_content).length > 0
-        ? wedding.draft_content
-        : wedding?.content) ?? {}) as CoverContent,
-    [wedding]
-  );
+  // ─── Initialize form state from draft_content (fallback to content) ───
+  const initialContent = useMemo<CoverContent>(() => {
+    if (!wedding) return {} as CoverContent;
+    const draft = (wedding.draft_content ?? {}) as CoverContent;
+    const published = (wedding.content ?? {}) as CoverContent;
+    // If draft has keys, prefer draft; otherwise fall back to published
+    const draftKeys = Object.keys(draft);
+    if (draftKeys.length > 0) return { ...published, ...draft };
+    return published;
+  }, [wedding]);
 
-  const [form, setForm] = useState<CoverContent>(initialContent);
+  const [coverMainHeading, setCoverMainHeading] = useState(initialContent.cover_main_heading ?? "");
+  const [coverHeading, setCoverHeading] = useState(initialContent.cover_heading ?? "");
+  const [coverSubtitle, setCoverSubtitle] = useState(initialContent.cover_subtitle ?? "");
+  const [coverWelcome, setCoverWelcome] = useState(initialContent.cover_welcome ?? "");
+  const [coverButtonText, setCoverButtonText] = useState(initialContent.cover_button_text ?? "");
+  const [coverBackgroundUrl, setCoverBackgroundUrl] = useState(initialContent.cover_background_url ?? "");
+  const [coverBackgroundVideoUrl, setCoverBackgroundVideoUrl] = useState(initialContent.cover_background_video_url ?? "");
+  const [coverOverlayOpacity, setCoverOverlayOpacity] = useState(initialContent.cover_overlay_opacity ?? 0.3);
+  const [coverTextAlign, setCoverTextAlign] = useState<"left" | "center" | "right">(initialContent.cover_text_align ?? "center");
+  const [coverLogoUrl, setCoverLogoUrl] = useState(initialContent.cover_logo_url ?? "");
+  const [coverLogoPosition, setCoverLogoPosition] = useState<"left" | "center" | "right">(initialContent.cover_logo_position ?? "center");
+  const [coverLogoSize, setCoverLogoSize] = useState(initialContent.cover_logo_size ?? "80px");
+  const [coverLogoVisible, setCoverLogoVisible] = useState(initialContent.cover_logo_visible !== false);
+  const [coverCountdownEnabled, setCoverCountdownEnabled] = useState(initialContent.cover_countdown_enabled !== false);
+  const [coverMusicEnabled, setCoverMusicEnabled] = useState(initialContent.cover_music_enabled ?? false);
+  const [coverMusicUrl, setCoverMusicUrl] = useState(initialContent.cover_music_url ?? "");
 
-  // Re-sync form when wedding changes (e.g. after save/publish)
-  const weddingContentKey = JSON.stringify(initialContent);
-  const [lastSyncedKey, setLastSyncedKey] = useState(weddingContentKey);
-  if (weddingContentKey !== lastSyncedKey) {
-    setLastSyncedKey(weddingContentKey);
-    setForm(initialContent);
-  }
+  // ─── Build the new content object from form state ───
+  const newContent: CoverContent = useMemo(() => ({
+    cover_main_heading: coverMainHeading,
+    cover_heading: coverHeading,
+    cover_subtitle: coverSubtitle,
+    cover_welcome: coverWelcome,
+    cover_button_text: coverButtonText,
+    cover_background_url: coverBackgroundUrl,
+    cover_background_video_url: coverBackgroundVideoUrl,
+    cover_overlay_opacity: coverOverlayOpacity,
+    cover_text_align: coverTextAlign,
+    cover_logo_url: coverLogoUrl,
+    cover_logo_position: coverLogoPosition,
+    cover_logo_size: coverLogoSize,
+    cover_logo_visible: coverLogoVisible,
+    cover_countdown_enabled: coverCountdownEnabled,
+    cover_music_enabled: coverMusicEnabled,
+    cover_music_url: coverMusicUrl,
+  }), [
+    coverMainHeading, coverHeading, coverSubtitle, coverWelcome, coverButtonText,
+    coverBackgroundUrl, coverBackgroundVideoUrl, coverOverlayOpacity, coverTextAlign,
+    coverLogoUrl, coverLogoPosition, coverLogoSize, coverLogoVisible,
+    coverCountdownEnabled, coverMusicEnabled, coverMusicUrl,
+  ]);
 
-  const update = <K extends keyof CoverContent>(key: K, value: CoverContent[K]) =>
-    setForm((f) => ({ ...f, [key]: value }));
-
-  // Synthetic wedding object merging form state into draft_content for live preview
-  const previewWedding = useMemo<Wedding>(
-    () =>
-      wedding
-        ? { ...wedding, draft_content: { ...(wedding.draft_content ?? {}), ...form } }
-        : ({} as Wedding),
-    [wedding, form]
-  );
+  // ─── Synthetic wedding for live preview: merge form state into draft_content ───
+  const previewWedding = useMemo<Wedding>(() => {
+    if (!wedding) return {} as Wedding;
+    return {
+      ...wedding,
+      draft_content: { ...(wedding.content ?? {}), ...newContent },
+    };
+  }, [wedding, newContent]);
 
   const theme = useMemo(() => getDraftTheme(wedding), [wedding]);
 
   // ─── Save Draft ───
-  const saveDraft = async () => {
+  const handleSaveDraft = async () => {
     if (!wedding) return;
     setSaving(true);
-    try {
-      const newContent = { ...form };
-      const { error } = await supabase
-        .from("weddings")
-        .update({ draft_content: newContent })
-        .eq("id", wedding.id);
-      if (error) throw error;
+    const { error } = await supabase
+      .from("weddings")
+      .update({ draft_content: newContent })
+      .eq("id", wedding.id);
+    setSaving(false);
+    if (error) {
+      setToast({ message: "Failed to save draft", type: "error" });
+    } else {
       setWedding({ ...wedding, draft_content: newContent });
       setToast({ message: "Draft saved", type: "success" });
-    } catch (err) {
-      setToast({ message: err instanceof Error ? err.message : "Failed to save draft", type: "error" });
-    } finally {
-      setSaving(false);
     }
   };
 
-  // ─── Publish ───
-  const publish = async () => {
+  // ─── Publish: copy draft to content, clear draft ───
+  const handlePublish = async () => {
     if (!wedding) return;
-    setSaving(true);
-    try {
-      const newContent = { ...form };
-      const { error } = await supabase
-        .from("weddings")
-        .update({ content: newContent, draft_content: {} })
-        .eq("id", wedding.id);
-      if (error) throw error;
+    setPublishing(true);
+    const { error } = await supabase
+      .from("weddings")
+      .update({ content: newContent, draft_content: {} })
+      .eq("id", wedding.id);
+    setPublishing(false);
+    if (error) {
+      setToast({ message: "Failed to publish", type: "error" });
+    } else {
       setWedding({ ...wedding, content: newContent, draft_content: {} });
-      setToast({ message: "Cover published", type: "success" });
-    } catch (err) {
-      setToast({ message: err instanceof Error ? err.message : "Failed to publish", type: "error" });
-    } finally {
-      setSaving(false);
+      setToast({ message: "Cover published!", type: "success" });
     }
   };
 
-  if (loading || !wedding) {
-    return <div className="flex items-center justify-center py-24 text-sepia">Loading…</div>;
+  if (loading) {
+    return <div className="flex items-center justify-center py-20 text-sepia">Loading…</div>;
+  }
+  if (!wedding) {
+    return <div className="text-center py-20 text-sepia">No wedding found.</div>;
   }
 
-  // ─── Editor form ───
+  // ─── Editor form (left panel) ───
   const editor = (
     <div className="space-y-4">
       {/* 1. Branding */}
@@ -173,151 +171,157 @@ export function AdminCoverEditor() {
           <Label>Logo</Label>
           <ImageUpload
             weddingId={wedding.id}
-            value={form.cover_logo_url ?? null}
-            onChange={(url) => update("cover_logo_url", url ?? undefined)}
+            value={coverLogoUrl || null}
+            onChange={(url) => setCoverLogoUrl(url ?? "")}
           />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label>Logo Position</Label>
-            <Select
-              value={form.cover_logo_position ?? "center"}
-              onChange={(e) => update("cover_logo_position", e.target.value as CoverContent["cover_logo_position"])}
-            >
-              <option value="left">Left</option>
-              <option value="center">Center</option>
-              <option value="right">Right</option>
-            </Select>
-          </div>
-          <div>
-            <Label>Logo Size</Label>
-            <Input
-              value={form.cover_logo_size ?? ""}
-              onChange={(e) => update("cover_logo_size", e.target.value)}
-              placeholder="80px"
-            />
-          </div>
+        <div>
+          <Label>Logo Position</Label>
+          <Select value={coverLogoPosition} onChange={(e) => setCoverLogoPosition(e.target.value as "left" | "center" | "right")}>
+            <option value="left">Left</option>
+            <option value="center">Center</option>
+            <option value="right">Right</option>
+          </Select>
         </div>
-        <div className="flex items-center justify-between pt-1">
-          <Label className="mb-0">Show Logo</Label>
-          <Toggle
-            checked={form.cover_logo_visible !== false}
-            onChange={(v) => update("cover_logo_visible", v)}
+        <div>
+          <Label>Logo Size</Label>
+          <Input
+            value={coverLogoSize}
+            onChange={(e) => setCoverLogoSize(e.target.value)}
+            placeholder="80px"
           />
+        </div>
+        <div>
+          <Label>Show Logo</Label>
+          <Toggle checked={coverLogoVisible} onChange={setCoverLogoVisible} label={coverLogoVisible ? "Visible" : "Hidden"} />
         </div>
       </AccordionSection>
 
       {/* 2. Hero Content */}
-      <AccordionSection title="Hero Content" icon={FileEdit} defaultOpen>
+      <AccordionSection title="Hero Content" icon={Eye} defaultOpen>
         <div>
-          <Label>Main Heading</Label>
+          <Label>Main Heading (small label above title)</Label>
           <Input
-            value={form.cover_main_heading ?? ""}
-            onChange={(e) => update("cover_main_heading", e.target.value)}
-            placeholder="e.g. We're getting married"
+            value={coverMainHeading}
+            onChange={(e) => setCoverMainHeading(e.target.value)}
+            placeholder="e.g. Together with their families"
           />
         </div>
         <div>
           <Label>Heading / Couple Names</Label>
           <Input
-            value={form.cover_heading ?? ""}
-            onChange={(e) => update("cover_heading", e.target.value)}
-            placeholder={`${wedding.couple_name_one} & ${wedding.couple_name_two}`}
+            value={coverHeading}
+            onChange={(e) => setCoverHeading(e.target.value)}
+            placeholder="e.g. Jane & John"
           />
         </div>
         <div>
           <Label>Subtitle</Label>
           <Input
-            value={form.cover_subtitle ?? ""}
-            onChange={(e) => update("cover_subtitle", e.target.value)}
-            placeholder="A celebration of love"
+            value={coverSubtitle}
+            onChange={(e) => setCoverSubtitle(e.target.value)}
+            placeholder="e.g. We're getting married"
           />
         </div>
         <div>
           <Label>Welcome Message</Label>
           <Textarea
+            value={coverWelcome}
+            onChange={(e) => setCoverWelcome(e.target.value)}
             rows={3}
-            value={form.cover_welcome ?? ""}
-            onChange={(e) => update("cover_welcome", e.target.value)}
-            placeholder="Welcome to our wedding website…"
+            placeholder="A warm welcome message for your guests…"
           />
         </div>
         <div>
-          <Label>Enter Button Text</Label>
+          <Label>Button Text</Label>
           <Input
-            value={form.cover_button_text ?? ""}
-            onChange={(e) => update("cover_button_text", e.target.value)}
+            value={coverButtonText}
+            onChange={(e) => setCoverButtonText(e.target.value)}
             placeholder="Enter Website"
           />
         </div>
       </AccordionSection>
 
       {/* 3. Background */}
-      <AccordionSection title="Background" icon={Upload}>
+      <AccordionSection title="Background" icon={ImageIcon}>
         <div>
           <Label>Background Image</Label>
           <ImageUpload
             weddingId={wedding.id}
-            value={form.cover_background_url ?? null}
-            onChange={(url) => update("cover_background_url", url ?? undefined)}
+            value={coverBackgroundUrl || null}
+            onChange={(url) => setCoverBackgroundUrl(url ?? "")}
           />
         </div>
         <div>
           <Label>Background Video URL</Label>
           <Input
-            value={form.cover_background_video_url ?? ""}
-            onChange={(e) => update("cover_background_video_url", e.target.value)}
-            placeholder="https://…/video.mp4"
+            value={coverBackgroundVideoUrl}
+            onChange={(e) => setCoverBackgroundVideoUrl(e.target.value)}
+            placeholder="https://… (mp4, webm)"
           />
         </div>
         <div>
-          <Label>Overlay Opacity — {((form.cover_overlay_opacity ?? 0.3) * 100).toFixed(0)}%</Label>
+          <Label>Overlay Opacity: {coverOverlayOpacity.toFixed(2)}</Label>
           <input
             type="range"
             min={0}
             max={1}
             step={0.05}
-            value={form.cover_overlay_opacity ?? 0.3}
-            onChange={(e) => update("cover_overlay_opacity", parseFloat(e.target.value))}
+            value={coverOverlayOpacity}
+            onChange={(e) => setCoverOverlayOpacity(parseFloat(e.target.value))}
             className="w-full accent-onyx"
           />
         </div>
-        <div className="flex items-center justify-between pt-1">
-          <Label className="mb-0">Text Alignment</Label>
-          <TextAlignButtons
-            value={form.cover_text_align ?? "center"}
-            onChange={(v) => update("cover_text_align", v)}
-          />
+        <div>
+          <Label>Text Alignment</Label>
+          <div className="inline-flex items-center gap-1 bg-mist rounded-lg p-1">
+            {([
+              { val: "left", icon: AlignLeft, label: "Left" },
+              { val: "center", icon: AlignCenter, label: "Center" },
+              { val: "right", icon: AlignRight, label: "Right" },
+            ] as const).map(({ val, icon: I, label }) => (
+              <button
+                key={val}
+                type="button"
+                title={label}
+                onClick={() => setCoverTextAlign(val)}
+                className={cn(
+                  "flex items-center justify-center w-9 h-8 rounded-md transition-colors",
+                  coverTextAlign === val ? "bg-card text-onyx shadow-sm" : "text-sepia hover:text-onyx"
+                )}
+              >
+                <I className="w-4 h-4" />
+              </button>
+            ))}
+          </div>
         </div>
       </AccordionSection>
 
       {/* 4. Extras */}
       <AccordionSection title="Extras" icon={Music}>
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-2 text-sm text-sepia">
-            <Clock className="w-4 h-4" /> Countdown Timer
-          </span>
+        <div>
+          <Label>Countdown</Label>
           <Toggle
-            checked={form.cover_countdown_enabled !== false}
-            onChange={(v) => update("cover_countdown_enabled", v)}
+            checked={coverCountdownEnabled}
+            onChange={setCoverCountdownEnabled}
+            label={coverCountdownEnabled ? "Enabled" : "Disabled"}
           />
         </div>
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-2 text-sm text-sepia">
-            <Music className="w-4 h-4" /> Background Music
-          </span>
+        <div>
+          <Label>Background Music</Label>
           <Toggle
-            checked={form.cover_music_enabled === true}
-            onChange={(v) => update("cover_music_enabled", v)}
+            checked={coverMusicEnabled}
+            onChange={setCoverMusicEnabled}
+            label={coverMusicEnabled ? "Enabled" : "Disabled"}
           />
         </div>
-        {form.cover_music_enabled && (
+        {coverMusicEnabled && (
           <div>
             <Label>Music URL</Label>
             <Input
-              value={form.cover_music_url ?? ""}
-              onChange={(e) => update("cover_music_url", e.target.value)}
-              placeholder="https://…/song.mp3"
+              value={coverMusicUrl}
+              onChange={(e) => setCoverMusicUrl(e.target.value)}
+              placeholder="https://… (mp3)"
             />
           </div>
         )}
@@ -325,30 +329,58 @@ export function AdminCoverEditor() {
     </div>
   );
 
-  // ─── Preview ───
+  // ─── Preview (right panel) ───
   const preview = <CoverPreview wedding={previewWedding} theme={theme} />;
 
   // ─── Actions ───
   const actions = (
-    <>
-      <Button variant="outline" size="sm" onClick={saveDraft} disabled={saving}>
-        <Save className="w-4 h-4" /> Save Draft
+    <div className="flex items-center gap-2">
+      <Button variant="outline" size="sm" onClick={handleSaveDraft} disabled={saving}>
+        <Save className="w-3.5 h-3.5" />
+        {saving ? "Saving…" : "Save Draft"}
       </Button>
-      <Button variant="primary" size="sm" onClick={publish} disabled={saving}>
-        <Send className="w-4 h-4" /> Publish
+      <Button variant="primary" size="sm" onClick={handlePublish} disabled={publishing}>
+        <Send className="w-3.5 h-3.5" />
+        {publishing ? "Publishing…" : "Publish"}
       </Button>
-    </>
+    </div>
   );
 
   return (
-    <div>
+    <div className="space-y-6">
       <SectionTitle
         title="Cover Page Editor"
-        subtitle="Design the first impression of your wedding website. Changes preview instantly."
-        action={<span className="hidden sm:flex items-center gap-1.5 text-xs text-sepia/70"><Eye className="w-4 h-4" /> Live Preview</span>}
+        subtitle="Design the first page guests see. Changes preview in real-time."
+        action={
+          <div className="flex items-center gap-2">
+            <a
+              href={`/w/${wedding.slug}?preview=true`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-sepia text-sm hover:text-onyx transition-colors px-3 py-1.5 rounded-lg hover:bg-mist"
+            >
+              <Eye className="w-4 h-4" /> Open Preview
+            </a>
+          </div>
+        }
       />
-      <SplitEditor editor={editor} preview={preview} actions={actions} />
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      <SplitEditor
+        editor={editor}
+        preview={preview}
+        actions={actions}
+        previewLabel="Cover Preview"
+      />
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }
+
+export default AdminCoverEditor;

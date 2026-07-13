@@ -1,10 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Trash2, Edit2, Save, Eye, Star, Check, X, Image as ImageIcon, FolderOpen } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  Plus,
+  Trash2,
+  Edit2,
+  Star,
+  Check,
+  X,
+  Image as ImageIcon,
+  Send,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Gallery, GalleryItem } from "@/lib/supabase";
 import { useHostWedding } from "@/lib/use-host-wedding";
 import { getDraftTheme } from "@/lib/theme";
-import type { ThemeConfig } from "@/lib/theme";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Label, Toggle } from "@/components/ui/Input";
 import { Card, Badge, Modal, EmptyState, SectionTitle, Toast } from "@/components/ui";
@@ -12,535 +20,765 @@ import { ImageUpload } from "@/components/ui/ImageUpload";
 import { SplitEditor } from "@/components/preview/SplitEditor";
 import { GalleryPreview } from "@/components/preview/PreviewRenderers";
 
-// ─── Form states ───
-type GalleryForm = { title: string };
-
+// ─── Types ───
 type ItemForm = {
-  image_url: string | null;
+  id: string | null; // null = new unsaved item
+  image_url: string;
   caption: string;
   is_featured: boolean;
+  is_approved: boolean;
 };
 
-const emptyItemForm: ItemForm = { image_url: null, caption: "", is_featured: false };
+type GalleryForm = {
+  title: string;
+};
 
-// ─── Component ───
+function emptyGalleryForm(): GalleryForm {
+  return { title: "" };
+}
+
+function emptyItemForm(): ItemForm {
+  return { id: null, image_url: "", caption: "", is_featured: false, is_approved: true };
+}
+
 export function AdminGallery() {
   const { wedding, loading } = useHostWedding();
-  const theme: ThemeConfig = useMemo(() => getDraftTheme(wedding), [wedding]);
+  const theme = getDraftTheme(wedding);
 
   const [galleries, setGalleries] = useState<Gallery[]>([]);
   const [items, setItems] = useState<GalleryItem[]>([]);
   const [fetching, setFetching] = useState(true);
-  const [activeGalleryId, setActiveGalleryId] = useState<string | null>(null);
-  const [createGalleryOpen, setCreateGalleryOpen] = useState(false);
-  const [newGalleryTitle, setNewGalleryTitle] = useState("");
-  const [renameTarget, setRenameTarget] = useState<Gallery | null>(null);
-  const [renameTitle, setRenameTitle] = useState("");
+
+  // Gallery-level state
+  const [viewingGalleryId, setViewingGalleryId] = useState<string | null>(null);
+  const [isCreatingGallery, setIsCreatingGallery] = useState(false);
+  const [galleryForm, setGalleryForm] = useState<GalleryForm>(emptyGalleryForm());
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [savingGallery, setSavingGallery] = useState(false);
   const [deleteGalleryTarget, setDeleteGalleryTarget] = useState<Gallery | null>(null);
-  const [itemForm, setItemForm] = useState<ItemForm>(emptyItemForm);
+
+  // Item-level state (within the gallery editor view)
+  const [itemForms, setItemForms] = useState<ItemForm[]>([]);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [draftItem, setDraftItem] = useState<ItemForm>(emptyItemForm());
+  const [savingItems, setSavingItems] = useState(false);
   const [deleteItemTarget, setDeleteItemTarget] = useState<GalleryItem | null>(null);
-  const [saving, setSaving] = useState(false);
+
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const weddingId = wedding?.id ?? "";
+  const weddingId = wedding?.id ?? null;
+  const viewingGallery = galleries.find((g) => g.id === viewingGalleryId) ?? null;
 
-  // ─── Load galleries ───
-  const loadGalleries = useCallback(async () => {
-    if (!weddingId) { setGalleries([]); setFetching(false); return; }
+  // ─── Fetch galleries + items ───
+  const fetchAll = useCallback(async () => {
+    if (!weddingId) return;
     setFetching(true);
-    const { data, error } = await supabase
-      .from("galleries")
-      .select("*")
-      .eq("wedding_id", weddingId)
-      .order("sort_order", { ascending: true });
-    if (!error && data) {
-      const gals = data as Gallery[];
-      setGalleries(gals);
-      if (gals.length > 0 && !activeGalleryId) setActiveGalleryId(gals[0].id);
-    }
+    const [gRes, iRes] = await Promise.all([
+      supabase
+        .from("galleries")
+        .select("*")
+        .eq("wedding_id", weddingId)
+        .order("sort_order", { ascending: true }),
+      supabase
+        .from("gallery_items")
+        .select("*")
+        .eq("wedding_id", weddingId)
+        .order("created_at", { ascending: false }),
+    ]);
+    if (!gRes.error && gRes.data) setGalleries(gRes.data as Gallery[]);
+    if (!iRes.error && iRes.data) setItems(iRes.data as GalleryItem[]);
     setFetching(false);
-  }, [weddingId, activeGalleryId]);
-
-  // ─── Load items ───
-  const loadItems = useCallback(async () => {
-    if (!weddingId) { setItems([]); return; }
-    const { data, error } = await supabase
-      .from("gallery_items")
-      .select("*")
-      .eq("wedding_id", weddingId)
-      .order("created_at", { ascending: false });
-    if (!error && data) setItems(data as GalleryItem[]);
   }, [weddingId]);
 
-  useEffect(() => { if (weddingId) loadGalleries(); }, [weddingId, loadGalleries]);
-  useEffect(() => { if (weddingId) loadItems(); }, [weddingId, loadItems]);
+  useEffect(() => {
+    if (weddingId) fetchAll();
+  }, [weddingId, fetchAll]);
 
-  // ─── Helpers ───
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  const activeGallery = useMemo(
-    () => galleries.find((g) => g.id === activeGalleryId) ?? null,
-    [galleries, activeGalleryId]
-  );
-
-  const activeItems = useMemo(
-    () => items.filter((i) => i.gallery_id === activeGalleryId),
-    [items, activeGalleryId]
-  );
-
-  const editingItem = useMemo(
-    () => activeItems.find((i) => i.id === editingItemId) ?? null,
-    [activeItems, editingItemId]
-  );
-
-  const previewImages = useMemo(
-    () => activeItems.map((i) => ({ image_url: i.image_url, caption: i.caption, is_featured: i.is_featured })),
-    [activeItems]
-  );
+  // ─── When entering a gallery view, seed item forms from saved items ───
+  useEffect(() => {
+    if (!viewingGalleryId) {
+      setItemForms([]);
+      return;
+    }
+    const galleryItems = items.filter((it) => it.gallery_id === viewingGalleryId);
+    setItemForms(
+      galleryItems.map((it) => ({
+        id: it.id,
+        image_url: it.image_url,
+        caption: it.caption ?? "",
+        is_featured: it.is_featured,
+        is_approved: it.is_approved,
+      })),
+    );
+    setEditingItemId(null);
+    setDraftItem(emptyItemForm());
+  }, [viewingGalleryId, items]);
 
   // ─── Gallery CRUD ───
-  const createGallery = async () => {
-    if (!weddingId) return;
-    const title = newGalleryTitle.trim();
-    if (!title) { showToast("Gallery title is required", "error"); return; }
-    setSaving(true);
-    const sortMax = galleries.reduce((mx, g) => Math.max(mx, g.sort_order), -1);
-    const { data, error } = await supabase
-      .from("galleries")
-      .insert({ wedding_id: weddingId, title, sort_order: sortMax + 1 })
-      .select()
-      .single();
-    setSaving(false);
-    if (error) { showToast(`Create failed: ${error.message}`, "error"); return; }
-    setNewGalleryTitle("");
-    setCreateGalleryOpen(false);
-    showToast("Gallery created");
-    await loadGalleries();
-    if (data) setActiveGalleryId((data as Gallery).id);
+  const startCreateGallery = () => {
+    setIsCreatingGallery(true);
+    setViewingGalleryId(null);
+    setGalleryForm(emptyGalleryForm());
   };
 
-  const renameGallery = async () => {
-    if (!renameTarget) return;
-    const title = renameTitle.trim();
-    if (!title) { showToast("Gallery title is required", "error"); return; }
-    setSaving(true);
+  const cancelCreateGallery = () => {
+    setIsCreatingGallery(false);
+    setGalleryForm(emptyGalleryForm());
+  };
+
+  const createGallery = async () => {
+    if (!weddingId || !galleryForm.title.trim()) {
+      setToast({ message: "Title is required", type: "error" });
+      return;
+    }
+    setSavingGallery(true);
+    const maxSort = galleries.reduce((m, g) => Math.max(m, g.sort_order), -1);
+    const { data, error } = await supabase
+      .from("galleries")
+      .insert({
+        wedding_id: weddingId,
+        title: galleryForm.title.trim(),
+        sort_order: maxSort + 1,
+      })
+      .select()
+      .single();
+    setSavingGallery(false);
+    if (error || !data) {
+      setToast({ message: "Failed to create gallery", type: "error" });
+      return;
+    }
+    setToast({ message: "Gallery created", type: "success" });
+    await fetchAll();
+    setIsCreatingGallery(false);
+    setGalleryForm(emptyGalleryForm());
+    // Immediately open the new gallery for editing
+    setViewingGalleryId((data as Gallery).id);
+  };
+
+  const startRename = (g: Gallery) => {
+    setRenameId(g.id);
+    setRenameValue(g.title);
+  };
+
+  const cancelRename = () => {
+    setRenameId(null);
+    setRenameValue("");
+  };
+
+  const saveRename = async () => {
+    if (!renameId || !renameValue.trim()) return;
+    setSavingGallery(true);
     const { error } = await supabase
       .from("galleries")
-      .update({ title })
-      .eq("id", renameTarget.id);
-    setSaving(false);
-    if (error) { showToast(`Rename failed: ${error.message}`, "error"); return; }
-    showToast("Gallery renamed");
-    setRenameTarget(null);
-    await loadGalleries();
+      .update({ title: renameValue.trim() })
+      .eq("id", renameId);
+    setSavingGallery(false);
+    if (error) {
+      setToast({ message: "Failed to rename gallery", type: "error" });
+    } else {
+      setToast({ message: "Gallery renamed", type: "success" });
+      cancelRename();
+      await fetchAll();
+    }
   };
 
   const deleteGallery = async (g: Gallery) => {
-    // Delete items first, then gallery
+    // Delete items belonging to this gallery first, then the gallery
     await supabase.from("gallery_items").delete().eq("gallery_id", g.id);
     const { error } = await supabase.from("galleries").delete().eq("id", g.id);
-    if (error) { showToast(`Delete failed: ${error.message}`, "error"); return; }
-    showToast("Gallery deleted");
     setDeleteGalleryTarget(null);
-    if (activeGalleryId === g.id) setActiveGalleryId(null);
-    await loadGalleries();
-    await loadItems();
+    if (error) {
+      setToast({ message: "Failed to delete gallery", type: "error" });
+    } else {
+      setToast({ message: "Gallery deleted", type: "success" });
+      if (viewingGalleryId === g.id) setViewingGalleryId(null);
+      await fetchAll();
+    }
   };
 
   // ─── Item CRUD ───
-  const startAddItem = () => {
-    setItemForm(emptyItemForm);
+  const addDraftItem = () => {
+    setEditingItemId(null);
+    setDraftItem(emptyItemForm());
+  };
+
+  const commitDraftItem = () => {
+    if (!draftItem.image_url) {
+      setToast({ message: "Image is required", type: "error" });
+      return;
+    }
+    if (editingItemId) {
+      // Update existing form entry
+      setItemForms((prev) =>
+        prev.map((f) =>
+          f.id === editingItemId
+            ? { ...draftItem, id: editingItemId }
+            : f,
+        ),
+      );
+    } else {
+      // Add new unsaved entry (id stays null until Save)
+      setItemForms((prev) => [...prev, { ...draftItem, id: null }]);
+    }
+    setDraftItem(emptyItemForm());
     setEditingItemId(null);
   };
 
-  const startEditItem = (item: GalleryItem) => {
-    setItemForm({
+  const editItemForm = (item: GalleryItem) => {
+    setEditingItemId(item.id);
+    setDraftItem({
+      id: item.id,
       image_url: item.image_url,
       caption: item.caption ?? "",
       is_featured: item.is_featured,
+      is_approved: item.is_approved,
     });
-    setEditingItemId(item.id);
   };
 
-  const cancelItemEdit = () => {
-    setItemForm(emptyItemForm);
-    setEditingItemId(null);
+  const removeItemForm = (id: string | null) => {
+    setItemForms((prev) => prev.filter((f) => f.id !== id));
   };
 
-  const saveItem = async () => {
-    if (!weddingId || !activeGalleryId) return;
-    if (!itemForm.image_url) { showToast("Image is required", "error"); return; }
-    setSaving(true);
-    let error: { message: string } | null = null;
-    const payload = {
-      wedding_id: weddingId,
-      gallery_id: activeGalleryId,
-      image_url: itemForm.image_url,
-      caption: itemForm.caption.trim() || null,
-      is_featured: itemForm.is_featured,
-      is_approved: true,
-    };
-    if (editingItemId) {
-      ({ error } = await supabase.from("gallery_items").update({
-        image_url: payload.image_url,
-        caption: payload.caption,
-        is_featured: payload.is_featured,
-      }).eq("id", editingItemId));
-    } else {
-      ({ error } = await supabase.from("gallery_items").insert(payload).select().single());
+  const toggleItemField = (
+    id: string | null,
+    field: "is_featured" | "is_approved",
+  ) => {
+    setItemForms((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, [field]: !f[field] } : f)),
+    );
+  };
+
+  const saveAllItems = async () => {
+    if (!weddingId || !viewingGalleryId) return;
+    setSavingItems(true);
+
+    // Determine which forms correspond to existing DB items
+    const existingItems = items.filter((it) => it.gallery_id === viewingGalleryId);
+    const existingIds = new Set(existingItems.map((it) => it.id));
+    const formIds = new Set(itemForms.map((f) => f.id).filter(Boolean));
+
+    // Deletes: items in DB but no longer in forms
+    const toDelete = existingItems.filter((it) => !formIds.has(it.id));
+    if (toDelete.length > 0) {
+      await supabase
+        .from("gallery_items")
+        .delete()
+        .in(
+          "id",
+          toDelete.map((it) => it.id),
+        );
     }
-    setSaving(false);
-    if (error) { showToast(`Save failed: ${error.message}`, "error"); return; }
-    showToast(editingItemId ? "Image updated" : "Image added");
-    cancelItemEdit();
-    await loadItems();
+
+    // Updates: forms with a non-null id
+    const toUpdate = itemForms.filter((f) => f.id && existingIds.has(f.id));
+    for (const f of toUpdate) {
+      await supabase
+        .from("gallery_items")
+        .update({
+          image_url: f.image_url,
+          caption: f.caption || null,
+          is_featured: f.is_featured,
+          is_approved: f.is_approved,
+        })
+        .eq("id", f.id);
+    }
+
+    // Inserts: forms with null id
+    const toInsert = itemForms
+      .filter((f) => !f.id)
+      .map((f) => ({
+        wedding_id: weddingId,
+        gallery_id: viewingGalleryId,
+        image_url: f.image_url,
+        caption: f.caption || null,
+        uploader_name: null,
+        is_featured: f.is_featured,
+        is_approved: f.is_approved,
+      }));
+    if (toInsert.length > 0) {
+      await supabase.from("gallery_items").insert(toInsert);
+    }
+
+    setSavingItems(false);
+    setToast({ message: "Gallery saved", type: "success" });
+    await fetchAll();
   };
 
   const deleteItem = async (item: GalleryItem) => {
     const { error } = await supabase.from("gallery_items").delete().eq("id", item.id);
-    if (error) { showToast(`Delete failed: ${error.message}`, "error"); return; }
-    showToast("Image deleted");
     setDeleteItemTarget(null);
-    await loadItems();
+    if (error) {
+      setToast({ message: "Failed to delete image", type: "error" });
+    } else {
+      setToast({ message: "Image deleted", type: "success" });
+      await fetchAll();
+    }
   };
 
-  const toggleApprove = async (item: GalleryItem) => {
-    const { error } = await supabase
-      .from("gallery_items")
-      .update({ is_approved: !item.is_approved })
-      .eq("id", item.id);
-    if (error) { showToast(`Update failed: ${error.message}`, "error"); return; }
-    await loadItems();
-  };
-
-  const toggleFeatured = async (item: GalleryItem) => {
-    const { error } = await supabase
-      .from("gallery_items")
-      .update({ is_featured: !item.is_featured })
-      .eq("id", item.id);
-    if (error) { showToast(`Update failed: ${error.message}`, "error"); return; }
-    await loadItems();
-  };
-
-  // ─── Render ───
+  // ─── Loading / no wedding ───
   if (loading || fetching) {
     return (
       <div className="flex items-center justify-center py-24 text-sepia">
-        <div className="animate-pulse">Loading gallery…</div>
+        Loading galleries…
       </div>
     );
   }
 
   if (!wedding) {
-    return <EmptyState title="No wedding found" description="Create a wedding to manage galleries." />;
+    return (
+      <EmptyState
+        title="No wedding found"
+        description="Create a wedding to manage galleries."
+      />
+    );
   }
 
-  // ─── Gallery view (SplitEditor with live preview) ───
-  if (activeGallery) {
+  // ─── Derived preview images from current item forms ───
+  const previewImages = itemForms.map((f) => ({
+    image_url: f.image_url,
+    caption: f.caption || null,
+    is_featured: f.is_featured,
+  }));
+
+  // ─── Gallery view (SplitEditor) ───
+  if (viewingGallery) {
     return (
       <div>
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setActiveGalleryId(null)}
-              className="text-sepia hover:text-onyx text-sm flex items-center gap-1.5 transition-colors"
-            >
-              ← Back to galleries
-            </button>
-            <span className="text-sepia/30">/</span>
-            <h1 className="text-xl font-serif text-onyx">{activeGallery.title}</h1>
-            <Badge>{activeItems.length} images</Badge>
-          </div>
-        </div>
-
-        <SplitEditor
-          editor={
-            <div className="space-y-5">
-              {/* ─── Add / Edit image form ─── */}
-              <Card className="p-5 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-serif text-base text-onyx">
-                    {editingItemId ? "Edit Image" : "Add Image"}
-                  </h3>
-                  {editingItemId && (
-                    <Button size="sm" variant="ghost" onClick={cancelItemEdit}>
-                      <X className="w-3.5 h-3.5" /> Cancel edit
-                    </Button>
-                  )}
-                </div>
-
-                <div>
-                  <Label>Image</Label>
-                  <ImageUpload
-                    weddingId={weddingId}
-                    value={itemForm.image_url}
-                    onChange={(url) => setItemForm((f) => ({ ...f, image_url: url }))}
-                  />
-                </div>
-
-                <div>
-                  <Label>Caption</Label>
-                  <Input
-                    value={itemForm.caption}
-                    onChange={(e) => setItemForm((f) => ({ ...f, caption: e.target.value }))}
-                    placeholder="Optional caption…"
-                  />
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-sand">
-                  <div>
-                    <Label>Featured</Label>
-                    <p className="text-xs text-sepia/60 -mt-1">Highlight this image on the site.</p>
-                  </div>
-                  <Toggle
-                    checked={itemForm.is_featured}
-                    onChange={(v) => setItemForm((f) => ({ ...f, is_featured: v }))}
-                    label={itemForm.is_featured ? "Featured" : "No"}
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  {editingItemId && (
-                    <Button variant="outline" onClick={cancelItemEdit}>Cancel</Button>
-                  )}
-                  <Button onClick={saveItem} disabled={saving || !itemForm.image_url}>
-                    <Save className="w-4 h-4" /> {editingItemId ? "Update" : "Add"} Image
-                  </Button>
-                </div>
-              </Card>
-
-              {/* ─── Image list ─── */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-serif text-base text-onyx">Images in this gallery</h3>
-                  {!editingItemId && (
-                    <Button size="sm" variant="outline" onClick={startAddItem}>
-                      <Plus className="w-3.5 h-3.5" /> Add
-                    </Button>
-                  )}
-                </div>
-
-                {activeItems.length === 0 ? (
-                  <Card className="p-8 text-center">
-                    <ImageIcon className="w-8 h-8 text-sepia/30 mx-auto mb-2" />
-                    <p className="text-sm text-sepia/60">No images yet. Add your first image above.</p>
-                  </Card>
-                ) : (
-                  <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
-                    {activeItems.map((item) => (
-                      <Card key={item.id} className="overflow-hidden group">
-                        <div className="relative aspect-square">
-                          <img
-                            src={item.image_url}
-                            alt={item.caption ?? ""}
-                            className="w-full h-full object-cover"
-                          />
-                          {/* Badges */}
-                          <div className="absolute top-1.5 left-1.5 flex gap-1">
-                            {item.is_featured && (
-                              <span className="bg-onyx/80 text-parchment p-1 rounded-full" title="Featured">
-                                <Star className="w-3 h-3 fill-current" />
-                              </span>
-                            )}
-                            <span
-                              className={`p-1 rounded-full ${item.is_approved ? "bg-green-600/80 text-white" : "bg-yellow-500/80 text-white"}`}
-                              title={item.is_approved ? "Approved" : "Pending"}
-                            >
-                              {item.is_approved ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
-                            </span>
-                          </div>
-                          {/* Hover actions */}
-                          <div className="absolute inset-0 bg-onyx/0 group-hover:bg-onyx/30 transition-colors flex items-end justify-center gap-1 pb-2 opacity-0 group-hover:opacity-100">
-                            <button
-                              onClick={() => toggleFeatured(item)}
-                              className={`p-1.5 rounded-full transition-colors ${item.is_featured ? "bg-onyx text-parchment" : "bg-white/90 text-sepia hover:bg-white"}`}
-                              title={item.is_featured ? "Unfeature" : "Feature"}
-                            >
-                              <Star className={`w-3.5 h-3.5 ${item.is_featured ? "fill-current" : ""}`} />
-                            </button>
-                            <button
-                              onClick={() => toggleApprove(item)}
-                              className={`p-1.5 rounded-full transition-colors ${item.is_approved ? "bg-green-600 text-white" : "bg-white/90 text-sepia hover:bg-white"}`}
-                              title={item.is_approved ? "Unapprove" : "Approve"}
-                            >
-                              {item.is_approved ? <Check className="w-3.5 h-3.5" /> : <X className="w-3.5 h-3.5" />}
-                            </button>
-                            <button
-                              onClick={() => startEditItem(item)}
-                              className="p-1.5 rounded-full bg-white/90 text-sepia hover:bg-white transition-colors"
-                              title="Edit"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => setDeleteItemTarget(item)}
-                              className="p-1.5 rounded-full bg-white/90 text-red-600 hover:bg-white transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                        {item.caption && (
-                          <p className="text-xs text-sepia/70 px-2 py-1.5 truncate">{item.caption}</p>
-                        )}
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          }
-          preview={
-            <GalleryPreview images={previewImages} theme={theme} />
-          }
-          previewLabel="Guest Preview"
-          actions={
-            <>
-              <Button variant="outline" onClick={() => setRenameTarget(activeGallery)}>
-                <Edit2 className="w-4 h-4" /> Rename
-              </Button>
-              <Button variant="danger" onClick={() => setDeleteGalleryTarget(activeGallery)}>
-                <Trash2 className="w-4 h-4" /> Delete Gallery
-              </Button>
-            </>
+        <SectionTitle
+          title={`Gallery: ${viewingGallery.title}`}
+          subtitle="Add images, approve uploads, and feature favorites. Preview updates live."
+          action={
+            <Button variant="outline" size="sm" onClick={() => setViewingGalleryId(null)}>
+              <X className="w-4 h-4" /> Back to Galleries
+            </Button>
           }
         />
 
-        {/* ─── Rename gallery modal ─── */}
-        <Modal open={!!renameTarget} onClose={() => setRenameTarget(null)} title="Rename Gallery">
-          <div className="space-y-4">
-            <div>
-              <Label>Gallery Title</Label>
-              <Input
-                value={renameTitle}
-                onChange={(e) => setRenameTitle(e.target.value)}
-                placeholder="Gallery name"
-                autoFocus
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setRenameTarget(null)}>Cancel</Button>
-              <Button onClick={renameGallery} disabled={saving}>Rename</Button>
-            </div>
+        <Card className="p-6">
+          <SplitEditor
+            previewLabel="Guest Preview"
+            draftData={{ theme }}
+            actions={
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setViewingGalleryId(null)}
+                  disabled={savingItems}
+                >
+                  Close
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={saveAllItems}
+                  disabled={savingItems}
+                >
+                  <Send className="w-4 h-4" /> {savingItems ? "Saving…" : "Save"}
+                </Button>
+              </div>
+            }
+            editor={
+              <div className="space-y-6">
+                {/* ─── Add / Edit draft item ─── */}
+                <div className="rounded-lg border border-sand bg-mist/40 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium text-onyx">
+                      {editingItemId ? "Edit Image" : "Add Image"}
+                    </h3>
+                    {(draftItem.image_url || editingItemId) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setDraftItem(emptyItemForm());
+                          setEditingItemId(null);
+                        }}
+                      >
+                        <X className="w-3.5 h-3.5" /> Clear
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Image</Label>
+                      <ImageUpload
+                        weddingId={wedding.id}
+                        value={draftItem.image_url || null}
+                        onChange={(url) =>
+                          setDraftItem((d) => ({ ...d, image_url: url ?? "" }))
+                        }
+                        label="Gallery image"
+                      />
+                    </div>
+                    <div>
+                      <Label>Caption</Label>
+                      <Input
+                        value={draftItem.caption}
+                        onChange={(e) =>
+                          setDraftItem((d) => ({
+                            ...d,
+                            caption: e.target.value,
+                          }))
+                        }
+                        placeholder="Optional caption…"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-6">
+                      <Toggle
+                        checked={draftItem.is_featured}
+                        onChange={(v) =>
+                          setDraftItem((d) => ({ ...d, is_featured: v }))
+                        }
+                        label="Featured"
+                      />
+                      <Toggle
+                        checked={draftItem.is_approved}
+                        onChange={(v) =>
+                          setDraftItem((d) => ({ ...d, is_approved: v }))
+                        }
+                        label="Approved"
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={commitDraftItem}
+                      disabled={!draftItem.image_url}
+                    >
+                      <Plus className="w-4 h-4" />
+                      {editingItemId ? "Update Image" : "Add to Gallery"}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* ─── Existing items grid ─── */}
+                <div>
+                  <h3 className="text-sm font-medium text-onyx mb-3">
+                    Images ({itemForms.length})
+                  </h3>
+                  {itemForms.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-sand py-10 text-center text-sm text-sepia/60">
+                      <ImageIcon className="w-6 h-6 mx-auto mb-2 text-sepia/40" />
+                      No images yet. Add one above.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {itemForms.map((f) => {
+                        const isNew = !f.id;
+                        return (
+                          <div
+                            key={f.id ?? `new-${f.image_url}`}
+                            className="rounded-lg border border-sand bg-card overflow-hidden flex flex-col"
+                          >
+                            <div className="relative aspect-square">
+                              <img
+                                src={f.image_url}
+                                alt={f.caption ?? ""}
+                                className="w-full h-full object-cover"
+                              />
+                              {/* Badges */}
+                              <div className="absolute top-1.5 left-1.5 flex gap-1">
+                                {isNew && (
+                                  <Badge variant="info">New</Badge>
+                                )}
+                                {!f.is_approved && (
+                                  <Badge variant="warning">Pending</Badge>
+                                )}
+                              </div>
+                              {f.is_featured && (
+                                <Star className="absolute top-1.5 right-1.5 w-4 h-4 text-yellow-400 fill-yellow-400" />
+                              )}
+                            </div>
+
+                            {f.caption && (
+                              <div className="px-2 py-1.5 text-xs text-sepia truncate">
+                                {f.caption}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between px-2 py-1.5 border-t border-sand bg-mist/30">
+                              <div className="flex items-center gap-1">
+                                {/* Approve toggle */}
+                                <button
+                                  onClick={() => toggleItemField(f.id, "is_approved")}
+                                  title={f.is_approved ? "Approved" : "Approve"}
+                                  className={
+                                    "p-1 rounded transition-colors " +
+                                    (f.is_approved
+                                      ? "text-green-600 hover:bg-green-50"
+                                      : "text-sepia/40 hover:bg-sand/40")
+                                  }
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                </button>
+                                {/* Feature toggle */}
+                                <button
+                                  onClick={() => toggleItemField(f.id, "is_featured")}
+                                  title={f.is_featured ? "Featured" : "Feature"}
+                                  className={
+                                    "p-1 rounded transition-colors " +
+                                    (f.is_featured
+                                      ? "text-yellow-500 hover:bg-yellow-50"
+                                      : "text-sepia/40 hover:bg-sand/40")
+                                  }
+                                >
+                                  <Star
+                                    className={
+                                      "w-3.5 h-3.5 " +
+                                      (f.is_featured ? "fill-yellow-400" : "")
+                                    }
+                                  />
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => editItemForm(
+                                    items.find((it) => it.id === f.id) ?? {
+                                      id: f.id ?? "",
+                                      wedding_id: weddingId ?? "",
+                                      image_url: f.image_url,
+                                      caption: f.caption || null,
+                                      uploader_name: null,
+                                      is_featured: f.is_featured,
+                                      is_approved: f.is_approved,
+                                      created_at: "",
+                                      gallery_id: viewingGalleryId,
+                                    } as GalleryItem,
+                                  )}
+                                  title="Edit"
+                                  className="p-1 rounded text-sepia hover:text-onyx hover:bg-sand/40 transition-colors"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => removeItemForm(f.id)}
+                                  title="Remove"
+                                  className="p-1 rounded text-red-500 hover:bg-red-50 transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            }
+            preview={<GalleryPreview images={previewImages} theme={theme} />}
+          />
+        </Card>
+
+        {/* ─── Delete item confirm ─── */}
+        <Modal
+          open={!!deleteItemTarget}
+          onClose={() => setDeleteItemTarget(null)}
+          title="Delete Image"
+        >
+          <p className="text-sm text-sepia mb-6">
+            Are you sure you want to delete this image? This cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteItemTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => deleteItemTarget && deleteItem(deleteItemTarget)}
+            >
+              <Trash2 className="w-4 h-4" /> Delete
+            </Button>
           </div>
         </Modal>
 
-        {/* ─── Delete gallery confirmation ─── */}
-        <Modal open={!!deleteGalleryTarget} onClose={() => setDeleteGalleryTarget(null)} title="Delete Gallery">
-          <div className="space-y-4">
-            <p className="text-sm text-sepia">
-              Are you sure you want to delete{" "}
-              <span className="font-medium text-onyx">{deleteGalleryTarget?.title}</span> and all
-              its images? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setDeleteGalleryTarget(null)}>Cancel</Button>
-              <Button variant="danger" onClick={() => deleteGalleryTarget && deleteGallery(deleteGalleryTarget)}>
-                <Trash2 className="w-4 h-4" /> Delete
-              </Button>
-            </div>
-          </div>
-        </Modal>
-
-        {/* ─── Delete item confirmation ─── */}
-        <Modal open={!!deleteItemTarget} onClose={() => setDeleteItemTarget(null)} title="Delete Image">
-          <div className="space-y-4">
-            <p className="text-sm text-sepia">Are you sure you want to delete this image?</p>
-            {deleteItemTarget && (
-              <img
-                src={deleteItemTarget.image_url}
-                alt=""
-                className="w-full max-w-xs mx-auto rounded-lg border border-sand"
-              />
-            )}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setDeleteItemTarget(null)}>Cancel</Button>
-              <Button variant="danger" onClick={() => deleteItemTarget && deleteItem(deleteItemTarget)}>
-                <Trash2 className="w-4 h-4" /> Delete
-              </Button>
-            </div>
-          </div>
-        </Modal>
-
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            onClose={() => setToast(null)}
+          />
+        )}
       </div>
     );
   }
 
-  // ─── Galleries list view ───
+  // ─── Gallery list / create mode ───
   return (
     <div>
       <SectionTitle
-        title="Gallery"
-        subtitle="Organize your wedding photos into beautiful galleries."
+        title="Galleries"
+        subtitle="Create photo galleries for guests to browse your wedding moments."
         action={
-          <Button onClick={() => setCreateGalleryOpen(true)}>
-            <Plus className="w-4 h-4" /> New Gallery
-          </Button>
+          !isCreatingGallery && (
+            <Button onClick={startCreateGallery}>
+              <Plus className="w-4 h-4" /> New Gallery
+            </Button>
+          )
         }
       />
 
-      {galleries.length === 0 ? (
+      {/* ─── Create gallery inline form ─── */}
+      {isCreatingGallery && (
+        <Card className="p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-serif text-onyx">Create Gallery</h2>
+            <Button variant="ghost" size="sm" onClick={cancelCreateGallery}>
+              <X className="w-4 h-4" /> Close
+            </Button>
+          </div>
+          <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+            <div className="flex-1 w-full">
+              <Label>Gallery Title</Label>
+              <Input
+                value={galleryForm.title}
+                onChange={(e) =>
+                  setGalleryForm((f) => ({ ...f, title: e.target.value }))
+                }
+                placeholder="e.g. Ceremony Photos"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") createGallery();
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={cancelCreateGallery}
+                disabled={savingGallery}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={createGallery}
+                disabled={savingGallery}
+              >
+                <Plus className="w-4 h-4" /> {savingGallery ? "Creating…" : "Create"}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* ─── Gallery grid ─── */}
+      {galleries.length === 0 && !isCreatingGallery ? (
         <EmptyState
           title="No galleries yet"
-          description="Create a gallery to start adding photos."
+          description="Create a gallery to start adding photos for guests to enjoy."
           action={
-            <Button onClick={() => setCreateGalleryOpen(true)}>
-              <Plus className="w-4 h-4" /> Create Gallery
+            <Button onClick={startCreateGallery}>
+              <Plus className="w-4 h-4" /> New Gallery
             </Button>
           }
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {galleries.map((g) => {
-            const gItems = items.filter((i) => i.gallery_id === g.id);
-            const cover = gItems.find((i) => i.is_featured)?.image_url ?? gItems[0]?.image_url ?? null;
+            const galleryItems = items.filter((it) => it.gallery_id === g.id);
+            const cover = galleryItems.find((it) => it.is_featured)?.image_url ?? galleryItems[0]?.image_url ?? null;
+            const photoCount = galleryItems.length;
+            const pendingCount = galleryItems.filter((it) => !it.is_approved).length;
 
             return (
-              <Card key={g.id} className="overflow-hidden flex flex-col cursor-pointer hover:shadow-md transition-shadow" >
-                <div
-                  className="relative h-40 overflow-hidden bg-mist"
-                  onClick={() => setActiveGalleryId(g.id)}
-                >
-                  {cover ? (
-                    <img src={cover} alt="" className="w-full h-full object-cover" />
+              <Card key={g.id} className="overflow-hidden flex flex-col">
+                {cover ? (
+                  <button
+                    onClick={() => setViewingGalleryId(g.id)}
+                    className="relative h-36 overflow-hidden block"
+                  >
+                    <img
+                      src={cover}
+                      alt=""
+                      className="w-full h-full object-cover transition-transform hover:scale-105"
+                    />
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      {pendingCount > 0 && (
+                        <Badge variant="warning">{pendingCount} pending</Badge>
+                      )}
+                    </div>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setViewingGalleryId(g.id)}
+                    className="relative h-36 bg-gradient-to-br from-mist to-sand/40 flex items-center justify-center"
+                  >
+                    <ImageIcon className="w-8 h-8 text-sepia/40" />
+                    {pendingCount > 0 && (
+                      <div className="absolute top-2 right-2">
+                        <Badge variant="warning">{pendingCount} pending</Badge>
+                      </div>
+                    )}
+                  </button>
+                )}
+
+                <div className="p-4 flex-1 flex flex-col">
+                  {renameId === g.id ? (
+                    <div className="mb-3">
+                      <Input
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveRename();
+                          if (e.key === "Escape") cancelRename();
+                        }}
+                        className="text-sm"
+                      />
+                      <div className="flex items-center gap-1 mt-2">
+                        <Button variant="primary" size="sm" onClick={saveRename} disabled={savingGallery}>
+                          <Check className="w-3.5 h-3.5" /> Save
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={cancelRename}>
+                          <X className="w-3.5 h-3.5" /> Cancel
+                        </Button>
+                      </div>
+                    </div>
                   ) : (
-                    <div className="flex items-center justify-center h-full">
-                      <ImageIcon className="w-10 h-10 text-sepia/30" />
+                    <h3 className="font-serif text-base text-onyx mb-2">{g.title}</h3>
+                  )}
+
+                  <div className="text-sm text-sepia/70 flex-1 flex items-center gap-2">
+                    <ImageIcon className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      {photoCount} {photoCount === 1 ? "photo" : "photos"}
+                    </span>
+                  </div>
+
+                  {renameId !== g.id && (
+                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-sand">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setViewingGalleryId(g.id)}
+                      >
+                        <ImageIcon className="w-3.5 h-3.5" /> Manage
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => startRename(g)}
+                        >
+                          <Edit2 className="w-3.5 h-3.5" /> Rename
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteGalleryTarget(g)}
+                          className="text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-                  <Badge className="absolute top-2 right-2 bg-white/90">{gItems.length} photos</Badge>
-                </div>
-
-                <div className="p-5 flex flex-col flex-1">
-                  <h3 className="font-serif text-lg text-onyx mb-1">{g.title}</h3>
-                  <p className="text-sm text-sepia/60 flex-1">
-                    {gItems.length === 0
-                      ? "No images yet"
-                      : `${gItems.filter((i) => i.is_approved).length} approved · ${gItems.filter((i) => i.is_featured).length} featured`}
-                  </p>
-
-                  <div className="flex items-center gap-2 mt-4 pt-4 border-t border-sand">
-                    <Button size="sm" onClick={() => setActiveGalleryId(g.id)}>
-                      <FolderOpen className="w-3.5 h-3.5" /> Open
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => { setRenameTarget(g); setRenameTitle(g.title); }}>
-                      <Edit2 className="w-3.5 h-3.5" /> Rename
-                    </Button>
-                    <button
-                      onClick={() => setDeleteGalleryTarget(g)}
-                      className="ml-auto text-sepia/50 hover:text-red-600 transition-colors p-1.5 rounded-lg hover:bg-red-50"
-                      title="Delete gallery"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
                 </div>
               </Card>
             );
@@ -548,66 +786,39 @@ export function AdminGallery() {
         </div>
       )}
 
-      {/* ─── Create gallery modal ─── */}
-      <Modal open={createGalleryOpen} onClose={() => setCreateGalleryOpen(false)} title="New Gallery">
-        <div className="space-y-4">
-          <div>
-            <Label>Gallery Title</Label>
-            <Input
-              value={newGalleryTitle}
-              onChange={(e) => setNewGalleryTitle(e.target.value)}
-              placeholder="e.g. Wedding Day"
-              autoFocus
-            />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setCreateGalleryOpen(false)}>Cancel</Button>
-            <Button onClick={createGallery} disabled={saving}>
-              <Plus className="w-4 h-4" /> Create
-            </Button>
-          </div>
+      {/* ─── Delete gallery confirm ─── */}
+      <Modal
+        open={!!deleteGalleryTarget}
+        onClose={() => setDeleteGalleryTarget(null)}
+        title="Delete Gallery"
+      >
+        <p className="text-sm text-sepia mb-6">
+          Are you sure you want to delete{" "}
+          <span className="font-medium text-onyx">{deleteGalleryTarget?.title}</span>?
+          All photos in this gallery will also be removed. This cannot be undone.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setDeleteGalleryTarget(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() =>
+              deleteGalleryTarget && deleteGallery(deleteGalleryTarget)
+            }
+          >
+            <Trash2 className="w-4 h-4" /> Delete
+          </Button>
         </div>
       </Modal>
 
-      {/* ─── Rename gallery modal ─── */}
-      <Modal open={!!renameTarget} onClose={() => setRenameTarget(null)} title="Rename Gallery">
-        <div className="space-y-4">
-          <div>
-            <Label>Gallery Title</Label>
-            <Input
-              value={renameTitle}
-              onChange={(e) => setRenameTitle(e.target.value)}
-              placeholder="Gallery name"
-              autoFocus
-            />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setRenameTarget(null)}>Cancel</Button>
-            <Button onClick={renameGallery} disabled={saving}>Rename</Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* ─── Delete gallery confirmation ─── */}
-      <Modal open={!!deleteGalleryTarget} onClose={() => setDeleteGalleryTarget(null)} title="Delete Gallery">
-        <div className="space-y-4">
-          <p className="text-sm text-sepia">
-            Are you sure you want to delete{" "}
-            <span className="font-medium text-onyx">{deleteGalleryTarget?.title}</span> and all
-            its images? This action cannot be undone.
-          </p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeleteGalleryTarget(null)}>Cancel</Button>
-            <Button variant="danger" onClick={() => deleteGalleryTarget && deleteGallery(deleteGalleryTarget)}>
-              <Trash2 className="w-4 h-4" /> Delete
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }
-
-export default AdminGallery;

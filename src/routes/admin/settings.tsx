@@ -1,129 +1,121 @@
-import { useEffect, useState } from "react";
-import {
-  Save, Eye, ExternalLink, Heart, Calendar, MapPin, Image as ImageIcon,
-  FileText, Hash, Loader2,
-} from "lucide-react";
-import { supabase, type Wedding } from "@/lib/supabase";
+import { useState, useEffect } from "react";
+import { Save, Eye, ExternalLink, Heart, Calendar, MapPin, Hash } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import type { Wedding } from "@/lib/supabase";
 import { useHostWedding } from "@/lib/use-host-wedding";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Label, Toggle } from "@/components/ui/Input";
-import { Card, SectionTitle, Toast, Badge } from "@/components/ui";
+import { Card, SectionTitle, Toast } from "@/components/ui";
 import { ImageUpload } from "@/components/ui/ImageUpload";
-import { cn, formatDate } from "@/lib/utils";
 
 type SettingsForm = {
   couple_name_one: string;
   couple_name_two: string;
   wedding_date: string;
   location: string;
-  hero_image_url: string;
+  hero_image_url: string | null;
   story: string;
   hashtag: string;
   is_published: boolean;
 };
 
+function toForm(wedding: Wedding): SettingsForm {
+  return {
+    couple_name_one: wedding.couple_name_one ?? "",
+    couple_name_two: wedding.couple_name_two ?? "",
+    wedding_date: wedding.wedding_date ?? "",
+    location: wedding.location ?? "",
+    hero_image_url: wedding.hero_image_url,
+    story: wedding.story ?? "",
+    hashtag: wedding.hashtag ?? "",
+    is_published: wedding.is_published,
+  };
+}
+
 export function AdminSettings() {
   const { wedding, loading, setWedding } = useHostWedding();
 
-  const [form, setForm] = useState<SettingsForm>({
-    couple_name_one: "",
-    couple_name_two: "",
-    wedding_date: "",
-    location: "",
-    hero_image_url: "",
-    story: "",
-    hashtag: "",
-    is_published: false,
-  });
+  const [form, setForm] = useState<SettingsForm>(() =>
+    wedding ? toForm(wedding) : {
+      couple_name_one: "",
+      couple_name_two: "",
+      wedding_date: "",
+      location: "",
+      hero_image_url: null,
+      story: "",
+      hashtag: "",
+      is_published: false,
+    },
+  );
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  // ─── Initialize form from wedding ───
+  // Re-init form when wedding loads/changes
+  const loadedKey = wedding?.id;
+  const [initKey, setInitKey] = useState<string | undefined>(undefined);
   useEffect(() => {
-    if (wedding) {
-      setForm({
-        couple_name_one: wedding.couple_name_one ?? "",
-        couple_name_two: wedding.couple_name_two ?? "",
-        wedding_date: wedding.wedding_date ?? "",
-        location: wedding.location ?? "",
-        hero_image_url: wedding.hero_image_url ?? "",
-        story: wedding.story ?? "",
-        hashtag: wedding.hashtag ?? "",
-        is_published: wedding.is_published ?? false,
-      });
+    if (loadedKey && initKey !== loadedKey && wedding) {
+      setInitKey(loadedKey);
+      setForm(toForm(wedding));
     }
-  }, [wedding?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loadedKey, initKey, wedding]);
 
-  // ─── Save ───
-  const save = async () => {
-    if (!wedding) return;
-    setSaving(true);
-    const payload = {
-      couple_name_one: form.couple_name_one.trim() || "First",
-      couple_name_two: form.couple_name_two.trim() || "Second",
-      wedding_date: form.wedding_date || null,
-      location: form.location.trim() || null,
-      hero_image_url: form.hero_image_url || null,
-      story: form.story.trim() || null,
-      hashtag: form.hashtag.trim() || null,
-      is_published: form.is_published,
-    };
-    const { data, error } = await supabase
-      .from("weddings")
-      .update(payload)
-      .eq("id", wedding.id)
-      .select()
-      .single();
-    setSaving(false);
-    if (error) { showToast(`Save failed: ${error.message}`, "error"); return; }
-    if (data) setWedding(data as Wedding);
-    showToast("Settings saved");
-  };
-
-  // ─── Render ───
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24 text-sepia">
-        <div className="animate-pulse">Loading settings…</div>
-      </div>
-    );
+    return <div className="flex items-center justify-center py-24 text-sepia">Loading settings…</div>;
   }
 
   if (!wedding) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <h3 className="font-serif text-lg text-onyx mb-1">No wedding found</h3>
-        <p className="text-sm text-sepia/70">Create a wedding to manage settings.</p>
-      </div>
-    );
+    return <div className="text-center py-24 text-sepia">No wedding found.</div>;
   }
 
   const publicUrl = `${window.location.origin}/w/${wedding.slug}`;
 
+  const save = async () => {
+    setSaving(true);
+    const updates = {
+      couple_name_one: form.couple_name_one,
+      couple_name_two: form.couple_name_two,
+      wedding_date: form.wedding_date || null,
+      location: form.location || null,
+      hero_image_url: form.hero_image_url,
+      story: form.story || null,
+      hashtag: form.hashtag || null,
+      is_published: form.is_published,
+    };
+    const { data, error } = await supabase
+      .from("weddings")
+      .update(updates)
+      .eq("id", wedding.id)
+      .select()
+      .maybeSingle();
+
+    setSaving(false);
+    if (error) {
+      setToast({ message: "Failed to save settings", type: "error" });
+    } else if (data) {
+      setWedding(data as Wedding);
+      setToast({ message: "Settings saved", type: "success" });
+    }
+  };
+
   return (
-    <div className="max-w-2xl">
+    <div>
       <SectionTitle
         title="Settings"
         subtitle="Manage your wedding details and publication status."
         action={
-          <Button onClick={save} disabled={saving}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {saving ? "Saving…" : "Save Changes"}
+          <Button size="sm" onClick={save} disabled={saving}>
+            <Save className="w-4 h-4" /> {saving ? "Saving…" : "Save Changes"}
           </Button>
         }
       />
 
-      <div className="space-y-6">
-        {/* ─── Couple names ─── */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* ─── Couple Names ─── */}
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <Heart className="w-4 h-4 text-sepia" />
-            <h3 className="font-serif text-lg text-onyx">The Couple</h3>
+            <h3 className="text-sm font-medium text-onyx">Couple</h3>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -145,11 +137,11 @@ export function AdminSettings() {
           </div>
         </Card>
 
-        {/* ─── Wedding details ─── */}
+        {/* ─── Wedding Date & Location ─── */}
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <Calendar className="w-4 h-4 text-sepia" />
-            <h3 className="font-serif text-lg text-onyx">Wedding Details</h3>
+            <h3 className="text-sm font-medium text-onyx">Date & Location</h3>
           </div>
           <div className="space-y-4">
             <div>
@@ -159,9 +151,6 @@ export function AdminSettings() {
                 value={form.wedding_date}
                 onChange={(e) => setForm((f) => ({ ...f, wedding_date: e.target.value }))}
               />
-              {form.wedding_date && (
-                <p className="text-xs text-sepia/60 mt-1.5">{formatDate(form.wedding_date)}</p>
-              )}
             </div>
             <div>
               <Label>Location</Label>
@@ -174,118 +163,105 @@ export function AdminSettings() {
           </div>
         </Card>
 
-        {/* ─── Hero image ─── */}
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <ImageIcon className="w-4 h-4 text-sepia" />
-            <h3 className="font-serif text-lg text-onyx">Hero Image</h3>
-          </div>
-          <ImageUpload
-            weddingId={wedding.id}
-            value={form.hero_image_url || null}
-            onChange={(url) => setForm((f) => ({ ...f, hero_image_url: url ?? "" }))}
-            label="Cover Photo"
-          />
-        </Card>
-
-        {/* ─── Story ─── */}
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <FileText className="w-4 h-4 text-sepia" />
-            <h3 className="font-serif text-lg text-onyx">Our Story</h3>
-          </div>
-          <Textarea
-            rows={5}
-            value={form.story}
-            onChange={(e) => setForm((f) => ({ ...f, story: e.target.value }))}
-            placeholder="Share the story of how you met and fell in love…"
-          />
-        </Card>
-
-        {/* ─── Hashtag ─── */}
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Hash className="w-4 h-4 text-sepia" />
-            <h3 className="font-serif text-lg text-onyx">Wedding Hashtag</h3>
-          </div>
-          <Input
-            value={form.hashtag}
-            onChange={(e) => setForm((f) => ({ ...f, hashtag: e.target.value }))}
-            placeholder="#JaneAndJohn2026"
-          />
-        </Card>
-
-        {/* ─── Publication ─── */}
+        {/* ─── Hero Image ─── */}
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <Eye className="w-4 h-4 text-sepia" />
-            <h3 className="font-serif text-lg text-onyx">Publication</h3>
+            <h3 className="text-sm font-medium text-onyx">Hero Image</h3>
+          </div>
+          <ImageUpload
+            weddingId={wedding.id}
+            value={form.hero_image_url}
+            onChange={(url) => setForm((f) => ({ ...f, hero_image_url: url }))}
+            label="Main background image"
+          />
+        </Card>
+
+        {/* ─── Story & Hashtag ─── */}
+        <Card className="p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Hash className="w-4 h-4 text-sepia" />
+            <h3 className="text-sm font-medium text-onyx">Story & Hashtag</h3>
           </div>
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-lg bg-mist/50">
-              <div>
-                <p className="text-sm font-medium text-onyx">Website Published</p>
-                <p className="text-xs text-sepia/60 mt-0.5">
-                  When published, your site is visible to guests at the public URL.
-                </p>
-              </div>
-              <Toggle
-                checked={form.is_published}
-                onChange={(v) => setForm((f) => ({ ...f, is_published: v }))}
-                label={form.is_published ? "Live" : "Hidden"}
+            <div>
+              <Label>Our Story</Label>
+              <Textarea
+                value={form.story}
+                onChange={(e) => setForm((f) => ({ ...f, story: e.target.value }))}
+                placeholder="Tell your guests how you met, the proposal story, or anything else you'd like to share…"
+                rows={5}
               />
             </div>
-
             <div>
-              <Label>Public URL</Label>
-              <div className="flex items-center gap-2">
-                <div className={cn(
-                  "flex-1 px-3 py-2 rounded-lg border border-sand bg-white text-sm text-sepia truncate",
-                  !form.is_published && "opacity-60"
-                )}>
-                  {publicUrl}
-                </div>
-                <a
-                  href={publicUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={cn(
-                    "p-2 rounded-lg border border-sand text-sepia hover:bg-mist transition-colors flex-shrink-0",
-                    !form.is_published && "pointer-events-none opacity-50"
-                  )}
-                  title="Open public site"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                {form.is_published ? (
-                  <Badge variant="success">Live</Badge>
-                ) : (
-                  <Badge variant="warning">Hidden</Badge>
-                )}
-                <span className="text-xs text-sepia/60">
-                  {form.is_published
-                    ? "Your site is live and accessible to guests."
-                    : "Your site is hidden — only visible to you."}
-                </span>
-              </div>
+              <Label>Wedding Hashtag</Label>
+              <Input
+                value={form.hashtag}
+                onChange={(e) => setForm((f) => ({ ...f, hashtag: e.target.value }))}
+                placeholder="#JaneAndJohn2025"
+              />
             </div>
           </div>
         </Card>
-
-        {/* ─── Sticky save bar ─── */}
-        <div className="flex justify-end pt-2">
-          <Button onClick={save} disabled={saving} size="lg">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {saving ? "Saving…" : "Save All Changes"}
-          </Button>
-        </div>
       </div>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {/* ─── Publication ─── */}
+      <Card className="p-6 mt-6">
+        <div className="flex items-center gap-2 mb-4">
+          <ExternalLink className="w-4 h-4 text-sepia" />
+          <h3 className="text-sm font-medium text-onyx">Publication</h3>
+        </div>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-4 rounded-lg bg-mist/30">
+            <div>
+              <p className="text-sm font-medium text-onyx">
+                {form.is_published ? "Website is live" : "Website is private"}
+              </p>
+              <p className="text-xs text-sepia/60 mt-0.5">
+                {form.is_published
+                  ? "Guests can view your wedding website."
+                  : "Only you can see the website. Toggle this to make it public."}
+              </p>
+            </div>
+            <Toggle
+              checked={form.is_published}
+              onChange={(v) => setForm((f) => ({ ...f, is_published: v }))}
+              label={form.is_published ? "Published" : "Private"}
+            />
+          </div>
+
+          <div>
+            <Label>Public URL</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                value={publicUrl}
+                readOnly
+                className="font-mono text-xs"
+              />
+              <a href={publicUrl} target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" size="sm" type="button">
+                  <ExternalLink className="w-4 h-4" /> Visit
+                </Button>
+              </a>
+            </div>
+            <p className="text-xs text-sepia/50 mt-1.5">
+              Share this link with your guests so they can RSVP and view your wedding details.
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      {/* ─── Save bar ─── */}
+      <div className="flex justify-end mt-6">
+        <Button onClick={save} disabled={saving}>
+          <Save className="w-4 h-4" /> {saving ? "Saving…" : "Save Changes"}
+        </Button>
+      </div>
+
+      {/* ─── Toast ─── */}
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }
-
-export default AdminSettings;

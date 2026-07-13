@@ -1,239 +1,198 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { MapPin, Mail, Phone, Globe, Heart, MessageSquare } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Mail, Phone, MapPin, MessageCircle, Heart } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { WebsiteContent } from "@/lib/supabase";
 import { useGuestData } from "@/lib/use-guest-data";
 import { getTheme, themeToCssVars } from "@/lib/theme";
-import type { ThemeConfig } from "@/lib/theme";
 import { Card, EmptyState } from "@/components/ui";
 
 type ContactInfo = {
   email?: string;
   phone?: string;
-  website?: string;
-  notes?: string;
+  address?: string;
+  note?: string;
 };
+
+function parseContactInfo(body: string): ContactInfo {
+  const info: ContactInfo = {};
+  const lines = body.split("\n");
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const lower = trimmed.toLowerCase();
+    if (lower.startsWith("email:") || lower.startsWith("e-mail:")) {
+      info.email = trimmed.slice(lower.startsWith("e-mail:") ? 7 : 6).trim();
+    } else if (lower.startsWith("phone:") || lower.startsWith("tel:")) {
+      info.phone = trimmed.slice(lower.startsWith("tel:") ? 4 : 6).trim();
+    } else if (lower.startsWith("address:")) {
+      info.address = trimmed.slice(8).trim();
+    } else if (lower.startsWith("note:")) {
+      info.note = trimmed.slice(5).trim();
+    }
+  }
+
+  return info;
+}
 
 export function GuestContact() {
   const { wedding, loading } = useGuestData();
-  const theme: ThemeConfig = useMemo(() => getTheme(wedding), [wedding]);
-  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
 
   const [content, setContent] = useState<WebsiteContent | null>(null);
   const [fetching, setFetching] = useState(true);
 
-  const weddingId = wedding?.id ?? "";
+  const theme = useMemo(() => getTheme(wedding), [wedding]);
+  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
 
-  const loadContent = useCallback(async () => {
-    if (!weddingId) { setFetching(false); return; }
+  const weddingId = wedding?.id ?? null;
+
+  useEffect(() => {
+    if (!weddingId) return;
     setFetching(true);
-    const { data } = await supabase
+    supabase
       .from("website_content")
       .select("*")
       .eq("wedding_id", weddingId)
       .eq("section", "contact")
-      .eq("is_published", true)
-      .order("sort_order", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (data) setContent(data as WebsiteContent);
-    setFetching(false);
+      .maybeSingle()
+      .then(({ data }) => {
+        setContent((data as WebsiteContent) ?? null);
+        setFetching(false);
+      });
   }, [weddingId]);
-
-  useEffect(() => { if (weddingId) loadContent(); }, [weddingId, loadContent]);
-
-  // ─── Parse contact info from body ───
-  const contactInfo = useMemo<ContactInfo>(() => {
-    const body = content?.body ?? "";
-    const info: ContactInfo = {};
-
-    const lines = body.split("\n");
-    for (const line of lines) {
-      const trimmed = line.trim();
-      const lower = trimmed.toLowerCase();
-
-      if (lower.startsWith("email:") || lower.startsWith("e-mail:")) {
-        info.email = trimmed.slice(lower.startsWith("e-mail:") ? 7 : 6).trim();
-      } else if (lower.startsWith("phone:") || lower.startsWith("tel:")) {
-        info.phone = trimmed.slice(lower.startsWith("tel:") ? 4 : 6).trim();
-      } else if (lower.startsWith("website:") || lower.startsWith("url:")) {
-        info.website = trimmed.slice(lower.startsWith("url:") ? 4 : 8).trim();
-      } else if (lower.startsWith("notes:") || lower.startsWith("note:")) {
-        info.notes = trimmed.slice(lower.startsWith("note:") ? 5 : 6).trim();
-      }
-    }
-
-    // Also try to extract email/phone from raw text if not explicitly labeled
-    if (!info.email) {
-      const emailMatch = body.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-      if (emailMatch) info.email = emailMatch[0];
-    }
-    if (!info.phone) {
-      const phoneMatch = body.match(/(\+?\d[\d\s\-().]{7,}\d)/);
-      if (phoneMatch) info.phone = phoneMatch[0].trim();
-    }
-
-    return info;
-  }, [content]);
 
   if (loading || fetching) {
     return (
-      <div className="flex items-center justify-center py-24 text-sepia">
-        <div className="animate-pulse">Loading…</div>
+      <div className="flex items-center justify-center py-24 text-sepia animate-fade-in">
+        Loading contact info…
       </div>
     );
   }
 
   if (!wedding) {
-    return <EmptyState title="No wedding found" />;
+    return <EmptyState title="Wedding Not Found" description="We couldn't find the wedding you're looking for." />;
   }
 
-  const hasContactInfo = contactInfo.email || contactInfo.phone || contactInfo.website || contactInfo.notes;
-  const hasLocation = wedding.location;
+  const title = content?.title ?? "Get in Touch";
+  const body = content?.body ?? null;
+  const contactInfo = body ? parseContactInfo(body) : {};
+  const hasAnyContact = contactInfo.email || contactInfo.phone || contactInfo.address || wedding.location;
 
-  if (!hasContactInfo && !hasLocation && !content?.body) {
+  if (!hasAnyContact) {
     return (
-      <div style={cssVars as React.CSSProperties} className="animate-fade-in px-6 py-12">
-        <div className="max-w-2xl mx-auto">
+      <div style={cssVars as React.CSSProperties} className="animate-fade-in">
+        <section className="px-6 py-24 text-center" style={{ background: "var(--c-background)" }}>
           <EmptyState
             title="Contact info coming soon"
             description="Check back later for contact details."
           />
-        </div>
+        </section>
       </div>
     );
   }
 
   return (
-    <div style={cssVars as React.CSSProperties} className="animate-fade-in px-6 py-12">
-      <div className="max-w-2xl mx-auto">
-        {/* ─── Header ─── */}
-        <div className="text-center mb-12">
-          <Heart className="w-6 h-6 mx-auto mb-3" style={{ color: "var(--c-accent)" }} />
-          <p className="text-xs uppercase tracking-[0.3em] mb-2" style={{ color: "var(--c-textMuted)" }}>
-            Get in touch
-          </p>
-          <h1 className="text-4xl font-serif" style={{ color: "var(--c-text)" }}>
-            {content?.title || "Contact"}
-          </h1>
+    <div style={cssVars as React.CSSProperties} className="animate-fade-in">
+      {/* ── Header ── */}
+      <section className="px-6 pt-16 pb-8 text-center" style={{ background: "var(--c-background)" }}>
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-4" style={{ background: "var(--c-secondary)" }}>
+          <MessageCircle className="w-6 h-6" style={{ color: "var(--c-accent)" }} />
         </div>
+        <p className="text-xs uppercase tracking-[0.3em] mb-3" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
+          We'd love to hear from you
+        </p>
+        <h1 className="text-4xl md:text-5xl font-serif" style={{ color: "var(--c-text)", fontFamily: "var(--f-heading)", fontStyle: "var(--f-style)" }}>
+          {title}
+        </h1>
+      </section>
 
-        {/* ─── Location ─── */}
-        {hasLocation && (
-          <Card className="p-6 mb-6 text-center">
-            <MapPin className="w-6 h-6 mx-auto mb-3" style={{ color: "var(--c-primary)" }} />
-            <h2 className="text-xs uppercase tracking-widest mb-2" style={{ color: "var(--c-textMuted)" }}>
-              Wedding Location
-            </h2>
-            <p className="text-lg font-serif" style={{ color: "var(--c-text)" }}>
-              {wedding.location}
-            </p>
-          </Card>
-        )}
-
-        {/* ─── Contact details ─── */}
-        {hasContactInfo && (
-          <Card className="p-6">
-            <div className="space-y-4">
-              {contactInfo.email && (
+      {/* ── Contact cards ── */}
+      <section className="px-6 pb-16 md:pb-24" style={{ background: "var(--c-background)" }}>
+        <div className="max-w-3xl mx-auto">
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Email */}
+            {contactInfo.email && (
+              <Card
+                className="p-6 flex flex-col items-center text-center animate-fade-in"
+                style={{ borderColor: "var(--c-secondary)", background: "var(--c-card)" } as React.CSSProperties}
+              >
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ background: "var(--c-secondary)" }}>
+                  <Mail className="w-6 h-6" style={{ color: "var(--c-primary)" }} />
+                </div>
+                <h3 className="text-sm uppercase tracking-widest mb-2" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
+                  Email
+                </h3>
                 <a
                   href={`mailto:${contactInfo.email}`}
-                  className="flex items-center gap-3 group transition-colors"
+                  className="text-sm hover:underline break-all"
+                  style={{ color: "var(--c-link)", fontFamily: "var(--f-body)" }}
                 >
-                  <span
-                    className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ background: "var(--c-secondary)", color: "var(--c-primary)" }}
-                  >
-                    <Mail className="w-5 h-5" />
-                  </span>
-                  <div>
-                    <p className="text-xs uppercase tracking-widest" style={{ color: "var(--c-textMuted)" }}>
-                      Email
-                    </p>
-                    <p className="text-sm group-hover:underline" style={{ color: "var(--c-link)" }}>
-                      {contactInfo.email}
-                    </p>
-                  </div>
+                  {contactInfo.email}
                 </a>
-              )}
+              </Card>
+            )}
 
-              {contactInfo.phone && (
+            {/* Phone */}
+            {contactInfo.phone && (
+              <Card
+                className="p-6 flex flex-col items-center text-center animate-fade-in"
+                style={{ borderColor: "var(--c-secondary)", background: "var(--c-card)" } as React.CSSProperties}
+              >
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ background: "var(--c-secondary)" }}>
+                  <Phone className="w-6 h-6" style={{ color: "var(--c-primary)" }} />
+                </div>
+                <h3 className="text-sm uppercase tracking-widest mb-2" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
+                  Phone
+                </h3>
                 <a
                   href={`tel:${contactInfo.phone.replace(/\s/g, "")}`}
-                  className="flex items-center gap-3 group transition-colors"
+                  className="text-sm hover:underline"
+                  style={{ color: "var(--c-link)", fontFamily: "var(--f-body)" }}
                 >
-                  <span
-                    className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ background: "var(--c-secondary)", color: "var(--c-primary)" }}
-                  >
-                    <Phone className="w-5 h-5" />
-                  </span>
-                  <div>
-                    <p className="text-xs uppercase tracking-widest" style={{ color: "var(--c-textMuted)" }}>
-                      Phone
-                    </p>
-                    <p className="text-sm group-hover:underline" style={{ color: "var(--c-link)" }}>
-                      {contactInfo.phone}
-                    </p>
-                  </div>
+                  {contactInfo.phone}
                 </a>
-              )}
-
-              {contactInfo.website && (
-                <a
-                  href={contactInfo.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 group transition-colors"
-                >
-                  <span
-                    className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ background: "var(--c-secondary)", color: "var(--c-primary)" }}
-                  >
-                    <Globe className="w-5 h-5" />
-                  </span>
-                  <div>
-                    <p className="text-xs uppercase tracking-widest" style={{ color: "var(--c-textMuted)" }}>
-                      Website
-                    </p>
-                    <p className="text-sm group-hover:underline" style={{ color: "var(--c-link)" }}>
-                      {contactInfo.website}
-                    </p>
-                  </div>
-                </a>
-              )}
-            </div>
-
-            {contactInfo.notes && (
-              <div className="mt-6 pt-6 border-t" style={{ borderColor: "var(--c-secondary)" }}>
-                <div className="flex items-start gap-3">
-                  <MessageSquare className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: "var(--c-textMuted)" }} />
-                  <p
-                    className="text-sm whitespace-pre-line leading-relaxed"
-                    style={{ color: "var(--c-textMuted)" }}
-                  >
-                    {contactInfo.notes}
-                  </p>
-                </div>
-              </div>
+              </Card>
             )}
-          </Card>
-        )}
 
-        {/* ─── Footer ornament ─── */}
-        <div className="text-center mt-12">
-          <div className="inline-flex items-center gap-3" style={{ color: "var(--c-accent)" }}>
-            <span className="h-px w-12" style={{ background: "var(--c-accent)" }} />
-            <Heart className="w-4 h-4" />
-            <span className="h-px w-12" style={{ background: "var(--c-accent)" }} />
+            {/* Address / Venue */}
+            {(contactInfo.address || wedding.location) && (
+              <Card
+                className="p-6 flex flex-col items-center text-center animate-fade-in sm:col-span-2"
+                style={{ borderColor: "var(--c-secondary)", background: "var(--c-card)" } as React.CSSProperties}
+              >
+                <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ background: "var(--c-secondary)" }}>
+                  <MapPin className="w-6 h-6" style={{ color: "var(--c-primary)" }} />
+                </div>
+                <h3 className="text-sm uppercase tracking-widest mb-2" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
+                  Venue Location
+                </h3>
+                <p className="text-sm leading-relaxed" style={{ color: "var(--c-text)", fontFamily: "var(--f-body)" }}>
+                  {contactInfo.address || wedding.location}
+                </p>
+              </Card>
+            )}
           </div>
-          <p className="text-xs mt-4" style={{ color: "var(--c-textMuted)" }}>
-            {wedding.couple_name_one} & {wedding.couple_name_two}
-          </p>
+
+          {/* Note */}
+          {contactInfo.note && (
+            <Card
+              className="p-6 mt-6 text-center animate-fade-in"
+              style={{ borderColor: "var(--c-secondary)", background: "var(--c-card)" } as React.CSSProperties}
+            >
+              <div className="inline-flex items-center justify-center w-10 h-10 rounded-full mb-3" style={{ background: "var(--c-secondary)" }}>
+                <Heart className="w-5 h-5" style={{ color: "var(--c-accent)" }} />
+              </div>
+              <p
+                className="text-sm leading-relaxed whitespace-pre-line"
+                style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}
+              >
+                {contactInfo.note}
+              </p>
+            </Card>
+          )}
         </div>
-      </div>
+      </section>
     </div>
   );
 }
-
-export default GuestContact;

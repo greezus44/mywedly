@@ -55,14 +55,16 @@ export default function App() {
           <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
           <Route path="/w/:slug" element={<GuestCover />} />
           <Route path="/w/:slug/signin" element={<GuestLogin />} />
-          <Route path="/w/:slug/home" element={<GuestLayout><GuestHome /></GuestLayout>} />
-          <Route path="/w/:slug/events" element={<GuestLayout><GuestEvents /></GuestLayout>} />
-          <Route path="/w/:slug/story" element={<GuestLayout><GuestStory /></GuestLayout>} />
-          <Route path="/w/:slug/gallery" element={<GuestLayout><GuestGallery /></GuestLayout>} />
-          <Route path="/w/:slug/travel" element={<GuestLayout><GuestTravel /></GuestLayout>} />
-          <Route path="/w/:slug/faq" element={<GuestLayout><GuestFaq /></GuestLayout>} />
-          <Route path="/w/:slug/registry" element={<GuestLayout><GuestRegistry /></GuestLayout>} />
-          <Route path="/w/:slug/contact" element={<GuestLayout><GuestContact /></GuestLayout>} />
+          <Route path="/w/:slug" element={<GuestLayout />}>
+            <Route path="home" element={<GuestHome />} />
+            <Route path="events" element={<GuestEvents />} />
+            <Route path="story" element={<GuestStory />} />
+            <Route path="gallery" element={<GuestGallery />} />
+            <Route path="travel" element={<GuestTravel />} />
+            <Route path="faq" element={<GuestFaq />} />
+            <Route path="registry" element={<GuestRegistry />} />
+            <Route path="contact" element={<GuestContact />} />
+          </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

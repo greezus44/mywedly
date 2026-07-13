@@ -15,3 +15,7 @@ body { font-family: var(--font-sans); background-color: #fdfcf9; color: #1a1a1a;
 ::-webkit-scrollbar-thumb:hover { background: #b8b0a4; }
 html { scroll-behavior: smooth; }
 *:focus-visible { outline: 2px solid #8c7e6a; outline-offset: 2px; }
+
+/* Hide scrollbar for nav scroll containers */
+.nav-scroll::-webkit-scrollbar { height: 3px; }
+.nav-scroll::-webkit-scrollbar-thumb { background: #d0c8be; }

@@ -1,226 +1,226 @@
 import { useMemo } from "react";
-import { Calendar, MapPin, Clock, Heart, ArrowRight, BookOpen, Images, CalendarDays } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Calendar, MapPin, Clock, CalendarHeart, BookOpen, Images, ChevronRight } from "lucide-react";
 import { useGuestData } from "@/lib/use-guest-data";
 import { getTheme, themeToCssVars } from "@/lib/theme";
-import type { ThemeConfig } from "@/lib/theme";
-import { formatDate, formatTime, daysUntil, cn } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
+import { formatDate, daysUntil, cn } from "@/lib/utils";
 import { Card } from "@/components/ui";
 
 export function GuestHome() {
   const { wedding, guest, loading } = useGuestData();
-  const theme: ThemeConfig = useMemo(() => getTheme(wedding), [wedding]);
+
+  const theme = useMemo(() => getTheme(wedding), [wedding]);
   const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
+
+  const dUntil = daysUntil(wedding?.wedding_date ?? null);
+  const heroUrl = wedding?.hero_image_url ?? null;
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24 text-sepia">
-        <div className="animate-pulse">Loading…</div>
+      <div className="flex items-center justify-center py-24 text-sepia animate-fade-in">
+        Loading…
       </div>
     );
   }
 
   if (!wedding) {
     return (
-      <div className="flex items-center justify-center py-24 text-center">
-        <p className="text-sepia">Wedding not found.</p>
+      <div className="flex items-center justify-center py-24 text-center animate-fade-in">
+        <div>
+          <h1 className="text-2xl font-serif text-onyx mb-2">Wedding Not Found</h1>
+          <p className="text-sm text-sepia/70">We couldn't find the wedding you're looking for.</p>
+        </div>
       </div>
     );
   }
 
-  const countdown = daysUntil(wedding.wedding_date);
-  const coupleName = `${wedding.couple_name_one} & ${wedding.couple_name_two}`;
-  const scriptFont = theme.typography.headingFont === "Inter" ? "'Dancing Script', cursive" : `'${theme.typography.headingFont}', serif`;
+  const quickLinks = [
+    { to: "events", label: "Events", icon: CalendarHeart, desc: "View schedule & RSVP" },
+    { to: "story", label: "Our Story", icon: BookOpen, desc: "How we got here" },
+    { to: "gallery", label: "Gallery", icon: Images, desc: "Photos & memories" },
+  ];
 
   return (
     <div style={cssVars as React.CSSProperties} className="animate-fade-in">
-      {/* ─── Hero ─── */}
+      {/* ── Hero ── */}
       <section className="relative overflow-hidden">
-        {wedding.hero_image_url && (
+        {heroUrl ? (
           <div className="absolute inset-0">
-            <img
-              src={wedding.hero_image_url}
-              alt=""
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-black/40" />
+            <img src={heroUrl} alt="" className="w-full h-full object-cover" />
+            <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.35)" }} />
           </div>
+        ) : (
+          <div
+            className="absolute inset-0"
+            style={{ background: "linear-gradient(135deg, var(--c-secondary), var(--c-accent))" }}
+          />
         )}
 
-        <div
-          className={cn(
-            "relative px-6 py-24 sm:py-32 text-center",
-            !wedding.hero_image_url && "bg-[var(--c-background)]"
-          )}
-        >
+        <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 py-24 md:py-32">
           <p
-            className="text-xs sm:text-sm uppercase tracking-[0.3em] mb-6"
-            style={{ color: wedding.hero_image_url ? "#fff" : "var(--c-textMuted)" }}
+            className="text-xs uppercase tracking-[0.3em] mb-4"
+            style={{ color: heroUrl ? "rgba(255,255,255,0.85)" : "var(--c-textMuted)", fontFamily: "var(--f-body)" }}
           >
             We're getting married
           </p>
 
           <h1
-            className="text-5xl sm:text-6xl md:text-7xl mb-6 leading-tight"
+            className="font-script leading-tight mb-4"
             style={{
-              fontFamily: scriptFont,
-              color: wedding.hero_image_url ? "#fff" : "var(--c-text)",
-              fontStyle: theme.typography.fontStyle,
+              color: heroUrl ? "white" : "var(--c-text)",
+              fontSize: "clamp(3rem, 8vw, 5.5rem)",
+              fontFamily: "var(--f-heading)",
+              fontStyle: "var(--f-style)",
+              textShadow: heroUrl ? "0 2px 20px rgba(0,0,0,0.3)" : "none",
             }}
           >
-            {coupleName}
+            {wedding.couple_name_one}
+            <span className="mx-3" style={{ color: heroUrl ? "rgba(255,255,255,0.7)" : "var(--c-accent)" }}>&</span>
+            {wedding.couple_name_two}
           </h1>
 
           {wedding.wedding_date && (
             <div
-              className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 text-sm sm:text-base"
-              style={{ color: wedding.hero_image_url ? "#fff" : "var(--c-textMuted)" }}
+              className="flex items-center gap-2 mb-2"
+              style={{ color: heroUrl ? "rgba(255,255,255,0.9)" : "var(--c-textMuted)" }}
             >
-              <span className="flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
+              <Calendar className="w-4 h-4" />
+              <span className="text-sm" style={{ fontFamily: "var(--f-body)" }}>
                 {formatDate(wedding.wedding_date)}
               </span>
-              {wedding.wedding_date && (
-                <span className="flex items-center gap-2">
-                  <Clock className="w-4 h-4" />
-                  {formatTime(wedding.wedding_date)}
-                </span>
-              )}
-              {wedding.location && (
-                <span className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  {wedding.location}
-                </span>
-              )}
             </div>
           )}
 
-          {/* Countdown */}
-          {countdown !== null && countdown > 0 && (
-            <div className="mt-12 flex flex-col items-center">
-              <p
-                className="text-xs uppercase tracking-[0.3em] mb-3"
-                style={{ color: wedding.hero_image_url ? "#fff" : "var(--c-textMuted)" }}
-              >
-                Counting down
-              </p>
-              <div className="flex items-center gap-4 sm:gap-8">
-                <CountdownUnit value={countdown} label="Days" hero={!!wedding.hero_image_url} />
-              </div>
+          {wedding.location && (
+            <div
+              className="flex items-center gap-2 mb-6"
+              style={{ color: heroUrl ? "rgba(255,255,255,0.9)" : "var(--c-textMuted)" }}
+            >
+              <MapPin className="w-4 h-4" />
+              <span className="text-sm" style={{ fontFamily: "var(--f-body)" }}>
+                {wedding.location}
+              </span>
+            </div>
+          )}
+
+          {dUntil !== null && dUntil > 0 && (
+            <div
+              className="inline-flex items-baseline gap-1 px-6 py-3 rounded-full"
+              style={{
+                background: heroUrl ? "rgba(255,255,255,0.15)" : "var(--c-card)",
+                backdropFilter: heroUrl ? "blur(8px)" : "none",
+                border: heroUrl ? "1px solid rgba(255,255,255,0.2)" : "1px solid var(--c-secondary)",
+                color: heroUrl ? "white" : "var(--c-text)",
+              }}
+            >
+              <span className="text-3xl font-serif" style={{ fontFamily: "var(--f-heading)" }}>
+                {dUntil}
+              </span>
+              <span className="text-xs ml-1" style={{ fontFamily: "var(--f-body)" }}>
+                days to go
+              </span>
             </div>
           )}
         </div>
       </section>
 
-      {/* ─── Personalized welcome ─── */}
-      {guest && (
-        <section className="px-6 py-12 text-center" style={{ background: "var(--c-background)" }}>
-          <div className="max-w-2xl mx-auto">
-            <Heart className="w-6 h-6 mx-auto mb-3" style={{ color: "var(--c-accent)" }} />
-            <h2
-              className="text-3xl sm:text-4xl font-serif mb-2"
-              style={{ color: "var(--c-text)" }}
+      {/* ── Personalized welcome ── */}
+      <section className="px-6 py-12 md:py-16" style={{ background: "var(--c-background)" }}>
+        <div className="max-w-2xl mx-auto text-center animate-fade-in">
+          {guest && (
+            <p
+              className="text-xs uppercase tracking-[0.3em] mb-3"
+              style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}
             >
-              Welcome, {guest.first_name || guest.full_name.split(" ")[0]}!
-            </h2>
-            <p className="text-sm" style={{ color: "var(--c-textMuted)" }}>
-              We're so glad you're here. Explore the details of our special day below.
+              Welcome, {guest.first_name || guest.full_name}!
             </p>
+          )}
+          <h2
+            className="text-3xl md:text-4xl font-serif mb-4"
+            style={{ color: "var(--c-text)", fontFamily: "var(--f-heading)", fontStyle: "var(--f-style)" }}
+          >
+            We're so glad you're here
+          </h2>
+          <p
+            className="text-base leading-relaxed"
+            style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}
+          >
+            We can't wait to celebrate our special day with you. Explore the site to find event details,
+            our story, travel information, and more.
+          </p>
+        </div>
+      </section>
+
+      {/* ── Quick links ── */}
+      <section className="px-6 pb-16 md:pb-24" style={{ background: "var(--c-background)" }}>
+        <div className="max-w-4xl mx-auto grid gap-4 sm:grid-cols-3">
+          {quickLinks.map(({ to, label, icon: Icon, desc }) => (
+            <Link key={to} to={to} className="block group">
+              <Card
+                className="p-6 h-full transition-all duration-200 hover:shadow-md"
+                style={{ borderColor: "var(--c-secondary)", background: "var(--c-card)" } as React.CSSProperties}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center mb-4 transition-colors group-hover:scale-110 transition-transform"
+                    style={{ background: "var(--c-secondary)" }}
+                  >
+                    <Icon className="w-6 h-6" style={{ color: "var(--c-primary)" }} />
+                  </div>
+                  <h3
+                    className="text-lg font-serif mb-1"
+                    style={{ color: "var(--c-text)", fontFamily: "var(--f-heading)" }}
+                  >
+                    {label}
+                  </h3>
+                  <p
+                    className="text-sm"
+                    style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}
+                  >
+                    {desc}
+                  </p>
+                  <ChevronRight
+                    className="w-4 h-4 mt-3 transition-transform group-hover:translate-x-1"
+                    style={{ color: "var(--c-textMuted)" }}
+                  />
+                </div>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Countdown detail ── */}
+      {dUntil !== null && dUntil > 0 && (
+        <section className="px-6 py-16 md:py-20" style={{ background: "var(--c-card)" }}>
+          <div className="max-w-3xl mx-auto text-center animate-fade-in">
+            <Clock className="w-8 h-8 mx-auto mb-4" style={{ color: "var(--c-accent)" }} />
+            <h2
+              className="text-2xl md:text-3xl font-serif mb-2"
+              style={{ color: "var(--c-text)", fontFamily: "var(--f-heading)" }}
+            >
+              The Big Day
+            </h2>
+            <p className="text-sm mb-6" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
+              {formatDate(wedding.wedding_date)}
+            </p>
+            <div
+              className="inline-flex items-baseline gap-2 px-8 py-4 rounded-lg"
+              style={{ background: "var(--c-background)", border: "1px solid var(--c-secondary)" }}
+            >
+              <span
+                className="text-5xl font-serif"
+                style={{ color: "var(--c-primary)", fontFamily: "var(--f-heading)" }}
+              >
+                {dUntil}
+              </span>
+              <span className="text-sm" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
+                days remaining
+              </span>
+            </div>
           </div>
         </section>
       )}
-
-      {/* ─── Quick links ─── */}
-      <section className="px-6 py-12" style={{ background: "var(--c-background)" }}>
-        <div className="max-w-4xl mx-auto grid gap-6 sm:grid-cols-3">
-          <QuickLink
-            icon={<CalendarDays className="w-6 h-6" />}
-            title="Events"
-            description="View schedule and RSVP"
-            href="#/events"
-            theme={theme}
-          />
-          <QuickLink
-            icon={<BookOpen className="w-6 h-6" />}
-            title="Our Story"
-            description="How we got here"
-            href="#/story"
-            theme={theme}
-          />
-          <QuickLink
-            icon={<Images className="w-6 h-6" />}
-            title="Gallery"
-            description="Moments we've shared"
-            href="#/gallery"
-            theme={theme}
-          />
-        </div>
-      </section>
     </div>
   );
 }
-
-function CountdownUnit({ value, label, hero }: { value: number; label: string; hero: boolean }) {
-  return (
-    <div className="text-center">
-      <div
-        className={cn(
-          "text-4xl sm:text-5xl font-serif",
-        )}
-        style={{ color: hero ? "#fff" : "var(--c-text)" }}
-      >
-        {value}
-      </div>
-      <div
-        className="text-xs uppercase tracking-widest mt-1"
-        style={{ color: hero ? "#fff" : "var(--c-textMuted)" }}
-      >
-        {label}
-      </div>
-    </div>
-  );
-}
-
-function QuickLink({
-  icon,
-  title,
-  description,
-  href,
-  theme,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  href: string;
-  theme: ThemeConfig;
-}) {
-  return (
-    <a href={href} className="block group">
-      <Card className="p-6 text-center h-full transition-all hover:shadow-md" >
-        <div
-          className="w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-4 transition-colors"
-          style={{ background: "var(--c-secondary)", color: "var(--c-primary)" }}
-        >
-          {icon}
-        </div>
-        <h3
-          className="text-lg font-serif mb-1"
-          style={{ color: "var(--c-text)" }}
-        >
-          {title}
-        </h3>
-        <p className="text-sm" style={{ color: "var(--c-textMuted)" }}>
-          {description}
-        </p>
-        <div
-          className="mt-3 inline-flex items-center gap-1 text-xs uppercase tracking-widest transition-transform group-hover:translate-x-0.5"
-          style={{ color: "var(--c-link)" }}
-        >
-          View <ArrowRight className="w-3 h-3" />
-        </div>
-      </Card>
-    </a>
-  );
-}
-
-export default GuestHome;

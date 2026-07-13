@@ -1,426 +1,385 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  Plus, UsersRound, Edit2, Trash2, X, ChevronRight, UserPlus, UserMinus, Check,
+  Plus, Pencil, Trash2, Save, X, Users, UsersRound, UserPlus,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Guest, GuestGroup } from "@/lib/supabase";
 import { useHostWedding } from "@/lib/use-host-wedding";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, Select } from "@/components/ui/Input";
 import { Card, Badge, Modal, EmptyState, SectionTitle, Toast } from "@/components/ui";
-import { cn } from "@/lib/utils";
+
+type GroupWithMembers = GuestGroup & { members: Guest[] };
 
 export function AdminGroups() {
   const { wedding, loading } = useHostWedding();
-  const weddingId = wedding?.id ?? "";
 
-  const [groups, setGroups] = useState<GuestGroup[]>([]);
-  const [guests, setGuests] = useState<Guest[]>([]);
+  const [groups, setGroups] = useState<GroupWithMembers[]>([]);
+  const [allGuests, setAllGuests] = useState<Guest[]>([]);
   const [fetching, setFetching] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<GroupWithMembers | null>(null);
+  const [managingGroup, setManagingGroup] = useState<GroupWithMembers | null>(null);
+  const [addGuestId, setAddGuestId] = useState("");
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  // Modal state
-  const [createOpen, setCreateOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [renameTarget, setRenameTarget] = useState<GuestGroup | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<GuestGroup | null>(null);
-  const [saving, setSaving] = useState(false);
+  const weddingId = wedding?.id ?? null;
 
-  // Side panel state
-  const [activeGroup, setActiveGroup] = useState<GuestGroup | null>(null);
-  const [addGuestId, setAddGuestId] = useState("");
-
-  const showToast = (message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
-  // ─── Load ───
-  const loadAll = useCallback(async () => {
-    if (!weddingId) { setFetching(false); return; }
+  const fetchGroups = useCallback(async () => {
+    if (!weddingId) return;
     setFetching(true);
     const [gr, g] = await Promise.all([
       supabase.from("guest_groups").select("*").eq("wedding_id", weddingId).order("sort_order", { ascending: true }),
-      supabase.from("guests").select("*").eq("wedding_id", weddingId).order("created_at", { ascending: false }),
+      supabase.from("guests").select("*").eq("wedding_id", weddingId).order("full_name", { ascending: true }),
     ]);
-    if (gr.data) setGroups(gr.data as GuestGroup[]);
-    if (g.data) setGuests(g.data as Guest[]);
+    const groupList = (gr.data ?? []) as GuestGroup[];
+    const guestList = (g.data ?? []) as Guest[];
+    setAllGuests(guestList);
+    setGroups(
+      groupList.map((group) => ({
+        ...group,
+        members: guestList.filter((gu) => gu.group_id === group.id),
+      })),
+    );
     setFetching(false);
   }, [weddingId]);
 
-  useEffect(() => { if (weddingId) loadAll(); }, [weddingId, loadAll]);
+  useEffect(() => {
+    if (weddingId) fetchGroups();
+  }, [weddingId, fetchGroups]);
 
-  // ─── Derived ───
-  const groupMembers = useMemo(() => {
-    const map = new Map<string, Guest[]>();
-    for (const g of guests) {
-      if (g.group_id) {
-        const arr = map.get(g.group_id) ?? [];
-        arr.push(g);
-        map.set(g.group_id, arr);
-      }
-    }
-    return map;
-  }, [guests]);
-
-  const ungroupedGuests = useMemo(() => guests.filter((g) => !g.group_id), [guests]);
-
-  // Guests available to add to the active group (not already in it)
-  const availableToAdd = useMemo(() => {
-    if (!activeGroup) return [];
-    const members = groupMembers.get(activeGroup.id) ?? [];
-    const memberIds = new Set(members.map((m) => m.id));
-    return guests.filter((g) => !memberIds.has(g.id));
-  }, [guests, activeGroup, groupMembers]);
-
-  // ─── Create ───
+  // ─── Create group ───
   const createGroup = async () => {
-    if (!weddingId) return;
-    const name = newName.trim();
-    if (!name) { showToast("Enter a group name", "error"); return; }
+    if (!weddingId || !newName.trim()) return;
     setSaving(true);
-    const maxSort = groups.reduce((mx, g) => Math.max(mx, g.sort_order), -1);
+    const maxSort = groups.reduce((max, g) => Math.max(max, g.sort_order), -1);
     const { error } = await supabase.from("guest_groups").insert({
       wedding_id: weddingId,
-      name,
+      name: newName.trim(),
       sort_order: maxSort + 1,
     });
     setSaving(false);
-    if (error) { showToast(`Create failed: ${error.message}`, "error"); return; }
-    showToast("Group created");
-    setNewName("");
-    setCreateOpen(false);
-    await loadAll();
-  };
-
-  // ─── Rename ───
-  const confirmRename = async () => {
-    if (!renameTarget) return;
-    const name = renameValue.trim();
-    if (!name) { showToast("Enter a group name", "error"); return; }
-    setSaving(true);
-    const { error } = await supabase.from("guest_groups").update({ name }).eq("id", renameTarget.id);
-    setSaving(false);
-    if (error) { showToast(`Rename failed: ${error.message}`, "error"); return; }
-    showToast("Group renamed");
-    setRenameTarget(null);
-    setRenameValue("");
-    await loadAll();
-  };
-
-  // ─── Delete ───
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
-    setSaving(true);
-    // Unassign all members first
-    const members = groupMembers.get(deleteTarget.id) ?? [];
-    if (members.length > 0) {
-      await supabase.from("guests").update({ group_id: null }).in("id", members.map((m) => m.id));
+    if (error) {
+      setToast({ message: "Failed to create group", type: "error" });
+    } else {
+      setToast({ message: "Group created", type: "success" });
+      setNewName("");
+      setIsCreating(false);
+      await fetchGroups();
     }
-    const { error } = await supabase.from("guest_groups").delete().eq("id", deleteTarget.id);
-    setSaving(false);
-    if (error) { showToast(`Delete failed: ${error.message}`, "error"); return; }
-    showToast("Group deleted");
-    if (activeGroup?.id === deleteTarget.id) setActiveGroup(null);
+  };
+
+  // ─── Rename group ───
+  const renameGroup = async () => {
+    if (!renamingId || !renameValue.trim()) return;
+    const { error } = await supabase.from("guest_groups").update({ name: renameValue.trim() }).eq("id", renamingId);
+    if (error) {
+      setToast({ message: "Failed to rename group", type: "error" });
+    } else {
+      setToast({ message: "Group renamed", type: "success" });
+      setRenamingId(null);
+      setRenameValue("");
+      await fetchGroups();
+    }
+  };
+
+  // ─── Delete group ───
+  const deleteGroup = async (group: GroupWithMembers) => {
+    // Unassign all members first
+    if (group.members.length > 0) {
+      await supabase.from("guests").update({ group_id: null }).eq("group_id", group.id);
+    }
+    const { error } = await supabase.from("guest_groups").delete().eq("id", group.id);
     setDeleteTarget(null);
-    await loadAll();
+    if (error) {
+      setToast({ message: "Failed to delete group", type: "error" });
+    } else {
+      setToast({ message: "Group deleted", type: "success" });
+      await fetchGroups();
+    }
   };
 
   // ─── Add guest to group ───
-  const addGuest = async (guestId: string) => {
-    if (!activeGroup || !guestId) return;
-    const { error } = await supabase.from("guests").update({ group_id: activeGroup.id }).eq("id", guestId);
-    if (error) { showToast(`Add failed: ${error.message}`, "error"); return; }
-    showToast("Guest added to group");
-    setAddGuestId("");
-    await loadAll();
+  const addGuestToGroup = async (groupId: string, guestId: string) => {
+    if (!guestId) return;
+    const { error } = await supabase.from("guests").update({ group_id: groupId }).eq("id", guestId);
+    if (error) {
+      setToast({ message: "Failed to add guest", type: "error" });
+    } else {
+      setToast({ message: "Guest added to group", type: "success" });
+      setAddGuestId("");
+      await fetchGroups();
+      // Update managingGroup if open
+      setManagingGroup((prev) => {
+        if (!prev || prev.id !== groupId) return prev;
+        const guest = allGuests.find((g) => g.id === guestId);
+        return { ...prev, members: [...prev.members, ...(guest ? [guest] : [])] };
+      });
+    }
   };
 
   // ─── Remove guest from group ───
-  const removeGuest = async (guestId: string) => {
+  const removeGuestFromGroup = async (groupId: string, guestId: string) => {
     const { error } = await supabase.from("guests").update({ group_id: null }).eq("id", guestId);
-    if (error) { showToast(`Remove failed: ${error.message}`, "error"); return; }
-    showToast("Guest removed from group");
-    await loadAll();
+    if (error) {
+      setToast({ message: "Failed to remove guest", type: "error" });
+    } else {
+      setToast({ message: "Guest removed", type: "success" });
+      await fetchGroups();
+      setManagingGroup((prev) => {
+        if (!prev || prev.id !== groupId) return prev;
+        return { ...prev, members: prev.members.filter((m) => m.id !== guestId) };
+      });
+    }
   };
 
-  // ─── Bulk assign: add all ungrouped guests to a group ───
-  const bulkAssign = async (groupId: string) => {
-    if (!groupId || ungroupedGuests.length === 0) return;
-    const { error } = await supabase.from("guests").update({ group_id: groupId }).in("id", ungroupedGuests.map((g) => g.id));
-    if (error) { showToast(`Bulk assign failed: ${error.message}`, "error"); return; }
-    showToast(`${ungroupedGuests.length} guests assigned`);
-    await loadAll();
-  };
-
-  // ─── Render ───
   if (loading || fetching) {
-    return (
-      <div className="flex items-center justify-center py-24 text-sepia">
-        <div className="animate-pulse">Loading groups…</div>
-      </div>
-    );
+    return <div className="flex items-center justify-center py-24 text-sepia">Loading groups…</div>;
   }
 
   if (!wedding) {
     return <EmptyState title="No wedding found" description="Create a wedding to manage groups." />;
   }
 
+  // Guests not in any group (for the add dropdown)
+  const ungroupedGuests = allGuests.filter((g) => !g.group_id);
+
   return (
     <div>
       <SectionTitle
-        title="Groups"
-        subtitle={`${groups.length} groups · ${ungroupedGuests.length} ungrouped guests`}
+        title="Guest Groups"
+        subtitle="Organize guests into groups for easier event invitations."
         action={
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4" /> New Group
-          </Button>
+          !isCreating && (
+            <Button size="sm" onClick={() => setIsCreating(true)}>
+              <Plus className="w-4 h-4" /> New Group
+            </Button>
+          )
         }
       />
 
-      {/* ─── Bulk assign bar ─── */}
-      {ungroupedGuests.length > 0 && groups.length > 0 && (
-        <Card className="p-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="flex-1">
-            <p className="text-sm text-sepia">
-              <span className="font-medium text-onyx">{ungroupedGuests.length}</span> ungrouped guests
-            </p>
-            <p className="text-xs text-sepia/60">Bulk assign all ungrouped guests to a group.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Select
-              value=""
-              onChange={(e) => { if (e.target.value) bulkAssign(e.target.value); }}
-              className="sm:w-48"
-            >
-              <option value="">Choose group…</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}</option>
-              ))}
-            </Select>
+      {/* ─── Create group inline ─── */}
+      {isCreating && (
+        <Card className="p-4 mb-4">
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <Label>Group Name</Label>
+              <Input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="e.g. Bride's Family, Groomsmen, College Friends"
+                autoFocus
+                onKeyDown={(e) => e.key === "Enter" && createGroup()}
+              />
+            </div>
+            <Button size="sm" onClick={createGroup} disabled={saving || !newName.trim()}>
+              <Save className="w-4 h-4" /> Create
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => { setIsCreating(false); setNewName(""); }}>
+              <X className="w-4 h-4" /> Cancel
+            </Button>
           </div>
         </Card>
       )}
 
-      {/* ─── Group grid ─── */}
-      {groups.length === 0 ? (
+      {/* ─── Groups grid ─── */}
+      {groups.length === 0 && !isCreating ? (
         <EmptyState
           title="No groups yet"
-          description="Create groups to organize your guests — family, friends, colleagues, etc."
-          action={<Button onClick={() => setCreateOpen(true)}><Plus className="w-4 h-4" /> New Group</Button>}
+          description="Create groups to organize your guests and send targeted event invitations."
+          action={
+            <Button size="sm" onClick={() => setIsCreating(true)}>
+              <Plus className="w-4 h-4" /> New Group
+            </Button>
+          }
         />
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {groups.map((group) => {
-            const members = groupMembers.get(group.id) ?? [];
-            const isActive = activeGroup?.id === group.id;
-            return (
-              <Card
-                key={group.id}
-                className={cn(
-                  "p-5 cursor-pointer transition-all hover:shadow-md",
-                  isActive && "ring-2 ring-sepia/40"
-                )}
-              >
-                <div
-                  onClick={() => setActiveGroup(isActive ? null : group)}
-                  className="flex items-start justify-between mb-3"
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {groups.map((group) => (
+            <Card key={group.id} className="p-5 flex flex-col">
+              {renamingId === group.id ? (
+                <div className="flex items-end gap-2 mb-3">
+                  <div className="flex-1">
+                    <Input
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      autoFocus
+                      onKeyDown={(e) => e.key === "Enter" && renameGroup()}
+                    />
+                  </div>
+                  <Button size="sm" onClick={renameGroup}>
+                    <Save className="w-3.5 h-3.5" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => { setRenamingId(null); setRenameValue(""); }}>
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center shrink-0">
+                      <UsersRound className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <h3 className="font-serif text-base text-onyx truncate">{group.name}</h3>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setRenamingId(group.id); setRenameValue(group.name); }}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDeleteTarget(group)}
+                      className="text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 mb-3">
+                <Badge variant="info">
+                  <Users className="w-3 h-3 mr-1" />
+                  {group.members.length} {group.members.length === 1 ? "member" : "members"}
+                </Badge>
+              </div>
+
+              {/* Member preview */}
+              {group.members.length > 0 ? (
+                <div className="space-y-1.5 flex-1 mb-3">
+                  {group.members.slice(0, 4).map((member) => (
+                    <div key={member.id} className="flex items-center gap-2 text-sm text-sepia/70">
+                      <div className="w-6 h-6 rounded-full bg-mist flex items-center justify-center shrink-0">
+                        <Users className="w-3 h-3 text-sepia/50" />
+                      </div>
+                      <span className="truncate">{member.full_name}</span>
+                    </div>
+                  ))}
+                  {group.members.length > 4 && (
+                    <p className="text-xs text-sepia/50 pl-8">+{group.members.length - 4} more</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-sepia/40 flex-1 mb-3">No members yet.</p>
+              )}
+
+              <Button variant="outline" size="sm" onClick={() => setManagingGroup(group)}>
+                <UserPlus className="w-3.5 h-3.5" /> Manage Members
+              </Button>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* ─── Manage members modal ─── */}
+      <Modal
+        open={!!managingGroup}
+        onClose={() => { setManagingGroup(null); setAddGuestId(""); }}
+        title={managingGroup ? `Manage: ${managingGroup.name}` : ""}
+        className="max-w-xl"
+      >
+        {managingGroup && (
+          <div className="space-y-4">
+            {/* Add guest */}
+            <div>
+              <Label>Add Guest to Group</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={addGuestId}
+                  onChange={(e) => setAddGuestId(e.target.value)}
+                  className="flex-1"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-mist flex items-center justify-center flex-shrink-0">
-                      <UsersRound className="w-5 h-5 text-sepia" />
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="font-serif text-lg text-onyx truncate">{group.name}</h3>
-                      <p className="text-xs text-sepia/60">{members.length} {members.length === 1 ? "member" : "members"}</p>
-                    </div>
-                  </div>
-                  <ChevronRight className={cn("w-4 h-4 text-sepia/40 transition-transform", isActive && "rotate-90")} />
-                </div>
-
-                {/* Member avatars preview */}
-                {members.length > 0 && (
-                  <div className="flex -space-x-2 mb-3">
-                    {members.slice(0, 5).map((m) => (
-                      <div
-                        key={m.id}
-                        className="w-7 h-7 rounded-full bg-sand border-2 border-card flex items-center justify-center text-xs font-medium text-sepia"
-                        title={m.full_name}
-                      >
-                        {(m.first_name ?? m.full_name)[0]?.toUpperCase()}
-                      </div>
-                    ))}
-                    {members.length > 5 && (
-                      <div className="w-7 h-7 rounded-full bg-mist border-2 border-card flex items-center justify-center text-xs text-sepia">
-                        +{members.length - 5}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 pt-3 border-t border-sand">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={(e) => { e.stopPropagation(); setRenameTarget(group); setRenameValue(group.name); }}
-                  >
-                    <Edit2 className="w-3.5 h-3.5" /> Rename
-                  </Button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(group); }}
-                    className="ml-auto p-1.5 rounded-lg text-sepia/50 hover:bg-red-50 hover:text-red-600 transition-colors"
-                    title="Delete group"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ─── Side panel: group members ─── */}
-      {activeGroup && (
-        <div className="fixed inset-0 z-40 flex justify-end animate-fade-in">
-          <div className="absolute inset-0 bg-onyx/30 backdrop-blur-sm" onClick={() => setActiveGroup(null)} />
-          <div className="relative z-10 w-full max-w-md bg-card border-l border-sand shadow-xl h-full overflow-y-auto animate-slide-in-right">
-            <div className="sticky top-0 bg-card border-b border-sand px-6 py-4 flex items-center justify-between z-10">
-              <div>
-                <h2 className="font-serif text-lg text-onyx">{activeGroup.name}</h2>
-                <p className="text-xs text-sepia/60">{groupMembers.get(activeGroup.id)?.length ?? 0} members</p>
+                  <option value="">Select a guest…</option>
+                  {ungroupedGuests.map((g) => (
+                    <option key={g.id} value={g.id}>{g.full_name}</option>
+                  ))}
+                </Select>
+                <Button
+                  size="sm"
+                  onClick={() => addGuestToGroup(managingGroup.id, addGuestId)}
+                  disabled={!addGuestId}
+                >
+                  <UserPlus className="w-4 h-4" /> Add
+                </Button>
               </div>
-              <button
-                onClick={() => setActiveGroup(null)}
-                className="text-sepia/60 hover:text-onyx w-8 h-8 flex items-center justify-center rounded-lg hover:bg-mist transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              {ungroupedGuests.length === 0 && (
+                <p className="text-xs text-sepia/50 mt-1">All guests are already assigned to a group.</p>
+              )}
             </div>
 
-            <div className="p-6 space-y-4">
-              {/* Add guest */}
-              <div>
-                <Label>Add Guest to Group</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={addGuestId}
-                    onChange={(e) => setAddGuestId(e.target.value)}
-                  >
-                    <option value="">Select a guest…</option>
-                    {availableToAdd.map((g) => (
-                      <option key={g.id} value={g.id}>{g.full_name}</option>
-                    ))}
-                  </Select>
-                  <Button
-                    size="sm"
-                    onClick={() => addGuestId && addGuest(addGuestId)}
-                    disabled={!addGuestId}
-                  >
-                    <UserPlus className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Member list */}
-              <div>
-                <Label>Members</Label>
-                {(groupMembers.get(activeGroup.id) ?? []).length === 0 ? (
-                  <p className="text-sm text-sepia/60 py-6 text-center">No members in this group yet.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {(groupMembers.get(activeGroup.id) ?? []).map((member) => (
-                      <li key={member.id} className="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-mist/50 transition-colors">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-full bg-mist flex items-center justify-center text-xs font-medium text-sepia flex-shrink-0">
-                            {(member.first_name ?? member.full_name)[0]?.toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-onyx truncate">{member.full_name}</p>
-                            <p className="text-xs text-sepia/60 truncate">{member.email ?? "No email"}</p>
-                          </div>
+            {/* Member list */}
+            <div>
+              <Label>Current Members ({managingGroup.members.length})</Label>
+              {managingGroup.members.length === 0 ? (
+                <p className="text-sm text-sepia/50 py-6 text-center bg-mist/30 rounded-lg">No members in this group.</p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {managingGroup.members.map((member) => (
+                    <div
+                      key={member.id}
+                      className="flex items-center justify-between py-2 px-3 rounded-lg bg-mist/30"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-full bg-card border border-sand flex items-center justify-center shrink-0">
+                          <Users className="w-3.5 h-3.5 text-sepia/60" />
                         </div>
-                        <button
-                          onClick={() => removeGuest(member.id)}
-                          className="p-1.5 rounded-lg text-sepia/50 hover:bg-red-50 hover:text-red-600 transition-colors flex-shrink-0"
-                          title="Remove from group"
-                        >
-                          <UserMinus className="w-4 h-4" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-onyx truncate">{member.full_name}</p>
+                          {member.email && (
+                            <p className="text-xs text-sepia/50 truncate">{member.email}</p>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeGuestFromGroup(managingGroup.id, member.id)}
+                        className="text-red-600 hover:bg-red-50 shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ─── Create modal ─── */}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New Group">
-        <div className="space-y-4">
-          <div>
-            <Label>Group Name</Label>
-            <Input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="e.g. Bride's Family"
-              autoFocus
-              onKeyDown={(e) => { if (e.key === "Enter") createGroup(); }}
-            />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={createGroup} disabled={saving}>
-              <Plus className="w-4 h-4" /> Create
-            </Button>
-          </div>
-        </div>
+        )}
       </Modal>
 
-      {/* ─── Rename modal ─── */}
-      <Modal open={!!renameTarget} onClose={() => setRenameTarget(null)} title="Rename Group">
-        <div className="space-y-4">
-          <div>
-            <Label>Group Name</Label>
-            <Input
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              autoFocus
-              onKeyDown={(e) => { if (e.key === "Enter") confirmRename(); }}
-            />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setRenameTarget(null)}>Cancel</Button>
-            <Button onClick={confirmRename} disabled={saving}>
-              <Check className="w-4 h-4" /> Save
-            </Button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* ─── Delete modal ─── */}
+      {/* ─── Delete confirm ─── */}
       <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Group">
-        <div className="space-y-4">
-          <p className="text-sm text-sepia">
-            Delete the group{" "}
-            <span className="font-medium text-onyx">{deleteTarget?.name}</span>?
-            Members will be unassigned but not deleted. This cannot be undone.
+        <p className="text-sm text-sepia mb-2">
+          Are you sure you want to delete{" "}
+          <span className="font-medium text-onyx">{deleteTarget?.name}</span>?
+        </p>
+        {deleteTarget && deleteTarget.members.length > 0 && (
+          <p className="text-sm text-sepia/70 mb-6">
+            The {deleteTarget.members.length} {deleteTarget.members.length === 1 ? "member" : "members"} in this group will be unassigned but not deleted.
           </p>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button variant="danger" onClick={confirmDelete} disabled={saving}>
-              <Trash2 className="w-4 h-4" /> Delete
-            </Button>
-          </div>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button variant="danger" onClick={() => deleteTarget && deleteGroup(deleteTarget)}>
+            <Trash2 className="w-4 h-4" /> Delete
+          </Button>
         </div>
       </Modal>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {/* ─── Toast ─── */}
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 }
-
-export default AdminGroups;
