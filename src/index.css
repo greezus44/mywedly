@@ -3,7 +3,6 @@
 @tailwind utilities;
 
 :root {
-  /* Central design tokens — updated live by ThemeProvider */
   --color-primary: #1a1a1a;
   --color-primary-light: #2a2a2a;
   --color-secondary: #2a2a2a;
@@ -18,52 +17,25 @@
   --color-error: #dc2626;
   --color-success: #16a34a;
   --color-warning: #d97706;
-
   --font-heading: "Cormorant Garamond", serif;
   --font-body: "Inter", sans-serif;
   --font-script: "Cormorant Garamond", serif;
-
   --radius: 2px;
   --max-width: 1200px;
 }
 
 @layer base {
-  * {
-    border-color: var(--color-border);
-  }
-  body {
-    font-family: var(--font-body);
-    background-color: var(--color-bg);
-    color: var(--color-text);
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-  h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-heading);
-  }
+  * { border-color: var(--color-border); }
+  body { font-family: var(--font-body); background-color: var(--color-bg); color: var(--color-text); -webkit-font-smoothing: antialiased; }
+  h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 }
 
 @layer components {
   .font-heading { font-family: var(--font-heading); }
   .font-script { font-family: var(--font-script); }
-
-  /* Theme-aware utility classes — these read CSS vars, so they update live */
-  .bg-primary { background-color: var(--color-primary); }
-  .bg-surface { background-color: var(--color-surface); }
-  .bg-subtle { background-color: var(--color-bg-subtle); }
-  .text-primary { color: var(--color-primary); }
-  .text-muted { color: var(--color-text-muted); }
-  .border-themed { border-color: var(--color-border); }
-  .text-accent { color: var(--color-accent); }
-  .bg-accent { background-color: var(--color-accent); }
 }
 
-/* Smooth transitions for theme changes */
-body, * {
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-}
-
-/* Scrollbar */
+body, * { transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease; }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-border); }

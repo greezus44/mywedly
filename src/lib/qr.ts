@@ -13,9 +13,7 @@ export async function generateQrDataUrl(text: string, size = 256): Promise<strin
 export async function downloadQrCode(text: string, filename = "qr-code.png"): Promise<void> {
   const dataUrl = await generateQrDataUrl(text, 512);
   const link = document.createElement("a");
-  link.href = dataUrl;
-  link.download = filename;
-  link.click();
+  link.href = dataUrl; link.download = filename; link.click();
 }
 
 export async function downloadQrSvg(text: string, filename = "qr-code.svg"): Promise<void> {
@@ -24,8 +22,6 @@ export async function downloadQrSvg(text: string, filename = "qr-code.svg"): Pro
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
+  link.href = url; link.download = filename; link.click();
   URL.revokeObjectURL(url);
 }

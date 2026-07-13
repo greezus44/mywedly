@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,78 +11,77 @@ import {
   type GuestEventInvite,
   type EventGuest,
 } from "../../lib/supabase";
-import { cn, formatDate, formatTime } from "../../lib/utils";
+import { cn } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import {
-  Card,
-  Badge,
-  EmptyState,
-  FormField,
-  Skeleton,
-  ErrorState,
-  Toast,
-  Modal,
-} from "../../components/ui";
-import { Input, Select } from "../../components/ui/Input";
+import { Card, Badge, EmptyState, Skeleton, ErrorState, Toast, Modal } from "../../components/ui";
+import { Input } from "../../components/ui/Input";
 import {
   Plus,
   Trash2,
   Pencil,
-  Check,
-  X,
   Users,
   ChevronDown,
   ChevronRight,
-  Calendar,
   UserPlus,
-  Layers,
-  AlertCircle,
-  Shield,
+  X,
   Info,
-  Mail,
+  Check,
+  Calendar,
+  UserCheck,
 } from "lucide-react";
 
-interface EventContext { event: UserEvent }
-
-interface GroupWithMeta extends GuestGroup {
-  memberCount: number;
-  invitedSubEvents: { sub_event_id: string; sub_event_name: string }[];
+interface EventContext {
+  event: UserEvent;
 }
 
-function GroupsPage() {
+interface GroupWithMeta extends GuestGroup {
+  guestCount: number;
+  members: EventGuest[];
+  invitedSubEventIds: string[];
+}
+
+const PRIORITY_NOTE = "1. Manual Override  2. Group Invitation  3. Not Invited";
+
+export default function GroupsPage() {
   const { eventId } = useParams();
-  const queryClient = useQueryClient();
   const { event } = useOutletContext<EventContext>();
+  const queryClient = useQueryClient();
 
-  const [toast, setToast] = useState<string | null>(null);
-  const [toastType, setToastType] = useState<"success" | "error">("success");
   const [newGroupName, setNewGroupName] = useState("");
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
-  const [editGroupName, setEditGroupName] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<GuestGroup | null>(null);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [assignModalGroup, setAssignModalGroup] = useState<string | null>(null);
+  const [selectedSubEvents, setSelectedSubEvents] = useState<Record<string, boolean>>({});
+  const [assignGuestSearch, setAssignGuestSearch] = useState("");
+  const [assignSelectedGuests, setAssignSelectedGuests] = useState<Record<string, boolean>>({});
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  // Bulk selection state
-  const [selectedGroupIds, setSelectedGroupIds] = useState<Set<string>>(new Set());
-  const [selectedSubEventIds, setSelectedSubEventIds] = useState<Set<string>>(new Set());
+  const groupsKey = ["guest-groups", eventId];
+  const subEventsKey = ["sub-events", eventId];
+  const membersKey = ["guest-group-members", eventId];
+  const guestsKey = ["event-guests", eventId];
+  const groupInvitesKey = ["group-event-invites", eventId];
+  const guestInvitesKey = ["guest-event-invites", eventId];
 
-  // Assign guest modal
-  const [assignModalOpen, setAssignModalOpen] = useState(false);
-  const [assignGuestId, setAssignGuestId] = useState("");
-  const [assignGroupId, setAssignGroupId] = useState("");
+  const { data: groups, isLoading: groupsLoading, isError: groupsError, error: groupsErr, refetch: refetchGroups } = useQuery({
+    queryKey: groupsKey,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("guest_groups")
+        .select("*")
+        .eq("wedding_id", eventId)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data as GuestGroup[];
+    },
+    enabled: !!eventId,
+  });
 
-  // Manual override state
-  const [manualGuestId, setManualGuestId] = useState("");
-  const [manualSubEventId, setManualSubEventId] = useState("");
-
-  // ---- Queries ----
-
-  // Fetch sub-events
-  const {
-    data: subEvents = [],
-    isLoading: subEventsLoading,
-  } = useQuery({
-    queryKey: ["sub-events", eventId],
+  const { data: subEvents } = useQuery({
+    queryKey: subEventsKey,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sub_events")
@@ -90,69 +89,26 @@ function GroupsPage() {
         .eq("parent_event_id", eventId)
         .order("order_index", { ascending: true });
       if (error) throw error;
-      return (data || []) as SubEvent[];
+      return data as SubEvent[];
     },
     enabled: !!eventId,
   });
 
-  // Fetch guest groups
-  const {
-    data: groups = [],
-    isLoading: groupsLoading,
-    isError: groupsError,
-    refetch: refetchGroups,
-  } = useQuery({
-    queryKey: ["guest-groups", eventId],
+  const { data: members } = useQuery({
+    queryKey: membersKey,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("guest_groups")
-        .select("*")
-        .eq("wedding_id", eventId)
-        .order("sort_order", { ascending: true });
-      if (error) throw error;
-      return (data || []) as GuestGroup[];
-    },
-    enabled: !!eventId,
-  });
-
-  // Fetch group members (all for this event's groups)
-  const { data: groupMembers = [] } = useQuery({
-    queryKey: ["group-members", eventId],
-    queryFn: async () => {
-      if (groups.length === 0) return [];
-      const groupIds = groups.map((g) => g.id);
       const { data, error } = await supabase
         .from("guest_group_members")
-        .select("*")
-        .in("group_id", groupIds);
+        .select("*, guest_groups!inner(wedding_id)")
+        .eq("guest_groups.wedding_id", eventId);
       if (error) throw error;
-      return (data || []) as GuestGroupMember[];
+      return data as (GuestGroupMember & { guest_groups: { wedding_id: string } })[];
     },
-    enabled: !!eventId && groups.length > 0,
+    enabled: !!eventId,
   });
 
-  // Fetch group event invites
-  const { data: groupInvites = [] } = useQuery({
-    queryKey: ["group-event-invites", eventId],
-    queryFn: async () => {
-      if (groups.length === 0) return [];
-      const groupIds = groups.map((g) => g.id);
-      const { data, error } = await supabase
-        .from("group_event_invites")
-        .select("*")
-        .in("group_id", groupIds);
-      if (error) throw error;
-      return (data || []) as GroupEventInvite[];
-    },
-    enabled: !!eventId && groups.length > 0,
-  });
-
-  // Fetch event guests
-  const {
-    data: guests = [],
-    isLoading: guestsLoading,
-  } = useQuery({
-    queryKey: ["event-guests", eventId],
+  const { data: guests } = useQuery({
+    queryKey: guestsKey,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_guests")
@@ -160,64 +116,98 @@ function GroupsPage() {
         .eq("event_id", eventId)
         .order("name", { ascending: true });
       if (error) throw error;
-      return (data || []) as EventGuest[];
+      return data as EventGuest[];
     },
     enabled: !!eventId,
   });
 
-  // Fetch manual invites (guest_event_invites)
-  const { data: manualInvites = [] } = useQuery({
-    queryKey: ["guest-event-invites", eventId],
+  const { data: groupInvites } = useQuery({
+    queryKey: groupInvitesKey,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("group_event_invites")
+        .select("*, guest_groups!inner(wedding_id)")
+        .eq("guest_groups.wedding_id", eventId);
+      if (error) throw error;
+      return data as (GroupEventInvite & { guest_groups: { wedding_id: string } })[];
+    },
+    enabled: !!eventId,
+  });
+
+  const { data: guestInvites } = useQuery({
+    queryKey: guestInvitesKey,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("guest_event_invites")
-        .select("*")
-        .eq("event_id", eventId);
+        .select("*, event_guests!inner(event_id)")
+        .eq("event_guests.event_id", eventId);
       if (error) throw error;
-      return (data || []) as GuestEventInvite[];
+      return data as (GuestEventInvite & { event_guests: { event_id: string } })[];
     },
     enabled: !!eventId,
   });
 
-  // ---- Derived data ----
-
-  const groupsWithMeta: GroupWithMeta[] = groups.map((g) => {
-    const members = groupMembers.filter((m) => m.group_id === g.id);
-    const invites = groupInvites.filter((i) => i.group_id === g.id);
-    const invitedSubEvents = invites.map((inv) => {
-      const se = subEvents.find((s) => s.id === inv.sub_event_id);
-      return { sub_event_id: inv.sub_event_id || "", sub_event_name: se?.name || "Main Event" };
-    });
-    return { ...g, memberCount: members.length, invitedSubEvents };
-  });
-
-  // ---- Mutations ----
-
-  // Create group
-  const createGroupMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const maxSort = groups.length > 0 ? Math.max(...groups.map((g) => g.sort_order)) : -1;
-      const payload = {
-        wedding_id: eventId,
-        name,
-        sort_order: maxSort + 1,
+  const enrichedGroups: GroupWithMeta[] = useMemo(() => {
+    if (!groups) return [];
+    return groups.map((g) => {
+      const groupMemberRows = (members || []).filter((m) => m.group_id === g.id);
+      const groupGuests = groupMemberRows
+        .map((m) => (guests || []).find((gst) => gst.id === m.guest_id))
+        .filter((x): x is EventGuest => Boolean(x));
+      const invitedSubEventIds = (groupInvites || [])
+        .filter((gi) => gi.group_id === g.id)
+        .map((gi) => gi.sub_event_id)
+        .filter((id): id is string => Boolean(id));
+      return {
+        ...g,
+        guestCount: groupGuests.length,
+        members: groupGuests,
+        invitedSubEventIds,
       };
-      const { error } = await supabase.from("guest_groups").insert(payload);
+    });
+  }, [groups, members, guests, groupInvites]);
+
+  // Manual overrides: guest_event_invites with invite_type
+  const manualOverrides = useMemo(() => {
+    return (guestInvites || []).map((gi) => {
+      const guest = (guests || []).find((g) => g.id === gi.guest_id);
+      const subEvent = (subEvents || []).find((se) => se.id === gi.sub_event_id);
+      return {
+        ...gi,
+        guestName: guest?.name || "Unknown guest",
+        subEventName: subEvent?.name || "Entire event",
+      };
+    });
+  }, [guestInvites, guests, subEvents]);
+
+  const createGroupMutation = useMutation({
+    mutationFn: async () => {
+      if (!eventId) throw new Error("Missing event id");
+      if (!newGroupName.trim()) throw new Error("Group name is required");
+      const orderIndex = (groups?.length || 0);
+      const { data, error } = await supabase
+        .from("guest_groups")
+        .insert({
+          wedding_id: eventId,
+          name: newGroupName.trim(),
+          sort_order: orderIndex,
+        })
+        .select()
+        .single();
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
+      queryClient.invalidateQueries({ queryKey: groupsKey });
+      queryClient.invalidateQueries({ queryKey: membersKey });
       setNewGroupName("");
-      setToast("Group created");
-      setToastType("success");
+      setToast({ message: "Group created", type: "success" });
     },
     onError: (err: Error) => {
-      setToast(err.message || "Failed to create group");
-      setToastType("error");
+      setToast({ message: `Failed to create group: ${err.message}`, type: "error" });
     },
   });
 
-  // Rename group
   const renameGroupMutation = useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
       const { error } = await supabase
@@ -227,800 +217,590 @@ function GroupsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
-      setEditingGroupId(null);
-      setEditGroupName("");
-      setToast("Group renamed");
-      setToastType("success");
+      queryClient.invalidateQueries({ queryKey: groupsKey });
+      setRenamingId(null);
+      setRenameValue("");
+      setToast({ message: "Group renamed", type: "success" });
     },
     onError: (err: Error) => {
-      setToast(err.message || "Failed to rename group");
-      setToastType("error");
+      setToast({ message: `Failed to rename: ${err.message}`, type: "error" });
     },
   });
 
-  // Delete group
   const deleteGroupMutation = useMutation({
-    mutationFn: async (group: GuestGroup) => {
-      // Delete group_event_invites for this group
-      const { error: invError } = await supabase
-        .from("group_event_invites")
-        .delete()
-        .eq("group_id", group.id);
-      if (invError) throw invError;
-      // Delete guest_group_members for this group
-      const { error: memError } = await supabase
+    mutationFn: async (id: string) => {
+      // Remove members association (does NOT delete guests themselves)
+      const { error: mErr } = await supabase
         .from("guest_group_members")
         .delete()
-        .eq("group_id", group.id);
-      if (memError) throw memError;
-      // Delete the group itself
-      const { error } = await supabase.from("guest_groups").delete().eq("id", group.id);
-      if (error) throw error;
+        .eq("group_id", id);
+      if (mErr) throw mErr;
+      const { error: giErr } = await supabase
+        .from("group_event_invites")
+        .delete()
+        .eq("group_id", id);
+      if (giErr) throw giErr;
+      const { error: gErr } = await supabase
+        .from("guest_groups")
+        .delete()
+        .eq("id", id);
+      if (gErr) throw gErr;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["group-members", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["group-event-invites", eventId] });
-      setDeleteTarget(null);
-      setToast("Group deleted");
-      setToastType("success");
+      queryClient.invalidateQueries({ queryKey: groupsKey });
+      queryClient.invalidateQueries({ queryKey: membersKey });
+      queryClient.invalidateQueries({ queryKey: groupInvitesKey });
+      setDeleteId(null);
+      setToast({ message: "Group deleted (guests kept)", type: "success" });
     },
     onError: (err: Error) => {
-      setToast(err.message || "Failed to delete group");
-      setToastType("error");
+      setToast({ message: `Failed to delete group: ${err.message}`, type: "error" });
+      setDeleteId(null);
     },
   });
 
-  // Bulk invite groups to events
   const bulkInviteMutation = useMutation({
-    mutationFn: async ({ groupIds, subEventIds }: { groupIds: string[]; subEventIds: string[] }) => {
-      // Build all combinations, avoiding duplicates
-      const existing = new Set(groupInvites.map((i) => `${i.group_id}:${i.sub_event_id || "null"}`));
-      const rows = [];
-      for (const gid of groupIds) {
-        for (const seid of subEventIds) {
-          const key = `${gid}:${seid}`;
-          if (!existing.has(key)) {
-            rows.push({
-              group_id: gid,
-              event_id: eventId,
-              sub_event_id: seid,
-            });
-          }
-        }
-      }
-      if (rows.length === 0) return;
-      const { error } = await supabase.from("group_event_invites").insert(rows);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["group-event-invites", eventId] });
-      setSelectedGroupIds(new Set());
-      setSelectedSubEventIds(new Set());
-      setToast("Groups invited to selected events");
-      setToastType("success");
-    },
-    onError: (err: Error) => {
-      setToast(err.message || "Failed to invite groups");
-      setToastType("error");
-    },
-  });
-
-  // Bulk remove groups from events
-  const bulkRemoveMutation = useMutation({
-    mutationFn: async ({ groupIds, subEventIds }: { groupIds: string[]; subEventIds: string[] }) => {
-      for (const gid of groupIds) {
+    mutationFn: async ({ groupId, subEventIds }: { groupId: string; subEventIds: string[] }) => {
+      if (!eventId) throw new Error("Missing event id");
+      if (subEventIds.length === 0) {
+        // Remove all invites for this group
         const { error } = await supabase
           .from("group_event_invites")
           .delete()
-          .eq("group_id", gid)
-          .in("sub_event_id", subEventIds);
+          .eq("group_id", groupId)
+          .eq("event_id", eventId);
         if (error) throw error;
+        return;
       }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["group-event-invites", eventId] });
-      setSelectedGroupIds(new Set());
-      setSelectedSubEventIds(new Set());
-      setToast("Groups removed from selected events");
-      setToastType("success");
-    },
-    onError: (err: Error) => {
-      setToast(err.message || "Failed to remove groups");
-      setToastType("error");
-    },
-  });
-
-  // Assign guest to group
-  const assignGuestMutation = useMutation({
-    mutationFn: async ({ guestId, groupId }: { guestId: string; groupId: string }) => {
-      // Check if already exists
-      const { data: existing, error: checkError } = await supabase
-        .from("guest_group_members")
-        .select("*")
-        .eq("guest_id", guestId)
-        .eq("group_id", groupId);
-      if (checkError) throw checkError;
-      if (existing && existing.length > 0) return; // Already assigned
-      const { error } = await supabase.from("guest_group_members").insert({
-        guest_id: guestId,
+      // Remove existing invites for this group, then insert new ones
+      const { error: delErr } = await supabase
+        .from("group_event_invites")
+        .delete()
+        .eq("group_id", groupId)
+        .eq("event_id", eventId);
+      if (delErr) throw delErr;
+      const rows = subEventIds.map((seId) => ({
         group_id: groupId,
-      });
-      if (error) throw error;
+        event_id: eventId,
+        sub_event_id: seId,
+      }));
+      const { error: insErr } = await supabase.from("group_event_invites").insert(rows);
+      if (insErr) throw insErr;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["group-members", eventId] });
-      setAssignModalOpen(false);
-      setAssignGuestId("");
-      setAssignGroupId("");
-      setToast("Guest assigned to group");
-      setToastType("success");
+      queryClient.invalidateQueries({ queryKey: groupInvitesKey });
+      queryClient.invalidateQueries({ queryKey: guestInvitesKey });
+      setSelectedSubEvents({});
+      setToast({ message: "Bulk invitation updated", type: "success" });
     },
     onError: (err: Error) => {
-      setToast(err.message || "Failed to assign guest");
-      setToastType("error");
+      setToast({ message: `Failed to update invites: ${err.message}`, type: "error" });
     },
   });
 
-  // Remove guest from group
-  const removeGuestFromGroupMutation = useMutation({
-    mutationFn: async ({ guestId, groupId }: { guestId: string; groupId: string }) => {
+  const removeGroupInviteMutation = useMutation({
+    mutationFn: async ({ groupId, subEventId }: { groupId: string; subEventId: string }) => {
+      if (!eventId) throw new Error("Missing event id");
       const { error } = await supabase
+        .from("group_event_invites")
+        .delete()
+        .eq("group_id", groupId)
+        .eq("sub_event_id", subEventId)
+        .eq("event_id", eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: groupInvitesKey });
+      setToast({ message: "Sub-event invitation removed", type: "success" });
+    },
+    onError: (err: Error) => {
+      setToast({ message: `Failed to remove invite: ${err.message}`, type: "error" });
+    },
+  });
+
+  const assignGuestsMutation = useMutation({
+    mutationFn: async ({ groupId, guestIds }: { groupId: string; guestIds: string[] }) => {
+      // Remove existing members for this group, then insert new ones
+      const { error: delErr } = await supabase
         .from("guest_group_members")
         .delete()
-        .eq("guest_id", guestId)
         .eq("group_id", groupId);
-      if (error) throw error;
+      if (delErr) throw delErr;
+      if (guestIds.length === 0) return;
+      const rows = guestIds.map((gid) => ({ group_id: groupId, guest_id: gid }));
+      const { error: insErr } = await supabase.from("guest_group_members").insert(rows);
+      if (insErr) throw insErr;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["group-members", eventId] });
-      setToast("Guest removed from group");
-      setToastType("success");
+      queryClient.invalidateQueries({ queryKey: membersKey });
+      setAssignModalGroup(null);
+      setAssignGuestSearch("");
+      setAssignSelectedGuests({});
+      setToast({ message: "Guests assigned to group", type: "success" });
     },
     onError: (err: Error) => {
-      setToast(err.message || "Failed to remove guest");
-      setToastType("error");
+      setToast({ message: `Failed to assign guests: ${err.message}`, type: "error" });
     },
   });
 
-  // Add manual invite
-  const addManualInviteMutation = useMutation({
-    mutationFn: async ({ guestId, subEventId }: { guestId: string; subEventId: string }) => {
-      // Check if already exists
-      const { data: existing, error: checkError } = await supabase
-        .from("guest_event_invites")
-        .select("*")
-        .eq("guest_id", guestId)
-        .eq("event_id", eventId)
-        .eq("sub_event_id", subEventId);
-      if (checkError) throw checkError;
-      if (existing && existing.length > 0) return;
-      const { error } = await supabase.from("guest_event_invites").insert({
-        guest_id: guestId,
-        event_id: eventId,
-        sub_event_id: subEventId,
-        invite_type: "manual",
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] });
-      setManualGuestId("");
-      setManualSubEventId("");
-      setToast("Manual invite added");
-      setToastType("success");
-    },
-    onError: (err: Error) => {
-      setToast(err.message || "Failed to add manual invite");
-      setToastType("error");
-    },
-  });
-
-  // Remove manual invite
-  const removeManualInviteMutation = useMutation({
-    mutationFn: async ({ guestId, subEventId }: { guestId: string; subEventId: string }) => {
-      const { error } = await supabase
+  const deleteManualOverrideMutation = useMutation({
+    mutationFn: async ({ guestId, subEventId }: { guestId: string; subEventId: string | null }) => {
+      let query = supabase
         .from("guest_event_invites")
         .delete()
-        .eq("guest_id", guestId)
-        .eq("event_id", eventId)
-        .eq("sub_event_id", subEventId);
+        .eq("guest_id", guestId);
+      if (subEventId) {
+        query = query.eq("sub_event_id", subEventId);
+      } else {
+        query = query.is("sub_event_id", null);
+      }
+      const { error } = await query;
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] });
-      setToast("Manual invite removed");
-      setToastType("success");
+      queryClient.invalidateQueries({ queryKey: guestInvitesKey });
+      setToast({ message: "Manual override removed", type: "success" });
     },
     onError: (err: Error) => {
-      setToast(err.message || "Failed to remove manual invite");
-      setToastType("error");
+      setToast({ message: `Failed to remove override: ${err.message}`, type: "error" });
     },
   });
 
-  // ---- Handlers ----
-
-  const toggleGroupExpanded = (groupId: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      return next;
-    });
+  const startRename = (g: GuestGroup) => {
+    setRenamingId(g.id);
+    setRenameValue(g.name);
   };
 
-  const toggleGroupSelected = (groupId: string) => {
-    setSelectedGroupIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      return next;
-    });
+  const submitRename = () => {
+    if (!renamingId || !renameValue.trim()) return;
+    renameGroupMutation.mutate({ id: renamingId, name: renameValue.trim() });
   };
 
-  const toggleSubEventSelected = (subEventId: string) => {
-    setSelectedSubEventIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(subEventId)) next.delete(subEventId);
-      else next.add(subEventId);
-      return next;
-    });
-  };
-
-  const startRename = (group: GuestGroup) => {
-    setEditingGroupId(group.id);
-    setEditGroupName(group.name);
-  };
-
-  const confirmRename = (groupId: string) => {
-    if (!editGroupName.trim()) {
-      setToast("Group name cannot be empty");
-      setToastType("error");
-      return;
-    }
-    renameGroupMutation.mutate({ id: groupId, name: editGroupName.trim() });
-  };
-
-  const handleCreateGroup = () => {
-    if (!newGroupName.trim()) {
-      setToast("Group name cannot be empty");
-      setToastType("error");
-      return;
-    }
-    createGroupMutation.mutate(newGroupName.trim());
-  };
-
-  const handleBulkInvite = () => {
-    if (selectedGroupIds.size === 0 || selectedSubEventIds.size === 0) {
-      setToast("Select groups and events first");
-      setToastType("error");
-      return;
-    }
-    bulkInviteMutation.mutate({
-      groupIds: Array.from(selectedGroupIds),
-      subEventIds: Array.from(selectedSubEventIds),
-    });
-  };
-
-  const handleBulkRemove = () => {
-    if (selectedGroupIds.size === 0 || selectedSubEventIds.size === 0) {
-      setToast("Select groups and events first");
-      setToastType("error");
-      return;
-    }
-    bulkRemoveMutation.mutate({
-      groupIds: Array.from(selectedGroupIds),
-      subEventIds: Array.from(selectedSubEventIds),
-    });
-  };
-
-  const handleAssignGuest = () => {
-    if (!assignGuestId || !assignGroupId) {
-      setToast("Select a guest and a group");
-      setToastType("error");
-      return;
-    }
-    assignGuestMutation.mutate({ guestId: assignGuestId, groupId: assignGroupId });
-  };
-
-  const handleAddManualInvite = () => {
-    if (!manualGuestId || !manualSubEventId) {
-      setToast("Select a guest and an event");
-      setToastType("error");
-      return;
-    }
-    addManualInviteMutation.mutate({ guestId: manualGuestId, subEventId: manualSubEventId });
-  };
-
-  const getGuestName = (guestId: string) => guests.find((g) => g.id === guestId)?.name || "Unknown";
-  const getSubEventName = (subEventId: string | null) => {
-    if (!subEventId) return "Main Event";
-    return subEvents.find((s) => s.id === subEventId)?.name || "Unknown Event";
-  };
-
-  const guestsInGroup = (groupId: string) => {
-    const memberGuestIds = groupMembers
+  const openAssignModal = (groupId: string) => {
+    const currentMemberIds = (members || [])
       .filter((m) => m.group_id === groupId)
       .map((m) => m.guest_id);
-    return guests.filter((g) => memberGuestIds.includes(g.id));
+    const initial: Record<string, boolean> = {};
+    currentMemberIds.forEach((id) => { initial[id] = true; });
+    setAssignSelectedGuests(initial);
+    setAssignGuestSearch("");
+    setAssignModalGroup(groupId);
   };
 
-  const allSubEventOptions = [
-    { id: "__main__", name: "Main Event", date: event.event_date, time: event.event_time },
-    ...subEvents.map((s) => ({ id: s.id, name: s.name, date: s.date, time: s.time })),
-  ];
+  const toggleAssignGuest = (guestId: string) => {
+    setAssignSelectedGuests((prev) => ({ ...prev, [guestId]: !prev[guestId] }));
+  };
 
-  const isLoading = groupsLoading || subEventsLoading || guestsLoading;
+  const submitAssign = () => {
+    if (!assignModalGroup) return;
+    const selected = Object.entries(assignSelectedGuests)
+      .filter(([, v]) => v)
+      .map(([id]) => id);
+    assignGuestsMutation.mutate({ groupId: assignModalGroup, guestIds: selected });
+  };
+
+  const openBulkInvite = (groupId: string) => {
+    const current = (groupInvites || [])
+      .filter((gi) => gi.group_id === groupId)
+      .reduce<Record<string, boolean>>((acc, gi) => {
+        if (gi.sub_event_id) acc[gi.sub_event_id] = true;
+        return acc;
+      }, {});
+    setSelectedSubEvents(current);
+    setExpandedId(expandedId === groupId ? null : groupId);
+  };
+
+  const toggleSubEvent = (seId: string) => {
+    setSelectedSubEvents((prev) => ({ ...prev, [seId]: !prev[seId] }));
+  };
+
+  const submitBulkInvite = (groupId: string) => {
+    const selected = Object.entries(selectedSubEvents)
+      .filter(([, v]) => v)
+      .map(([id]) => id);
+    bulkInviteMutation.mutate({ groupId, subEventIds: selected });
+  };
+
+  const filteredGuestsForAssign = (guests || []).filter((g) =>
+    g.name.toLowerCase().includes(assignGuestSearch.toLowerCase()) ||
+    g.email.toLowerCase().includes(assignGuestSearch.toLowerCase())
+  );
+
+  const inviteTypeVariant = (type: string): "success" | "warning" | "default" => {
+    if (type === "override") return "warning";
+    if (type === "invited") return "success";
+    return "default";
+  };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-6 lg:p-8 space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-heading text-[var(--color-text)]">Guest Groups</h1>
+          <h1 className="font-heading text-2xl">Guest Groups</h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            Create groups, assign guests, and invite groups to events in bulk.
+            Organize guests into groups and bulk-invite them to sub-events for {event.draft_name || event.name}.
           </p>
         </div>
-        <Button onClick={() => setAssignModalOpen(true)}>
-          <UserPlus className="w-4 h-4" /> Assign Guest
-        </Button>
       </div>
 
-      {/* Priority Info Banner */}
-      <Card className="p-4 mb-6 bg-[var(--color-bg-subtle)]">
-        <div className="flex items-start gap-3">
-          <Info className="w-5 h-5 text-[var(--color-text-muted)] mt-0.5 shrink-0" />
-          <div className="text-sm">
-            <p className="font-medium text-[var(--color-text)]">Invitation Priority</p>
-            <div className="flex items-center gap-3 mt-2 flex-wrap">
-              <Badge variant="info">1. Manual Override</Badge>
-              <span className="text-[var(--color-text-muted)]">→</span>
-              <Badge variant="success">2. Group Invitation</Badge>
-              <span className="text-[var(--color-text-muted)]">→</span>
-              <Badge variant="default">3. Not Invited</Badge>
-            </div>
-            <p className="text-xs text-[var(--color-text-muted)] mt-2">
-              Manual overrides take precedence over group invitations. If a guest is not invited via either method, they cannot RSVP to that event.
-            </p>
-          </div>
+      {/* Priority note */}
+      <Card className="p-4 flex items-start gap-3 bg-blue-50/50 border-blue-200">
+        <Info className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+        <div>
+          <p className="text-sm font-medium text-blue-900">Invitation Priority</p>
+          <p className="text-xs text-blue-700 mt-0.5">
+            When resolving whether a guest is invited to a sub-event, the system checks in this order:
+          </p>
+          <p className="text-xs font-mono text-blue-900 mt-1.5 font-medium">{PRIORITY_NOTE}</p>
         </div>
       </Card>
 
-      {/* Create new group */}
-      <Card className="p-4 mb-6">
-        <FormField label="Create New Group">
-          <div className="flex gap-2">
-            <Input
-              value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
-              placeholder="e.g. Bride's Family, Groom's Friends, Coworkers"
-              onKeyDown={(e) => e.key === "Enter" && handleCreateGroup()}
-            />
-            <Button onClick={handleCreateGroup} loading={createGroupMutation.isPending} disabled={!newGroupName.trim()}>
-              <Plus className="w-4 h-4" /> Add
-            </Button>
-          </div>
-        </FormField>
+      {/* Inline create */}
+      <Card className="p-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <Input
+            value={newGroupName}
+            onChange={(e) => setNewGroupName(e.target.value)}
+            placeholder="New group name (e.g. Bride's Family, Groomsmen, VIP)"
+            className="flex-1 min-w-[200px]"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newGroupName.trim()) createGroupMutation.mutate();
+            }}
+          />
+          <Button onClick={() => createGroupMutation.mutate()} loading={createGroupMutation.isPending} disabled={!newGroupName.trim()}>
+            <Plus className="w-4 h-4" /> Create Group
+          </Button>
+        </div>
       </Card>
 
-      {/* Loading */}
-      {isLoading && (
-        <div className="space-y-4">
+      {groupsLoading ? (
+        <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <Card key={i} className="p-6">
-              <Skeleton className="h-6 w-48 mb-4" />
-              <Skeleton className="h-4 w-32 mb-2" />
-              <Skeleton className="h-4 w-64" />
-            </Card>
+            <Skeleton key={i} className="h-32" />
           ))}
         </div>
-      )}
-
-      {/* Error */}
-      {groupsError && (
-        <ErrorState message="Failed to load groups" onRetry={() => refetchGroups()} />
-      )}
-
-      {/* Empty */}
-      {!isLoading && !groupsError && groups.length === 0 && (
+      ) : groupsError ? (
+        <ErrorState message={(groupsErr as Error)?.message || "Failed to load groups"} onRetry={() => refetchGroups()} />
+      ) : enrichedGroups.length === 0 ? (
         <EmptyState
-          icon={<Layers className="w-16 h-16" />}
+          icon={<Users className="w-12 h-12" />}
           title="No guest groups yet"
-          description="Create groups to organize your guests and invite them to events in bulk."
+          description="Create groups like 'Bride's Family' or 'College Friends' to bulk-invite guests to sub-events."
         />
-      )}
-
-      {/* Groups list */}
-      {!isLoading && !groupsError && groups.length > 0 && (
-        <>
-          {/* Bulk Actions Bar */}
-          <Card className="p-4 mb-6">
-            <div className="space-y-4">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
-                  Bulk Invite — Select Groups ({selectedGroupIds.size} selected)
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {groupsWithMeta.map((g) => (
-                    <button
-                      key={g.id}
-                      onClick={() => toggleGroupSelected(g.id)}
-                      className={cn(
-                        "px-3 py-1.5 text-sm border transition-colors",
-                        selectedGroupIds.has(g.id)
-                          ? "bg-[var(--color-primary)] text-[var(--color-bg)] border-[var(--color-primary)]"
-                          : "bg-[var(--color-surface)] text-[var(--color-text)] border-[var(--color-border)] hover:border-[var(--color-primary)]"
-                      )}
-                      style={{ borderRadius: "var(--radius)" }}
-                    >
-                      {g.name} ({g.memberCount})
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
-                  Select Events ({selectedSubEventIds.size} selected)
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {allSubEventOptions.map((se) => (
-                    <button
-                      key={se.id}
-                      onClick={() => toggleSubEventSelected(se.id)}
-                      className={cn(
-                        "px-3 py-1.5 text-sm border transition-colors flex items-center gap-1.5",
-                        selectedSubEventIds.has(se.id)
-                          ? "bg-[var(--color-primary)] text-[var(--color-bg)] border-[var(--color-primary)]"
-                          : "bg-[var(--color-surface)] text-[var(--color-text)] border-[var(--color-border)] hover:border-[var(--color-primary)]"
-                      )}
-                      style={{ borderRadius: "var(--radius)" }}
-                    >
-                      <Calendar className="w-3.5 h-3.5" />
-                      {se.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <Button
-                  onClick={handleBulkInvite}
-                  loading={bulkInviteMutation.isPending}
-                  disabled={selectedGroupIds.size === 0 || selectedSubEventIds.size === 0}
-                  size="sm"
-                >
-                  <Mail className="w-3.5 h-3.5" /> Invite to Events
-                </Button>
-                <Button
-                  onClick={handleBulkRemove}
-                  loading={bulkRemoveMutation.isPending}
-                  disabled={selectedGroupIds.size === 0 || selectedSubEventIds.size === 0}
-                  size="sm"
-                  variant="secondary"
-                >
-                  <X className="w-3.5 h-3.5" /> Remove from Events
-                </Button>
-              </div>
-            </div>
-          </Card>
-
-          {/* Group Cards */}
-          <div className="space-y-4">
-            {groupsWithMeta.map((group) => {
-              const isExpanded = expandedGroups.has(group.id);
-              const isSelected = selectedGroupIds.has(group.id);
-              const groupGuests = guestsInGroup(group.id);
-
-              return (
-                <Card key={group.id} className="overflow-hidden">
-                  {/* Card header */}
-                  <div className="p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <button
-                          onClick={() => toggleGroupSelected(group.id)}
-                          className={cn(
-                            "w-5 h-5 border-2 flex items-center justify-center shrink-0 transition-colors",
-                            isSelected
-                              ? "bg-[var(--color-primary)] border-[var(--color-primary)]"
-                              : "border-[var(--color-border)] hover:border-[var(--color-primary)]"
-                          )}
-                          style={{ borderRadius: "var(--radius)" }}
-                        >
-                          {isSelected && <Check className="w-3 h-3 text-[var(--color-bg)]" />}
-                        </button>
-                        {editingGroupId === group.id ? (
-                          <div className="flex items-center gap-2 flex-1">
+      ) : (
+        <div className="space-y-3">
+          {enrichedGroups.map((g) => {
+            const isExpanded = expandedId === g.id;
+            const isRenaming = renamingId === g.id;
+            return (
+              <Card key={g.id} className="overflow-hidden">
+                <div className="p-4">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <button
+                        onClick={() => setExpandedId(isExpanded ? null : g.id)}
+                        className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-subtle)] transition-colors mt-0.5"
+                        style={{ borderRadius: "var(--radius)" }}
+                      >
+                        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        {isRenaming ? (
+                          <div className="flex items-center gap-2">
                             <Input
-                              value={editGroupName}
-                              onChange={(e) => setEditGroupName(e.target.value)}
-                              onKeyDown={(e) => e.key === "Enter" && confirmRename(group.id)}
-                              className="flex-1"
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              className="max-w-xs"
                               autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") submitRename();
+                                if (e.key === "Escape") { setRenamingId(null); setRenameValue(""); }
+                              }}
                             />
-                            <button
-                              onClick={() => confirmRename(group.id)}
-                              disabled={renameGroupMutation.isPending}
-                              className="p-1.5 hover:bg-green-50 transition-colors"
-                              style={{ borderRadius: "var(--radius)" }}
-                            >
-                              <Check className="w-4 h-4 text-green-600" />
-                            </button>
-                            <button
-                              onClick={() => { setEditingGroupId(null); setEditGroupName(""); }}
-                              className="p-1.5 hover:bg-[var(--color-bg-subtle)] transition-colors"
-                              style={{ borderRadius: "var(--radius)" }}
-                            >
-                              <X className="w-4 h-4 text-[var(--color-text-muted)]" />
-                            </button>
+                            <Button size="sm" onClick={submitRename} loading={renameGroupMutation.isPending}>Save</Button>
+                            <Button size="sm" variant="ghost" onClick={() => { setRenamingId(null); setRenameValue(""); }}>Cancel</Button>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => toggleGroupExpanded(group.id)}
-                            className="flex items-center gap-2 text-left min-w-0"
-                          >
-                            {isExpanded ? (
-                              <ChevronDown className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
-                            )}
-                            <h3 className="text-lg font-heading text-[var(--color-text)] truncate">{group.name}</h3>
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Badge variant="default">
-                          <Users className="w-3 h-3 mr-1" />
-                          {group.memberCount} {group.memberCount === 1 ? "guest" : "guests"}
-                        </Badge>
-                        {editingGroupId !== group.id && (
                           <>
-                            <button
-                              onClick={() => startRename(group)}
-                              className="p-1.5 hover:bg-[var(--color-bg-subtle)] transition-colors"
-                              style={{ borderRadius: "var(--radius)" }}
-                              title="Rename"
-                            >
-                              <Pencil className="w-4 h-4 text-[var(--color-text-muted)]" />
-                            </button>
-                            <button
-                              onClick={() => setDeleteTarget(group)}
-                              className="p-1.5 hover:bg-red-50 transition-colors"
-                              style={{ borderRadius: "var(--radius)" }}
-                              title="Delete group"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </button>
+                            <h3 className="font-heading text-lg truncate">{g.name}</h3>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <Badge variant="info">
+                                <Users className="w-3 h-3 mr-1" /> {g.guestCount} {g.guestCount === 1 ? "guest" : "guests"}
+                              </Badge>
+                              {g.invitedSubEventIds.length > 0 && (
+                                <Badge variant="success">
+                                  <Calendar className="w-3 h-3 mr-1" /> {g.invitedSubEventIds.length} sub-event{g.invitedSubEventIds.length === 1 ? "" : "s"}
+                                </Badge>
+                              )}
+                            </div>
                           </>
                         )}
                       </div>
                     </div>
 
-                    {/* Invited sub-events */}
-                    {group.invitedSubEvents.length > 0 && (
-                      <div className="mt-4 flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">Invited to:</span>
-                        {group.invitedSubEvents.map((inv) => (
-                          <Badge key={inv.sub_event_id || "main"} variant="info">
-                            <Calendar className="w-3 h-3 mr-1" />
-                            {inv.sub_event_name}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button size="sm" variant="secondary" onClick={() => openAssignModal(g.id)}>
+                        <UserPlus className="w-3.5 h-3.5" /> Assign
+                      </Button>
+                      <button
+                        onClick={() => startRename(g)}
+                        className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-subtle)] transition-colors"
+                        style={{ borderRadius: "var(--radius)" }}
+                        title="Rename"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteId(g.id)}
+                        className="p-1.5 text-[var(--color-text-muted)] hover:text-red-600 hover:bg-red-50 transition-colors"
+                        style={{ borderRadius: "var(--radius)" }}
+                        title="Delete group"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Expanded guest list */}
-                  {isExpanded && (
-                    <div className="border-t border-[var(--color-border)] bg-[var(--color-bg-subtle)] p-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-medium text-[var(--color-text)]">Guests in this group</h4>
-                        <Button size="sm" variant="ghost" onClick={() => setAssignModalOpen(true)}>
-                          <UserPlus className="w-3.5 h-3.5" /> Add Guest
-                        </Button>
-                      </div>
-                      {groupGuests.length === 0 ? (
-                        <p className="text-sm text-[var(--color-text-muted)] py-4 text-center">No guests assigned to this group yet.</p>
-                      ) : (
-                        <div className="space-y-1">
-                          {groupGuests.map((guest) => (
-                            <div
-                              key={guest.id}
-                              className="flex items-center justify-between p-2 bg-[var(--color-surface)] border border-[var(--color-border)]"
-                              style={{ borderRadius: "var(--radius)" }}
+                  {/* Invited sub-event badges */}
+                  {g.invitedSubEventIds.length > 0 && (
+                    <div className="flex items-center gap-1.5 mt-3 flex-wrap">
+                      <span className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider">Invited to:</span>
+                      {g.invitedSubEventIds.map((seId) => {
+                        const se = (subEvents || []).find((s) => s.id === seId);
+                        return (
+                          <span
+                            key={seId}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs bg-green-50 text-green-700"
+                            style={{ borderRadius: "var(--radius)" }}
+                          >
+                            {se?.name || "Unknown"}
+                            <button
+                              onClick={() => removeGroupInviteMutation.mutate({ groupId: g.id, subEventId: seId })}
+                              className="hover:text-red-600 transition-colors"
+                              title="Remove this invitation"
                             >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-8 h-8 bg-[var(--color-bg-subtle)] flex items-center justify-center shrink-0" style={{ borderRadius: "var(--radius)" }}>
-                                  <Users className="w-4 h-4 text-[var(--color-text-muted)]" />
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-[var(--color-text)] truncate">{guest.name}</p>
-                                  {guest.email && <p className="text-xs text-[var(--color-text-muted)] truncate">{guest.email}</p>}
-                                </div>
-                              </div>
-                              <button
-                                onClick={() => removeGuestFromGroupMutation.mutate({ guestId: guest.id, groupId: group.id })}
-                                disabled={removeGuestFromGroupMutation.isPending}
-                                className="p-1.5 hover:bg-red-50 transition-colors shrink-0"
-                                style={{ borderRadius: "var(--radius)" }}
-                                title="Remove from group"
-                              >
-                                <X className="w-4 h-4 text-red-500" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
-                </Card>
-              );
-            })}
-          </div>
-        </>
+
+                  {/* Expandable bulk invite + guest list */}
+                  {isExpanded && (
+                    <div className="mt-4 pt-4 border-t border-[var(--color-border)] space-y-4">
+                      {/* Guest list */}
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+                          Guests in this group ({g.guestCount})
+                        </p>
+                        {g.members.length === 0 ? (
+                          <p className="text-sm text-[var(--color-text-muted)] italic">No guests assigned yet.</p>
+                        ) : (
+                          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {g.members.map((m) => (
+                              <div key={m.id} className="flex items-center gap-2 px-3 py-2 bg-[var(--color-bg-subtle)]" style={{ borderRadius: "var(--radius)" }}>
+                                <UserCheck className="w-3.5 h-3.5 text-[var(--color-text-muted)] shrink-0" />
+                                <div className="min-w-0">
+                                  <div className="text-sm truncate">{m.name}</div>
+                                  {m.email && <div className="text-xs text-[var(--color-text-muted)] truncate">{m.email}</div>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Bulk invite to sub-events */}
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+                          Bulk invite to sub-events
+                        </p>
+                        {(!subEvents || subEvents.length === 0) ? (
+                          <p className="text-sm text-[var(--color-text-muted)] italic">
+                            No sub-events available. Create sub-events in the Events tab first.
+                          </p>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {subEvents.map((se) => {
+                                const checked = !!selectedSubEvents[se.id];
+                                return (
+                                  <button
+                                    key={se.id}
+                                    onClick={() => toggleSubEvent(se.id)}
+                                    className={cn(
+                                      "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border transition-colors",
+                                      checked
+                                        ? "bg-[var(--color-primary)] text-[var(--color-bg)] border-[var(--color-primary)]"
+                                        : "bg-[var(--color-surface)] text-[var(--color-text)] border-[var(--color-border)] hover:border-[var(--color-primary)]"
+                                    )}
+                                    style={{ borderRadius: "var(--radius)" }}
+                                  >
+                                    {checked && <Check className="w-3.5 h-3.5" />}
+                                    {se.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => submitBulkInvite(g.id)}
+                                loading={bulkInviteMutation.isPending}
+                              >
+                                Apply Invitations
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setSelectedSubEvents({})}
+                              >
+                                Clear Selection
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
+        </div>
       )}
 
       {/* Manual Overrides Section */}
-      {!isLoading && !groupsError && guests.length > 0 && (
-        <div className="mt-8">
-          <Card className="p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <Shield className="w-5 h-5 text-[var(--color-text)]" />
-              <h2 className="text-lg font-heading text-[var(--color-text)]">Manual Overrides</h2>
-            </div>
-            <p className="text-sm text-[var(--color-text-muted)] mb-4">
-              These invitations take precedence over group invitations. Use them to individually include or exclude guests from specific events.
-            </p>
+      <div className="pt-4">
+        <div className="flex items-center gap-2 mb-3">
+          <h2 className="font-heading text-xl">Manual Overrides</h2>
+          <Badge variant="warning">Per-guest</Badge>
+        </div>
+        <p className="text-sm text-[var(--color-text-muted)] mb-4">
+          Individual guest invitations that override group settings. These take the highest priority.
+        </p>
 
-            {/* Add manual invite */}
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-3 mb-4">
-              <Select
-                value={manualGuestId}
-                onChange={(e) => setManualGuestId(e.target.value)}
-              >
-                <option value="">Select guest...</option>
-                {guests.map((g) => (
-                  <option key={g.id} value={g.id}>{g.name}</option>
-                ))}
-              </Select>
-              <Select
-                value={manualSubEventId}
-                onChange={(e) => setManualSubEventId(e.target.value)}
-              >
-                <option value="">Select event...</option>
-                {allSubEventOptions.map((se) => (
-                  <option key={se.id} value={se.id}>{se.name}</option>
-                ))}
-              </Select>
-              <Button
-                onClick={handleAddManualInvite}
-                loading={addManualInviteMutation.isPending}
-                disabled={!manualGuestId || !manualSubEventId}
-              >
-                <Plus className="w-4 h-4" /> Add
-              </Button>
-            </div>
-
-            {/* Manual invites list */}
-            {manualInvites.length === 0 ? (
-              <p className="text-sm text-[var(--color-text-muted)] py-4 text-center">No manual overrides yet.</p>
-            ) : (
-              <div className="space-y-1">
-                {manualInvites.map((inv) => (
-                  <div
-                    key={`${inv.guest_id}-${inv.sub_event_id || "null"}`}
-                    className="flex items-center justify-between p-3 bg-[var(--color-bg-subtle)] border border-[var(--color-border)]"
-                    style={{ borderRadius: "var(--radius)" }}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Shield className="w-4 h-4 text-[var(--color-primary)] shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-[var(--color-text)] truncate">
-                          {getGuestName(inv.guest_id)}
-                        </p>
-                        <p className="text-xs text-[var(--color-text-muted)]">
-                          {getSubEventName(inv.sub_event_id)}
-                        </p>
+        {manualOverrides.length === 0 ? (
+          <Card className="p-6">
+            <EmptyState
+              icon={<UserCheck className="w-10 h-10" />}
+              title="No manual overrides"
+              description="When you set per-guest invitations (e.g. from the Guests tab), they will appear here."
+            />
+          </Card>
+        ) : (
+          <Card className="overflow-hidden">
+            <div className="divide-y divide-[var(--color-border)]">
+              {manualOverrides.map((ov, idx) => (
+                <div key={`${ov.guest_id}-${ov.sub_event_id || "all"}-${idx}`} className="p-4 flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 flex items-center justify-center bg-amber-50 text-amber-700 shrink-0" style={{ borderRadius: "var(--radius)" }}>
+                      <UserCheck className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{ov.guestName}</div>
+                      <div className="text-xs text-[var(--color-text-muted)] flex items-center gap-1.5">
+                        <Calendar className="w-3 h-3" /> {ov.subEventName}
                       </div>
                     </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant={inviteTypeVariant(ov.invite_type)}>{ov.invite_type}</Badge>
                     <button
-                      onClick={() => removeManualInviteMutation.mutate({ guestId: inv.guest_id, subEventId: inv.sub_event_id || "" })}
-                      disabled={removeManualInviteMutation.isPending}
-                      className="p-1.5 hover:bg-red-50 transition-colors shrink-0"
+                      onClick={() => deleteManualOverrideMutation.mutate({ guestId: ov.guest_id, subEventId: ov.sub_event_id })}
+                      className="p-1.5 text-[var(--color-text-muted)] hover:text-red-600 hover:bg-red-50 transition-colors"
                       style={{ borderRadius: "var(--radius)" }}
                       title="Remove override"
                     >
-                      <Trash2 className="w-4 h-4 text-red-500" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
           </Card>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Assign Guest Modal */}
-      <Modal open={assignModalOpen} onClose={() => setAssignModalOpen(false)} title="Assign Guest to Group">
-        <div className="space-y-4">
-          <FormField label="Guest">
-            <Select
-              value={assignGuestId}
-              onChange={(e) => setAssignGuestId(e.target.value)}
-            >
-              <option value="">Select guest...</option>
-              {guests.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}{g.email ? ` (${g.email})` : ""}</option>
-              ))}
-            </Select>
-          </FormField>
-
-          <FormField label="Group">
-            <Select
-              value={assignGroupId}
-              onChange={(e) => setAssignGroupId(e.target.value)}
-            >
-              <option value="">Select group...</option>
-              {groups.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}</option>
-              ))}
-            </Select>
-          </FormField>
-
-          {guests.length === 0 && (
-            <p className="text-sm text-[var(--color-text-muted)] flex items-center gap-2">
-              <AlertCircle className="w-4 h-4" />
-              No guests found. Add guests from the Guests tab first.
-            </p>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <Button variant="ghost" onClick={() => setAssignModalOpen(false)}>Cancel</Button>
-            <Button
-              onClick={handleAssignGuest}
-              loading={assignGuestMutation.isPending}
-              disabled={!assignGuestId || !assignGroupId}
-            >
-              Assign
-            </Button>
-          </div>
+      {/* Delete group confirmation */}
+      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Delete Group">
+        <p className="text-sm text-[var(--color-text-muted)] mb-2">
+          Are you sure you want to delete this group?
+        </p>
+        <p className="text-sm text-[var(--color-text-muted)] mb-6">
+          <strong>This does NOT delete the guests themselves</strong> — they remain in your guest list. Only the group and its sub-event invitations are removed.
+        </p>
+        <div className="flex gap-3">
+          <Button variant="danger" onClick={() => deleteId && deleteGroupMutation.mutate(deleteId)} loading={deleteGroupMutation.isPending}>
+            Delete Group
+          </Button>
+          <Button variant="ghost" onClick={() => setDeleteId(null)}>Cancel</Button>
         </div>
       </Modal>
 
-      {/* Delete Group Confirmation */}
-      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Group">
+      {/* Assign guests to group modal */}
+      <Modal open={!!assignModalGroup} onClose={() => setAssignModalGroup(null)} title="Assign Guests to Group">
         <div className="space-y-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-            <div className="text-sm text-[var(--color-text)]">
-              <p>
-                Are you sure you want to delete the group <span className="font-medium">"{deleteTarget?.name}"</span>?
+          <Input
+            value={assignGuestSearch}
+            onChange={(e) => setAssignGuestSearch(e.target.value)}
+            placeholder="Search guests by name or email..."
+            autoFocus
+          />
+          <div className="max-h-80 overflow-y-auto space-y-1 border border-[var(--color-border)] p-2" style={{ borderRadius: "var(--radius)" }}>
+            {filteredGuestsForAssign.length === 0 ? (
+              <p className="text-sm text-[var(--color-text-muted)] text-center py-6">
+                {guests?.length === 0 ? "No guests in this event yet." : "No guests match your search."}
               </p>
-              <p className="mt-2 text-[var(--color-text-muted)]">
-                This will NOT delete the guests themselves — only the group and its member associations. All group event invitations for this group will also be removed.
-              </p>
+            ) : (
+              filteredGuestsForAssign.map((g) => {
+                const checked = !!assignSelectedGuests[g.id];
+                return (
+                  <button
+                    key={g.id}
+                    onClick={() => toggleAssignGuest(g.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-3 py-2 text-left transition-colors",
+                      checked ? "bg-[var(--color-bg-subtle)]" : "hover:bg-[var(--color-bg-subtle)]"
+                    )}
+                    style={{ borderRadius: "var(--radius)" }}
+                  >
+                    <div className={cn(
+                      "w-4 h-4 border flex items-center justify-center shrink-0",
+                      checked ? "bg-[var(--color-primary)] border-[var(--color-primary)]" : "border-[var(--color-border)]"
+                    )} style={{ borderRadius: "2px" }}>
+                      {checked && <Check className="w-3 h-3 text-[var(--color-bg)]" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm truncate">{g.name}</div>
+                      {g.email && <div className="text-xs text-[var(--color-text-muted)] truncate">{g.email}</div>}
+                    </div>
+                    {g.group_name && (
+                      <Badge variant="default">{g.group_name}</Badge>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-3 pt-2">
+            <span className="text-xs text-[var(--color-text-muted)]">
+              {Object.values(assignSelectedGuests).filter(Boolean).length} selected
+            </span>
+            <div className="flex gap-3">
+              <Button onClick={submitAssign} loading={assignGuestsMutation.isPending}>
+                Save Assignment
+              </Button>
+              <Button variant="ghost" onClick={() => setAssignModalGroup(null)}>Cancel</Button>
             </div>
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button
-              variant="danger"
-              loading={deleteGroupMutation.isPending}
-              onClick={() => deleteTarget && deleteGroupMutation.mutate(deleteTarget)}
-            >
-              Delete Group
-            </Button>
-          </div>
         </div>
       </Modal>
 
-      {/* Toast */}
-      {toast && <Toast message={toast} type={toastType} onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
 
-export default GroupsPage;

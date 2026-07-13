@@ -1,324 +1,180 @@
-import { Link, useNavigate, useOutletContext } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type SubEvent, type ScheduleItem, type GuestEventInvite, type GroupEventInvite, type GuestGroupMember } from "../../lib/supabase";
-import { formatDate, formatTime, getCountdown } from "../../lib/utils";
+import { Link, useNavigate } from "react-router-dom";
+import { useRustyContext } from "./rusty-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { supabase, type EventRsvp, type UserEvent } from "../../lib/supabase";
+import { useQuery } from "@tanstack/react-query";
 import { RUSTY_CONTENT, RUSTY_THEME } from "../../lib/theme";
+import { formatDate, formatTime, isRsvpClosed } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { Calendar, Clock, MapPin, ChevronRight, CalendarCheck } from "lucide-react";
+import { Calendar, Clock, MapPin, CalendarCheck, MessageCircle, Info, ChevronRight, Heart } from "lucide-react";
 
 export type Lang = "en" | "id";
 
-interface OutletContext {
-  event: UserEvent;
-  subEvents: SubEvent[];
-  schedule: ScheduleItem[];
-  lang: Lang;
-  setLang: (lang: Lang) => void;
-}
-
 function GoldDivider() {
   return (
-    <div className="flex items-center justify-center gap-4 my-8">
-      <div className="w-24 h-px" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
-      <div className="w-2 h-2 rotate-45" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
-      <div className="w-24 h-px" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
+    <div className="flex items-center justify-center gap-3 my-8">
+      <div className="h-px w-16" style={{ backgroundColor: RUSTY_THEME.accentColor }} />
+      <div className="w-1.5 h-1.5 rotate-45" style={{ backgroundColor: RUSTY_THEME.accentColor }} />
+      <div className="h-px w-16" style={{ backgroundColor: RUSTY_THEME.accentColor }} />
     </div>
   );
 }
 
 export default function RustyHome() {
+  const { event, subEvents, schedule } = useRustyContext();
+  const { guestName, isAuthenticated, signOut } = useGuestAuth();
   const navigate = useNavigate();
-  const { event, subEvents, schedule } = useOutletContext<OutletContext>();
-  const { guestName } = useGuestAuth();
-
   const content = { ...RUSTY_CONTENT, ...(event.content || {}) };
-  const countdown = getCountdown(event.event_date);
 
-  // Determine visible sub-events (same backward-compat logic)
-  const { data: visibleSubEvents } = useQuery({
-    queryKey: ["rusty-visible-sub-events", event.id, guestName],
+  const { data: existingRsvps = [] } = useQuery({
+    queryKey: ["rusty-rsvps", event.id, guestName],
     queryFn: async () => {
-      if (subEvents.length === 0) return [] as SubEvent[];
-
-      const { data: guestRow } = await supabase
-        .from("event_guests")
-        .select("id")
-        .ilike("name", guestName || "")
+      if (!guestName) return [];
+      const { data, error } = await supabase
+        .from("event_rsvps")
+        .select("*")
         .eq("event_id", event.id)
-        .maybeSingle();
-
-      let allowedIds: Set<string> | null = null;
-
-      if (guestRow) {
-        const { data: guestInvites } = await supabase
-          .from("guest_event_invites")
-          .select("*")
-          .eq("guest_id", guestRow.id)
-          .eq("event_id", event.id);
-        if (guestInvites && guestInvites.length > 0) {
-          allowedIds = new Set<string>();
-          const hasNull = guestInvites.some((i: GuestEventInvite) => i.sub_event_id === null);
-          if (hasNull) return subEvents;
-          guestInvites.forEach((i: GuestEventInvite) => {
-            if (i.sub_event_id) allowedIds!.add(i.sub_event_id);
-          });
-        }
-
-        const { data: memberships } = await supabase
-          .from("guest_group_members")
-          .select("group_id")
-          .eq("guest_id", guestRow.id);
-        if (memberships && memberships.length > 0) {
-          const groupIds = memberships.map((m) => m.group_id);
-          const { data: groupInvites } = await supabase
-            .from("group_event_invites")
-            .select("*")
-            .in("group_id", groupIds)
-            .eq("event_id", event.id);
-          if (groupInvites && groupInvites.length > 0) {
-            if (!allowedIds) allowedIds = new Set<string>();
-            const hasNull = groupInvites.some((i: GroupEventInvite) => i.sub_event_id === null);
-            if (hasNull) return subEvents;
-            groupInvites.forEach((i: GroupEventInvite) => {
-              if (i.sub_event_id) allowedIds!.add(i.sub_event_id);
-            });
-          }
-        }
-      }
-
-      if (!allowedIds || allowedIds.size === 0) return subEvents;
-      return subEvents.filter((s) => allowedIds!.has(s.id));
+        .eq("guest_name", guestName);
+      if (error) throw error;
+      return (data as EventRsvp[]) || [];
     },
-    enabled: subEvents.length > 0,
-    initialData: subEvents,
+    enabled: !!guestName,
   });
 
-  const subEventsToShow = visibleSubEvents || subEvents;
+  const hasRsvp = existingRsvps.length > 0;
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center px-6 text-center">
+        <p className="text-sm mb-6" style={{ color: RUSTY_THEME.textMutedColor! }}>Please sign in to view this page.</p>
+        <Button onClick={() => navigate("./login")} style={{ backgroundColor: RUSTY_THEME.accentColor!, color: "#F5ECD7", borderRadius: "2px" }}>Sign In</Button>
+      </div>
+    );
+  }
 
   return (
-    <div
-      className="min-h-screen"
-      style={{
-        backgroundColor: RUSTY_THEME.bgColor || "#F5ECD7",
-        color: RUSTY_THEME.textColor || "#3D3528",
-      }}
-    >
+    <div className="min-h-screen" style={{ backgroundColor: RUSTY_THEME.bgColor!, color: RUSTY_THEME.textColor! }}>
       {/* Hero */}
-      <section className="max-w-3xl mx-auto px-6 pt-20 pb-12 text-center">
-        {guestName && (
-          <p className="text-xs uppercase tracking-[0.3em] opacity-60 mb-6">
-            Welcome, {guestName}
-          </p>
-        )}
-        <GoldDivider />
-        <h1
-          className="font-heading text-5xl md:text-7xl tracking-tight leading-[1.1]"
-          style={{ fontFamily: '"Cormorant Garamond", serif' }}
-        >
+      <header className="pt-20 pb-12 text-center px-6">
+        <p className="text-xs uppercase tracking-[0.3em] mb-4" style={{ color: RUSTY_THEME.accentColor! }}>
+          {content.invitation_title}
+        </p>
+        <h1 className="font-serif text-4xl md:text-5xl tracking-tight mb-4" style={{ fontFamily: RUSTY_THEME.headingFont }}>
           {event.name}
         </h1>
         {content.invitation_subtitle && (
-          <p className="mt-6 text-base italic opacity-70" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
+          <p className="font-serif text-lg italic mb-6" style={{ fontFamily: RUSTY_THEME.scriptFont, color: RUSTY_THEME.textMutedColor! }}>
             {content.invitation_subtitle}
           </p>
         )}
-
         {event.event_date && (
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-sm opacity-80">
-            <span className="flex items-center gap-2">
-              <Calendar className="w-4 h-4" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }} /> {formatDate(event.event_date)}
-            </span>
-            {event.event_time && (
-              <span className="flex items-center gap-2">
-                <Clock className="w-4 h-4" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }} /> {formatTime(event.event_time)}
-              </span>
-            )}
-            {event.venue && (
-              <span className="flex items-center gap-2">
-                <MapPin className="w-4 h-4" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }} /> {event.venue}
-              </span>
-            )}
+          <div className="flex items-center justify-center gap-3 text-sm" style={{ color: RUSTY_THEME.textMutedColor! }}>
+            <Calendar className="w-4 h-4" style={{ color: RUSTY_THEME.accentColor! }} />
+            <span>{formatDate(event.event_date)}</span>
+            {event.event_time && (<><span>·</span><Clock className="w-4 h-4" style={{ color: RUSTY_THEME.accentColor! }} /><span>{formatTime(event.event_time)}</span></>)}
           </div>
         )}
-
-        {!countdown.isPast && (
-          <div
-            className="mt-8 inline-flex items-center gap-4 px-8 py-3 border"
-            style={{ borderColor: RUSTY_THEME.borderColor || "#D4C695", borderRadius: 2 }}
-          >
-            <span className="text-xs uppercase tracking-[0.2em] opacity-60">Counting Down</span>
-            <span
-              className="font-heading text-2xl tabular-nums"
-              style={{ color: RUSTY_THEME.primaryColor || "#B8962E", fontFamily: '"Cormorant Garamond", serif' }}
-            >
-              {countdown.days}d {countdown.hours}h {countdown.minutes}m
-            </span>
+        {event.venue && (
+          <div className="flex items-center justify-center gap-2 mt-2 text-sm" style={{ color: RUSTY_THEME.textMutedColor! }}>
+            <MapPin className="w-4 h-4" style={{ color: RUSTY_THEME.accentColor! }} />
+            <span>{event.venue}</span>
           </div>
         )}
-      </section>
+      </header>
 
-      {/* Invitation content */}
-      {(content.invitation_body || content.invitation_text) && (
-        <section className="max-w-2xl mx-auto px-6 py-12 text-center">
+      {/* Guest greeting */}
+      <div className="max-w-2xl mx-auto px-6 py-4 flex items-center justify-between">
+        <p className="text-sm" style={{ color: RUSTY_THEME.textMutedColor! }}>
+          Welcome, <span className="font-medium" style={{ color: RUSTY_THEME.textColor! }}>{guestName}</span>
+        </p>
+        <button onClick={signOut} className="text-xs uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: RUSTY_THEME.textMutedColor! }}>
+          Sign Out
+        </button>
+      </div>
+
+      {/* Invitation body */}
+      {content.invitation_body && (
+        <section className="max-w-xl mx-auto px-6 py-8 text-center">
           <GoldDivider />
-          {content.invitation_title && (
-            <h2
-              className="font-heading text-3xl md:text-4xl mb-6"
-              style={{ fontFamily: '"Cormorant Garamond", serif' }}
-            >
-              {content.invitation_title}
-            </h2>
-          )}
-          <p className="text-base leading-relaxed italic opacity-80" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
-            {content.invitation_body || content.invitation_text}
+          <p className="text-base leading-relaxed font-serif italic whitespace-pre-wrap" style={{ fontFamily: RUSTY_THEME.scriptFont, color: RUSTY_THEME.textColor! }}>
+            {content.invitation_body}
           </p>
         </section>
       )}
 
       {/* Story */}
       {content.story && (
-        <section className="max-w-2xl mx-auto px-6 py-12 text-center">
+        <section className="max-w-xl mx-auto px-6 py-8">
           <GoldDivider />
-          <h2 className="font-heading text-3xl md:text-4xl mb-6" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
-            Our Story
-          </h2>
-          <p className="text-base leading-relaxed italic opacity-80 whitespace-pre-line" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
+          <div className="text-center mb-6">
+            <Heart className="w-5 h-5 mx-auto mb-3" style={{ color: RUSTY_THEME.accentColor! }} />
+            <h2 className="font-serif text-2xl" style={{ fontFamily: RUSTY_THEME.headingFont }}>Our Story</h2>
+          </div>
+          {content.story_image && (
+            <img src={content.story_image} alt="Our story" className="w-full max-h-80 object-cover mb-6" style={{ borderRadius: "2px", border: `1px solid ${RUSTY_THEME.borderColor}` }} />
+          )}
+          <p className="text-sm leading-relaxed font-serif italic whitespace-pre-wrap text-center" style={{ fontFamily: RUSTY_THEME.scriptFont, color: RUSTY_THEME.textMutedColor! }}>
             {content.story}
           </p>
-          {content.story_image && (
-            <img
-              src={content.story_image}
-              alt="Our story"
-              className="mt-8 w-full max-w-md mx-auto"
-              style={{ borderRadius: 2 }}
-            />
-          )}
         </section>
       )}
 
       {/* Sub-events */}
-      {subEventsToShow.length > 0 && (
-        <section className="max-w-2xl mx-auto px-6 py-12">
+      {subEvents.length > 0 && (
+        <section className="max-w-xl mx-auto px-6 py-8">
           <GoldDivider />
           <div className="text-center mb-8">
-            <p className="text-xs uppercase tracking-[0.3em] opacity-60 mb-2">Schedule of Events</p>
-            <h2 className="font-heading text-3xl md:text-4xl" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
-              Celebrate With Us
-            </h2>
+            <CalendarCheck className="w-5 h-5 mx-auto mb-3" style={{ color: RUSTY_THEME.accentColor! }} />
+            <h2 className="font-serif text-2xl" style={{ fontFamily: RUSTY_THEME.headingFont }}>Events</h2>
+            <p className="text-sm mt-1" style={{ color: RUSTY_THEME.textMutedColor! }}>{subEvents.length} {subEvents.length === 1 ? "event" : "events"} to celebrate</p>
           </div>
           <div className="space-y-4">
-            {subEventsToShow.map((sub) => (
-              <Link
-                key={sub.id}
-                to={`../rsvp`}
-                className="block p-6 border group transition-colors"
-                style={{
-                  borderColor: RUSTY_THEME.borderColor || "#D4C695",
-                  borderRadius: 2,
-                }}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-heading text-xl mb-2" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
-                      {sub.name}
-                    </h3>
-                    {sub.date && (
-                      <p className="text-sm opacity-70 flex items-center gap-2 mb-1">
-                        <Calendar className="w-3.5 h-3.5" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }} />
-                        {formatDate(sub.date)}
-                        {sub.time && <> · {formatTime(sub.time)}</>}
-                      </p>
-                    )}
-                    {sub.venue && (
-                      <p className="text-sm opacity-70 flex items-center gap-2 mb-1">
-                        <MapPin className="w-3.5 h-3.5" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }} /> {sub.venue}
-                      </p>
-                    )}
-                    {sub.description && (
-                      <p className="text-sm opacity-70 mt-2 italic">{sub.description}</p>
-                    )}
-                  </div>
-                  <ChevronRight
-                    className="w-5 h-5 opacity-50 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-1"
-                    style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }}
-                  />
+            {subEvents.map((se) => {
+              const closed = isRsvpClosed(se.rsvp_deadline);
+              return (
+                <div key={se.id} className="p-5" style={{ border: `1px solid ${RUSTY_THEME.borderColor}`, borderRadius: "2px", backgroundColor: RUSTY_THEME.bgSubtleColor }}>
+                  <h3 className="font-serif text-lg mb-2" style={{ fontFamily: RUSTY_THEME.headingFont }}>{se.name}</h3>
+                  {se.date && <p className="text-xs flex items-center gap-1.5" style={{ color: RUSTY_THEME.textMutedColor! }}><Calendar className="w-3 h-3" style={{ color: RUSTY_THEME.accentColor! }} />{formatDate(se.date)}</p>}
+                  {se.time && <p className="text-xs flex items-center gap-1.5 mt-1" style={{ color: RUSTY_THEME.textMutedColor! }}><Clock className="w-3 h-3" style={{ color: RUSTY_THEME.accentColor! }} />{formatTime(se.time)}</p>}
+                  {se.venue && <p className="text-xs flex items-center gap-1.5 mt-1" style={{ color: RUSTY_THEME.textMutedColor! }}><MapPin className="w-3 h-3" style={{ color: RUSTY_THEME.accentColor! }} />{se.venue}</p>}
+                  {se.description && <p className="text-sm mt-3 font-serif italic" style={{ fontFamily: RUSTY_THEME.scriptFont, color: RUSTY_THEME.textMutedColor! }}>{se.description}</p>}
+                  {se.dress_code && <p className="text-xs uppercase tracking-wider mt-2" style={{ color: RUSTY_THEME.accentColor! }}>Dress: {se.dress_code}</p>}
+                  {se.rsvp_enabled && (
+                    <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${RUSTY_THEME.borderColor}` }}>
+                      {closed ? (
+                        <p className="text-xs uppercase tracking-wider" style={{ color: RUSTY_THEME.textMutedColor! }}>RSVP Closed</p>
+                      ) : (
+                        <Link to="./rsvp" className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wider transition-opacity hover:opacity-70" style={{ color: RUSTY_THEME.accentColor! }}>
+                          RSVP for this event <ChevronRight className="w-3 h-3" />
+                        </Link>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </Link>
-            ))}
+              );
+            })}
           </div>
-          <div className="mt-10 text-center">
-            <Button
-              onClick={() => navigate(`../rsvp`)}
-              size="lg"
-              className="uppercase tracking-[0.2em]"
-              style={{
-                backgroundColor: RUSTY_THEME.primaryColor || "#B8962E",
-                color: RUSTY_THEME.bgColor || "#F5ECD7",
-                borderRadius: 2,
-              }}
-            >
-              <CalendarCheck className="w-4 h-4" /> RSVP Now
-            </Button>
-          </div>
-        </section>
-      )}
-
-      {/* Single RSVP when no sub-events */}
-      {subEventsToShow.length === 0 && (
-        <section className="max-w-2xl mx-auto px-6 py-12 text-center">
-          <GoldDivider />
-          <h2 className="font-heading text-3xl md:text-4xl mb-4" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
-            Will you join us?
-          </h2>
-          <p className="text-sm italic opacity-70 mb-8" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
-            Please let us know if you can make it.
-          </p>
-          <Button
-            onClick={() => navigate(`../rsvp`)}
-            size="lg"
-            className="uppercase tracking-[0.2em]"
-            style={{
-              backgroundColor: RUSTY_THEME.primaryColor || "#B8962E",
-              color: RUSTY_THEME.bgColor || "#F5ECD7",
-              borderRadius: 2,
-            }}
-          >
-            <CalendarCheck className="w-4 h-4" /> {content.rsvp_button_text || "RSVP Now"}
-          </Button>
         </section>
       )}
 
       {/* Schedule preview */}
       {schedule.length > 0 && (
-        <section className="max-w-2xl mx-auto px-6 py-12">
+        <section className="max-w-xl mx-auto px-6 py-8">
           <GoldDivider />
           <div className="text-center mb-8">
-            <p className="text-xs uppercase tracking-[0.3em] opacity-60 mb-2">Timeline</p>
-            <h2 className="font-heading text-3xl" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
-              Day-of Schedule
-            </h2>
+            <Clock className="w-5 h-5 mx-auto mb-3" style={{ color: RUSTY_THEME.accentColor! }} />
+            <h2 className="font-serif text-2xl" style={{ fontFamily: RUSTY_THEME.headingFont }}>Schedule</h2>
           </div>
           <div className="space-y-3">
             {schedule.slice(0, 5).map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start gap-4 p-5 border"
-                style={{ borderColor: RUSTY_THEME.borderColor || "#D4C695", borderRadius: 2 }}
-              >
-                <div className="flex-shrink-0 text-right w-20">
-                  {item.start_time && <p className="text-sm font-medium">{formatTime(item.start_time)}</p>}
-                  {item.end_time && <p className="text-xs opacity-60">{formatTime(item.end_time)}</p>}
+              <div key={item.id} className="flex items-start gap-4 py-3" style={{ borderBottom: `1px solid ${RUSTY_THEME.borderColor}` }}>
+                <div className="text-xs uppercase tracking-wider min-w-[80px]" style={{ color: RUSTY_THEME.accentColor! }}>
+                  {item.start_time ? formatTime(item.start_time) : formatDate(item.schedule_date)}
                 </div>
-                <div className="flex-1 min-w-0 border-l pl-4" style={{ borderColor: RUSTY_THEME.borderColor || "#D4C695" }}>
-                  <h3 className="font-heading text-base" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
-                    {item.title}
-                  </h3>
-                  {item.venue && (
-                    <p className="text-xs opacity-60 flex items-center gap-1 mt-1">
-                      <MapPin className="w-3 h-3" /> {item.venue}
-                    </p>
-                  )}
+                <div className="flex-1">
+                  <h4 className="text-sm font-medium font-serif" style={{ fontFamily: RUSTY_THEME.headingFont }}>{item.title}</h4>
+                  {item.description && <p className="text-xs mt-0.5 font-serif italic" style={{ fontFamily: RUSTY_THEME.scriptFont, color: RUSTY_THEME.textMutedColor! }}>{item.description}</p>}
+                  {item.venue && <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: RUSTY_THEME.textMutedColor! }}><MapPin className="w-3 h-3" style={{ color: RUSTY_THEME.accentColor! }} />{item.venue}</p>}
                 </div>
               </div>
             ))}
@@ -326,14 +182,38 @@ export default function RustyHome() {
         </section>
       )}
 
-      {/* Footer nav */}
-      <footer className="max-w-2xl mx-auto px-6 py-16">
+      {/* Quick actions */}
+      <section className="max-w-xl mx-auto px-6 py-8">
         <GoldDivider />
-        <div className="flex flex-wrap items-center justify-center gap-6 text-sm uppercase tracking-[0.15em]">
-          <Link to="../rsvp" className="opacity-60 hover:opacity-100 transition-opacity">RSVP</Link>
-          <Link to="../wishes" className="opacity-60 hover:opacity-100 transition-opacity">Wishes</Link>
-          <Link to="../contact" className="opacity-60 hover:opacity-100 transition-opacity">Contact</Link>
+        <div className="grid sm:grid-cols-3 gap-4">
+          <Link to="./rsvp" className="block">
+            <div className="p-6 text-center transition-opacity hover:opacity-80" style={{ border: `1px solid ${RUSTY_THEME.accentColor}`, borderRadius: "2px", backgroundColor: RUSTY_THEME.bgSubtleColor }}>
+              <CalendarCheck className="w-5 h-5 mx-auto mb-3" style={{ color: RUSTY_THEME.accentColor! }} />
+              <p className="text-sm font-medium font-serif" style={{ fontFamily: RUSTY_THEME.headingFont }}>{hasRsvp ? "Edit RSVP" : (content.rsvp_button_text || "RSVP")}</p>
+              <p className="text-xs mt-1" style={{ color: RUSTY_THEME.textMutedColor! }}>{hasRsvp ? "Update your response" : "Let us know"}</p>
+            </div>
+          </Link>
+          <Link to="./wishes" className="block">
+            <div className="p-6 text-center transition-opacity hover:opacity-80" style={{ border: `1px solid ${RUSTY_THEME.borderColor}`, borderRadius: "2px", backgroundColor: RUSTY_THEME.bgSubtleColor }}>
+              <MessageCircle className="w-5 h-5 mx-auto mb-3" style={{ color: RUSTY_THEME.accentColor! }} />
+              <p className="text-sm font-medium font-serif" style={{ fontFamily: RUSTY_THEME.headingFont }}>Wishes</p>
+              <p className="text-xs mt-1" style={{ color: RUSTY_THEME.textMutedColor! }}>Leave a message</p>
+            </div>
+          </Link>
+          <Link to="./contact" className="block">
+            <div className="p-6 text-center transition-opacity hover:opacity-80" style={{ border: `1px solid ${RUSTY_THEME.borderColor}`, borderRadius: "2px", backgroundColor: RUSTY_THEME.bgSubtleColor }}>
+              <Info className="w-5 h-5 mx-auto mb-3" style={{ color: RUSTY_THEME.accentColor! }} />
+              <p className="text-sm font-medium font-serif" style={{ fontFamily: RUSTY_THEME.headingFont }}>Details</p>
+              <p className="text-xs mt-1" style={{ color: RUSTY_THEME.textMutedColor! }}>Venue & info</p>
+            </div>
+          </Link>
         </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-10 text-center">
+        <GoldDivider />
+        <p className="text-xs uppercase tracking-wider font-serif" style={{ fontFamily: RUSTY_THEME.scriptFont, color: RUSTY_THEME.accentColor! }}>{event.name}</p>
       </footer>
     </div>
   );

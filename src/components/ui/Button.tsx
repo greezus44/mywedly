@@ -28,12 +28,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = "primary", size = "md", loading = false, className, children, disabled, ...props }, ref) => (
     <button
       ref={ref}
-      className={cn(
-        "inline-flex items-center justify-center gap-2 font-medium uppercase tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed",
-        variants[variant],
-        sizes[size],
-        className
-      )}
+      className={cn("inline-flex items-center justify-center gap-2 font-medium uppercase tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed", variants[variant], sizes[size], className)}
       style={{ borderRadius: "var(--radius)" }}
       disabled={disabled || loading}
       {...props}

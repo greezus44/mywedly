@@ -1,93 +1,72 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useOutletContext } from "react-router-dom";
-import { supabase, type UserEvent, type SubEvent, type ScheduleItem } from "../../lib/supabase";
-import { cn } from "../../lib/utils";
+import { useGuestContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { ArrowRight, User } from "lucide-react";
 
-interface OutletContext {
-  event: UserEvent;
-  subEvents: SubEvent[];
-  schedule: ScheduleItem[];
-}
-
 export default function GuestLogin() {
+  const { event } = useGuestContext();
   const navigate = useNavigate();
-  const { event } = useOutletContext<OutletContext>();
   const { signIn } = useGuestAuth();
+  const config = event.login_config || {};
   const [name, setName] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loginConfig = event.login_config || {};
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) {
       setError("Please enter your name to continue.");
       return;
     }
-    setSubmitting(true);
-    setError(null);
-    try {
-      signIn(trimmed, event.id);
-      navigate(`./home`);
-    } catch (err) {
-      setError("Something went wrong. Please try again.");
-      console.error(err);
-    } finally {
-      setSubmitting(false);
+    if (trimmed.length < 2) {
+      setError("Name must be at least 2 characters.");
+      return;
     }
+    signIn(trimmed, event.id);
+    navigate(`./home`);
   };
 
-  const bgColor = loginConfig.bgColor || "var(--color-bg)";
-  const textColor = loginConfig.textColor || "var(--color-text)";
-  const heading = loginConfig.heading || "Welcome";
-  const subheading = loginConfig.subheading || "Please enter your name to continue";
-  const placeholder = loginConfig.inputPlaceholder || "Your full name";
-  const buttonText = loginConfig.buttonText || "Continue";
+  const bgStyle: React.CSSProperties = config.bgImage
+    ? { backgroundImage: `url(${config.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" }
+    : { backgroundColor: config.bgColor || "var(--color-bg-subtle)" };
+
+  const overlayStyle: React.CSSProperties = config.overlayColor
+    ? { backgroundColor: config.overlayColor, opacity: config.overlayOpacity ?? 0.4 }
+    : {};
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-6"
-      style={{ backgroundColor: bgColor, color: textColor }}
-    >
-      <div className="w-full max-w-md">
-        <div className="text-center mb-10">
-          <h1 className="font-heading text-4xl md:text-5xl tracking-tight">{heading}</h1>
-          <p className="mt-4 text-sm opacity-70">{subheading}</p>
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden" style={bgStyle}>
+      {config.overlayColor && <div className="absolute inset-0" style={overlayStyle} />}
+      <div className="relative z-10 w-full max-w-md mx-auto px-6 py-20 text-center" style={{ color: config.textColor || "var(--color-text)" }}>
+        <div className="mb-8">
+          <h1 className="font-[var(--font-heading)] text-3xl md:text-4xl mb-2">{config.heading || "Welcome"}</h1>
+          {config.subheading && <p className="text-sm opacity-70">{config.subheading}</p>}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
+            <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50" />
             <Input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={placeholder}
+              onChange={(e) => { setName(e.target.value); setError(null); }}
+              placeholder={config.inputPlaceholder || "Your full name"}
+              className="pl-11"
               autoFocus
-              className={cn("pl-11 py-3 text-base")}
+              maxLength={100}
             />
           </div>
-
-          {error && <p className="text-sm text-red-600">{error}</p>}
-
-          <Button
-            type="submit"
-            size="lg"
-            loading={submitting}
-            className="w-full justify-center"
-          >
-            {buttonText} <ArrowRight className="w-4 h-4" />
+          {error && <p className="text-xs text-red-500 text-left">{error}</p>}
+          <Button type="submit" size="lg" className="w-full" style={{ backgroundColor: config.buttonColor }}>
+            {config.buttonText || "Continue"}
+            <ArrowRight className="w-4 h-4" />
           </Button>
         </form>
 
-        <p className="mt-8 text-center text-xs opacity-50">
+        <p className="mt-8 text-xs opacity-50 uppercase tracking-wider">
           {event.name}
         </p>
       </div>

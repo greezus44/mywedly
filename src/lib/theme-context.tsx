@@ -17,20 +17,14 @@ export function ThemeProvider({ children, initialTheme }: { children: ReactNode;
   useEffect(() => {
     const vars = themeToCssVars(theme);
     const root = document.documentElement;
-    Object.entries(vars).forEach(([key, value]) => {
-      root.style.setProperty(key, value);
-    });
+    Object.entries(vars).forEach(([key, value]) => { root.style.setProperty(key, value); });
   }, [theme]);
 
   const setTheme = (t: ThemeConfig) => setThemeState(t);
   const updateTheme = (partial: Partial<ThemeConfig>) => setThemeState((prev) => ({ ...prev, ...partial }));
   const resetTheme = () => setThemeState(DEFAULT_THEME);
 
-  return (
-    <ThemeContext.Provider value={{ theme, setTheme, updateTheme, resetTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={{ theme, setTheme, updateTheme, resetTheme }}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme(): ThemeContextValue {

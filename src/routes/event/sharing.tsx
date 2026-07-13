@@ -1,198 +1,177 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type SharingConfig } from "../../lib/supabase";
-import { debounce } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { Card, FormField, Toast } from "../../components/ui";
+import { Card, FormField, Toggle, Toast } from "../../components/ui";
 import { Input, Textarea } from "../../components/ui/Input";
 import { generateQrDataUrl, downloadQrCode, downloadQrSvg } from "../../lib/qr";
-import {
-  Share2,
-  Copy,
-  Download,
-  FileCode,
-  Link as LinkIcon,
-  Loader2,
-  Check,
-  QrCode,
-} from "lucide-react";
+import { Share2, Copy, Image as ImageIcon, FileCode, Link as LinkIcon, Check } from "lucide-react";
 
-export default function SharingPage() {
+const DEFAULT_SHARING_CONFIG: SharingConfig = {
+  showShareButtons: true,
+  shareMessage: "",
+};
+
+function SharingPage() {
   const { eventId } = useParams();
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const [toast, setToast] = useState<string | null>(null);
-  const [toastError, setToastError] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [copied, setCopied] = useState(false);
-
-  const slug = event.draft_slug || event.slug || event.id;
-  const shareUrl = `${window.location.origin}/e/${slug}`;
-
-  const initialConfig: SharingConfig =
-    (event.draft_sharing_config || event.sharing_config || {}) as SharingConfig;
-
-  const [shareMessage, setShareMessage] = useState(
-    initialConfig.shareMessage || `You're invited to ${event.draft_name || event.name}! View the invitation here:`
+  const [toast, setToast] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<"success" | "error">("success");
+  const [config, setConfig] = useState<SharingConfig>(
+    () => (event.draft_sharing_config || event.sharing_config || DEFAULT_SHARING_CONFIG) as SharingConfig
   );
 
-  const updateMutation = useMutation({
-    mutationFn: async (config: SharingConfig) => {
-      if (!eventId) return;
-      const { error } = await supabase
-        .from("user_events")
-        .update({
-          draft_sharing_config: config,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", eventId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-    },
-  });
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const debouncedSave = useCallback(
-    debounce((config: SharingConfig) => updateMutation.mutate(config), 600),
-    [updateMutation]
-  );
+  const shareUrl = event.is_published && event.slug
+    ? `${window.location.origin}/e/${event.slug}`
+    : `${window.location.origin}/event/${eventId}/preview`;
 
   useEffect(() => {
-    debouncedSave({ shareMessage });
-  }, [shareMessage, debouncedSave]);
+    setConfig((event.draft_sharing_config || event.sharing_config || DEFAULT_SHARING_CONFIG) as SharingConfig);
+  }, [event]);
 
   // Generate QR code
   useEffect(() => {
     let cancelled = false;
     setQrLoading(true);
     generateQrDataUrl(shareUrl, 256)
-      .then((url) => {
-        if (!cancelled) setQrDataUrl(url);
-      })
-      .catch(() => {
-        if (!cancelled) setToastError("Failed to generate QR code");
-      })
-      .finally(() => {
-        if (!cancelled) setQrLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .then((url) => { if (!cancelled) setQrDataUrl(url); })
+      .catch(() => { if (!cancelled) setQrDataUrl(null); })
+      .finally(() => { if (!cancelled) setQrLoading(false); });
+    return () => { cancelled = true; };
   }, [shareUrl]);
 
-  const handleCopyLink = async () => {
+  const saveMutation = useMutation({
+    mutationFn: async (data: SharingConfig) => {
+      const { error } = await supabase
+        .from("user_events")
+        .update({ draft_sharing_config: data, updated_at: new Date().toISOString() })
+        .eq("id", eventId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setToastType("success");
+      setToast("Sharing settings saved");
+    },
+    onError: (err: Error) => {
+      setToastType("error");
+      setToast(`Failed to save: ${err.message}`);
+    },
+  });
+
+  const update = (partial: Partial<SharingConfig>) => {
+    const updated = { ...config, ...partial };
+    setConfig(updated);
+    saveMutation.mutate(updated);
+  };
+
+  const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
+      setToastType("success");
       setToast("Link copied to clipboard");
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      setToastError("Failed to copy link");
+      setToastType("error");
+      setToast("Failed to copy link");
     }
   };
 
   const handleDownloadPng = async () => {
     try {
-      await downloadQrCode(shareUrl, `${slug}-qr.png`);
+      await downloadQrCode(shareUrl, `${event.draft_name || event.name || "event"}-qr.png`);
+      setToastType("success");
       setToast("QR code downloaded");
     } catch {
-      setToastError("Failed to download QR code");
+      setToastType("error");
+      setToast("Failed to download QR code");
     }
   };
 
   const handleDownloadSvg = async () => {
     try {
-      await downloadQrSvg(shareUrl, `${slug}-qr.svg`);
+      await downloadQrSvg(shareUrl, `${event.draft_name || event.name || "event"}-qr.svg`);
+      setToastType("success");
       setToast("QR SVG downloaded");
     } catch {
-      setToastError("Failed to download QR SVG");
+      setToastType("error");
+      setToast("Failed to download SVG");
     }
   };
 
-  const fullShareText = `${shareMessage} ${shareUrl}`;
-
-  const handleCopyShareText = async () => {
-    try {
-      await navigator.clipboard.writeText(fullShareText);
-      setToast("Share message copied");
-    } catch {
-      setToastError("Failed to copy");
+  const shareText = config.shareMessage || `You're invited to ${event.draft_name || event.name}! View details and RSVP here:`;
+  const nativeShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: event.draft_name || event.name, text: shareText, url: shareUrl });
+      } catch { /* user cancelled */ }
+    } else {
+      copyLink();
     }
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Sharing</h2>
-        <p className="text-sm text-[var(--color-text-muted)]">
-          Share your event invitation link and QR code with guests.
-        </p>
+    <div className="p-6 lg:p-8 max-w-4xl mx-auto">
+      <div className="mb-6">
+        <h2 className="font-heading text-2xl text-[var(--color-text)] flex items-center gap-2">
+          <Share2 className="w-5 h-5" /> Sharing
+        </h2>
+        <p className="text-sm text-[var(--color-text-muted)] mt-1">Share your event link and QR code with guests</p>
       </div>
 
-      {/* Share URL */}
-      <Card className="p-5 space-y-4">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-          Event Link
-        </h3>
+      {/* Event Link */}
+      <Card className="p-5 mb-6">
+        <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-3">Event Link</h3>
         <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-2 px-4 py-2.5 bg-[var(--color-bg-subtle)] border border-[var(--color-border)]" style={{ borderRadius: "var(--radius)" }}>
-            <LinkIcon className="w-4 h-4 text-[var(--color-text-muted)] flex-shrink-0" />
+          <div className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-[var(--color-bg-subtle)] border border-[var(--color-border)]" style={{ borderRadius: "var(--radius)" }}>
+            <LinkIcon className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
             <span className="text-sm text-[var(--color-text)] truncate">{shareUrl}</span>
           </div>
-          <Button
-            variant={copied ? "primary" : "secondary"}
-            onClick={handleCopyLink}
-            size="md"
-          >
-            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          <Button variant="secondary" size="sm" onClick={copyLink}>
+            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
             {copied ? "Copied" : "Copy"}
           </Button>
         </div>
         {!event.is_published && (
-          <p className="text-xs text-amber-600">
-            This link uses draft content. Publish your event to share the live version.
+          <p className="text-xs text-[var(--color-text-muted)] mt-2">
+            This is a preview link. Publish your event to get a public link.
           </p>
         )}
+        <div className="mt-3">
+          <Button variant="ghost" size="sm" onClick={nativeShare}>
+            <Share2 className="w-3.5 h-3.5" /> Share via...
+          </Button>
+        </div>
       </Card>
 
       {/* QR Code */}
-      <Card className="p-5 space-y-4">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-          QR Code
-        </h3>
-        <div className="flex flex-col md:flex-row items-center gap-6">
-          <div className="flex-shrink-0">
+      <Card className="p-5 mb-6">
+        <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-3">QR Code</h3>
+        <div className="flex flex-col sm:flex-row items-center gap-6">
+          <div className="w-48 h-48 flex items-center justify-center bg-[var(--color-bg-subtle)] border border-[var(--color-border)]" style={{ borderRadius: "var(--radius)" }}>
             {qrLoading ? (
-              <div className="w-48 h-48 flex items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-subtle)]" style={{ borderRadius: "var(--radius)" }}>
-                <Loader2 className="w-8 h-8 text-[var(--color-text-muted)] animate-spin" />
-              </div>
+              <div className="w-32 h-32 animate-pulse bg-[var(--color-border)]" style={{ borderRadius: "var(--radius)" }} />
             ) : qrDataUrl ? (
-              <img
-                src={qrDataUrl}
-                alt="QR Code"
-                className="w-48 h-48 border border-[var(--color-border)]"
-                style={{ borderRadius: "var(--radius)" }}
-              />
+              <img src={qrDataUrl} alt="QR Code" className="w-40 h-40" />
             ) : (
-              <div className="w-48 h-48 flex items-center justify-center border border-[var(--color-border)] bg-[var(--color-bg-subtle)]" style={{ borderRadius: "var(--radius)" }}>
-                <QrCode className="w-12 h-12 text-[var(--color-text-muted)] opacity-30" />
-              </div>
+              <div className="text-xs text-[var(--color-text-muted)] text-center px-4">Failed to generate QR</div>
             )}
           </div>
-          <div className="flex-1 space-y-3 w-full">
+          <div className="flex-1 space-y-3">
             <p className="text-sm text-[var(--color-text-muted)]">
-              Guests can scan this QR code to open your event invitation directly on their phone.
+              Guests can scan this QR code to open your event page on their phone.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" size="sm" onClick={handleDownloadPng}>
-                <Download className="w-3.5 h-3.5" /> Download PNG
+              <Button variant="secondary" size="sm" onClick={handleDownloadPng} disabled={!qrDataUrl}>
+                <ImageIcon className="w-3.5 h-3.5" /> Download PNG
               </Button>
-              <Button variant="secondary" size="sm" onClick={handleDownloadSvg}>
+              <Button variant="secondary" size="sm" onClick={handleDownloadSvg} disabled={!qrDataUrl}>
                 <FileCode className="w-3.5 h-3.5" /> Download SVG
               </Button>
             </div>
@@ -200,33 +179,43 @@ export default function SharingPage() {
         </div>
       </Card>
 
-      {/* Share Message */}
-      <Card className="p-5 space-y-4">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
-          Share Message
-        </h3>
-        <FormField label="Message" hint="This text will be included when guests share or copy the link">
+      {/* Share Settings */}
+      <Card className="p-5 space-y-5">
+        <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">Share Settings</h3>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-[var(--color-text)]">Show Share Buttons</h4>
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">Display social share buttons on your event page</p>
+          </div>
+          <Toggle
+            checked={config.showShareButtons ?? true}
+            onChange={(v) => update({ showShareButtons: v })}
+          />
+        </div>
+
+        <FormField label="Share Message" hint="Default text used when guests share your event">
           <Textarea
-            value={shareMessage}
-            onChange={(e) => setShareMessage(e.target.value)}
+            value={config.shareMessage || ""}
+            onChange={(e) => update({ shareMessage: e.target.value })}
+            placeholder={`You're invited to ${event.draft_name || event.name}! View details and RSVP here:`}
             rows={3}
-            placeholder="You're invited! View the invitation here:"
           />
         </FormField>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={handleCopyShareText}>
-            <Share2 className="w-3.5 h-3.5" /> Copy Full Message
-          </Button>
-        </div>
-        <div className="mt-3 p-3 bg-[var(--color-bg-subtle)] border border-[var(--color-border)]" style={{ borderRadius: "var(--radius)" }}>
-          <p className="text-sm text-[var(--color-text-muted)] whitespace-pre-wrap">
-            {fullShareText}
-          </p>
+
+        {/* Preview */}
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)] mb-2">Share Preview</p>
+          <div className="p-4 bg-[var(--color-bg-subtle)] border border-[var(--color-border)]" style={{ borderRadius: "var(--radius)" }}>
+            <p className="text-sm text-[var(--color-text)]">{shareText}</p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1 truncate">{shareUrl}</p>
+          </div>
         </div>
       </Card>
 
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
-      {toastError && <Toast message={toastError} type="error" onClose={() => setToastError(null)} />}
+      {toast && <Toast message={toast} type={toastType} onClose={() => setToast(null)} />}
     </div>
   );
 }
+
+export default SharingPage;

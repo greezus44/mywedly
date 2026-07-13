@@ -18,33 +18,21 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const p = JSON.parse(raw);
-        setGuestName(p.guestName);
-        setEventId(p.eventId);
-      }
-    } catch {
-      /* ignore */
-    }
+      if (raw) { const p = JSON.parse(raw); setGuestName(p.guestName); setEventId(p.eventId); }
+    } catch { /* ignore */ }
   }, []);
 
   const signIn = (name: string, evId: string) => {
-    setGuestName(name);
-    setEventId(evId);
+    setGuestName(name); setEventId(evId);
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ guestName: name, eventId: evId }));
   };
 
   const signOut = () => {
-    setGuestName(null);
-    setEventId(null);
+    setGuestName(null); setEventId(null);
     localStorage.removeItem(STORAGE_KEY);
   };
 
-  return (
-    <GuestAuthContext.Provider value={{ guestName, eventId, signIn, signOut, isAuthenticated: !!guestName }}>
-      {children}
-    </GuestAuthContext.Provider>
-  );
+  return <GuestAuthContext.Provider value={{ guestName, eventId, signIn, signOut, isAuthenticated: !!guestName }}>{children}</GuestAuthContext.Provider>;
 }
 
 export function useGuestAuth(): GuestAuthState {

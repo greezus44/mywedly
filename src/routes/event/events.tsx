@@ -1,548 +1,438 @@
 import { useState } from "react";
-import { useNavigate, useParams, useOutletContext } from "react-router-dom";
+import { useParams, useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  supabase,
-  type UserEvent,
-  type SubEvent,
-  type EventRsvp,
-} from "../../lib/supabase";
-import {
-  cn,
-  formatDate,
-  formatTime,
-  getEventStatus,
-  isRsvpClosed,
-  formatDeadline,
-  toDatetimeLocal,
-  fromDatetimeLocal,
-} from "../../lib/utils";
+import { supabase, type UserEvent, type SubEvent, type EventRsvp } from "../../lib/supabase";
+import { cn, formatDate, formatTime, getEventStatus, isRsvpClosed, formatDeadline, toDatetimeLocal, fromDatetimeLocal } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import {
-  Card,
-  Badge,
-  EmptyState,
-  FormField,
-  Toggle,
-  Skeleton,
-  ErrorState,
-  Toast,
-  Modal,
-} from "../../components/ui";
+import { Card, Badge, EmptyState, FormField, Toggle, Skeleton, ErrorState, Toast, Modal } from "../../components/ui";
 import { Input, Textarea } from "../../components/ui/Input";
 import { DatePicker } from "../../components/ui/DatePicker";
 import { TimePicker } from "../../components/ui/TimePicker";
-import {
-  Plus,
-  Pencil,
-  Copy,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
-  Calendar,
-  Clock,
-  MapPin,
-  Shirt,
-  Users,
-  Eye,
-  EyeOff,
-  CalendarPlus,
-  AlertCircle,
-} from "lucide-react";
+import { Plus, Pencil, Trash2, Copy, ArrowUp, ArrowDown, Calendar, MapPin, Clock, Users, Shirt, CalendarClock } from "lucide-react";
 
-interface SubEventForm {
+interface EventContext { event: UserEvent; }
+
+interface SubEventWithCounts extends SubEvent { rsvpCounts: { attending: number; declined: number; pending: number; total: number }; }
+
+interface SubEventFormState {
   name: string;
   date: string | null;
   time: string | null;
-  venue: string;
-  address: string;
-  description: string;
-  dress_code: string;
-  rsvp_deadline: string;
+  venue: string | null;
+  address: string | null;
+  description: string | null;
+  dress_code: string | null;
+  rsvp_deadline: string | null;
   rsvp_enabled: boolean;
 }
 
-const EMPTY_FORM: SubEventForm = {
+const emptyForm: SubEventFormState = {
   name: "",
   date: null,
   time: null,
-  venue: "",
-  address: "",
-  description: "",
-  dress_code: "",
-  rsvp_deadline: "",
+  venue: null,
+  address: null,
+  description: null,
+  dress_code: null,
+  rsvp_deadline: null,
   rsvp_enabled: true,
 };
 
-type EventContext = { event: UserEvent };
-
-function EventsPage() {
+export default function EventsPage() {
   const { eventId } = useParams();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { event } = useOutletContext<EventContext>();
+  const queryClient = useQueryClient();
 
-  const [toast, setToast] = useState<string | null>(null);
-  const [toastType, setToastType] = useState<"success" | "error">("success");
-  const [modalOpen, setModalOpen] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<SubEventForm>(EMPTY_FORM);
-  const [deleteTarget, setDeleteTarget] = useState<SubEvent | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [duplicateId, setDuplicateId] = useState<string | null>(null);
+  const [form, setForm] = useState<SubEventFormState>(emptyForm);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  // Fetch sub-events ordered chronologically
-  const {
-    data: subEvents = [],
-    isLoading,
-    isError,
-    refetch,
-  } = useQuery({
-    queryKey: ["sub-events", eventId],
+  const subEventsKey = ["sub-events", eventId];
+  const rsvpsKey = ["sub-event-rsvps", eventId];
+
+  const { data: subEvents, isLoading, isError, error, refetch } = useQuery({
+    queryKey: subEventsKey,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sub_events")
         .select("*")
         .eq("parent_event_id", eventId)
+        .order("order_index", { ascending: true })
         .order("date", { ascending: true, nullsFirst: false })
-        .order("time", { ascending: true, nullsFirst: false })
-        .order("order_index", { ascending: true });
+        .order("time", { ascending: true, nullsFirst: false });
       if (error) throw error;
-      return (data || []) as SubEvent[];
+      return data as SubEvent[];
     },
     enabled: !!eventId,
   });
 
-  // Fetch RSVP counts per sub-event
-  const { data: rsvpCounts = {} } = useQuery({
-    queryKey: ["sub-event-rsvp-counts", eventId],
+  const { data: rsvps } = useQuery({
+    queryKey: rsvpsKey,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_rsvps")
-        .select("sub_event_id, status")
-        .eq("event_id", eventId);
+        .select("*")
+        .in("sub_event_id", subEvents?.map((s) => s.id) || []);
       if (error) throw error;
-      const counts: Record<string, { total: number; attending: number; declined: number; pending: number }> = {};
-      (data || []).forEach((rsvp: Pick<EventRsvp, "sub_event_id" | "status">) => {
-        const key = rsvp.sub_event_id || "__parent__";
-        if (!counts[key]) counts[key] = { total: 0, attending: 0, declined: 0, pending: 0 };
-        counts[key].total++;
-        if (rsvp.status === "attending") counts[key].attending++;
-        else if (rsvp.status === "declined") counts[key].declined++;
-        else counts[key].pending++;
-      });
-      return counts;
+      return data as EventRsvp[];
     },
-    enabled: !!eventId,
+    enabled: !!subEvents && subEvents.length > 0,
   });
 
-  // Create sub-event
+  const buildCounts = (list: SubEvent[]): SubEventWithCounts[] => {
+    return list.map((se) => {
+      const subset = (rsvps || []).filter((r) => r.sub_event_id === se.id);
+      return {
+        ...se,
+        rsvpCounts: {
+          attending: subset.filter((r) => r.status === "attending").length,
+          declined: subset.filter((r) => r.status === "declined").length,
+          pending: subset.filter((r) => r.status === "pending").length,
+          total: subset.length,
+        },
+      };
+    });
+  };
+
+  const enriched = subEvents ? buildCounts(subEvents) : [];
+
   const createMutation = useMutation({
-    mutationFn: async (input: SubEventForm) => {
-      const maxOrder = subEvents.length > 0 ? Math.max(...subEvents.map((s) => s.order_index)) : -1;
-      const payload = {
-        parent_event_id: eventId,
-        name: input.name,
-        date: input.date,
-        time: input.time,
-        venue: input.venue || null,
-        address: input.address || null,
-        description: input.description || null,
-        dress_code: input.dress_code || null,
-        rsvp_deadline: input.rsvp_deadline ? fromDatetimeLocal(input.rsvp_deadline) : null,
-        rsvp_enabled: input.rsvp_enabled,
-        order_index: maxOrder + 1,
-      };
-      const { error } = await supabase.from("sub_events").insert(payload);
+    mutationFn: async () => {
+      if (!eventId) throw new Error("Missing event id");
+      const orderIndex = (subEvents?.length || 0);
+      const { data, error } = await supabase
+        .from("sub_events")
+        .insert({
+          parent_event_id: eventId,
+          name: form.name,
+          date: form.date,
+          time: form.time,
+          venue: form.venue,
+          address: form.address,
+          description: form.description,
+          dress_code: form.dress_code,
+          rsvp_deadline: form.rsvp_deadline ? fromDatetimeLocal(form.rsvp_deadline) : null,
+          rsvp_enabled: form.rsvp_enabled,
+          order_index: orderIndex,
+        })
+        .select()
+        .single();
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["sub-event-rsvp-counts", eventId] });
-      setModalOpen(false);
-      setForm(EMPTY_FORM);
+      queryClient.invalidateQueries({ queryKey: subEventsKey });
+      queryClient.invalidateQueries({ queryKey: rsvpsKey });
+      setShowModal(false);
+      setForm(emptyForm);
       setEditingId(null);
-      setToast("Sub-event created");
-      setToastType("success");
+      setToast({ message: "Sub-event created", type: "success" });
     },
     onError: (err: Error) => {
-      setToast(err.message || "Failed to create sub-event");
-      setToastType("error");
+      setToast({ message: `Failed to create: ${err.message}`, type: "error" });
     },
   });
 
-  // Update sub-event
   const updateMutation = useMutation({
-    mutationFn: async ({ id, input }: { id: string; input: SubEventForm }) => {
-      const payload = {
-        name: input.name,
-        date: input.date,
-        time: input.time,
-        venue: input.venue || null,
-        address: input.address || null,
-        description: input.description || null,
-        dress_code: input.dress_code || null,
-        rsvp_deadline: input.rsvp_deadline ? fromDatetimeLocal(input.rsvp_deadline) : null,
-        rsvp_enabled: input.rsvp_enabled,
-        updated_at: new Date().toISOString(),
-      };
-      const { error } = await supabase.from("sub_events").update(payload).eq("id", id);
+    mutationFn: async () => {
+      if (!editingId) throw new Error("No sub-event selected");
+      const { error } = await supabase
+        .from("sub_events")
+        .update({
+          name: form.name,
+          date: form.date,
+          time: form.time,
+          venue: form.venue,
+          address: form.address,
+          description: form.description,
+          dress_code: form.dress_code,
+          rsvp_deadline: form.rsvp_deadline ? fromDatetimeLocal(form.rsvp_deadline) : null,
+          rsvp_enabled: form.rsvp_enabled,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", editingId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["sub-event-rsvp-counts", eventId] });
-      setModalOpen(false);
-      setForm(EMPTY_FORM);
+      queryClient.invalidateQueries({ queryKey: subEventsKey });
+      queryClient.invalidateQueries({ queryKey: rsvpsKey });
+      setShowModal(false);
+      setForm(emptyForm);
       setEditingId(null);
-      setToast("Sub-event updated");
-      setToastType("success");
+      setToast({ message: "Sub-event updated", type: "success" });
     },
     onError: (err: Error) => {
-      setToast(err.message || "Failed to update sub-event");
-      setToastType("error");
+      setToast({ message: `Failed to update: ${err.message}`, type: "error" });
     },
   });
 
-  // Delete sub-event
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("sub_events").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["sub-event-rsvp-counts", eventId] });
-      setDeleteTarget(null);
-      setToast("Sub-event deleted");
-      setToastType("success");
+      queryClient.invalidateQueries({ queryKey: subEventsKey });
+      queryClient.invalidateQueries({ queryKey: rsvpsKey });
+      setDeleteId(null);
+      setToast({ message: "Sub-event deleted", type: "success" });
     },
     onError: (err: Error) => {
-      setToast(err.message || "Failed to delete sub-event");
-      setToastType("error");
+      setToast({ message: `Failed to delete: ${err.message}`, type: "error" });
+      setDeleteId(null);
     },
   });
 
-  // Duplicate sub-event
   const duplicateMutation = useMutation({
     mutationFn: async (source: SubEvent) => {
-      const maxOrder = subEvents.length > 0 ? Math.max(...subEvents.map((s) => s.order_index)) : -1;
-      const payload = {
-        parent_event_id: source.parent_event_id,
-        name: `${source.name} (Copy)`,
-        date: source.date,
-        time: source.time,
-        venue: source.venue,
-        address: source.address,
-        description: source.description,
-        dress_code: source.dress_code,
-        rsvp_deadline: source.rsvp_deadline,
-        rsvp_enabled: source.rsvp_enabled,
-        order_index: maxOrder + 1,
-      };
-      const { error } = await supabase.from("sub_events").insert(payload);
+      if (!eventId) throw new Error("Missing event id");
+      const orderIndex = (subEvents?.length || 0);
+      const { data, error } = await supabase
+        .from("sub_events")
+        .insert({
+          parent_event_id: eventId,
+          name: `${source.name} (Copy)`,
+          date: source.date,
+          time: source.time,
+          venue: source.venue,
+          address: source.address,
+          description: source.description,
+          dress_code: source.dress_code,
+          rsvp_deadline: source.rsvp_deadline,
+          rsvp_enabled: source.rsvp_enabled,
+          order_index: orderIndex,
+        })
+        .select()
+        .single();
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] });
-      setToast("Sub-event duplicated");
-      setToastType("success");
+      queryClient.invalidateQueries({ queryKey: subEventsKey });
+      setDuplicateId(null);
+      setToast({ message: "Sub-event duplicated", type: "success" });
     },
     onError: (err: Error) => {
-      setToast(err.message || "Failed to duplicate sub-event");
-      setToastType("error");
+      setToast({ message: `Failed to duplicate: ${err.message}`, type: "error" });
+      setDuplicateId(null);
     },
   });
 
-  // Reorder (move up/down)
   const reorderMutation = useMutation({
-    mutationFn: async ({ sub, direction }: { sub: SubEvent; direction: "up" | "down" }) => {
+    mutationFn: async ({ id, direction }: { id: string; direction: "up" | "down" }) => {
+      if (!subEvents || subEvents.length < 2) return;
       const sorted = [...subEvents].sort((a, b) => a.order_index - b.order_index);
-      const idx = sorted.findIndex((s) => s.id === sub.id);
+      const idx = sorted.findIndex((s) => s.id === id);
+      if (idx === -1) return;
       const swapIdx = direction === "up" ? idx - 1 : idx + 1;
       if (swapIdx < 0 || swapIdx >= sorted.length) return;
-      const swapSub = sorted[swapIdx];
+      const a = sorted[idx];
+      const b = sorted[swapIdx];
       const updates = [
-        { id: sub.id, order_index: swapSub.order_index },
-        { id: swapSub.id, order_index: sub.order_index },
+        supabase.from("sub_events").update({ order_index: b.order_index, updated_at: new Date().toISOString() }).eq("id", a.id),
+        supabase.from("sub_events").update({ order_index: a.order_index, updated_at: new Date().toISOString() }).eq("id", b.id),
       ];
-      for (const u of updates) {
-        const { error } = await supabase.from("sub_events").update({ order_index: u.order_index, updated_at: new Date().toISOString() }).eq("id", u.id);
-        if (error) throw error;
-      }
+      const results = await Promise.all(updates);
+      for (const r of results) if (r.error) throw r.error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] });
-    },
-    onError: (err: Error) => {
-      setToast(err.message || "Failed to reorder");
-      setToastType("error");
-    },
-  });
-
-  // Archive (toggle rsvp_enabled to hide from guest view)
-  const archiveMutation = useMutation({
-    mutationFn: async ({ sub, hide }: { sub: SubEvent; hide: boolean }) => {
-      const { error } = await supabase
-        .from("sub_events")
-        .update({ rsvp_enabled: !hide, updated_at: new Date().toISOString() })
-        .eq("id", sub.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] });
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: subEventsKey });
+      setToast({ message: `Moved ${vars.direction}`, type: "success" });
     },
     onError: (err: Error) => {
-      setToast(err.message || "Failed to update visibility");
-      setToastType("error");
+      setToast({ message: `Failed to reorder: ${err.message}`, type: "error" });
     },
   });
 
   const openCreate = () => {
-    setForm(EMPTY_FORM);
     setEditingId(null);
-    setModalOpen(true);
+    setForm(emptyForm);
+    setShowModal(true);
   };
 
-  const openEdit = (sub: SubEvent) => {
+  const openEdit = (se: SubEvent) => {
+    setEditingId(se.id);
     setForm({
-      name: sub.name,
-      date: sub.date,
-      time: sub.time,
-      venue: sub.venue || "",
-      address: sub.address || "",
-      description: sub.description || "",
-      dress_code: sub.dress_code || "",
-      rsvp_deadline: sub.rsvp_deadline ? toDatetimeLocal(sub.rsvp_deadline) : "",
-      rsvp_enabled: sub.rsvp_enabled,
+      name: se.name,
+      date: se.date,
+      time: se.time,
+      venue: se.venue,
+      address: se.address,
+      description: se.description,
+      dress_code: se.dress_code,
+      rsvp_deadline: toDatetimeLocal(se.rsvp_deadline),
+      rsvp_enabled: se.rsvp_enabled,
     });
-    setEditingId(sub.id);
-    setModalOpen(true);
+    setShowModal(true);
   };
 
-  const handleSubmit = () => {
-    if (!form.name.trim()) {
-      setToast("Name is required");
-      setToastType("error");
-      return;
-    }
-    if (editingId) {
-      updateMutation.mutate({ id: editingId, input: form });
-    } else {
-      createMutation.mutate(form);
-    }
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingId(null);
+    setForm(emptyForm);
   };
 
-  const statusVariant = (status: string): "success" | "info" | "default" => {
+  const statusVariant = (status: string): "info" | "success" | "default" => {
     if (status === "upcoming") return "info";
     if (status === "ongoing") return "success";
     return "default";
   };
 
-  const sortedEvents = [...subEvents].sort((a, b) => {
-    const dateA = a.date ? new Date(a.date).getTime() : Infinity;
-    const dateB = b.date ? new Date(b.date).getTime() : Infinity;
-    if (dateA !== dateB) return dateA - dateB;
-    const timeA = a.time ? a.time : "";
-    const timeB = b.time ? b.time : "";
-    if (timeA !== timeB) return timeA.localeCompare(timeB);
-    return a.order_index - b.order_index;
-  });
+  const submitForm = () => {
+    if (!form.name.trim()) {
+      setToast({ message: "Name is required", type: "error" });
+      return;
+    }
+    if (editingId) updateMutation.mutate();
+    else createMutation.mutate();
+  };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-6 lg:p-8 space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-heading text-[var(--color-text)]">Events</h1>
+          <h1 className="font-heading text-2xl">Multiple Events</h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            Manage individual events within "{event.name}" — ceremony, reception, rehearsal dinner, and more.
+            Create sub-events for {event.draft_name || event.name} — guests can RSVP to each individually.
           </p>
         </div>
         <Button onClick={openCreate}>
-          <Plus className="w-4 h-4" /> Add Event
+          <Plus className="w-4 h-4" /> Add Sub-Event
         </Button>
       </div>
 
-      {/* Info banner */}
-      <Card className="p-4 mb-6 bg-[var(--color-bg-subtle)]">
-        <div className="flex items-start gap-3">
-          <CalendarPlus className="w-5 h-5 text-[var(--color-text-muted)] mt-0.5 shrink-0" />
-          <div className="text-sm text-[var(--color-text-muted)]">
-            <p className="font-medium text-[var(--color-text)]">Multiple Events per Invitation</p>
-            <p className="mt-0.5">
-              Create sub-events that guests can RSVP to individually. Each sub-event can have its own date, time, venue, dress code, and RSVP deadline.
-            </p>
-          </div>
-        </div>
-      </Card>
-
-      {/* Loading */}
-      {isLoading && (
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="p-6">
-              <Skeleton className="h-6 w-48 mb-4" />
-              <Skeleton className="h-4 w-32 mb-2" />
-              <Skeleton className="h-4 w-64" />
-            </Card>
+      {isLoading ? (
+        <div className="grid md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-56" />
           ))}
         </div>
-      )}
-
-      {/* Error */}
-      {isError && (
-        <ErrorState message="Failed to load sub-events" onRetry={() => refetch()} />
-      )}
-
-      {/* Empty */}
-      {!isLoading && !isError && sortedEvents.length === 0 && (
+      ) : isError ? (
+        <ErrorState message={(error as Error)?.message || "Failed to load sub-events"} onRetry={() => refetch()} />
+      ) : enriched.length === 0 ? (
         <EmptyState
-          icon={<Calendar className="w-16 h-16" />}
-          title="No events yet"
-          description="Add your first sub-event to start managing individual events within this invitation."
-          action={<Button onClick={openCreate}><Plus className="w-4 h-4" /> Add Event</Button>}
+          icon={<Calendar className="w-12 h-12" />}
+          title="No sub-events yet"
+          description="Add individual events like Ceremony, Reception, or Mehndi so guests can RSVP to each one separately."
+          action={<Button onClick={openCreate}><Plus className="w-4 h-4" /> Add Sub-Event</Button>}
         />
-      )}
-
-      {/* Event cards */}
-      {!isLoading && !isError && sortedEvents.length > 0 && (
-        <div className="space-y-4">
-          {sortedEvents.map((sub, index) => {
-            const status = getEventStatus(sub.date);
-            const rsvpClosed = isRsvpClosed(sub.rsvp_deadline);
-            const counts = rsvpCounts[sub.id] || { total: 0, attending: 0, declined: 0, pending: 0 };
-            const isHidden = !sub.rsvp_enabled;
-
+      ) : (
+        <div className="grid md:grid-cols-2 gap-4">
+          {enriched.map((se, idx) => {
+            const status = getEventStatus(se.date);
+            const rsvpClosed = isRsvpClosed(se.rsvp_deadline);
             return (
-              <Card key={sub.id} className={cn("p-5 transition-opacity", isHidden && "opacity-60")}>
-                {/* Top row: name + badges + actions */}
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="min-w-0 flex-1">
+              <Card key={se.id} className="p-5 flex flex-col gap-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-lg font-heading text-[var(--color-text)] truncate">{sub.name}</h3>
+                      <h3 className="font-heading text-lg truncate">{se.name}</h3>
                       <Badge variant={statusVariant(status)}>{status}</Badge>
-                      {sub.rsvp_enabled ? (
-                        <Badge variant={rsvpClosed ? "warning" : "success"}>
-                          RSVP {rsvpClosed ? "Closed" : "Open"}
-                        </Badge>
+                      {se.rsvp_enabled ? (
+                        rsvpClosed ? <Badge variant="error">RSVP Closed</Badge> : <Badge variant="success">RSVP Open</Badge>
                       ) : (
-                        <Badge variant="default">Hidden</Badge>
+                        <Badge variant="default">RSVP Off</Badge>
                       )}
                     </div>
+                    {se.date && (
+                      <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)] mt-1.5">
+                        <Calendar className="w-3.5 h-3.5" /> {formatDate(se.date)}
+                        {se.time && (<><span>·</span><Clock className="w-3.5 h-3.5" /> {formatTime(se.time)}</>)}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
                     <button
-                      onClick={() => reorderMutation.mutate({ sub, direction: "up" })}
-                      disabled={index === 0 || reorderMutation.isPending}
-                      className="p-1.5 hover:bg-[var(--color-bg-subtle)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      onClick={() => reorderMutation.mutate({ id: se.id, direction: "up" })}
+                      disabled={idx === 0 || reorderMutation.isPending}
+                      className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-subtle)] disabled:opacity-30 transition-colors"
                       style={{ borderRadius: "var(--radius)" }}
                       title="Move up"
                     >
-                      <ChevronUp className="w-4 h-4 text-[var(--color-text-muted)]" />
+                      <ArrowUp className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => reorderMutation.mutate({ sub, direction: "down" })}
-                      disabled={index === sortedEvents.length - 1 || reorderMutation.isPending}
-                      className="p-1.5 hover:bg-[var(--color-bg-subtle)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      onClick={() => reorderMutation.mutate({ id: se.id, direction: "down" })}
+                      disabled={idx === enriched.length - 1 || reorderMutation.isPending}
+                      className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-subtle)] disabled:opacity-30 transition-colors"
                       style={{ borderRadius: "var(--radius)" }}
                       title="Move down"
                     >
-                      <ChevronDown className="w-4 h-4 text-[var(--color-text-muted)]" />
+                      <ArrowDown className="w-4 h-4" />
                     </button>
+                  </div>
+                </div>
+
+                {se.venue && (
+                  <div className="flex items-start gap-1.5 text-sm">
+                    <MapPin className="w-4 h-4 text-[var(--color-text-muted)] mt-0.5 shrink-0" />
+                    <div>
+                      <div className="font-medium">{se.venue}</div>
+                      {se.address && <div className="text-[var(--color-text-muted)] text-xs mt-0.5">{se.address}</div>}
+                    </div>
+                  </div>
+                )}
+
+                {se.description && (
+                  <p className="text-sm text-[var(--color-text-muted)] line-clamp-3">{se.description}</p>
+                )}
+
+                {se.dress_code && (
+                  <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
+                    <Shirt className="w-3.5 h-3.5" /> {se.dress_code}
+                  </div>
+                )}
+
+                {se.rsvp_enabled && se.rsvp_deadline && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <CalendarClock className={cn("w-3.5 h-3.5", rsvpClosed ? "text-red-500" : "text-[var(--color-text-muted)]")} />
+                    <span className={cn(rsvpClosed ? "text-red-600 font-medium" : "text-[var(--color-text-muted)]")}>
+                      RSVP {rsvpClosed ? "closed" : "deadline"}: {formatDeadline(se.rsvp_deadline)}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 pt-2 border-t border-[var(--color-border)]">
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Users className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
+                    <span className="font-medium text-green-700">{se.rsvpCounts.attending}</span>
+                    <span className="text-[var(--color-text-muted)]">attending</span>
+                    <span className="text-[var(--color-border)]">·</span>
+                    <span className="font-medium text-red-700">{se.rsvpCounts.declined}</span>
+                    <span className="text-[var(--color-text-muted)]">declined</span>
+                    <span className="text-[var(--color-border)]">·</span>
+                    <span className="font-medium text-amber-700">{se.rsvpCounts.pending}</span>
+                    <span className="text-[var(--color-text-muted)]">pending</span>
+                  </div>
+                  <div className="ml-auto flex items-center gap-1">
                     <button
-                      onClick={() => openEdit(sub)}
-                      className="p-1.5 hover:bg-[var(--color-bg-subtle)] transition-colors"
+                      onClick={() => openEdit(se)}
+                      className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-subtle)] transition-colors"
                       style={{ borderRadius: "var(--radius)" }}
                       title="Edit"
                     >
-                      <Pencil className="w-4 h-4 text-[var(--color-text-muted)]" />
+                      <Pencil className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => duplicateMutation.mutate(sub)}
-                      disabled={duplicateMutation.isPending}
-                      className="p-1.5 hover:bg-[var(--color-bg-subtle)] transition-colors"
+                      onClick={() => setDuplicateId(se.id)}
+                      className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-subtle)] transition-colors"
                       style={{ borderRadius: "var(--radius)" }}
                       title="Duplicate"
                     >
-                      <Copy className="w-4 h-4 text-[var(--color-text-muted)]" />
+                      <Copy className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => archiveMutation.mutate({ sub, hide: sub.rsvp_enabled })}
-                      disabled={archiveMutation.isPending}
-                      className="p-1.5 hover:bg-[var(--color-bg-subtle)] transition-colors"
-                      style={{ borderRadius: "var(--radius)" }}
-                      title={isHidden ? "Show from guest view" : "Hide from guest view"}
-                    >
-                      {isHidden ? <Eye className="w-4 h-4 text-[var(--color-text-muted)]" /> : <EyeOff className="w-4 h-4 text-[var(--color-text-muted)]" />}
-                    </button>
-                    <button
-                      onClick={() => setDeleteTarget(sub)}
-                      className="p-1.5 hover:bg-red-50 transition-colors"
+                      onClick={() => setDeleteId(se.id)}
+                      className="p-1.5 text-[var(--color-text-muted)] hover:text-red-600 hover:bg-red-50 transition-colors"
                       style={{ borderRadius: "var(--radius)" }}
                       title="Delete"
                     >
-                      <Trash2 className="w-4 h-4 text-red-500" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                </div>
-
-                {/* Details grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 mb-4">
-                  {sub.date && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Calendar className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
-                      <span className="text-[var(--color-text)]">{formatDate(sub.date)}</span>
-                    </div>
-                  )}
-                  {sub.time && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
-                      <span className="text-[var(--color-text)]">{formatTime(sub.time)}</span>
-                    </div>
-                  )}
-                  {sub.venue && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <MapPin className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
-                      <span className="text-[var(--color-text)]">
-                        {sub.venue}
-                        {sub.address && <span className="text-[var(--color-text-muted)]"> · {sub.address}</span>}
-                      </span>
-                    </div>
-                  )}
-                  {sub.dress_code && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Shirt className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
-                      <span className="text-[var(--color-text)]">{sub.dress_code}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Description */}
-                {sub.description && (
-                  <p className="text-sm text-[var(--color-text-muted)] mb-4 whitespace-pre-wrap">{sub.description}</p>
-                )}
-
-                {/* Footer: RSVP info */}
-                <div className="flex items-center justify-between pt-4 border-t border-[var(--color-border)] flex-wrap gap-3">
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className="flex items-center gap-1.5">
-                      <Users className="w-4 h-4 text-[var(--color-text-muted)]" />
-                      <span className="text-[var(--color-text)] font-medium">{counts.attending}</span>
-                      <span className="text-[var(--color-text-muted)]">attending</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[var(--color-text)] font-medium">{counts.declined}</span>
-                      <span className="text-[var(--color-text-muted)]">declined</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[var(--color-text)] font-medium">{counts.pending}</span>
-                      <span className="text-[var(--color-text-muted)]">pending</span>
-                    </div>
-                  </div>
-                  {sub.rsvp_deadline && (
-                    <div className="text-xs text-[var(--color-text-muted)]">
-                      RSVP deadline: <span className={cn("font-medium", rsvpClosed ? "text-red-500" : "text-[var(--color-text)]")}>{formatDeadline(sub.rsvp_deadline)}</span>
-                    </div>
-                  )}
                 </div>
               </Card>
             );
@@ -550,63 +440,54 @@ function EventsPage() {
         </div>
       )}
 
-      {/* Create / Edit Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingId ? "Edit Event" : "Add Event"}>
+      <Modal open={showModal} onClose={closeModal} title={editingId ? "Edit Sub-Event" : "Add Sub-Event"}>
         <div className="space-y-4">
-          <FormField label="Event Name" hint="e.g. Ceremony, Reception, Rehearsal Dinner">
+          <FormField label="Name">
             <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Enter event name"
+              placeholder="e.g. Ceremony, Reception, Mehndi"
             />
           </FormField>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3">
             <FormField label="Date">
-              <DatePicker
-                value={form.date}
-                onChange={(v) => setForm({ ...form, date: v })}
-                placeholder="Select date"
-              />
+              <DatePicker value={form.date} onChange={(v) => setForm({ ...form, date: v })} />
             </FormField>
             <FormField label="Time">
-              <TimePicker
-                value={form.time}
-                onChange={(v) => setForm({ ...form, time: v })}
-                placeholder="Select time"
-              />
+              <TimePicker value={form.time} onChange={(v) => setForm({ ...form, time: v })} />
             </FormField>
           </div>
 
           <FormField label="Venue">
             <Input
-              value={form.venue}
-              onChange={(e) => setForm({ ...form, venue: e.target.value })}
-              placeholder="e.g. Grand Ballroom"
+              value={form.venue || ""}
+              onChange={(e) => setForm({ ...form, venue: e.target.value || null })}
+              placeholder="e.g. The Grand Ballroom"
             />
           </FormField>
 
           <FormField label="Address">
             <Input
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
-              placeholder="e.g. 123 Main St, City, State"
+              value={form.address || ""}
+              onChange={(e) => setForm({ ...form, address: e.target.value || null })}
+              placeholder="123 Main St, City"
             />
           </FormField>
 
           <FormField label="Description">
             <Textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Additional details about this event..."
+              value={form.description || ""}
+              onChange={(e) => setForm({ ...form, description: e.target.value || null })}
+              placeholder="Details about this sub-event..."
               rows={3}
             />
           </FormField>
 
           <FormField label="Dress Code">
             <Input
-              value={form.dress_code}
-              onChange={(e) => setForm({ ...form, dress_code: e.target.value })}
+              value={form.dress_code || ""}
+              onChange={(e) => setForm({ ...form, dress_code: e.target.value || null })}
               placeholder="e.g. Black Tie, Cocktail, Casual"
             />
           </FormField>
@@ -614,58 +495,56 @@ function EventsPage() {
           <FormField label="RSVP Deadline">
             <Input
               type="datetime-local"
-              value={form.rsvp_deadline}
-              onChange={(e) => setForm({ ...form, rsvp_deadline: e.target.value })}
+              value={form.rsvp_deadline || ""}
+              onChange={(e) => setForm({ ...form, rsvp_deadline: e.target.value || null })}
             />
           </FormField>
 
-          <div className="flex items-center justify-between pt-2">
-            <Toggle
-              checked={form.rsvp_enabled}
-              onChange={(v) => setForm({ ...form, rsvp_enabled: v })}
-              label="RSVP enabled (visible to guests)"
-            />
-          </div>
+          <FormField label="RSVP Enabled">
+            <Toggle checked={form.rsvp_enabled} onChange={(v) => setForm({ ...form, rsvp_enabled: v })} label="Allow guests to RSVP to this sub-event" />
+          </FormField>
 
-          <div className="flex justify-end gap-3 pt-4">
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button
-              onClick={handleSubmit}
-              loading={createMutation.isPending || updateMutation.isPending}
-            >
-              {editingId ? "Save Changes" : "Create Event"}
+          <div className="flex gap-3 pt-2">
+            <Button onClick={submitForm} loading={createMutation.isPending || updateMutation.isPending} disabled={!form.name.trim()}>
+              {editingId ? "Save Changes" : "Create Sub-Event"}
             </Button>
+            <Button variant="ghost" onClick={closeModal}>Cancel</Button>
           </div>
         </div>
       </Modal>
 
-      {/* Delete Confirmation Modal */}
-      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Event">
-        <div className="space-y-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-sm text-[var(--color-text)]">
-              Are you sure you want to delete <span className="font-medium">"{deleteTarget?.name}"</span>?
-              This will also remove all RSVPs associated with this event. This action cannot be undone.
-            </p>
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button
-              variant="danger"
-              loading={deleteMutation.isPending}
-              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-            >
-              Delete
-            </Button>
-          </div>
+      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Delete Sub-Event">
+        <p className="text-sm text-[var(--color-text-muted)] mb-6">
+          Are you sure you want to delete this sub-event? All associated RSVPs will also be removed. This action cannot be undone.
+        </p>
+        <div className="flex gap-3">
+          <Button variant="danger" onClick={() => deleteId && deleteMutation.mutate(deleteId)} loading={deleteMutation.isPending}>
+            Delete
+          </Button>
+          <Button variant="ghost" onClick={() => setDeleteId(null)}>Cancel</Button>
         </div>
       </Modal>
 
-      {/* Toast */}
-      {toast && <Toast message={toast} type={toastType} onClose={() => setToast(null)} />}
+      <Modal open={!!duplicateId} onClose={() => setDuplicateId(null)} title="Duplicate Sub-Event">
+        <p className="text-sm text-[var(--color-text-muted)] mb-6">
+          This will create a copy of the sub-event with "(Copy)" appended to its name. RSVPs are not copied.
+        </p>
+        <div className="flex gap-3">
+          <Button
+            onClick={() => {
+              const source = subEvents?.find((s) => s.id === duplicateId);
+              if (source) duplicateMutation.mutate(source);
+            }}
+            loading={duplicateMutation.isPending}
+          >
+            Duplicate
+          </Button>
+          <Button variant="ghost" onClick={() => setDuplicateId(null)}>Cancel</Button>
+        </div>
+      </Modal>
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
 
-export default EventsPage;

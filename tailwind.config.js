@@ -4,27 +4,9 @@ export default {
   theme: {
     extend: {
       colors: {
-        onyx: {
-          DEFAULT: "#1a1a1a",
-          light: "#2a2a2a",
-          muted: "#6b6b6b",
-          border: "#333",
-        },
-        cream: {
-          DEFAULT: "#f5f0e8",
-          light: "#faf7f2",
-          dark: "#e8e0d4",
-        },
-        rusty: {
-          DEFAULT: "#B8962E",
-          light: "#C4A44A",
-          dark: "#A07820",
-          bg: "#F5ECD7",
-          "bg-light": "#FAF3E0",
-          text: "#3D3528",
-          muted: "#8B7355",
-          border: "#D4C695",
-        },
+        onyx: { DEFAULT: "#1a1a1a", light: "#2a2a2a", muted: "#6b6b6b", border: "#333" },
+        cream: { DEFAULT: "#f5f0e8", light: "#faf7f2", dark: "#e8e0d4" },
+        rusty: { DEFAULT: "#B8962E", light: "#C4A44A", dark: "#A07820", bg: "#F5ECD7", "bg-light": "#FAF3E0", text: "#3D3528", muted: "#8B7355", border: "#D4C695" },
       },
       fontFamily: {
         heading: ["Cormorant Garamond", "serif"],

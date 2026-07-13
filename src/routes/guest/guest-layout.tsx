@@ -1,116 +1,110 @@
-import { useParams, Outlet, useNavigate } from "react-router-dom";
+import { useParams, Outlet, useOutletContext, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type SubEvent, type ScheduleItem } from "../../lib/supabase";
 import { DEFAULT_THEME, themeToCssVars } from "../../lib/theme";
+import { useGuestAuth } from "../../lib/guest-auth";
 import { Loader2 } from "lucide-react";
-import { type CSSProperties } from "react";
 
-export interface GuestOutletContext {
+export interface GuestContext {
   event: UserEvent;
   subEvents: SubEvent[];
   schedule: ScheduleItem[];
 }
 
-async function fetchEventBySlug(slug: string): Promise<UserEvent | null> {
-  // 1. Try matching the slug directly on user_events
-  const { data: bySlug, error: errSlug } = await supabase
-    .from("user_events")
-    .select("*")
-    .eq("slug", slug)
-    .maybeSingle();
-  if (errSlug) throw errSlug;
-  if (bySlug) return bySlug as UserEvent;
-
-  // 2. Fall back to the event_slug_redirects table
-  const { data: redirect, error: errRedirect } = await supabase
-    .from("event_slug_redirects")
-    .select("event_id")
-    .eq("slug", slug)
-    .maybeSingle();
-  if (errRedirect) throw errRedirect;
-  if (!redirect) return null;
-
-  const { data: byId, error: errId } = await supabase
-    .from("user_events")
-    .select("*")
-    .eq("id", redirect.event_id)
-    .maybeSingle();
-  if (errId) throw errId;
-  return (byId as UserEvent) || null;
+export function useGuestContext(): GuestContext {
+  return useOutletContext<GuestContext>();
 }
 
 export default function GuestLayout() {
-  const { slug } = useParams();
-  const navigate = useNavigate();
+  const { slug } = useParams<{ slug: string }>();
+  const { eventId, isAuthenticated } = useGuestAuth();
 
-  const { data: event, isLoading, isError } = useQuery({
+  const { data: event, isLoading: eventLoading, isError: eventError } = useQuery({
     queryKey: ["guest-event", slug],
-    queryFn: () => fetchEventBySlug(slug!),
+    queryFn: async () => {
+      if (!slug) return null;
+      // Try direct slug lookup on user_events
+      const { data: direct, error: directError } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("slug", slug)
+        .maybeSingle();
+      if (directError) throw directError;
+      if (direct) return direct as UserEvent;
+      // Try redirect table
+      const { data: redirect, error: redirectError } = await supabase
+        .from("event_slug_redirects")
+        .select("event_id")
+        .eq("slug", slug)
+        .maybeSingle();
+      if (redirectError) throw redirectError;
+      if (!redirect) return null;
+      const { data: redirected, error: redirectedError } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("id", redirect.event_id)
+        .maybeSingle();
+      if (redirectedError) throw redirectedError;
+      return (redirected as UserEvent) || null;
+    },
     enabled: !!slug,
   });
 
-  // Fetch sub-events for this event
   const { data: subEvents = [] } = useQuery({
     queryKey: ["guest-sub-events", event?.id],
     queryFn: async () => {
+      if (!event) return [];
       const { data, error } = await supabase
         .from("sub_events")
         .select("*")
-        .eq("parent_event_id", event!.id)
+        .eq("parent_event_id", event.id)
         .order("order_index", { ascending: true });
       if (error) throw error;
       return (data as SubEvent[]) || [];
     },
-    enabled: !!event?.id,
+    enabled: !!event,
   });
 
-  // Fetch schedule items for this event
   const { data: schedule = [] } = useQuery({
     queryKey: ["guest-schedule", event?.id],
     queryFn: async () => {
+      if (!event) return [];
       const { data, error } = await supabase
-        .from("event_schedule")
+        .from("schedule_items")
         .select("*")
-        .eq("event_id", event!.id)
+        .eq("event_id", event.id)
         .order("order_index", { ascending: true });
       if (error) throw error;
       return (data as ScheduleItem[]) || [];
     },
-    enabled: !!event?.id,
+    enabled: !!event,
   });
 
-  if (isLoading) {
+  if (eventLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg)]">
-        <Loader2 className="w-6 h-6 animate-spin text-[var(--color-text-muted)]" />
+        <Loader2 className="w-8 h-8 animate-spin text-[var(--color-text-muted)]" />
       </div>
     );
   }
 
-  if (isError || !event) {
+  if (eventError || !event) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-bg)] text-[var(--color-text)] p-8">
-        <h1 className="font-heading text-3xl mb-3">Event not found</h1>
-        <p className="text-sm text-[var(--color-text-muted)] mb-6">
-          The invitation you're looking for doesn't exist or has been removed.
-        </p>
-        <button
-          onClick={() => navigate("/")}
-          className="px-6 py-2.5 bg-[var(--color-primary)] text-[var(--color-bg)] text-sm uppercase tracking-wider"
-          style={{ borderRadius: "var(--radius)" }}
-        >
-          Go Home
-        </button>
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <h1 className="font-heading text-3xl text-gray-900 mb-3">Event not found</h1>
+          <p className="text-sm text-gray-500">The event you're looking for doesn't exist or has been removed.</p>
+        </div>
       </div>
     );
   }
 
   const theme = event.theme || DEFAULT_THEME;
-  const cssVars = themeToCssVars(theme) as CSSProperties;
+  const cssVars = themeToCssVars(theme) as React.CSSProperties;
 
   return (
-    <div style={cssVars} className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]">
-      <Outlet context={{ event, subEvents, schedule } satisfies GuestOutletContext} />
+    <div style={cssVars} className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] font-[var(--font-body)]">
+      <Outlet context={{ event, subEvents, schedule } satisfies GuestContext} />
     </div>
   );
 }

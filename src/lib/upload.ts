@@ -1,9 +1,6 @@
 import { supabase } from "./supabase";
 
-export interface UploadedImage {
-  url: string;
-  path: string;
-}
+export interface UploadedImage { url: string; path: string; }
 
 export async function compressImage(file: File, maxWidth = 1920, quality = 0.82): Promise<Blob> {
   return new Promise((resolve, reject) => {
@@ -13,20 +10,12 @@ export async function compressImage(file: File, maxWidth = 1920, quality = 0.82)
       img.onload = () => {
         const canvas = document.createElement("canvas");
         let { width, height } = img;
-        if (width > maxWidth) {
-          height = (height * maxWidth) / width;
-          width = maxWidth;
-        }
-        canvas.width = width;
-        canvas.height = height;
+        if (width > maxWidth) { height = (height * maxWidth) / width; width = maxWidth; }
+        canvas.width = width; canvas.height = height;
         const ctx = canvas.getContext("2d");
         if (!ctx) return reject(new Error("Canvas not supported"));
         ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob(
-          (blob) => (blob ? resolve(blob) : reject(new Error("Compression failed"))),
-          "image/jpeg",
-          quality
-        );
+        canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Compression failed"))), "image/jpeg", quality);
       };
       img.onerror = () => reject(new Error("Failed to load image"));
       img.src = e.target?.result as string;
@@ -40,10 +29,7 @@ export async function uploadImage(file: File, eventId: string, onProgress?: (pct
   const compressed = await compressImage(file);
   const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
   const fileName = `${eventId}/${Date.now()}.${ext}`;
-  const { data, error } = await supabase.storage.from("event-images").upload(fileName, compressed, {
-    contentType: "image/jpeg",
-    upsert: false,
-  });
+  const { data, error } = await supabase.storage.from("event-images").upload(fileName, compressed, { contentType: "image/jpeg", upsert: false });
   if (error) throw error;
   const { data: urlData } = supabase.storage.from("event-images").getPublicUrl(data.path);
   if (onProgress) onProgress(100);
@@ -62,7 +48,5 @@ export function extractPathFromUrl(url: string): string | null {
     const idx = parts.indexOf("event-images");
     if (idx === -1) return null;
     return parts.slice(idx + 1).join("/");
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }

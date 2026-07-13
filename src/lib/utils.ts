@@ -1,9 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }
 
 export function formatDate(date: string | null): string {
   if (!date) return "";
@@ -32,21 +30,12 @@ export function getCountdown(targetDate: string | null) {
   const target = new Date(targetDate).getTime();
   const diff = target - Date.now();
   if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
-  return {
-    days: Math.floor(diff / 86400000),
-    hours: Math.floor((diff % 86400000) / 3600000),
-    minutes: Math.floor((diff % 3600000) / 60000),
-    seconds: Math.floor((diff % 60000) / 1000),
-    isPast: false,
-  };
+  return { days: Math.floor(diff / 86400000), hours: Math.floor((diff % 86400000) / 3600000), minutes: Math.floor((diff % 3600000) / 60000), seconds: Math.floor((diff % 60000) / 1000), isPast: false };
 }
 
 export function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
   let timer: ReturnType<typeof setTimeout>;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
+  return (...args: Parameters<T>) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); };
 }
 
 export function isRsvpClosed(deadline: string | null): boolean {
@@ -93,8 +82,7 @@ export function getEventStatus(date: string | null): "upcoming" | "ongoing" | "c
   const d = new Date(date);
   if (isNaN(d.getTime())) return "unscheduled";
   const now = new Date();
-  const eventEnd = new Date(d);
-  eventEnd.setHours(23, 59, 59);
+  const eventEnd = new Date(d); eventEnd.setHours(23, 59, 59);
   if (d > now) return "upcoming";
   if (now <= eventEnd) return "ongoing";
   return "completed";

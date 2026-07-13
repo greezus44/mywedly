@@ -70,45 +70,10 @@ export const RUSTY_CONTENT = {
 export const THEME_PRESETS: Record<string, ThemeConfig> = {
   classic: DEFAULT_THEME,
   rusty: RUSTY_THEME,
-  mono: {
-    ...DEFAULT_THEME,
-    preset: "mono",
-    primaryColor: "#000000",
-    secondaryColor: "#333333",
-    accentColor: "#000000",
-    bgColor: "#ffffff",
-    bgSubtleColor: "#f5f5f5",
-    textColor: "#1a1a1a",
-    textMutedColor: "#6b6b6b",
-    borderColor: "#e2e2e2",
-  },
-  ocean: {
-    ...DEFAULT_THEME,
-    preset: "ocean",
-    primaryColor: "#0c4a6e",
-    secondaryColor: "#075985",
-    accentColor: "#0ea5e9",
-    bgColor: "#f0f9ff",
-    bgSubtleColor: "#e0f2fe",
-  },
-  forest: {
-    ...DEFAULT_THEME,
-    preset: "forest",
-    primaryColor: "#14532d",
-    secondaryColor: "#166534",
-    accentColor: "#16a34a",
-    bgColor: "#f0fdf4",
-    bgSubtleColor: "#dcfce7",
-  },
-  rose: {
-    ...DEFAULT_THEME,
-    preset: "rose",
-    primaryColor: "#881337",
-    secondaryColor: "#9f1239",
-    accentColor: "#e11d48",
-    bgColor: "#fff1f2",
-    bgSubtleColor: "#ffe4e6",
-  },
+  mono: { ...DEFAULT_THEME, preset: "mono", primaryColor: "#000000", secondaryColor: "#333333", accentColor: "#000000", bgColor: "#ffffff", bgSubtleColor: "#f5f5f5", textColor: "#1a1a1a", textMutedColor: "#6b6b6b", borderColor: "#e2e2e2" },
+  ocean: { ...DEFAULT_THEME, preset: "ocean", primaryColor: "#0c4a6e", secondaryColor: "#075985", accentColor: "#0ea5e9", bgColor: "#f0f9ff", bgSubtleColor: "#e0f2fe" },
+  forest: { ...DEFAULT_THEME, preset: "forest", primaryColor: "#14532d", secondaryColor: "#166534", accentColor: "#16a34a", bgColor: "#f0fdf4", bgSubtleColor: "#dcfce7" },
+  rose: { ...DEFAULT_THEME, preset: "rose", primaryColor: "#881337", secondaryColor: "#9f1239", accentColor: "#e11d48", bgColor: "#fff1f2", bgSubtleColor: "#ffe4e6" },
 };
 
 export const FONT_OPTIONS = [
@@ -116,7 +81,6 @@ export const FONT_OPTIONS = [
   { value: "Cormorant Garamond", label: "Cormorant Garamond (Serif)" },
 ];
 
-/** Convert a ThemeConfig into CSS custom properties for live application */
 export function themeToCssVars(theme: ThemeConfig | null): Record<string, string> {
   const t = theme || DEFAULT_THEME;
   return {
@@ -139,27 +103,17 @@ export function themeToCssVars(theme: ThemeConfig | null): Record<string, string
   };
 }
 
-/** Apply theme CSS vars to any HTMLElement — used for live preview */
 export function applyThemeToElement(el: HTMLElement, theme: ThemeConfig | null) {
   const vars = themeToCssVars(theme);
-  Object.entries(vars).forEach(([key, value]) => {
-    el.style.setProperty(key, value);
-  });
+  Object.entries(vars).forEach(([key, value]) => { el.style.setProperty(key, value); });
 }
 
-/** Apply theme CSS vars to document root — used for global theme */
 export function applyThemeToDocument(theme: ThemeConfig | null) {
   applyThemeToElement(document.documentElement, theme);
 }
 
 export function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+  return text.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
 }
 
 export function isValidSlug(slug: string): boolean {
