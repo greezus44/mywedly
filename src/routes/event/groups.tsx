@@ -1,28 +1,20 @@
-import { useState, type FormEvent } from "react";
+import React, { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type GuestGroup } from "../../lib/supabase";
-import {
-  Button,
-  Card,
-  Modal,
-  Input,
-  Badge,
-  EmptyState,
-  ErrorState,
-  LoadingSpinner,
-} from "../../components/ui";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
+import { Card, Modal, EmptyState, LoadingSpinner, ErrorState, Badge } from "../../components/ui";
 
-export default function GroupsPage() {
+export default function Groups() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const [modalOpen, setModalOpen] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<GuestGroup | null>(null);
   const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
   const { data: groups, isLoading, isError, refetch } = useQuery({
-    queryKey: ["guest_groups", event.id],
+    queryKey: ["groups", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("guest_groups")
@@ -36,21 +28,18 @@ export default function GroupsPage() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const sortOrder = groups?.length ?? 0;
       const { error } = await supabase.from("guest_groups").insert({
-        name,
         event_id: event.id,
-        sort_order: sortOrder,
+        wedding_id: event.id,
+        name,
+        sort_order: groups?.length ?? 0,
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guest_groups", event.id] });
-      setModalOpen(false);
-      setName("");
-      setError(null);
+      queryClient.invalidateQueries({ queryKey: ["groups", event.id] });
+      setShowModal(false);
     },
-    onError: (err: Error) => setError(err.message),
   });
 
   const updateMutation = useMutation({
@@ -63,13 +52,9 @@ export default function GroupsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guest_groups", event.id] });
-      setModalOpen(false);
-      setEditing(null);
-      setName("");
-      setError(null);
+      queryClient.invalidateQueries({ queryKey: ["groups", event.id] });
+      setShowModal(false);
     },
-    onError: (err: Error) => setError(err.message),
   });
 
   const deleteMutation = useMutation({
@@ -78,83 +63,57 @@ export default function GroupsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guest_groups", event.id] });
+      queryClient.invalidateQueries({ queryKey: ["groups", event.id] });
     },
   });
 
   const openCreate = () => {
     setEditing(null);
     setName("");
-    setError(null);
-    setModalOpen(true);
+    setShowModal(true);
   };
 
-  const openEdit = (g: GuestGroup) => {
-    setEditing(g);
-    setName(g.name);
-    setError(null);
-    setModalOpen(true);
+  const openEdit = (group: GuestGroup) => {
+    setEditing(group);
+    setName(group.name);
+    setShowModal(true);
   };
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) {
-      setError("Group name is required");
-      return;
-    }
-    if (editing) updateMutation.mutate();
-    else createMutation.mutate();
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-  if (isError) {
-    return <ErrorState message="Failed to load guest groups." onRetry={() => refetch()} />;
-  }
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-3xl space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-dash-text">Guest Groups</h2>
-          <p className="text-sm text-dash-muted">Organize your guests into groups for easier management.</p>
+          <h2 className="text-lg font-semibold text-dash-text">Guest Groups</h2>
+          <p className="mt-1 text-sm text-dash-muted">Organize guests into groups for targeted invitations.</p>
         </div>
-        <Button onClick={openCreate}>Add Group</Button>
+        <Button onClick={openCreate}>+ Add Group</Button>
       </div>
 
-      {(!groups || groups.length === 0) && (
+      {isLoading ? (
+        <div className="flex justify-center py-12"><LoadingSpinner /></div>
+      ) : isError ? (
+        <ErrorState onRetry={() => refetch()} />
+      ) : !groups || groups.length === 0 ? (
         <EmptyState
           title="No groups yet"
-          description="Create groups to organize your guests (e.g. Family, Friends, Colleagues)."
-          icon={<span className="text-4xl">👥</span>}
-          action={<Button onClick={openCreate}>Add Group</Button>}
+          description="Create groups like 'Bride's Family', 'Groom's Friends', etc."
+          action={<Button onClick={openCreate}>+ Add Group</Button>}
         />
-      )}
-
-      {groups && groups.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {groups.map((g) => (
-            <Card key={g.id} className="flex items-center justify-between gap-2">
+      ) : (
+        <div className="space-y-3">
+          {groups.map((group) => (
+            <Card key={group.id} className="flex items-center justify-between p-4">
               <div>
-                <h3 className="font-medium text-dash-text">{g.name}</h3>
-                <Badge variant="default" className="mt-1">Group</Badge>
+                <h3 className="font-semibold text-dash-text">{group.name}</h3>
+                <p className="mt-0.5 text-xs text-dash-muted">Order: {group.sort_order}</p>
               </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="secondary" onClick={() => openEdit(g)}>
-                  Edit
-                </Button>
+              <div className="flex gap-1">
+                <Button size="sm" variant="ghost" onClick={() => openEdit(group)}>Edit</Button>
                 <Button
                   size="sm"
-                  variant="danger"
+                  variant="ghost"
+                  onClick={() => deleteMutation.mutate(group.id)}
                   loading={deleteMutation.isPending}
-                  onClick={() => {
-                    if (confirm(`Delete group "${g.name}"?`)) deleteMutation.mutate(g.id);
-                  }}
                 >
                   Delete
                 </Button>
@@ -165,28 +124,34 @@ export default function GroupsPage() {
       )}
 
       <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        open={showModal}
+        onClose={() => setShowModal(false)}
         title={editing ? "Edit Group" : "Add Group"}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShowModal(false)}>Cancel</Button>
+            <Button
+              onClick={() => (editing ? updateMutation.mutate() : createMutation.mutate())}
+              loading={createMutation.isPending || updateMutation.isPending}
+              disabled={!name.trim()}
+            >
+              {editing ? "Save" : "Add"}
+            </Button>
+          </>
+        }
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Group Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Family, Friends, Colleagues"
-            autoFocus
-            error={error ?? undefined}
-          />
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={createMutation.isPending || updateMutation.isPending}>
-              {editing ? "Update" : "Create"}
-            </Button>
-          </div>
-        </form>
+        <Input
+          label="Group Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Bride's Family"
+        />
+        {(createMutation.isError || updateMutation.isError) && (
+          <p className="mt-2 text-sm text-dash-danger">
+            {createMutation.error?.message || updateMutation.error?.message || "Failed"}
+          </p>
+        )}
       </Modal>
     </div>
   );

@@ -11,30 +11,30 @@
   --event-border: #fde68a; --event-text: #78350f; --event-heading: #78350f; --event-muted: #92400e;
   --event-primary: #b45309; --event-primary-hover: #92400e; --event-primary-fg: #ffffff;
   --event-accent: #d97706; --event-font-heading: Georgia, serif; --event-font-body: Georgia, serif;
-  --event-font-rich: Georgia, serif;
+  --event-font-rich: Georgia, serif; --event-radius: 0.5rem; --event-font-scale: 1;
 }
 
 body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
 * { box-sizing: border-box; }
 
-.event-themed { min-height: 100vh; background-color: var(--event-bg); color: var(--event-text); font-family: var(--event-font-body); }
-.event-themed h1,.event-themed h2,.event-themed h3,.event-themed h4,.event-themed h5,.event-themed h6 { font-family: var(--event-font-heading); color: var(--event-heading); }
+.event-themed { min-height: 100vh; background-color: var(--event-bg); color: var(--event-text); font-family: var(--event-font-body); border-radius: var(--event-radius); }
+.event-themed h1,.event-themed h2,.event-themed h3,.event-themed h4,.event-themed h5,.event-themed h6 { font-family: var(--event-font-heading); color: var(--event-heading); font-size: calc(1em * var(--event-font-scale, 1)); }
 
-.event-themed .event-btn-primary { background-color: var(--event-primary); color: var(--event-primary-fg); padding: 0.625rem 1.5rem; border-radius: 0.5rem; font-weight: 600; transition: background-color 0.2s; cursor: pointer; border: none; }
+.event-themed .event-btn-primary { background-color: var(--event-primary); color: var(--event-primary-fg); padding: 0.625rem 1.5rem; border-radius: var(--event-radius); font-weight: 600; transition: background-color 0.2s; cursor: pointer; border: none; }
 .event-themed .event-btn-primary:hover { background-color: var(--event-primary-hover); }
-.event-themed .event-btn-secondary { background-color: transparent; color: var(--event-primary); padding: 0.625rem 1.5rem; border-radius: 0.5rem; font-weight: 600; border: 1px solid var(--event-border); transition: all 0.2s; cursor: pointer; }
+.event-themed .event-btn-secondary { background-color: transparent; color: var(--event-primary); padding: 0.625rem 1.5rem; border-radius: var(--event-radius); font-weight: 600; border: 1px solid var(--event-border); transition: all 0.2s; cursor: pointer; }
 .event-themed .event-btn-secondary:hover { background-color: var(--event-surface-alt); }
-.event-themed .event-input { background-color: var(--event-surface); border: 1px solid var(--event-border); color: var(--event-text); padding: 0.625rem 0.875rem; border-radius: 0.5rem; width: 100%; outline: none; transition: border-color 0.2s; }
+.event-themed .event-input { background-color: var(--event-surface); border: 1px solid var(--event-border); color: var(--event-text); padding: 0.625rem 0.875rem; border-radius: var(--event-radius); width: 100%; outline: none; transition: border-color 0.2s; }
 .event-themed .event-input:focus { border-color: var(--event-primary); }
-.event-themed .event-card { background-color: var(--event-surface); border: 1px solid var(--event-border); border-radius: 0.75rem; padding: 1.5rem; }
+.event-themed .event-card { background-color: var(--event-surface); border: 1px solid var(--event-border); border-radius: var(--event-radius); padding: 1.5rem; }
 .event-themed .rich-content { font-family: var(--event-font-rich); line-height: 1.7; color: var(--event-text); }
-.event-themed .rich-content h1 { font-size: 1.75rem; font-weight: 700; margin: 0.5em 0; }
-.event-themed .rich-content h2 { font-size: 1.5rem; font-weight: 600; margin: 0.5em 0; }
-.event-themed .rich-content h3 { font-size: 1.25rem; font-weight: 600; margin: 0.5em 0; }
+.event-themed .rich-content h1 { font-size: calc(1.75rem * var(--event-font-scale, 1)); font-weight: 700; margin: 0.5em 0; }
+.event-themed .rich-content h2 { font-size: calc(1.5rem * var(--event-font-scale, 1)); font-weight: 600; margin: 0.5em 0; }
+.event-themed .rich-content h3 { font-size: calc(1.25rem * var(--event-font-scale, 1)); font-weight: 600; margin: 0.5em 0; }
 .event-themed .rich-content p { margin: 0.5em 0; }
 .event-themed .rich-content ul,.event-themed .rich-content ol { padding-left: 1.5em; margin: 0.5em 0; }
 .event-themed .rich-content a { color: var(--event-primary); text-decoration: underline; }
-.event-themed .rich-content img { max-width: 100%; border-radius: 0.5rem; margin: 0.5em 0; }
+.event-themed .rich-content img { max-width: 100%; border-radius: var(--event-radius); margin: 0.5em 0; }
 .event-themed .rich-content blockquote { border-left: 3px solid var(--event-border); padding-left: 1em; margin: 0.5em 0; font-style: italic; color: var(--event-muted); }
 
 .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }

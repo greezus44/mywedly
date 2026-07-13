@@ -1,53 +1,54 @@
-import { forwardRef, type ButtonHTMLAttributes } from "react";
+import React, { forwardRef } from "react";
 import { cn } from "../../lib/utils";
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
-type Size = "sm" | "md" | "lg";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonSize = "sm" | "md" | "lg";
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: Variant;
-  size?: Size;
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   loading?: boolean;
 }
 
-const variantClasses: Record<Variant, string> = {
+const variantClasses: Record<ButtonVariant, string> = {
   primary:
     "bg-dash-primary text-dash-primary-fg hover:bg-dash-primary-hover focus-visible:ring-dash-primary",
   secondary:
-    "bg-dash-surface text-dash-text border border-dash-border hover:bg-dash-bg focus-visible:ring-dash-border",
+    "bg-transparent border border-dash-border text-dash-text hover:bg-dash-surface focus-visible:ring-dash-border",
   ghost:
-    "bg-transparent text-dash-text hover:bg-dash-bg focus-visible:ring-dash-border",
+    "bg-transparent text-dash-text hover:bg-dash-surface focus-visible:ring-dash-border",
   danger:
     "bg-dash-danger text-dash-danger-fg hover:bg-dash-danger-hover focus-visible:ring-dash-danger",
 };
 
-const sizeClasses: Record<Size, string> = {
-  sm: "px-3 py-1.5 text-sm",
-  md: "px-4 py-2 text-sm",
-  lg: "px-6 py-3 text-base",
+const sizeClasses: Record<ButtonSize, string> = {
+  sm: "text-sm px-3 py-1.5 gap-1.5",
+  md: "text-sm px-4 py-2 gap-2",
+  lg: "text-base px-6 py-3 gap-2",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = "primary", size = "md", loading = false, className, children, disabled, ...props }, ref) => {
+  ({ className, variant = "primary", size = "md", loading, disabled, children, ...props }, ref) => {
     return (
       <button
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+          "inline-flex items-center justify-center rounded-lg font-semibold transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+          "disabled:opacity-50 disabled:pointer-events-none",
           variantClasses[variant],
           sizeClasses[size],
-          className
+          className,
         )}
         {...props}
       >
         {loading && (
           <svg
-            className="h-4 w-4 animate-spin"
+            className="animate-spin h-4 w-4 -ml-1"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
-            aria-hidden="true"
           >
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path
@@ -60,7 +61,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {children}
       </button>
     );
-  }
+  },
 );
 
 Button.displayName = "Button";

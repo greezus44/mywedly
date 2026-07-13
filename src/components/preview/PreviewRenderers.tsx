@@ -1,168 +1,227 @@
+import React from "react";
+import type { UserEvent } from "../../lib/supabase";
 import { RichTextContent } from "../../lib/sanitize";
 import { formatDate, formatTime12, getCountdown, cn } from "../../lib/utils";
-import type { UserEvent } from "../../lib/supabase";
 
-interface PreviewProps {
-  event: Partial<UserEvent>;
-}
+// --- CoverPreview ---
 
-// ---------------------------------------------------------------------------
-// CoverPreview
-// ---------------------------------------------------------------------------
-export function CoverPreview({ event }: PreviewProps) {
-  const cover = event.cover_image || event.draft_cover_image;
-  const name = event.draft_name || event.name || "Our Wedding";
-  const date = event.draft_event_date || event.event_date;
-  const venue = event.draft_venue || event.venue;
-  const countdown = getCountdown(date);
+export function CoverPreview({ event }: { event: Partial<UserEvent> }) {
+  const cover = event.cover_image;
+  const coverConfig = (event.cover_config ?? {}) as Record<string, unknown>;
+  const overlayOpacity = (coverConfig.overlayOpacity as number) ?? 0.3;
+  const titleColor = (coverConfig.titleColor as string) || "#ffffff";
 
   return (
-    <div className="event-card relative overflow-hidden">
-      {cover ? (
-        <div className="relative h-64 w-full">
-          <img src={cover} alt={name} className="h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-6 text-center">
-            <h1 className="text-2xl font-bold text-white drop-shadow">{name}</h1>
-            {date && <p className="mt-1 text-sm text-white/90">{formatDate(date)}</p>}
-            {venue && <p className="text-xs text-white/80">{venue}</p>}
-          </div>
-        </div>
-      ) : (
-        <div className="flex h-64 flex-col items-center justify-center gap-2 text-center">
-          <h1 className="text-2xl font-bold">{name}</h1>
-          {date && <p className="text-sm">{formatDate(date)}</p>}
-          {venue && <p className="text-xs text-dash-muted">{venue}</p>}
-        </div>
+    <div
+      className="relative flex min-h-[400px] flex-col items-center justify-center overflow-hidden rounded-xl"
+      style={{
+        backgroundImage: cover ? `url(${cover})` : undefined,
+        backgroundColor: cover ? undefined : "var(--event-surface)",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
+    >
+      {cover && (
+        <div
+          className="absolute inset-0"
+          style={{ backgroundColor: "#000", opacity: overlayOpacity }}
+        />
       )}
-      {!countdown.isPast && date && (
-        <div className="mt-4 flex justify-center gap-4 text-center">
-          {[
-            { label: "Days", value: countdown.days },
-            { label: "Hours", value: countdown.hours },
-            { label: "Mins", value: countdown.minutes },
-            { label: "Secs", value: countdown.seconds },
-          ].map((item) => (
-            <div key={item.label}>
-              <div className="text-2xl font-bold">{item.value}</div>
-              <div className="text-xs uppercase tracking-wide text-dash-muted">{item.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// LoginPreview
-// ---------------------------------------------------------------------------
-export function LoginPreview({ event }: PreviewProps) {
-  const name = event.draft_name || event.name || "Our Wedding";
-  return (
-    <div className="event-card mx-auto max-w-sm">
-      <h2 className="mb-4 text-center text-xl font-semibold">Welcome to {name}</h2>
-      <p className="mb-4 text-center text-sm text-dash-muted">
-        Please enter your name to find your invitation.
-      </p>
-      <input
-        type="text"
-        placeholder="Your full name"
-        className="event-input mb-3"
-        readOnly
-      />
-      <button type="button" className="event-btn-primary w-full">
-        Find My Invitation
-      </button>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// HomePreview
-// ---------------------------------------------------------------------------
-export function HomePreview({ event }: PreviewProps) {
-  const name = event.draft_name || event.name || "Our Wedding";
-  const date = event.draft_event_date || event.event_date;
-  const time = event.draft_event_time || event.event_time;
-  const venue = event.draft_venue || event.venue;
-  const address = event.draft_address || event.address;
-  const content = event.draft_content || event.content;
-
-  let welcomeHtml = "";
-  if (content && typeof content === "object" && !Array.isArray(content)) {
-    const c = content as Record<string, unknown>;
-    welcomeHtml = (c.welcome as string) || (c.home as string) || "";
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="event-card text-center">
-        <h1 className="text-3xl font-bold">{name}</h1>
-        {date && <p className="mt-2 text-lg">{formatDate(date)}</p>}
-        {time && <p className="text-sm text-dash-muted">{formatTime12(time)}</p>}
-        {venue && <p className="mt-2 font-medium">{venue}</p>}
-        {address && <p className="text-sm text-dash-muted">{address}</p>}
-      </div>
-      {welcomeHtml && (
-        <div className="event-card">
-          <RichTextContent html={welcomeHtml} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// RsvpPreview
-// ---------------------------------------------------------------------------
-export function RsvpPreview({ event }: PreviewProps) {
-  const name = event.draft_name || event.name || "Our Wedding";
-  const deadline = event.draft_rsvp_deadline || event.rsvp_deadline;
-  const closed = deadline ? new Date(deadline).getTime() < Date.now() : false;
-
-  return (
-    <div className="event-card mx-auto max-w-md">
-      <h2 className="mb-2 text-center text-xl font-semibold">RSVP</h2>
-      <p className="mb-4 text-center text-sm text-dash-muted">
-        {name}
-      </p>
-      {closed ? (
-        <p className={cn("text-center text-sm text-dash-muted")}>
-          RSVP is now closed.
+      <div className="relative z-10 px-6 text-center" style={{ color: titleColor }}>
+        <p className="text-sm uppercase tracking-widest" style={{ opacity: 0.85 }}>
+          {event.event_type || "Wedding"}
         </p>
-      ) : (
-        <div className="space-y-3">
-          <div className="flex gap-2">
-            <button type="button" className="event-btn-primary flex-1">
-              Joyfully Accepts
-            </button>
-            <button type="button" className="event-btn-secondary flex-1">
-              Regretfully Declines
-            </button>
+        <h1 className="mt-2 text-4xl font-bold" style={{ fontFamily: "var(--event-font-heading)" }}>
+          {event.name || "Our Wedding"}
+        </h1>
+        <p className="mt-3 text-lg" style={{ opacity: 0.9 }}>
+          {formatDate(event.event_date)}
+          {event.event_time ? ` at ${formatTime12(event.event_time)}` : ""}
+        </p>
+        {event.venue && (
+          <p className="mt-1 text-base" style={{ opacity: 0.85 }}>
+            {event.venue}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- LoginPreview ---
+
+export function LoginPreview({ event }: { event: Partial<UserEvent> }) {
+  const loginConfig = (event.login_config ?? {}) as Record<string, unknown>;
+  const heading = (loginConfig.heading as string) || "Enter your name to continue";
+  const subheading = (loginConfig.subheading as string) || "Please enter the name on your invitation";
+  const placeholder = (loginConfig.placeholder as string) || "Your full name";
+  const cta = (loginConfig.cta as string) || "Continue";
+
+  return (
+    <div className="flex min-h-[400px] flex-col items-center justify-center px-6">
+      <div className="w-full max-w-sm rounded-xl border border-dash-border bg-dash-surface p-6 shadow-sm">
+        <h2 className="text-center text-2xl font-bold" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>
+          {heading}
+        </h2>
+        <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>
+          {subheading}
+        </p>
+        <input
+          type="text"
+          placeholder={placeholder}
+          className="event-input mt-4"
+          disabled
+        />
+        <button className="event-btn-primary mt-3 w-full" disabled>
+          {cta}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// --- HomePreview ---
+
+export function HomePreview({ event }: { event: Partial<UserEvent> }) {
+  const content = (event.content ?? {}) as Record<string, unknown>;
+  const welcomeTitle = (content.welcomeTitle as string) || "Welcome";
+  const welcomeBody = (content.welcomeBody as string) || "We're so glad you're here. Explore the details of our special day below.";
+  const countdown = getCountdown(event.event_date);
+
+  return (
+    <div className="px-6 py-8">
+      <div className="mx-auto max-w-2xl">
+        <h2 className="text-3xl font-bold text-center" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>
+          {welcomeTitle}
+        </h2>
+        <RichTextContent html={welcomeBody} className="mt-4 text-center" />
+
+        {!countdown.isPast && (
+          <div className="mt-8 flex justify-center gap-4">
+            {[
+              { label: "Days", value: countdown.days },
+              { label: "Hours", value: countdown.hours },
+              { label: "Minutes", value: countdown.minutes },
+              { label: "Seconds", value: countdown.seconds },
+            ].map((item) => (
+              <div key={item.label} className="event-card text-center" style={{ minWidth: 80 }}>
+                <div className="text-2xl font-bold" style={{ color: "var(--event-primary)" }}>
+                  {item.value}
+                </div>
+                <div className="text-xs uppercase" style={{ color: "var(--event-muted)" }}>
+                  {item.label}
+                </div>
+              </div>
+            ))}
           </div>
-          <label className="text-sm font-medium">Number of guests</label>
-          <select className="event-input" disabled defaultValue="1">
-            <option value="1">1</option>
-            <option value="2">2</option>
+        )}
+
+        <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="event-card">
+            <h3 className="text-lg font-semibold" style={{ color: "var(--event-heading)" }}>
+              When & Where
+            </h3>
+            <p className="mt-2 text-sm" style={{ color: "var(--event-text)" }}>
+              {formatDate(event.event_date)}
+              {event.event_time ? ` at ${formatTime12(event.event_time)}` : ""}
+            </p>
+            {event.venue && (
+              <p className="text-sm" style={{ color: "var(--event-text)" }}>
+                {event.venue}
+              </p>
+            )}
+            {event.address && (
+              <p className="text-sm" style={{ color: "var(--event-muted)" }}>
+                {event.address}
+              </p>
+            )}
+          </div>
+          <div className="event-card">
+            <h3 className="text-lg font-semibold" style={{ color: "var(--event-heading)" }}>
+              Our Story
+            </h3>
+            <p className="mt-2 text-sm" style={{ color: "var(--event-text)" }}>
+              Read about how we met and fell in love.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- RsvpPreview ---
+
+export function RsvpPreview({ event }: { event: Partial<UserEvent> }) {
+  return (
+    <div className="px-6 py-8">
+      <div className="mx-auto max-w-lg">
+        <h2 className="text-3xl font-bold text-center" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>
+          RSVP
+        </h2>
+        <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>
+          Will you be joining us?
+        </p>
+
+        <div className="mt-6 event-card">
+          <p className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
+            Name
+          </p>
+          <input
+            type="text"
+            placeholder="Your name"
+            className="event-input mt-1"
+            disabled
+          />
+
+          <p className="mt-4 text-sm font-medium" style={{ color: "var(--event-text)" }}>
+            Attending
+          </p>
+          <div className="mt-2 flex gap-3">
+            <label className="flex items-center gap-2 text-sm" style={{ color: "var(--event-text)" }}>
+              <input type="radio" name="rsvp-preview" disabled />
+              Joyfully accepts
+            </label>
+            <label className="flex items-center gap-2 text-sm" style={{ color: "var(--event-text)" }}>
+              <input type="radio" name="rsvp-preview" disabled />
+              Regretfully declines
+            </label>
+          </div>
+
+          <p className="mt-4 text-sm font-medium" style={{ color: "var(--event-text)" }}>
+            Number of guests
+          </p>
+          <select className="event-input mt-1" disabled>
+            <option>1</option>
+            <option>2</option>
+            <option>3</option>
           </select>
-          <label className="text-sm font-medium">Dietary requirements</label>
+
+          <p className="mt-4 text-sm font-medium" style={{ color: "var(--event-text)" }}>
+            Dietary requirements
+          </p>
           <textarea
-            className="event-input min-h-[60px]"
             placeholder="Any allergies or dietary needs?"
-            readOnly
+            className="event-input mt-1"
+            rows={2}
+            disabled
           />
-          <label className="text-sm font-medium">Message for the couple</label>
+
+          <p className="mt-4 text-sm font-medium" style={{ color: "var(--event-text)" }}>
+            Message
+          </p>
           <textarea
-            className="event-input min-h-[60px]"
-            placeholder="Leave a message…"
-            readOnly
+            placeholder="Leave a message for the couple"
+            className="event-input mt-1"
+            rows={3}
+            disabled
           />
-          <button type="button" className="event-btn-primary w-full">
+
+          <button className="event-btn-primary mt-4 w-full" disabled>
             Submit RSVP
           </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }

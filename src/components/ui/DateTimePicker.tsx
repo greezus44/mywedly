@@ -1,67 +1,58 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { cn } from "../../lib/utils";
 import { DatePicker } from "./DatePicker";
 import { TimePicker } from "./TimePicker";
 
-interface DateTimePickerProps {
+export interface DateTimePickerProps {
   date: string | null;
   time: string | null;
-  onDateChange: (value: string | null) => void;
-  onTimeChange: (value: string | null) => void;
-  label?: string;
+  onChange: (date: string | null, time: string | null) => void;
   className?: string;
+  label?: string;
 }
 
 export function DateTimePicker({
   date,
   time,
-  onDateChange,
-  onTimeChange,
-  label,
+  onChange,
   className,
+  label,
 }: DateTimePickerProps) {
   const [tab, setTab] = useState<"date" | "time">("date");
 
   return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      {label && <label className="text-sm font-medium text-dash-text">{label}</label>}
-      <div className="flex gap-1 border-b border-dash-border">
-        <button
-          type="button"
-          onClick={() => setTab("date")}
-          className={cn(
-            "border-b-2 px-3 py-1.5 text-sm font-medium transition-colors",
-            tab === "date"
-              ? "border-dash-primary text-dash-primary"
-              : "border-transparent text-dash-muted hover:text-dash-text"
+    <div className={cn("w-full", className)}>
+      {label && <span className="block text-sm font-medium text-dash-text mb-1">{label}</span>}
+      <div className="rounded-xl border border-dash-border bg-dash-surface overflow-hidden">
+        <div className="flex border-b border-dash-border">
+          <button
+            type="button"
+            onClick={() => setTab("date")}
+            className={cn(
+              "flex-1 px-3 py-1.5 text-sm font-medium transition-colors",
+              tab === "date" ? "bg-dash-surface text-dash-primary border-b-2 border-dash-primary" : "text-dash-muted hover:text-dash-text",
+            )}
+          >
+            📅 Date
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("time")}
+            className={cn(
+              "flex-1 px-3 py-1.5 text-sm font-medium transition-colors",
+              tab === "time" ? "bg-dash-surface text-dash-primary border-b-2 border-dash-primary" : "text-dash-muted hover:text-dash-text",
+            )}
+          >
+            🕐 Time
+          </button>
+        </div>
+        <div className="p-3">
+          {tab === "date" ? (
+            <DatePicker value={date} onChange={(d) => onChange(d, time)} />
+          ) : (
+            <TimePicker value={time} onChange={(t) => onChange(date, t)} />
           )}
-        >
-          Date
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("time")}
-          className={cn(
-            "border-b-2 px-3 py-1.5 text-sm font-medium transition-colors",
-            tab === "time"
-              ? "border-dash-primary text-dash-primary"
-              : "border-transparent text-dash-muted hover:text-dash-text"
-          )}
-        >
-          Time
-        </button>
-      </div>
-      <div className="pt-1">
-        {tab === "date" ? (
-          <DatePicker value={date} onChange={onDateChange} />
-        ) : (
-          <TimePicker value={time} onChange={onTimeChange} />
-        )}
-      </div>
-      <div className="flex gap-2 text-xs text-dash-muted">
-        <span>Date: {date || "—"}</span>
-        <span>•</span>
-        <span>Time: {time || "—"}</span>
+        </div>
       </div>
     </div>
   );

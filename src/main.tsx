@@ -42,9 +42,7 @@ import RustyWishes from "./routes/guest/rusty-wishes";
 import RustyContact from "./routes/guest/rusty-contact";
 
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { retry: 1, refetchOnWindowFocus: false },
-  },
+  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

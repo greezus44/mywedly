@@ -1,104 +1,155 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
+import { EventThemeProvider } from "../../lib/theme-context";
+import { simplifiedToFullTheme, fullToSimplifiedTheme, type ThemeConfig } from "../../lib/theme";
+import { Button } from "../../components/ui/Button";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
-import { Button, Card } from "../../components/ui";
 
 interface HomeContent {
-  welcome?: string;
-  story?: string;
-  details?: string;
+  welcomeTitle?: string;
+  welcomeBody?: string;
+  storyTitle?: string;
+  storyBody?: string;
+  detailsTitle?: string;
+  detailsBody?: string;
 }
+
+const DEFAULT_CONTENT: HomeContent = {
+  welcomeTitle: "Welcome",
+  welcomeBody: "<p>We're so glad you're here. Explore the details of our special day below.</p>",
+  storyTitle: "Our Story",
+  storyBody: "<p>Read about how we met and fell in love.</p>",
+  detailsTitle: "When & Where",
+  detailsBody: "<p>Find all the details about our venue and schedule here.</p>",
+};
 
 export default function HomeEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
 
-  const [content, setContent] = useState<HomeContent>(() => {
-    const c = event.draft_content ?? event.content;
-    return (c as HomeContent) ?? {};
-  });
-  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [content, setContent] = useState<HomeContent>(
+    (event.draft_content ?? event.content ?? DEFAULT_CONTENT) as HomeContent,
+  );
 
   useEffect(() => {
-    const c = event.draft_content ?? event.content;
-    setContent((c as HomeContent) ?? {});
+    setContent(
+      (event.draft_content ?? event.content ?? DEFAULT_CONTENT) as HomeContent,
+    );
   }, [event]);
+
+  const themeConfig = (event.draft_theme ?? event.theme ?? {}) as unknown as ThemeConfig;
+  const fullTheme = Object.keys(themeConfig).length
+    ? themeConfig
+    : simplifiedToFullTheme(fullToSimplifiedTheme({} as ThemeConfig));
+
+  const previewEvent: Partial<UserEvent> = {
+    ...event,
+    content: content as unknown as Json,
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("user_events")
-        .update({
-          draft_content: content as unknown as Json,
-        })
+        .update({ draft_content: content as unknown as Json })
         .eq("id", event.id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user_events", event.id] });
-      setSavedMsg("Saved successfully");
-      setTimeout(() => setSavedMsg(null), 3000);
+      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
     },
   });
 
-  const previewEvent = {
-    ...event,
-    draft_content: content as unknown as Json,
-  };
+  const update = (patch: Partial<HomeContent>) => setContent({ ...content, ...patch });
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-dash-text">Home Page</h2>
-          <p className="text-sm text-dash-muted">Edit the content sections of your home page.</p>
-        </div>
-        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-          Save Changes
-        </Button>
-      </div>
-      {saveMutation.isError && (
-        <p className="text-sm text-dash-danger">
-          {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save"}
-        </p>
-      )}
-      {savedMsg && <p className="text-sm text-green-600">{savedMsg}</p>}
-
-      <SplitEditor
-        editor={
-          <div className="space-y-4">
-            <Card>
-              <h3 className="mb-3 text-sm font-semibold text-dash-text">Welcome Message</h3>
-              <RichTextEditor
-                value={content.welcome ?? ""}
-                onChange={(html) => setContent({ ...content, welcome: html })}
-                placeholder="Write a welcome message for your guests…"
-              />
-            </Card>
-            <Card>
-              <h3 className="mb-3 text-sm font-semibold text-dash-text">Our Story</h3>
-              <RichTextEditor
-                value={content.story ?? ""}
-                onChange={(html) => setContent({ ...content, story: html })}
-                placeholder="Tell your love story…"
-              />
-            </Card>
-            <Card>
-              <h3 className="mb-3 text-sm font-semibold text-dash-text">Event Details</h3>
-              <RichTextEditor
-                value={content.details ?? ""}
-                onChange={(html) => setContent({ ...content, details: html })}
-                placeholder="Add any additional details about the event…"
-              />
-            </Card>
+    <SplitEditor
+      editorRatio={0.45}
+      editor={
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-dash-text">Home Editor</h2>
+            <Button
+              size="sm"
+              onClick={() => saveMutation.mutate()}
+              loading={saveMutation.isPending}
+            >
+              Save Changes
+            </Button>
           </div>
-        }
-        preview={<HomePreview event={previewEvent} />}
-      />
-    </div>
+
+          {saveMutation.isSuccess && (
+            <p className="text-sm text-green-600">Saved successfully!</p>
+          )}
+          {saveMutation.isError && (
+            <p className="text-sm text-dash-danger">
+              {saveMutation.error instanceof Error
+                ? saveMutation.error.message
+                : "Failed to save"}
+            </p>
+          )}
+
+          {/* Section 1: Welcome */}
+          <div className="space-y-3 rounded-lg border border-dash-border p-4">
+            <h3 className="text-sm font-semibold text-dash-text">Welcome Section</h3>
+            <input
+              type="text"
+              placeholder="Section title"
+              value={content.welcomeTitle ?? ""}
+              onChange={(e) => update({ welcomeTitle: e.target.value })}
+              className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+            />
+            <RichTextEditor
+              value={content.welcomeBody ?? ""}
+              onChange={(html: string) => update({ welcomeBody: html })}
+              placeholder="Welcome message..."
+            />
+          </div>
+
+          {/* Section 2: Story */}
+          <div className="space-y-3 rounded-lg border border-dash-border p-4">
+            <h3 className="text-sm font-semibold text-dash-text">Our Story Section</h3>
+            <input
+              type="text"
+              placeholder="Section title"
+              value={content.storyTitle ?? ""}
+              onChange={(e) => update({ storyTitle: e.target.value })}
+              className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+            />
+            <RichTextEditor
+              value={content.storyBody ?? ""}
+              onChange={(html: string) => update({ storyBody: html })}
+              placeholder="Tell your story..."
+            />
+          </div>
+
+          {/* Section 3: Details */}
+          <div className="space-y-3 rounded-lg border border-dash-border p-4">
+            <h3 className="text-sm font-semibold text-dash-text">Details Section</h3>
+            <input
+              type="text"
+              placeholder="Section title"
+              value={content.detailsTitle ?? ""}
+              onChange={(e) => update({ detailsTitle: e.target.value })}
+              className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+            />
+            <RichTextEditor
+              value={content.detailsBody ?? ""}
+              onChange={(html: string) => update({ detailsBody: html })}
+              placeholder="Event details..."
+            />
+          </div>
+        </div>
+      }
+      preview={
+        <EventThemeProvider initialTheme={fullTheme}>
+          <HomePreview event={previewEvent} />
+        </EventThemeProvider>
+      }
+    />
   );
 }

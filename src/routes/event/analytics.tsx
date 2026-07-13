@@ -1,14 +1,15 @@
+import React from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventRsvp, type SharingEvent } from "../../lib/supabase";
+import { supabase, type UserEvent } from "../../lib/supabase";
+import { Card, LoadingSpinner, ErrorState, Badge } from "../../components/ui";
 import { formatDate } from "../../lib/utils";
-import { Card, LoadingSpinner, ErrorState, Badge, EmptyState } from "../../components/ui";
 
-export default function AnalyticsPage() {
+export default function Analytics() {
   const { event } = useOutletContext<{ event: UserEvent }>();
 
-  const { data: sharingEvents, isLoading: viewsLoading, isError: viewsError } = useQuery({
-    queryKey: ["sharing_events", event.id],
+  const { data: views, isLoading: viewsLoading, isError: viewsError, refetch: refetchViews } = useQuery({
+    queryKey: ["analytics-views", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sharing_events")
@@ -16,12 +17,12 @@ export default function AnalyticsPage() {
         .eq("wedding_id", event.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as SharingEvent[];
+      return data;
     },
   });
 
-  const { data: rsvps, isLoading: rsvpsLoading, isError: rsvpsError } = useQuery({
-    queryKey: ["event_rsvps", event.id],
+  const { data: rsvps, isLoading: rsvpsLoading, isError: rsvpsError, refetch: refetchRsvps } = useQuery({
+    queryKey: ["analytics-rsvps", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_rsvps")
@@ -29,125 +30,148 @@ export default function AnalyticsPage() {
         .eq("event_id", event.id)
         .order("submitted_at", { ascending: false });
       if (error) throw error;
-      return data as EventRsvp[];
+      return data;
     },
   });
 
-  const isLoading = viewsLoading || rsvpsLoading;
-  const isError = viewsError || rsvpsError;
+  const totalViews = views?.length ?? 0;
+  const totalRsvps = rsvps?.length ?? 0;
+  const attending = rsvps?.filter((r) => r.status === "attending").length ?? 0;
+  const declined = rsvps?.filter((r) => r.status === "declined").length ?? 0;
+  const pending = rsvps?.filter((r) => r.status === "pending").length ?? 0;
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-  if (isError) {
-    return <ErrorState message="Failed to load analytics data." />;
-  }
+  const viewsBySource: Record<string, number> = {};
+  views?.forEach((v) => {
+    const src = v.source ?? "unknown";
+    viewsBySource[src] = (viewsBySource[src] ?? 0) + 1;
+  });
 
-  const views = sharingEvents ?? [];
-  const rsvpList = rsvps ?? [];
-  const totalViews = views.length;
-  const uniqueGuests = new Set(views.map((v) => v.guest_id).filter(Boolean)).size;
-  const totalRsvps = rsvpList.length;
-  const attending = rsvpList.filter((r) => r.status === "attending" || r.status === "yes").length;
-  const declined = rsvpList.filter((r) => r.status === "declined" || r.status === "no").length;
-  const pending = rsvpList.filter((r) => r.status === "pending").length;
-
-  const stats = [
-    { label: "Total Views", value: totalViews, icon: "👁" },
-    { label: "Unique Guests", value: uniqueGuests, icon: "👥" },
-    { label: "Total RSVPs", value: totalRsvps, icon: "📝" },
-    { label: "Attending", value: attending, icon: "✓" },
-    { label: "Declined", value: declined, icon: "✕" },
-    { label: "Pending", value: pending, icon: "⏳" },
-  ];
+  const viewsByDevice: Record<string, number> = {};
+  views?.forEach((v) => {
+    const dev = v.device_type ?? "unknown";
+    viewsByDevice[dev] = (viewsByDevice[dev] ?? 0) + 1;
+  });
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-4xl space-y-6 p-6">
       <div>
-        <h2 className="text-xl font-bold text-dash-text">Analytics</h2>
-        <p className="text-sm text-dash-muted">Track views and RSVP responses for your website.</p>
+        <h2 className="text-lg font-semibold text-dash-text">Analytics</h2>
+        <p className="mt-1 text-sm text-dash-muted">Track views and RSVP responses.</p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="text-center">
-            <div className="text-2xl">{stat.icon}</div>
-            <div className="mt-1 text-2xl font-bold text-dash-text">{stat.value}</div>
-            <div className="text-xs text-dash-muted">{stat.label}</div>
-          </Card>
-        ))}
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard label="Total Views" value={totalViews} loading={viewsLoading} />
+        <StatCard label="Total RSVPs" value={totalRsvps} loading={rsvpsLoading} />
+        <StatCard label="Attending" value={attending} loading={rsvpsLoading} />
+        <StatCard label="Declined" value={declined} loading={rsvpsLoading} />
       </div>
+
+      {/* RSVP Breakdown */}
+      <Card className="p-5">
+        <h3 className="text-sm font-semibold text-dash-text">RSVP Breakdown</h3>
+        {rsvpsLoading ? (
+          <div className="mt-4"><LoadingSpinner /></div>
+        ) : rsvpsError ? (
+          <div className="mt-4"><ErrorState onRetry={() => refetchRsvps()} /></div>
+        ) : (
+          <div className="mt-4 space-y-2">
+            <StatBar label="Attending" value={attending} total={totalRsvps} color="bg-green-500" />
+            <StatBar label="Declined" value={declined} total={totalRsvps} color="bg-red-500" />
+            <StatBar label="Pending" value={pending} total={totalRsvps} color="bg-amber-500" />
+          </div>
+        )}
+      </Card>
+
+      {/* Views by Source */}
+      <Card className="p-5">
+        <h3 className="text-sm font-semibold text-dash-text">Views by Source</h3>
+        {viewsLoading ? (
+          <div className="mt-4"><LoadingSpinner /></div>
+        ) : viewsError ? (
+          <div className="mt-4"><ErrorState onRetry={() => refetchViews()} /></div>
+        ) : Object.keys(viewsBySource).length === 0 ? (
+          <p className="mt-4 text-sm text-dash-muted">No views yet.</p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {Object.entries(viewsBySource).map(([source, count]) => (
+              <div key={source} className="flex items-center justify-between text-sm">
+                <span className="capitalize text-dash-text">{source}</span>
+                <Badge>{count}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Views by Device */}
+      <Card className="p-5">
+        <h3 className="text-sm font-semibold text-dash-text">Views by Device</h3>
+        {viewsLoading ? (
+          <div className="mt-4"><LoadingSpinner /></div>
+        ) : Object.keys(viewsByDevice).length === 0 ? (
+          <p className="mt-4 text-sm text-dash-muted">No views yet.</p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {Object.entries(viewsByDevice).map(([device, count]) => (
+              <div key={device} className="flex items-center justify-between text-sm">
+                <span className="capitalize text-dash-text">{device}</span>
+                <Badge>{count}</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       {/* Recent Views */}
-      <Card>
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Recent Views</h3>
-        {views.length === 0 ? (
-          <EmptyState title="No views yet" description="Share your website URL to start tracking views." />
+      <Card className="p-5">
+        <h3 className="text-sm font-semibold text-dash-text">Recent Views</h3>
+        {viewsLoading ? (
+          <div className="mt-4"><LoadingSpinner /></div>
+        ) : !views || views.length === 0 ? (
+          <p className="mt-4 text-sm text-dash-muted">No views yet.</p>
         ) : (
-          <div className="space-y-2">
-            {views.slice(0, 20).map((v) => (
-              <div
-                key={v.id}
-                className="flex items-center justify-between rounded-lg border border-dash-border bg-dash-bg px-3 py-2"
-              >
-                <div className="flex items-center gap-2">
-                  <Badge variant="info">{v.event_type}</Badge>
-                  <span className="text-sm text-dash-muted">{v.source || "direct"}</span>
-                  {v.device_type && (
-                    <span className="text-xs text-dash-muted">• {v.device_type}</span>
-                  )}
+          <div className="mt-4 space-y-2">
+            {views.slice(0, 10).map((v) => (
+              <div key={v.id} className="flex items-center justify-between border-b border-dash-border pb-2 text-sm last:border-0">
+                <span className="text-dash-text">{formatDate(v.created_at)}</span>
+                <div className="flex gap-2">
+                  {v.source && <Badge variant="info">{v.source}</Badge>}
+                  {v.device_type && <Badge>{v.device_type}</Badge>}
                 </div>
-                <span className="text-xs text-dash-muted">
-                  {formatDate(v.created_at)}
-                </span>
               </div>
             ))}
           </div>
         )}
       </Card>
+    </div>
+  );
+}
 
-      {/* Recent RSVPs */}
-      <Card>
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Recent RSVPs</h3>
-        {rsvpList.length === 0 ? (
-          <EmptyState title="No RSVPs yet" description="RSVP responses will appear here once guests respond." />
-        ) : (
-          <div className="space-y-2">
-            {rsvpList.slice(0, 20).map((r) => (
-              <div
-                key={r.id}
-                className="flex items-center justify-between rounded-lg border border-dash-border bg-dash-bg px-3 py-2"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-dash-text">{r.guest_name}</span>
-                  {r.plus_ones > 0 && (
-                    <span className="text-xs text-dash-muted">+{r.plus_ones}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant={
-                      r.status === "attending" || r.status === "yes"
-                        ? "success"
-                        : r.status === "declined" || r.status === "no"
-                        ? "danger"
-                        : "warning"
-                    }
-                  >
-                    {r.status}
-                  </Badge>
-                  <span className="text-xs text-dash-muted">{formatDate(r.submitted_at)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
+function StatCard({ label, value, loading }: { label: string; value: number; loading: boolean }) {
+  return (
+    <Card className="p-4">
+      <p className="text-xs font-medium uppercase text-dash-muted">{label}</p>
+      {loading ? (
+        <div className="mt-2"><LoadingSpinner className="h-4 w-4" /></div>
+      ) : (
+        <p className="mt-1 text-2xl font-bold text-dash-text">{value}</p>
+      )}
+    </Card>
+  );
+}
+
+function StatBar({ label, value, total, color }: { label: string; value: number; total: number; color: string }) {
+  const pct = total > 0 ? (value / total) * 100 : 0;
+  return (
+    <div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-dash-text">{label}</span>
+        <span className="text-dash-muted">{value} ({pct.toFixed(0)}%)</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-dash-border">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }

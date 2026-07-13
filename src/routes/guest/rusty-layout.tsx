@@ -1,18 +1,11 @@
-import { useEffect } from "react";
+import React from "react";
 import { Link, NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/supabase";
-import { useGuestAuth } from "../../lib/guest-auth";
+import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME, type ThemeConfig } from "../../lib/theme";
+import { RUSTY_THEME } from "../../lib/theme";
+import { useGuestAuth } from "../../lib/guest-auth";
 import { cn } from "../../lib/utils";
-
-function parseTheme(theme: Json | null | undefined): ThemeConfig {
-  if (theme && typeof theme === "object" && !Array.isArray(theme)) {
-    return { ...RUSTY_THEME, ...(theme as Partial<ThemeConfig>) };
-  }
-  return RUSTY_THEME;
-}
 
 const BASE_NAV = [
   { label: "Home", to: "home", end: false },
@@ -27,14 +20,8 @@ export default function RustyLayout() {
   const navigate = useNavigate();
   const { guestName, eventId, signOut } = useGuestAuth();
 
-  useEffect(() => {
-    if (!guestName || !eventId) {
-      navigate(`/r/${slug}`, { replace: true });
-    }
-  }, [guestName, eventId, slug, navigate]);
-
   const { data: event, isLoading, isError } = useQuery({
-    queryKey: ["user_events", "slug", slug],
+    queryKey: ["guest-event", slug],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
@@ -49,11 +36,11 @@ export default function RustyLayout() {
   });
 
   const { data: navPages } = useQuery({
-    queryKey: ["custom_pages", "nav", event?.id],
+    queryKey: ["guest-nav-pages", event?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
-        .select("id, slug, nav_label, title, show_in_nav, is_footer, is_published, event_id")
+        .select("*")
         .eq("event_id", event!.id)
         .eq("show_in_nav", true)
         .eq("is_published", true)
@@ -61,15 +48,15 @@ export default function RustyLayout() {
       if (error) throw error;
       return (data ?? []) as CustomPage[];
     },
-    enabled: !!event,
+    enabled: !!event?.id,
   });
 
   const { data: footerPages } = useQuery({
-    queryKey: ["custom_pages", "footer", event?.id],
+    queryKey: ["guest-footer-pages", event?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
-        .select("id, slug, nav_label, title, is_footer, is_published, event_id")
+        .select("*")
         .eq("event_id", event!.id)
         .eq("is_footer", true)
         .eq("is_published", true)
@@ -77,92 +64,132 @@ export default function RustyLayout() {
       if (error) throw error;
       return (data ?? []) as CustomPage[];
     },
-    enabled: !!event,
+    enabled: !!event?.id,
   });
 
-  if (!guestName || !eventId) return null;
+  // Redirect to cover if not signed in for this event
+  React.useEffect(() => {
+    if (!isLoading && event && (!guestName || eventId !== event.id)) {
+      navigate(`/r/${slug}`, { replace: true });
+    }
+  }, [isLoading, event, guestName, eventId, slug, navigate]);
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-pulse opacity-70">Loading…</div>
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <div className="animate-pulse text-gray-400">Loading…</div>
       </div>
     );
   }
 
   if (isError || !event) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
-        <h1 className="text-2xl font-bold">Invitation not found</h1>
-        <p className="max-w-md opacity-80">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-50 px-6 text-center">
+        <p className="text-lg text-gray-600">
           This invitation website could not be found or is no longer available.
         </p>
-        <Link to="/" className="underline">Go to homepage</Link>
+        <Link to="/" className="text-sm font-semibold text-blue-600 hover:underline">
+          Go to homepage
+        </Link>
       </div>
     );
   }
 
-  const theme = parseTheme(event.theme);
-  const customNav = (navPages ?? []).map((p) => ({
-    label: p.nav_label || p.title,
-    to: `p/${p.slug}`,
-    end: false,
-  }));
+  if (!guestName || eventId !== event.id) {
+    return null;
+  }
+
+  const handleSignOut = () => {
+    signOut();
+    navigate(`/r/${slug}`);
+  };
 
   return (
-    <EventThemeProvider theme={theme}>
+    <EventThemeProvider initialTheme={RUSTY_THEME}>
       <div className="flex min-h-screen flex-col">
-        <header
-          className="sticky top-0 z-40 border-b"
-          style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}
-        >
-          <div className="mx-auto max-w-5xl px-4 py-3">
-            <div className="flex items-center justify-between">
-              <Link to={`/r/${slug}/home`} className="text-lg font-bold">{event.name}</Link>
-              <span className="text-sm opacity-70">Welcome, {guestName}</span>
+        {/* Header / Nav */}
+        <header className="sticky top-0 z-20 border-b" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
+          <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+            <Link to={`/r/${slug}/home`} className="text-lg font-bold" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>
+              {event.name}
+            </Link>
+            <div className="text-sm" style={{ color: "var(--event-muted)" }}>
+              Hi, {guestName}
             </div>
           </div>
-          <nav className="mx-auto max-w-5xl px-4">
-            <div className="flex gap-1 overflow-x-auto pb-px">
-              {[...BASE_NAV, ...customNav].map((tab) => (
-                <NavLink
-                  key={tab.to}
-                  to={tab.to}
-                  end={tab.end}
-                  className={({ isActive }) =>
-                    cn(
-                      "whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
-                      isActive ? "border-current" : "border-transparent opacity-70 hover:opacity-100"
-                    )
-                  }
-                >
-                  {tab.label}
-                </NavLink>
-              ))}
-            </div>
+          <nav className="mx-auto flex max-w-4xl items-center gap-1 overflow-x-auto px-4 pb-2 scrollbar-thin">
+            {BASE_NAV.map((tab) => (
+              <NavLink
+                key={tab.label}
+                to={tab.to}
+                end={tab.end}
+                className={({ isActive }) =>
+                  cn(
+                    "whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                    isActive ? "text-white" : "hover:opacity-80",
+                  )
+                }
+                style={({ isActive }) => ({
+                  backgroundColor: isActive ? "var(--event-primary)" : "transparent",
+                  color: isActive ? "var(--event-primary-fg)" : "var(--event-muted)",
+                })}
+              >
+                {tab.label}
+              </NavLink>
+            ))}
+            {(navPages ?? []).map((page) => (
+              <NavLink
+                key={page.id}
+                to={`p/${page.slug}`}
+                className={({ isActive }) =>
+                  cn(
+                    "whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                    isActive ? "text-white" : "hover:opacity-80",
+                  )
+                }
+                style={({ isActive }) => ({
+                  backgroundColor: isActive ? "var(--event-primary)" : "transparent",
+                  color: isActive ? "var(--event-primary-fg)" : "var(--event-muted)",
+                })}
+              >
+                {page.nav_label || page.title}
+              </NavLink>
+            ))}
           </nav>
         </header>
 
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
+        {/* Main content */}
+        <main className="flex-1">
           <Outlet context={{ event }} />
         </main>
 
-        <footer
-          className="border-t"
-          style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}
-        >
-          <div className="mx-auto max-w-5xl px-4 py-6 text-center text-sm opacity-70">
+        {/* Footer */}
+        <footer className="border-t px-4 py-8" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
+          <div className="mx-auto max-w-4xl text-center">
             {(footerPages ?? []).length > 0 && (
-              <div className="mb-3 flex flex-wrap justify-center gap-4">
-                {(footerPages ?? []).map((p) => (
-                  <Link key={p.id} to={`/r/${slug}/p/${p.slug}`} className="hover:underline">
-                    {p.nav_label || p.title}
+              <div className="mb-4 flex flex-wrap justify-center gap-4">
+                {(footerPages ?? []).map((page) => (
+                  <Link
+                    key={page.id}
+                    to={`p/${page.slug}`}
+                    className="text-sm hover:underline"
+                    style={{ color: "var(--event-muted)" }}
+                  >
+                    {page.nav_label || page.title}
                   </Link>
                 ))}
               </div>
             )}
-            <button onClick={() => signOut()} className="underline">Sign out</button>
-            <p className="mt-2">Powered by MyWedly</p>
+            <p className="text-sm" style={{ color: "var(--event-muted)" }}>
+              {event.name}
+            </p>
+            <button
+              onClick={handleSignOut}
+              className="mt-2 text-xs hover:underline"
+              style={{ color: "var(--event-muted)" }}
+            >
+              Sign out
+            </button>
           </div>
         </footer>
       </div>

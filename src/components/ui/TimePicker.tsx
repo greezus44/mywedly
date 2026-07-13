@@ -1,83 +1,100 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { cn, formatTime12, to12Hour, to24Hour } from "../../lib/utils";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { cn } from "../../lib/utils";
+import { to12Hour, to24Hour, roundTo5Min } from "../../lib/utils";
 
-interface TimePickerProps {
+export interface TimePickerProps {
   value: string | null; // "HH:MM" 24-hour
-  onChange: (value: string | null) => void;
+  onChange: (time: string | null) => void;
+  className?: string;
   label?: string;
   placeholder?: string;
-  className?: string;
 }
 
-function roundTo5(minute: number): number {
-  return Math.round(minute / 5) * 5 % 60;
-}
-
-export function TimePicker({ value, onChange, label, placeholder = "Select time", className }: TimePickerProps) {
+export function TimePicker({
+  value,
+  onChange,
+  className,
+  label,
+  placeholder = "Select time",
+}: TimePickerProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const initial = useMemo(() => to12Hour(value), [value]);
-  const [hour, setHour] = useState<number>(initial.hour);
-  const [minute, setMinute] = useState<number>(roundTo5(initial.minute));
-  const [period, setPeriod] = useState<"AM" | "PM">(initial.period);
+  const [hour, setHour] = useState<number>(12);
+  const [minute, setMinute] = useState<number>(0);
+  const [period, setPeriod] = useState<"AM" | "PM">("AM");
 
+  // Parse value into internal state
   useEffect(() => {
-    const p = to12Hour(value);
-    setHour(p.hour);
-    setMinute(roundTo5(p.minute));
-    setPeriod(p.period);
+    if (value) {
+      const [hStr, mStr] = value.split(":");
+      let h = parseInt(hStr, 10);
+      const m = parseInt(mStr, 10);
+      if (!isNaN(h) && !isNaN(m)) {
+        const p = h >= 12 ? "PM" : "AM";
+        h = h % 12;
+        if (h === 0) h = 12;
+        setHour(h);
+        setMinute(m);
+        setPeriod(p);
+      }
+    }
   }, [value]);
 
   useEffect(() => {
-    if (!open) return;
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     };
-    window.addEventListener("mousedown", handler);
-    return () => window.removeEventListener("mousedown", handler);
-  }, [open]);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
-  const hours = useMemo(() => Array.from({ length: 12 }, (_, i) => i + 1), []);
-  const minutes = useMemo(() => Array.from({ length: 12 }, (_, i) => i * 5), []);
-
-  const apply = () => {
-    onChange(to24Hour(hour, minute, period));
-    setOpen(false);
+  const commit = (h: number, m: number, p: "AM" | "PM") => {
+    let h24 = h % 12;
+    if (p === "PM") h24 += 12;
+    const time24 = `${String(h24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    onChange(roundTo5Min(time24));
   };
 
-  const clear = () => {
-    onChange(null);
-    setOpen(false);
-  };
+  const hours = Array.from({ length: 12 }, (_, i) => i + 1);
+  const minutes = Array.from({ length: 12 }, (_, i) => i * 5);
+
+  const displayValue = value ? to12Hour(value) : "";
 
   return (
-    <div className={cn("flex flex-col gap-1", className)} ref={containerRef}>
-      {label && <label className="text-sm font-medium text-dash-text">{label}</label>}
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-left text-sm text-dash-text hover:border-dash-primary focus:outline-none focus:ring-1 focus:ring-dash-primary"
-        >
-          {value ? formatTime12(value) : <span className="text-dash-muted">{placeholder}</span>}
-        </button>
-        {open && (
-          <div className="absolute z-30 mt-1 flex gap-3 rounded-lg border border-dash-border bg-dash-surface p-3 shadow-lg">
-            {/* Hour */}
-            <div className="flex flex-col gap-1">
-              <span className="text-center text-xs font-medium text-dash-muted">Hour</span>
-              <div className="h-40 w-14 overflow-y-auto scrollbar-thin">
+    <div className={cn("relative w-full", className)} ref={containerRef}>
+      {label && <span className="block text-sm font-medium text-dash-text mb-1">{label}</span>}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          "flex w-full items-center justify-between rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text",
+          "focus:outline-none focus:ring-2 focus:ring-dash-primary/40 focus:border-dash-primary",
+        )}
+      >
+        <span className={cn(!value && "text-dash-muted")}>{displayValue || placeholder}</span>
+        <span className="text-dash-muted">🕐</span>
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 rounded-xl border border-dash-border bg-dash-surface p-3 shadow-lg animate-slideUp">
+          <div className="flex gap-4">
+            <div className="flex flex-col">
+              <span className="mb-1 text-xs font-medium text-dash-muted">Hour</span>
+              <div className="max-h-40 overflow-y-auto scrollbar-thin">
                 {hours.map((h) => (
                   <button
                     key={h}
                     type="button"
-                    onClick={() => setHour(h)}
+                    onClick={() => {
+                      setHour(h);
+                      commit(h, minute, period);
+                    }}
                     className={cn(
-                      "block w-full rounded p-1.5 text-center text-sm",
-                      h === hour ? "bg-dash-primary text-dash-primary-fg" : "text-dash-text hover:bg-dash-bg"
+                      "block w-12 rounded px-2 py-1 text-sm",
+                      hour === h ? "bg-dash-primary text-dash-primary-fg font-semibold" : "text-dash-text hover:bg-dash-bg",
                     )}
                   >
                     {h}
@@ -85,65 +102,56 @@ export function TimePicker({ value, onChange, label, placeholder = "Select time"
                 ))}
               </div>
             </div>
-            {/* Minute */}
-            <div className="flex flex-col gap-1">
-              <span className="text-center text-xs font-medium text-dash-muted">Min</span>
-              <div className="h-40 w-14 overflow-y-auto scrollbar-thin">
+            <div className="flex flex-col">
+              <span className="mb-1 text-xs font-medium text-dash-muted">Min</span>
+              <div className="max-h-40 overflow-y-auto scrollbar-thin">
                 {minutes.map((m) => (
                   <button
                     key={m}
                     type="button"
-                    onClick={() => setMinute(m)}
+                    onClick={() => {
+                      setMinute(m);
+                      commit(hour, m, period);
+                    }}
                     className={cn(
-                      "block w-full rounded p-1.5 text-center text-sm",
-                      m === minute ? "bg-dash-primary text-dash-primary-fg" : "text-dash-text hover:bg-dash-bg"
+                      "block w-12 rounded px-2 py-1 text-sm",
+                      minute === m ? "bg-dash-primary text-dash-primary-fg font-semibold" : "text-dash-text hover:bg-dash-bg",
                     )}
                   >
-                    {m.toString().padStart(2, "0")}
+                    {String(m).padStart(2, "0")}
                   </button>
                 ))}
               </div>
             </div>
-            {/* AM/PM */}
-            <div className="flex flex-col gap-1">
-              <span className="text-center text-xs font-medium text-dash-muted">AM/PM</span>
-              <div className="flex flex-col gap-1">
-                {(["AM", "PM"] as const).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPeriod(p)}
-                    className={cn(
-                      "rounded p-2 text-center text-sm",
-                      p === period ? "bg-dash-primary text-dash-primary-fg" : "text-dash-text hover:bg-dash-bg"
-                    )}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex flex-col justify-end gap-1">
-              <button
-                type="button"
-                onClick={apply}
-                className="rounded bg-dash-primary px-3 py-1.5 text-xs font-medium text-dash-primary-fg hover:bg-dash-primary-hover"
-              >
-                OK
-              </button>
-              {value && (
+            <div className="flex flex-col">
+              <span className="mb-1 text-xs font-medium text-dash-muted">AM/PM</span>
+              {(["AM", "PM"] as const).map((p) => (
                 <button
+                  key={p}
                   type="button"
-                  onClick={clear}
-                  className="rounded border border-dash-border px-3 py-1.5 text-xs text-dash-muted hover:bg-dash-bg"
+                  onClick={() => {
+                    setPeriod(p);
+                    commit(hour, minute, p);
+                  }}
+                  className={cn(
+                    "block w-14 rounded px-2 py-1 text-sm",
+                    period === p ? "bg-dash-primary text-dash-primary-fg font-semibold" : "text-dash-text hover:bg-dash-bg",
+                  )}
                 >
-                  Clear
+                  {p}
                 </button>
-              )}
+              ))}
             </div>
           </div>
-        )}
-      </div>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="mt-2 w-full rounded-lg border border-dash-border px-3 py-1.5 text-sm text-dash-text hover:bg-dash-bg"
+          >
+            Done
+          </button>
+        </div>
+      )}
     </div>
   );
 }

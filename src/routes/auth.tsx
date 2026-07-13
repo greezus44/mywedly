@@ -1,11 +1,11 @@
-import { useState, type FormEvent } from "react";
+import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui";
+import { Input } from "../components/ui/Input";
 import { LoadingSpinner } from "../components/ui";
 
-export default function AuthPage() {
+export default function Auth() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -13,7 +13,7 @@ export default function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -37,59 +37,51 @@ export default function AuthPage() {
     <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <Link to="/" className="inline-flex items-center gap-2">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-dash-primary text-dash-primary-fg font-bold text-lg">
-              M
+          <Link to="/" className="inline-block">
+            <span className="text-2xl font-bold tracking-tight text-dash-text">
+              My<span className="text-dash-primary">Wedly</span>
             </span>
-            <span className="text-2xl font-bold text-dash-text">MyWedly</span>
           </Link>
         </div>
+
         <div className="rounded-xl border border-dash-border bg-dash-surface p-8 shadow-sm">
           <h1 className="text-2xl font-bold text-dash-text">
             {mode === "signin" ? "Welcome back" : "Create your account"}
           </h1>
           <p className="mt-1 text-sm text-dash-muted">
             {mode === "signin"
-              ? "Sign in to manage your event websites."
-              : "Sign up to create your first event website."}
+              ? "Sign in to manage your invitation websites."
+              : "Start creating beautiful invitation websites in minutes."}
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <Input
               type="email"
               label="Email"
+              placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
               required
               autoComplete="email"
             />
             <Input
               type="password"
               label="Password"
+              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
               required
               autoComplete={mode === "signin" ? "current-password" : "new-password"}
-              minLength={6}
             />
+
             {error && (
-              <p className="rounded-lg border border-dash-danger/30 bg-dash-danger/5 px-3 py-2 text-sm text-dash-danger">
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {error}
-              </p>
+              </div>
             )}
+
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <LoadingSpinner size="sm" />
-                  <span>{mode === "signin" ? "Signing in…" : "Signing up…"}</span>
-                </>
-              ) : mode === "signin" ? (
-                "Sign in"
-              ) : (
-                "Sign up"
-              )}
+              {loading ? "Please wait…" : mode === "signin" ? "Sign in" : "Sign up"}
             </Button>
           </form>
 
@@ -103,7 +95,7 @@ export default function AuthPage() {
                     setMode("signup");
                     setError(null);
                   }}
-                  className="font-medium text-dash-primary hover:underline"
+                  className="font-semibold text-dash-primary hover:underline"
                 >
                   Sign up
                 </button>
@@ -117,7 +109,7 @@ export default function AuthPage() {
                     setMode("signin");
                     setError(null);
                   }}
-                  className="font-medium text-dash-primary hover:underline"
+                  className="font-semibold text-dash-primary hover:underline"
                 >
                   Sign in
                 </button>
