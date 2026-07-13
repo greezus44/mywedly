@@ -2,9 +2,10 @@ import React from "react";
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-slate-200 py-8">
-      <div className="max-w-6xl mx-auto px-4 text-center text-sm text-slate-500">
-        <p>&copy; {new Date().getFullYear()} MyWedly. All rights reserved.</p>
+    <footer className="border-t border-dash-border bg-dash-surface">
+      <div className="max-w-6xl mx-auto px-4 py-8 text-center">
+        <p className="text-sm text-dash-muted">MyWedly — Invitation Website Builder</p>
+        <p className="text-xs text-dash-muted mt-1">Create beautiful invitation websites for any event.</p>
       </div>
     </footer>
   );

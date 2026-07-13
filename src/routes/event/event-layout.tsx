@@ -1,22 +1,22 @@
-import React from "react";
-import { useParams, Outlet, Link, NavLink } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate, NavLink, Outlet } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { Badge } from "../../components/ui";
-import { ArrowLeft, Globe } from "lucide-react";
+import { cn } from "../../lib/utils";
 
 const NAV_TABS = [
-  { path: "cover", label: "Cover" },
+  { path: "", label: "Cover", end: true },
   { path: "login", label: "Login" },
   { path: "home", label: "Home" },
-  { path: "theme", label: "Theme" },
   { path: "events", label: "Events" },
   { path: "guests", label: "Guests" },
-  { path: "groups", label: "Groups" },
+  { path: "groups", label: "Guest Groups" },
   { path: "rsvp", label: "RSVP" },
-  { path: "timeline", label: "Timeline" },
+  { path: "timeline", label: "Schedule" },
   { path: "pages", label: "Pages" },
+  { path: "theme", label: "Theme" },
   { path: "sharing", label: "Sharing" },
   { path: "analytics", label: "Analytics" },
   { path: "settings", label: "Settings" },
@@ -24,95 +24,137 @@ const NAV_TABS = [
 
 export default function EventLayout() {
   const { eventId } = useParams<{ eventId: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [publishing, setPublishing] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) navigate("/auth");
+    });
+  }, [navigate]);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId).single();
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("id", eventId!)
+        .maybeSingle();
       if (error) throw error;
-      return data as UserEvent;
+      return data as UserEvent | null;
     },
     enabled: !!eventId,
   });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      const updates: Record<string, any> = { is_published: true, published_at: new Date().toISOString() };
-      if (event?.draft_name) updates.name = event.draft_name;
-      if (event?.draft_event_type) updates.event_type = event.draft_event_type;
-      if (event?.draft_event_date !== undefined) updates.event_date = event.draft_event_date;
-      if (event?.draft_event_time !== undefined) updates.event_time = event.draft_event_time;
-      if (event?.draft_venue !== undefined) updates.venue = event.draft_venue;
-      if (event?.draft_address !== undefined) updates.address = event.draft_address;
-      if (event?.draft_cover_image !== undefined) updates.cover_image = event.draft_cover_image;
-      if (event?.draft_cover_config) updates.cover_config = event.draft_cover_config;
-      if (event?.draft_login_config) updates.login_config = event.draft_login_config;
-      if (event?.draft_theme) updates.theme = event.draft_theme;
-      if (event?.draft_logo_config) updates.logo_config = event.draft_logo_config;
-      if (event?.draft_content) updates.content = event.draft_content;
-      if (event?.draft_sharing_config) updates.sharing_config = event.draft_sharing_config;
-      if (event?.draft_slug) updates.slug = event.draft_slug;
-      if (event?.draft_rsvp_deadline !== undefined) updates.rsvp_deadline = event.draft_rsvp_deadline;
-      const { data, error } = await supabase.from("user_events").update(updates).eq("id", eventId).select().single();
+      setPublishing(true);
+      const updates: Record<string, any> = {
+        is_published: true,
+        published_at: new Date().toISOString(),
+        name: event?.draft_name || event?.name,
+        event_type: event?.draft_event_type || event?.event_type,
+        event_date: event?.draft_event_date || event?.event_date,
+        event_time: event?.draft_event_time || event?.event_time,
+        venue: event?.draft_venue || event?.venue,
+        address: event?.draft_address || event?.address,
+        cover_image: event?.draft_cover_image || event?.cover_image,
+        cover_config: event?.draft_cover_config || event?.cover_config,
+        login_config: event?.draft_login_config || event?.login_config,
+        theme: event?.draft_theme || event?.theme,
+        logo_config: event?.draft_logo_config || event?.logo_config,
+        content: event?.draft_content || event?.content,
+        sharing_config: event?.draft_sharing_config || event?.sharing_config,
+        slug: event?.draft_slug || event?.slug,
+        rsvp_deadline: event?.draft_rsvp_deadline || event?.rsvp_deadline,
+      };
+
+      const { data, error } = await supabase
+        .from("user_events")
+        .update(updates)
+        .eq("id", eventId!)
+        .select()
+        .single();
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["events"] });
+      setPublishing(false);
     },
-    onError: (err: any) => alert("Failed to publish: " + (err.message || "Unknown error")),
+    onError: () => setPublishing(false),
   });
 
-  const unpublishMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("user_events").update({ is_published: false }).eq("id", eventId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["events"] });
-    },
-    onError: (err: any) => alert("Failed to unpublish: " + (err.message || "Unknown error")),
-  });
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-dash-bg flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-2 border-dash-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center text-dash-muted">Loading...</div>;
-  if (!event) return <div className="min-h-screen flex items-center justify-center text-red-600">Event not found</div>;
+  if (!event) {
+    return (
+      <div className="min-h-screen bg-dash-bg flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-dash-muted">Website not found.</p>
+          <Button className="mt-4" onClick={() => navigate("/dashboard")}>Back to Dashboard</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-dash-bg">
-      <header className="sticky top-0 z-40 bg-dash-surface border-b border-dash-border">
+      <div className="sticky top-0 z-30 border-b border-dash-border bg-dash-surface/90 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="h-16 flex items-center justify-between">
+          <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <Link to="/dashboard" className="text-dash-muted hover:text-dash-text"><ArrowLeft className="w-5 h-5" /></Link>
+              <button onClick={() => navigate("/dashboard")} className="text-dash-muted hover:text-dash-text">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+              </button>
               <h1 className="text-lg font-semibold text-dash-text">{event.name}</h1>
-              <Badge variant={event.is_published ? "success" : "default"}>{event.is_published ? "Published" : "Draft"}</Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              {event.is_published && event.slug && (
-                <a href={`/e/${event.slug}`} target="_blank" rel="noopener" className="text-sm text-teal-700 hover:underline flex items-center gap-1"><Globe className="w-4 h-4" /> View</a>
-              )}
               {event.is_published ? (
-                <Button variant="secondary" size="sm" onClick={() => unpublishMutation.mutate()} loading={unpublishMutation.isPending}>Unpublish</Button>
+                <Badge variant="success">Published</Badge>
               ) : (
-                <Button size="sm" onClick={() => publishMutation.mutate()} loading={publishMutation.isPending}><Globe className="w-4 h-4" /> Publish</Button>
+                <Badge variant="default">Draft</Badge>
               )}
             </div>
+            <Button
+              loading={publishing}
+              onClick={() => publishMutation.mutate()}
+            >
+              {event.is_published ? "Republish" : "Publish"}
+            </Button>
           </div>
-          <nav className="flex flex-wrap gap-1 pb-2">
+          <nav className="flex gap-1 overflow-x-auto scrollbar-thin pb-px">
             {NAV_TABS.map((tab) => (
-              <NavLink key={tab.path} to={`/event/${eventId}/${tab.path}`} className={({ isActive }) => `px-3 py-1.5 rounded-full text-sm transition-colors ${isActive ? "bg-dash-primary text-white" : "text-dash-muted hover:bg-dash-primary-light hover:text-dash-primary"}`}>
+              <NavLink
+                key={tab.path}
+                to={tab.path}
+                end={tab.end}
+                className={({ isActive }) =>
+                  cn(
+                    "whitespace-nowrap px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
+                    isActive
+                      ? "border-dash-primary text-dash-primary"
+                      : "border-transparent text-dash-muted hover:text-dash-text",
+                  )
+                }
+              >
                 {tab.label}
               </NavLink>
             ))}
           </nav>
         </div>
-      </header>
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      </div>
+      <div className="max-w-7xl mx-auto px-4 py-6">
         <Outlet context={{ event }} />
-      </main>
+      </div>
     </div>
   );
 }

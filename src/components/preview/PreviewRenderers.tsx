@@ -1,79 +1,108 @@
 import React from "react";
-import type { UserEvent } from "../../lib/supabase";
-import { EventThemeProvider } from "../../lib/theme-context";
 import { RichTextContent } from "../../lib/sanitize";
-import { formatDate, formatTime12 } from "../../lib/utils";
+import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
+import type { UserEvent, SubEvent } from "../../lib/supabase";
 
-export function CoverPreview({ event }: { event: UserEvent }) {
-  const cfg = event.draft_cover_config || event.cover_config || {};
-  const theme = event.draft_theme || event.theme;
+export function CoverPreview({ event }: { event: Partial<UserEvent> }) {
+  const coverConfig = (event.cover_config || {}) as Record<string, any>;
+  const heroImage = event.cover_image;
+  const title = event.name || "Your Event Title";
+  const subtitle = coverConfig.subtitle || "";
+
   return (
-    <EventThemeProvider initialTheme={theme}>
-      <div className="relative flex flex-col items-center justify-center text-center p-8" style={{ minHeight: 400 }}>
-        {cfg.cover_image && <img src={cfg.cover_image} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />}
-        <div className="relative z-10">
-          {cfg.logo_image && <img src={cfg.logo_image} alt="logo" className="w-20 h-20 mx-auto mb-4 rounded-full object-cover" />}
-          <h1 className="text-3xl md:text-4xl font-serif mb-2" style={{ color: "var(--event-primary)" }}>{cfg.title || event.name}</h1>
-          {cfg.subtitle && <p className="text-lg mb-4 event-muted-text">{cfg.subtitle}</p>}
-          {cfg.date && <p className="text-base mb-1">{formatDate(cfg.date)}</p>}
-          {cfg.time && <p className="text-base mb-1">{formatTime12(cfg.time)}</p>}
-          {cfg.venue && <p className="text-base">{cfg.venue}</p>}
+    <div className="relative min-h-[400px] rounded-lg overflow-hidden bg-event-bg">
+      {heroImage ? (
+        <div className="absolute inset-0">
+          <img src={heroImage} alt="Cover" className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-black/30" />
         </div>
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-br from-event-bg to-event-surface" />
+      )}
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-[400px] p-8 text-center">
+        <h1 className="font-event text-3xl md:text-4xl text-white drop-shadow-lg mb-2">{title}</h1>
+        {subtitle && <p className="font-event-body text-lg text-white/90 drop-shadow">{subtitle}</p>}
+        {event.event_date && (
+          <p className="font-event-body text-sm text-white/80 mt-3">{formatDate(event.event_date)}</p>
+        )}
       </div>
-    </EventThemeProvider>
+    </div>
   );
 }
 
-export function LoginPreview({ event }: { event: UserEvent }) {
-  const cfg = event.draft_login_config || event.login_config || {};
-  const theme = event.draft_theme || event.theme;
+export function LoginPreview({ event }: { event: Partial<UserEvent> }) {
+  const loginConfig = (event.login_config || {}) as Record<string, any>;
+  const hasPassword = loginConfig.passwordMode && loginConfig.passwordMode !== "none";
+
   return (
-    <EventThemeProvider initialTheme={theme}>
-      <div className="relative flex flex-col items-center justify-center text-center p-8" style={{ minHeight: 400 }}>
-        {cfg.background_image && <img src={cfg.background_image} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />}
-        <div className="relative z-10">
-          {cfg.logo_image && <img src={cfg.logo_image} alt="logo" className="w-16 h-16 mx-auto mb-4 rounded-full object-cover" />}
-          <h2 className="text-2xl font-serif mb-2" style={{ color: "var(--event-primary)" }}>{cfg.heading || "Sign In"}</h2>
-          {cfg.subheading && <p className="text-sm mb-4 event-muted-text">{cfg.subheading}</p>}
-          <div className="space-y-2">
-            <div className="px-4 py-2 border rounded-lg bg-white/50 text-sm" style={{ borderColor: "var(--event-border)" }}>Enter your name</div>
-            <div className="px-4 py-2 rounded-lg text-sm text-white" style={{ background: "var(--event-primary)" }}>Sign In</div>
+    <div className="event-themed min-h-[300px] rounded-lg p-8 flex flex-col items-center justify-center">
+      <h2 className="font-event text-xl text-event-heading mb-4">Enter your username to continue</h2>
+      <div className="w-full max-w-xs space-y-3">
+        <input
+          type="text"
+          placeholder="Enter your username"
+          className="event-input"
+          disabled
+        />
+        {hasPassword && (
+          <input
+            type="password"
+            placeholder="Enter password"
+            className="event-input"
+            disabled
+          />
+        )}
+        <button className="event-btn-primary w-full" disabled>Enter</button>
+      </div>
+    </div>
+  );
+}
+
+export function HomePreview({ event }: { event: Partial<UserEvent> }) {
+  const content = (event.content || {}) as Record<string, any>;
+  const countdown = getCountdown(event.event_date);
+
+  return (
+    <div className="event-themed min-h-[300px] rounded-lg p-8">
+      <div className="max-w-2xl mx-auto">
+        <h1 className="font-event text-2xl text-event-heading mb-4 text-center">{event.name}</h1>
+        {!countdown.isPast && event.event_date && (
+          <div className="flex justify-center gap-4 mb-6">
+            {[
+              { label: "Days", value: countdown.days },
+              { label: "Hours", value: countdown.hours },
+              { label: "Min", value: countdown.minutes },
+              { label: "Sec", value: countdown.seconds },
+            ].map((item) => (
+              <div key={item.label} className="text-center">
+                <div className="text-2xl font-bold text-event-primary">{item.value}</div>
+                <div className="text-xs text-event-muted">{item.label}</div>
+              </div>
+            ))}
           </div>
-        </div>
+        )}
+        {content.section1 && <RichTextContent html={content.section1} className="mb-4" />}
+        {content.section2 && <RichTextContent html={content.section2} className="mb-4" />}
+        {content.section3 && <RichTextContent html={content.section3} />}
       </div>
-    </EventThemeProvider>
+    </div>
   );
 }
 
-export function HomePreview({ event }: { event: UserEvent }) {
-  const content = event.draft_content || event.content || {};
-  const theme = event.draft_theme || event.theme;
+export function RsvpPreview({ event }: { event: Partial<UserEvent> }) {
   return (
-    <EventThemeProvider initialTheme={theme}>
-      <div className="p-8" style={{ minHeight: 400 }}>
-        {content.title && <RichTextContent html={content.title} className="text-3xl font-serif text-center mb-4" />}
-        {content.subtitle && <RichTextContent html={content.subtitle} className="text-lg text-center mb-4 event-muted-text" />}
-        {content.body && <RichTextContent html={content.body} className="text-base leading-relaxed" />}
-      </div>
-    </EventThemeProvider>
-  );
-}
-
-export function RsvpPreview({ event }: { event: UserEvent }) {
-  const theme = event.draft_theme || event.theme;
-  return (
-    <EventThemeProvider initialTheme={theme}>
-      <div className="p-8" style={{ minHeight: 400 }}>
-        <h2 className="text-2xl font-serif text-center mb-6" style={{ color: "var(--event-primary)" }}>RSVP</h2>
-        <div className="space-y-4 max-w-md mx-auto">
+    <div className="event-themed min-h-[300px] rounded-lg p-8">
+      <div className="max-w-md mx-auto">
+        <h2 className="font-event text-xl text-event-heading mb-4 text-center">RSVP</h2>
+        <div className="space-y-3">
           <div className="flex gap-2">
-            <div className="flex-1 p-3 border rounded-lg text-center text-sm" style={{ borderColor: "var(--event-border)" }}>Joyfully Accept</div>
-            <div className="flex-1 p-3 border rounded-lg text-center text-sm" style={{ borderColor: "var(--event-border)" }}>Regretfully Decline</div>
+            <button className="event-btn-primary flex-1" disabled>Attending</button>
+            <button className="event-btn-secondary flex-1" disabled>Not Attending</button>
           </div>
-          <div className="p-3 border rounded-lg text-sm" style={{ borderColor: "var(--event-border)" }}>Number of Guests: 1</div>
-          <div className="w-full p-3 rounded-lg text-center text-sm text-white" style={{ background: "var(--event-primary)" }}>Submit RSVP</div>
+          <textarea placeholder="Message" className="event-input" rows={3} disabled />
+          <button className="event-btn-primary w-full" disabled>Submit RSVP</button>
         </div>
       </div>
-    </EventThemeProvider>
+    </div>
   );
 }

@@ -1,57 +1,244 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  supabase, type UserEvent, type SubEvent, type EventRsvp,
+  type GuestGroupMember, type SubEventGroupAssignment, type GuestInvitationOverride,
+} from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { isRsvpClosed } from "../../lib/utils";
+import { formatDate, formatTime12, isRsvpClosed } from "../../lib/utils";
+
+interface RsvpState {
+  status: "accepted" | "declined" | "pending";
+  plus_ones: number;
+  dietary: string;
+  message: string;
+}
+
+const cardStyle: React.CSSProperties = { backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" };
+
+function Spinner() {
+  return <div className="animate-spin h-8 w-8 border-2 rounded-full" style={{ borderColor: "var(--event-primary)", borderTopColor: "transparent" }} />;
+}
 
 export default function GuestRsvp() {
   const { event } = useOutletContext<{ event: UserEvent }>();
-  const { guestName } = useGuestAuth();
+  const { guestId, guestName } = useGuestAuth();
   const queryClient = useQueryClient();
-  const [attending, setAttending] = useState<boolean | null>(null);
-  const [plusOnes, setPlusOnes] = useState(0);
-  const [dietary, setDietary] = useState("");
-  const [message, setMessage] = useState("");
+  const [rsvpStates, setRsvpStates] = useState<Record<string, RsvpState>>({});
   const [submitted, setSubmitted] = useState(false);
 
-  const closed = isRsvpClosed(event.rsvp_deadline);
+  const deadlineClosed = isRsvpClosed(event.rsvp_deadline);
+
+  const { data: subEvents, isLoading } = useQuery({
+    queryKey: ["guest_rsvp_sub_events", event.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sub_events").select("*").eq("parent_event_id", event.id).order("display_order", { ascending: true });
+      if (error) throw error;
+      return data as SubEvent[];
+    },
+  });
+
+  const { data: groupMemberships } = useQuery({
+    queryKey: ["guest_group_memberships", guestId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("guest_group_members").select("*").eq("guest_id", guestId!);
+      if (error) throw error;
+      return data as GuestGroupMember[];
+    },
+    enabled: !!guestId,
+  });
+
+  const { data: groupAssignments } = useQuery({
+    queryKey: ["sub_event_group_assignments", event.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sub_event_group_assignments").select("*")
+        .in("sub_event_id", (subEvents || []).map((se) => se.id));
+      if (error) throw error;
+      return data as SubEventGroupAssignment[];
+    },
+    enabled: !!subEvents?.length,
+  });
+
+  const { data: overrides } = useQuery({
+    queryKey: ["guest_invitation_overrides", guestId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("guest_invitation_overrides").select("*").eq("guest_id", guestId!);
+      if (error) throw error;
+      return data as GuestInvitationOverride[];
+    },
+    enabled: !!guestId,
+  });
+
+  const { data: existingRsvps } = useQuery({
+    queryKey: ["guest_existing_rsvps", event.id, guestId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_rsvps").select("*").eq("event_id", event.id).eq("guest_id", guestId!);
+      if (error) throw error;
+      return data as EventRsvp[];
+    },
+    enabled: !!guestId,
+  });
+
+  // Determine which sub-events the guest is invited to
+  const guestGroupIds = new Set((groupMemberships || []).map((gm) => gm.group_id));
+  const invitedSubEvents = (subEvents || []).filter((se) => {
+    const override = (overrides || []).find((o) => o.sub_event_id === se.id);
+    if (override) return override.is_invited;
+    const assignments = (groupAssignments || []).filter((ga) => ga.sub_event_id === se.id);
+    if (assignments.length === 0) return true;
+    return assignments.some((ga) => guestGroupIds.has(ga.group_id));
+  });
+
+  useEffect(() => {
+    if (!invitedSubEvents.length) return;
+    const states: Record<string, RsvpState> = {};
+    for (const se of invitedSubEvents) {
+      const existing = (existingRsvps || []).find((r) => r.sub_event_id === se.id);
+      states[se.id] = {
+        status: (existing?.status as RsvpState["status"]) || "pending",
+        plus_ones: existing?.plus_ones ?? 0,
+        dietary: existing?.dietary ?? "",
+        message: existing?.message ?? "",
+      };
+    }
+    setRsvpStates(states);
+  }, [invitedSubEvents, existingRsvps]);
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("event_rsvps").insert({
-        event_id: event.id, guest_name: guestName || "Guest",
-        attending: attending!, plus_ones: plusOnes, dietary, message,
-      });
-      if (error) throw error;
+      for (const se of invitedSubEvents) {
+        const state = rsvpStates[se.id];
+        if (!state) continue;
+        const existing = (existingRsvps || []).find((r) => r.sub_event_id === se.id);
+        const payload = {
+          event_id: event.id, guest_id: guestId, guest_name: guestName || "Guest",
+          status: state.status, plus_ones: state.plus_ones, dietary: state.dietary,
+          message: state.message, submitted_at: new Date().toISOString(), sub_event_id: se.id,
+        };
+        if (existing) {
+          const { error } = await supabase.from("event_rsvps").update(payload).eq("id", existing.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from("event_rsvps").insert(payload);
+          if (error) throw error;
+        }
+      }
     },
-    onSuccess: () => { setSubmitted(true); queryClient.invalidateQueries({ queryKey: ["rsvps", event.id] }); },
-    onError: (err: any) => alert("Failed to submit RSVP: " + (err.message || "Unknown error")),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guest_existing_rsvps", event.id, guestId] });
+      setSubmitted(true);
+      setTimeout(() => setSubmitted(false), 5000);
+    },
   });
 
-  if (closed) return <div className="text-center py-12"><h2 className="text-2xl font-serif mb-2" style={{ color: "var(--event-primary)" }}>RSVP Closed</h2><p className="event-muted-text">The RSVP deadline has passed.</p></div>;
-  if (submitted) return <div className="text-center py-12"><h2 className="text-2xl font-serif mb-2" style={{ color: "var(--event-primary)" }}>Thank You!</h2><p className="event-muted-text">Your RSVP has been submitted.</p></div>;
+  function updateState(id: string, patch: Partial<RsvpState>) {
+    setRsvpStates((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  }
+
+  if (isLoading) return <div className="flex justify-center py-12"><Spinner /></div>;
+
+  if (deadlineClosed) return (
+    <div className="max-w-lg mx-auto text-center py-12">
+      <h2 className="font-event text-2xl mb-3" style={{ color: "var(--event-heading)" }}>RSVP Closed</h2>
+      <p style={{ color: "var(--event-muted)" }}>The RSVP deadline has passed. Please contact the host if you need to make changes.</p>
+    </div>
+  );
+
+  if (!invitedSubEvents.length) return (
+    <div className="max-w-lg mx-auto text-center py-12">
+      <h2 className="font-event text-2xl mb-3" style={{ color: "var(--event-heading)" }}>RSVP</h2>
+      <p style={{ color: "var(--event-muted)" }}>There are no events requiring an RSVP at this time.</p>
+    </div>
+  );
 
   return (
-    <div className="max-w-md mx-auto">
-      <h2 className="text-2xl font-serif text-center mb-6" style={{ color: "var(--event-primary)" }}>RSVP</h2>
-      <div className="space-y-4">
-        <div>
-          <p className="text-sm mb-2 event-muted-text">Will you attend?</p>
-          <div className="flex gap-3">
-            <button onClick={() => setAttending(true)} className="flex-1 py-3 rounded-lg border transition-colors" style={{ borderColor: attending === true ? "var(--event-primary)" : "var(--event-border)", background: attending === true ? "var(--event-primary-light)" : "transparent", color: attending === true ? "var(--event-primary)" : "var(--event-text)" }}>Joyfully Accept</button>
-            <button onClick={() => setAttending(false)} className="flex-1 py-3 rounded-lg border transition-colors" style={{ borderColor: attending === false ? "var(--event-primary)" : "var(--event-border)", background: attending === false ? "var(--event-primary-light)" : "transparent", color: attending === false ? "var(--event-primary)" : "var(--event-text)" }}>Regretfully Decline</button>
-          </div>
+    <div className="max-w-lg mx-auto">
+      <h2 className="font-event text-2xl mb-2 text-center" style={{ color: "var(--event-heading)" }}>RSVP</h2>
+      <p className="text-sm text-center mb-8" style={{ color: "var(--event-muted)" }}>Please let us know if you'll be attending each event.</p>
+
+      {submitted && (
+        <div className="rounded-lg p-4 mb-6 text-center" style={cardStyle}>
+          <p className="text-sm" style={{ color: "var(--event-primary)" }}>✓ Thank you! Your RSVP has been submitted.</p>
         </div>
-        {attending === true && (
-          <>
-            <div><label className="block text-sm mb-1 event-muted-text">Number of Plus Ones</label><input type="number" min={0} max={5} value={plusOnes} onChange={(e) => setPlusOnes(Math.max(0, Number(e.target.value)))} className="w-full px-4 py-2.5 rounded-lg border bg-white" style={{ borderColor: "var(--event-border)" }} /></div>
-            <div><label className="block text-sm mb-1 event-muted-text">Dietary Requirements</label><input value={dietary} onChange={(e) => setDietary(e.target.value)} placeholder="e.g. Vegetarian, gluten-free" className="w-full px-4 py-2.5 rounded-lg border bg-white" style={{ borderColor: "var(--event-border)" }} /></div>
-          </>
-        )}
-        <div><label className="block text-sm mb-1 event-muted-text">Message (optional)</label><textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} className="w-full px-4 py-2.5 rounded-lg border bg-white" style={{ borderColor: "var(--event-border)" }} /></div>
-        <button onClick={() => submitMutation.mutate()} disabled={attending === null || submitMutation.isPending} className="w-full py-2.5 rounded-lg text-white font-medium disabled:opacity-50" style={{ background: "var(--event-primary)" }}>{submitMutation.isPending ? "Submitting..." : "Submit RSVP"}</button>
+      )}
+
+      <div className="space-y-6">
+        {invitedSubEvents.map((se) => {
+          const state = rsvpStates[se.id] || { status: "pending" as const, plus_ones: 0, dietary: "", message: "" };
+          const eventClosed = isRsvpClosed(se.rsvp_deadline);
+          return (
+            <div key={se.id} className="rounded-xl p-5" style={cardStyle}>
+              <h3 className="font-event text-lg mb-1" style={{ color: "var(--event-heading)" }}>{se.name}</h3>
+              {se.date && (
+                <p className="text-sm mb-4" style={{ color: "var(--event-muted)" }}>
+                  {formatDate(se.date)}{se.start_time && ` at ${formatTime12(se.start_time)}`}
+                </p>
+              )}
+              {eventClosed ? (
+                <p className="text-sm" style={{ color: "var(--event-muted)" }}>RSVP for this event is closed.</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex gap-2">
+                    {(["accepted", "declined"] as const).map((status) => (
+                      <button
+                        key={status}
+                        onClick={() => updateState(se.id, { status })}
+                        className="flex-1 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                        style={state.status === status
+                          ? { backgroundColor: "var(--event-primary)", color: "var(--event-primary-fg)" }
+                          : { backgroundColor: "transparent", color: "var(--event-primary)", border: "1px solid var(--event-border)" }
+                        }
+                      >
+                        {status === "accepted" ? "Attending" : "Not Attending"}
+                      </button>
+                    ))}
+                  </div>
+                  {state.status === "accepted" && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-medium mb-1" style={{ color: "var(--event-muted)" }}>Plus Ones</label>
+                        <input type="number" min={0} value={state.plus_ones}
+                          onChange={(e) => updateState(se.id, { plus_ones: Number(e.target.value) })} className="event-input" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1" style={{ color: "var(--event-muted)" }}>Dietary Requirements</label>
+                        <input type="text" value={state.dietary}
+                          onChange={(e) => updateState(se.id, { dietary: e.target.value })}
+                          placeholder="Any dietary restrictions?" className="event-input" />
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: "var(--event-muted)" }}>Message (optional)</label>
+                    <textarea rows={2} value={state.message}
+                      onChange={(e) => updateState(se.id, { message: e.target.value })}
+                      placeholder="Leave a message for the host..." className="event-input resize-none" />
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
+
+      <button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}
+        className="event-btn-primary w-full mt-6 flex items-center justify-center gap-2">
+        {submitMutation.isPending && (
+          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        )}
+        {submitMutation.isPending ? "Submitting..." : "Submit RSVP"}
+      </button>
+
+      {submitMutation.isError && (
+        <p className="text-sm text-red-600 text-center mt-3">Failed to submit RSVP. Please try again.</p>
+      )}
     </div>
   );
 }

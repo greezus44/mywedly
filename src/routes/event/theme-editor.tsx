@@ -1,80 +1,193 @@
-import React from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type ThemeConfig } from "../../lib/supabase";
-import { Button } from "../../components/ui/Button";
-import { ColorInput, Select, FormField } from "../../components/ui";
-import { THEME_PRESETS, RICH_FONT_OPTIONS } from "../../lib/theme";
+import { supabase, type UserEvent } from "../../lib/supabase";
+import { Select } from "../../components/ui/Input";
+import { ColorInput, FormField, LoadingSpinner, Card } from "../../components/ui";
+import {
+  THEME_PRESETS,
+  DEFAULT_THEME,
+  HEADING_FONT_OPTIONS,
+  RICH_FONT_OPTIONS,
+  themeToEventCssVars,
+  type ThemeConfig,
+} from "../../lib/theme";
+
+const COLOR_FIELDS: { key: keyof ThemeConfig; label: string }[] = [
+  { key: "bg", label: "Background" },
+  { key: "surface", label: "Surface" },
+  { key: "border", label: "Border" },
+  { key: "text", label: "Body Text" },
+  { key: "heading", label: "Heading Text" },
+  { key: "muted", label: "Muted Text" },
+  { key: "primary", label: "Primary" },
+  { key: "primaryHover", label: "Primary Hover" },
+  { key: "primaryFg", label: "Primary Foreground" },
+  { key: "accent", label: "Accent" },
+];
 
 export default function ThemeEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const theme = event.draft_theme || event.theme || {};
-  const [bg, setBg] = React.useState(theme.bg || "#faf7f2");
-  const [surface, setSurface] = React.useState(theme.surface || "#ffffff");
-  const [border, setBorder] = React.useState(theme.border || "#e8e0d5");
-  const [text, setText] = React.useState(theme.text || "#2d2424");
-  const [muted, setMuted] = React.useState(theme.muted || "#8a7a72");
-  const [primary, setPrimary] = React.useState(theme.primary || "#b8860b");
-  const [primaryHover, setPrimaryHover] = React.useState(theme.primaryHover || "#9a7209");
-  const [primaryLight, setPrimaryLight] = React.useState(theme.primaryLight || "#f5e6c8");
-  const [accent, setAccent] = React.useState(theme.accent || "#d4a574");
-  const [font, setFont] = React.useState(theme.font || '"Cormorant Garamond", serif');
+  const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
+  const [saved, setSaved] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const t = (event.draft_theme ?? event.theme ?? DEFAULT_THEME) as ThemeConfig;
+    setTheme({ ...DEFAULT_THEME, ...t });
+  }, [event.id]);
 
   const saveMutation = useMutation({
-    mutationFn: async () => {
-      const themeConfig: ThemeConfig = { bg, surface, border, text, muted, primary, primaryHover, primaryLight, accent, font };
-      const { error } = await supabase.from("user_events").update({ draft_theme: themeConfig }).eq("id", event.id);
+    mutationFn: async (payload: ThemeConfig) => {
+      const { error } = await supabase
+        .from("user_events")
+        .update({ draft_theme: payload })
+        .eq("id", event.id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", event.id] }),
-    onError: (err: any) => alert("Failed to save: " + (err.message || "Unknown error")),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    },
   });
 
-  const applyPreset = (preset: ThemeConfig) => {
-    setBg(preset.bg || ""); setSurface(preset.surface || ""); setBorder(preset.border || "");
-    setText(preset.text || ""); setMuted(preset.muted || ""); setPrimary(preset.primary || "");
-    setPrimaryHover(preset.primaryHover || ""); setPrimaryLight(preset.primaryLight || "");
-    setAccent(preset.accent || ""); setFont(preset.font || "");
-  };
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      saveMutation.mutate(theme);
+    }, 800);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme]);
+
+  function applyPreset(presetKey: string) {
+    const preset = THEME_PRESETS[presetKey];
+    if (preset) setTheme({ ...preset.theme });
+  }
+
+  const cssVars = themeToEventCssVars(theme);
 
   return (
-    <div>
-      <h2 className="text-xl font-semibold text-dash-text mb-6">Theme</h2>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-dash-text">Website Theme</h2>
+        {saved && <span className="text-sm text-green-600">✓ Saved</span>}
+        {saveMutation.isPending && <LoadingSpinner className="h-4 w-4" />}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-4">
-          <FormField label="Preset">
-            <Select value="" onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { const preset = THEME_PRESETS.find((p) => p.name === e.target.value); if (preset) applyPreset(preset.theme); }}>
-              <option value="">Choose a preset...</option>
-              {THEME_PRESETS.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
-            </Select>
+          <FormField label="Theme Presets">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {Object.entries(THEME_PRESETS).map(([key, preset]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => applyPreset(key)}
+                  className="rounded-lg border border-dash-border p-3 text-left hover:border-dash-primary/50 transition-colors"
+                >
+                  <div className="flex gap-1 mb-2">
+                    {[
+                      preset.theme.primary,
+                      preset.theme.bg,
+                      preset.theme.surface,
+                      preset.theme.accent,
+                    ].map((c, i) => (
+                      <div key={i} className="h-4 w-4 rounded-full border border-dash-border" style={{ background: c }} />
+                    ))}
+                  </div>
+                  <div className="text-xs font-medium text-dash-text">{preset.name}</div>
+                </button>
+              ))}
+            </div>
           </FormField>
-          <div className="grid grid-cols-2 gap-4">
-            <ColorInput label="Background" value={bg} onChange={setBg} />
-            <ColorInput label="Surface" value={surface} onChange={setSurface} />
-            <ColorInput label="Border" value={border} onChange={setBorder} />
-            <ColorInput label="Text" value={text} onChange={setText} />
-            <ColorInput label="Muted" value={muted} onChange={setMuted} />
-            <ColorInput label="Primary" value={primary} onChange={setPrimary} />
-            <ColorInput label="Primary Hover" value={primaryHover} onChange={setPrimaryHover} />
-            <ColorInput label="Primary Light" value={primaryLight} onChange={setPrimaryLight} />
-            <ColorInput label="Accent" value={accent} onChange={setAccent} />
+
+          <Card className="p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-dash-text">Colors</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {COLOR_FIELDS.map((field) => (
+                <ColorInput
+                  key={field.key}
+                  label={field.label}
+                  value={theme[field.key] as string}
+                  onChange={(v) => setTheme((t) => ({ ...t, [field.key]: v }))}
+                />
+              ))}
+            </div>
+          </Card>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Select
+              label="Heading Font"
+              value={theme.fontHeading}
+              onChange={(e) => setTheme((t) => ({ ...t, fontHeading: e.target.value }))}
+            >
+              {HEADING_FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </Select>
+            <Select
+              label="Body Font"
+              value={theme.fontBody}
+              onChange={(e) => setTheme((t) => ({ ...t, fontBody: e.target.value }))}
+            >
+              {HEADING_FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </Select>
+            <Select
+              label="Rich Text Font"
+              value={theme.fontRich}
+              onChange={(e) => setTheme((t) => ({ ...t, fontRich: e.target.value }))}
+            >
+              {RICH_FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>{f.label}</option>
+              ))}
+            </Select>
           </div>
-          <FormField label="Font Family">
-            <Select value={font} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFont(e.target.value)}>
-              {RICH_FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-            </Select>
-          </FormField>
-          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>Save Changes</Button>
         </div>
-        <div className="rounded-xl border border-dash-border overflow-hidden" style={{ background: bg, color: text, fontFamily: font }}>
-          <div className="p-8 text-center">
-            <h1 className="text-3xl font-serif mb-2" style={{ color: primary }}>Preview Title</h1>
-            <p className="mb-4" style={{ color: muted }}>Preview subtitle text</p>
-            <div className="inline-block px-6 py-2.5 rounded-lg text-white font-medium" style={{ background: primary }}>Button</div>
-            <div className="mt-4 p-4 rounded-lg border" style={{ borderColor: border, background: surface }}>
-              <p style={{ color: text }}>Card content example</p>
-              <p className="text-sm" style={{ color: muted }}>Muted text example</p>
+
+        {/* Live Preview */}
+        <div className="rounded-xl border border-dash-border overflow-hidden">
+          <div className="border-b border-dash-border px-4 py-2 bg-dash-surface">
+            <span className="text-sm font-medium text-dash-text">Live Preview</span>
+          </div>
+          <div
+            className="p-8 min-h-[400px]"
+            style={{
+              background: "var(--event-bg)",
+              color: "var(--event-text)",
+              fontFamily: "var(--event-font-body)",
+              ...cssVars,
+            } as React.CSSProperties}
+          >
+            <h1
+              className="text-3xl mb-4"
+              style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}
+            >
+              {event.draft_name || event.name || "Your Event Title"}
+            </h1>
+            <p className="mb-3" style={{ color: "var(--event-muted)" }}>
+              A preview of your theme colors and typography.
+            </p>
+            <button
+              className="px-4 py-2 rounded-lg font-medium"
+              style={{ background: "var(--event-primary)", color: "var(--event-primary-fg)" }}
+            >
+              Primary Button
+            </button>
+            <div className="mt-6 p-4 rounded-lg" style={{ background: "var(--event-surface)", border: "1px solid var(--event-border)" }}>
+              <h2
+                className="text-xl mb-2"
+                style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}
+              >
+                Surface Card
+              </h2>
+              <p className="text-sm" style={{ color: "var(--event-text)" }}>
+                This card uses the surface and border colors from your theme.
+              </p>
             </div>
           </div>
         </div>

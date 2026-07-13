@@ -1,24 +1,34 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, EVENT_TYPES, EVENT_TEMPLATES, type UserEvent } from "../lib/supabase";
+import { supabase, type UserEvent } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
-import { Input, Select, Modal, Badge, EmptyState, Card } from "../components/ui";
-import { Plus, Calendar, ExternalLink } from "lucide-react";
-import { formatDateShort, getEventStatus } from "../lib/utils";
+import { Input, Textarea, Select } from "../components/ui/Input";
+import { Modal, Badge, EmptyState } from "../components/ui";
+import { formatDateShort } from "../lib/utils";
+import { slugify } from "../lib/theme";
 
-export default function Dashboard() {
+export default function DashboardPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState("other");
-  const [newTemplate, setNewTemplate] = useState("default");
+  const [newDate, setNewDate] = useState("");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) navigate("/auth");
+    });
+  }, [navigate]);
 
   const { data: events, isLoading } = useQuery({
-    queryKey: ["events"],
+    queryKey: ["user-events"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*")
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data as UserEvent[];
     },
@@ -26,61 +36,127 @@ export default function Dashboard() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.from("user_events").insert({ name: newName, event_type: newType, template_id: newTemplate }).select().single();
+      const { data, error } = await supabase
+        .from("user_events")
+        .insert({
+          name: newName,
+          event_type: newType,
+          event_date: newDate || null,
+          draft_name: newName,
+          draft_event_type: newType,
+          draft_event_date: newDate || null,
+          draft_slug: slugify(newName),
+        })
+        .select()
+        .single();
       if (error) throw error;
       return data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["events"] });
-      setShowCreate(false); setNewName("");
-      navigate(`/event/${data.id}/cover`);
+      queryClient.invalidateQueries({ queryKey: ["user-events"] });
+      setShowCreate(false);
+      setNewName("");
+      setNewDate("");
+      navigate(`/event/${data.id}`);
     },
-    onError: (err: any) => alert("Failed to create event: " + (err.message || "Unknown error")),
   });
 
   return (
     <div className="min-h-screen bg-dash-bg">
-      <header className="bg-dash-surface border-b border-dash-border">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-dash-text">My Events</h1>
-          <Button onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" /> New Event</Button>
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-2xl font-bold text-dash-text">Your Invitation Websites</h1>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                supabase.auth.signOut();
+                navigate("/auth");
+              }}
+            >
+              Sign out
+            </Button>
+            <Button onClick={() => setShowCreate(true)}>+ Create Website</Button>
+          </div>
         </div>
-      </header>
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        {isLoading ? <div className="text-center py-12 text-dash-muted">Loading...</div> : !events || events.length === 0 ? (
-          <EmptyState icon={<Calendar className="w-12 h-12" />} title="No events yet" description="Create your first event to get started." action={<Button onClick={() => setShowCreate(true)}><Plus className="w-4 h-4" /> New Event</Button>} />
+
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-40 rounded-xl border border-dash-border bg-dash-surface animate-pulse" />
+            ))}
+          </div>
+        ) : events && events.length === 0 ? (
+          <EmptyState
+            title="No invitation websites yet"
+            description="Create your first invitation website to get started."
+            action={<Button onClick={() => setShowCreate(true)}>+ Create Website</Button>}
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {events.map((event) => (
-              <Card key={event.id} className="p-4 cursor-pointer hover:shadow-md transition-shadow">
-                <div onClick={() => navigate(`/event/${event.id}/cover`)}>
-                  <div className="flex items-start justify-between mb-2">
-                    <h3 className="font-medium text-dash-text">{event.name}</h3>
-                    <Badge variant={event.is_published ? "success" : "default"}>{getEventStatus(event)}</Badge>
-                  </div>
-                  <p className="text-sm text-dash-muted">{formatDateShort(event.event_date)}</p>
-                  {event.venue && <p className="text-sm text-dash-muted">{event.venue}</p>}
+            {events?.map((event) => (
+              <Link
+                key={event.id}
+                to={`/event/${event.id}`}
+                className="group rounded-xl border border-dash-border bg-dash-surface p-5 hover:border-dash-primary/50 hover:shadow-md transition-all"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-dash-text group-hover:text-dash-primary transition-colors">
+                    {event.name}
+                  </h3>
+                  {event.is_published ? (
+                    <Badge variant="success">Published</Badge>
+                  ) : (
+                    <Badge variant="default">Draft</Badge>
+                  )}
                 </div>
-                {event.is_published && event.slug && (
-                  <a href={`/e/${event.slug}`} target="_blank" rel="noopener" className="mt-2 inline-flex items-center gap-1 text-xs text-teal-700 hover:underline">
-                    <ExternalLink className="w-3 h-3" /> View Guest Page
-                  </a>
-                )}
-              </Card>
+                <div className="space-y-1 text-sm text-dash-muted">
+                  {event.event_date && <p>{formatDateShort(event.event_date)}</p>}
+                  {event.venue && <p>{event.venue}</p>}
+                  <p className="capitalize">Type: {event.event_type}</p>
+                </div>
+              </Link>
             ))}
           </div>
         )}
-      </main>
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create New Event">
+      </div>
+
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Invitation Website">
         <div className="space-y-4">
-          <Input placeholder="Event name" value={newName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewName(e.target.value)} />
-          <Select value={newType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewType(e.target.value)}>
-            {EVENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          <Input
+            label="Website Name"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="e.g., John & Sarah's Wedding"
+            autoFocus
+          />
+          <Select label="Event Type" value={newType} onChange={(e) => setNewType(e.target.value)}>
+            <option value="wedding">Wedding</option>
+            <option value="conference">Conference</option>
+            <option value="birthday">Birthday</option>
+            <option value="festival">Festival</option>
+            <option value="corporate">Corporate Event</option>
+            <option value="charity">Charity Event</option>
+            <option value="graduation">Graduation</option>
+            <option value="reunion">Family Reunion</option>
+            <option value="other">Other</option>
           </Select>
-          <Select value={newTemplate} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewTemplate(e.target.value)}>
-            {EVENT_TEMPLATES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </Select>
-          <Button onClick={() => createMutation.mutate()} loading={createMutation.isPending} disabled={!newName.trim()} className="w-full">Create Event</Button>
+          <Input
+            label="Event Date"
+            type="date"
+            value={newDate}
+            onChange={(e) => setNewDate(e.target.value)}
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button
+              loading={createMutation.isPending}
+              disabled={!newName.trim()}
+              onClick={() => createMutation.mutate()}
+            >
+              Create
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>

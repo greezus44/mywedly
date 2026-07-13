@@ -1,0 +1,200 @@
+
+=== custom_pages | anon_select_custom_pages | cmd=SELECT | roles={anon,authenticated} ===
+  USING: (is_published = true)
+  CHECK: None
+
+=== custom_pages | custom_pages_member_all | cmd=ALL | roles={authenticated} ===
+  USING: private.is_wedding_member(wedding_id, auth.uid())
+  CHECK: private.is_wedding_member(wedding_id, auth.uid())
+
+=== custom_pages | custom_pages_public_read | cmd=SELECT | roles={anon,authenticated} ===
+  USING: (is_published AND (EXISTS ( SELECT 1\n   FROM weddings w\n  WHERE ((w.id = custom_pages.wedding_id) AND w.is_published))))
+  CHECK: None
+
+=== custom_pages | guest_select_custom_pages | cmd=SELECT | roles={anon,authenticated} ===
+  USING: ((is_published = true) AND (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = custom_pages.event_id) AND (user_events.is_published = true)))))
+  CHECK: None
+
+=== custom_pages | host_delete_custom_pages | cmd=DELETE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = custom_pages.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== custom_pages | host_insert_custom_pages | cmd=INSERT | roles={authenticated} ===
+  USING: None
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = custom_pages.event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== custom_pages | host_select_custom_pages | cmd=SELECT | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = custom_pages.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== custom_pages | host_update_custom_pages | cmd=UPDATE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = custom_pages.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = custom_pages.event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== event_guests | delete_own_event_guests | cmd=DELETE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_guests.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== event_guests | guest_insert_event_guests | cmd=INSERT | roles={anon,authenticated} ===
+  USING: None
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_guests.event_id) AND (user_events.is_published = true))))
+
+=== event_guests | guest_read_event_guests | cmd=SELECT | roles={anon,authenticated} ===
+  USING: true
+  CHECK: None
+
+=== event_guests | guest_update_event_guests | cmd=UPDATE | roles={anon,authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_guests.event_id) AND (user_events.is_published = true))))
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_guests.event_id) AND (user_events.is_published = true))))
+
+=== event_guests | insert_own_event_guests | cmd=INSERT | roles={authenticated} ===
+  USING: None
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_guests.event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== event_guests | select_own_event_guests | cmd=SELECT | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_guests.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== event_guests | update_own_event_guests | cmd=UPDATE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_guests.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_guests.event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== event_messages | delete_own_event_messages | cmd=DELETE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_messages.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== event_messages | guest_insert_event_message | cmd=INSERT | roles={anon,authenticated} ===
+  USING: None
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_messages.event_id) AND (user_events.is_published = true))))
+
+=== event_messages | guest_read_event_message | cmd=SELECT | roles={anon,authenticated} ===
+  USING: true
+  CHECK: None
+
+=== event_messages | insert_own_event_messages | cmd=INSERT | roles={authenticated} ===
+  USING: None
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_messages.event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== event_messages | select_own_event_messages | cmd=SELECT | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_messages.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== event_rsvps | delete_own_event_rsvps | cmd=DELETE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_rsvps.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== event_rsvps | guest_insert_event_rsvp | cmd=INSERT | roles={anon,authenticated} ===
+  USING: None
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_rsvps.event_id) AND (user_events.is_published = true))))
+
+=== event_rsvps | guest_read_event_rsvp | cmd=SELECT | roles={anon,authenticated} ===
+  USING: true
+  CHECK: None
+
+=== event_rsvps | insert_own_event_rsvps | cmd=INSERT | roles={authenticated} ===
+  USING: None
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_rsvps.event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== event_rsvps | select_own_event_rsvps | cmd=SELECT | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_rsvps.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== event_rsvps | update_own_event_rsvps | cmd=UPDATE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_rsvps.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_rsvps.event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== event_schedule | delete_own_event_schedule | cmd=DELETE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_schedule.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== event_schedule | guest_read_event_schedule | cmd=SELECT | roles={anon,authenticated} ===
+  USING: true
+  CHECK: None
+
+=== event_schedule | insert_own_event_schedule | cmd=INSERT | roles={authenticated} ===
+  USING: None
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_schedule.event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== event_schedule | select_own_event_schedule | cmd=SELECT | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_schedule.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== event_schedule | update_own_event_schedule | cmd=UPDATE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_schedule.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = event_schedule.event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== guest_groups | guest_select_guest_groups | cmd=SELECT | roles={anon,authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = guest_groups.event_id) AND (user_events.is_published = true))))
+  CHECK: None
+
+=== guest_groups | host_delete_guest_groups | cmd=DELETE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = guest_groups.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== guest_groups | host_insert_guest_groups | cmd=INSERT | roles={authenticated} ===
+  USING: None
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = guest_groups.event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== guest_groups | host_select_guest_groups | cmd=SELECT | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = guest_groups.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== guest_groups | host_update_guest_groups | cmd=UPDATE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = guest_groups.event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = guest_groups.event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== sub_events | delete_own_sub_events | cmd=DELETE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = sub_events.parent_event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== sub_events | insert_own_sub_events | cmd=INSERT | roles={authenticated} ===
+  USING: None
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = sub_events.parent_event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== sub_events | select_own_sub_events | cmd=SELECT | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = sub_events.parent_event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: None
+
+=== sub_events | update_own_sub_events | cmd=UPDATE | roles={authenticated} ===
+  USING: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = sub_events.parent_event_id) AND (user_events.creator_id = auth.uid()))))
+  CHECK: (EXISTS ( SELECT 1\n   FROM user_events\n  WHERE ((user_events.id = sub_events.parent_event_id) AND (user_events.creator_id = auth.uid()))))
+
+=== user_events | delete_own_events | cmd=DELETE | roles={authenticated} ===
+  USING: (auth.uid() = creator_id)
+  CHECK: None
+
+=== user_events | delete_own_user_events | cmd=DELETE | roles={authenticated} ===
+  USING: (auth.uid() = creator_id)
+  CHECK: None
+
+=== user_events | guest_read_published_events | cmd=SELECT | roles={anon,authenticated} ===
+  USING: (is_published = true)
+  CHECK: None
+
+=== user_events | guest_read_user_events | cmd=SELECT | roles={anon,authenticated} ===
+  USING: true
+  CHECK: None
+
+=== user_events | insert_own_events | cmd=INSERT | roles={authenticated} ===
+  USING: None
+  CHECK: (auth.uid() = creator_id)
+
+=== user_events | insert_own_user_events | cmd=INSERT | roles={authenticated} ===
+  USING: None
+  CHECK: (auth.uid() = creator_id)
+
+=== user_events | select_own_events | cmd=SELECT | roles={authenticated} ===
+  USING: (auth.uid() = creator_id)
+  CHECK: None
+
+=== user_events | select_own_user_events | cmd=SELECT | roles={authenticated} ===
+  USING: (auth.uid() = creator_id)
+  CHECK: None
+
+=== user_events | update_own_events | cmd=UPDATE | roles={authenticated} ===
+  USING: (auth.uid() = creator_id)
+  CHECK: (auth.uid() = creator_id)
+
+=== user_events | update_own_user_events | cmd=UPDATE | roles={authenticated} ===
+  USING: (auth.uid() = creator_id)
+  CHECK: (auth.uid() = creator_id)

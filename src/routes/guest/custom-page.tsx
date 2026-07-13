@@ -1,157 +1,224 @@
-import React, { useState } from "react";
-import { useParams, useOutletContext } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage, type ContentBlock, type FaqItem, type TimelineItem, type SocialLink } from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
+import { EventThemeProvider } from "../../lib/theme-context";
+import { DEFAULT_THEME, type ThemeConfig } from "../../lib/theme";
 import { RichTextContent } from "../../lib/sanitize";
 import { getCountdown } from "../../lib/utils";
-import { ChevronDown, Mail, Phone, MapPin } from "lucide-react";
+
+type BlockType =
+  | "heading" | "paragraph" | "image" | "spacer" | "divider" | "gallery"
+  | "video" | "button" | "columns" | "list" | "quote" | "countdown"
+  | "map" | "rsvp-form" | "guest-list" | "schedule" | "venue" | "faq";
+
+interface Block {
+  id: string;
+  type: BlockType;
+  data: Record<string, any>;
+}
+
+const cardStyle: React.CSSProperties = { backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" };
+
+function CountdownBlock({ date }: { date: string }) {
+  const [countdown, setCountdown] = useState(getCountdown(date));
+  useEffect(() => {
+    if (countdown.isPast) return;
+    const timer = setInterval(() => setCountdown(getCountdown(date)), 1000);
+    return () => clearInterval(timer);
+  }, [date, countdown.isPast]);
+  if (countdown.isPast) return null;
+  const items = [
+    { label: "Days", value: countdown.days },
+    { label: "Hours", value: countdown.hours },
+    { label: "Min", value: countdown.minutes },
+    { label: "Sec", value: countdown.seconds },
+  ];
+  return (
+    <div className="my-6 flex justify-center gap-4">
+      {items.map((item) => (
+        <div key={item.label} className="text-center">
+          <div className="text-2xl font-bold" style={{ color: "var(--event-primary)" }}>
+            {String(item.value).padStart(2, "0")}
+          </div>
+          <div className="text-xs" style={{ color: "var(--event-muted)" }}>{item.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BlockRenderer({ block }: { block: Block }) {
+  const d = block.data || {};
+  switch (block.type) {
+    case "heading":
+      return <h2 className="font-event text-2xl md:text-3xl my-4" style={{ color: "var(--event-heading)" }}>{d.text || ""}</h2>;
+    case "paragraph":
+      return <RichTextContent html={d.html || ""} className="my-4" />;
+    case "image":
+      return d.url ? <div className="my-4"><img src={d.url} alt="" className="w-full rounded-lg" /></div> : null;
+    case "spacer":
+      return <div style={{ height: `${d.height || 40}px` }} />;
+    case "divider":
+      return <hr className="my-6" style={{ borderColor: "var(--event-border)" }} />;
+    case "gallery": {
+      const urls: string[] = d.urls || [];
+      if (!urls.length) return null;
+      return (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 my-4">
+          {urls.map((url, i) => <img key={i} src={url} alt="" className="w-full h-40 object-cover rounded-lg" />)}
+        </div>
+      );
+    }
+    case "video":
+      return d.url ? (
+        <div className="my-4 aspect-video rounded-lg overflow-hidden">
+          <iframe src={d.url} className="w-full h-full" allowFullScreen title="Video" />
+        </div>
+      ) : null;
+    case "button":
+      return d.text && d.url ? (
+        <div className="my-4 text-center">
+          <a href={d.url} target="_blank" rel="noopener noreferrer" className="event-btn-primary inline-block">{d.text}</a>
+        </div>
+      ) : null;
+    case "columns":
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
+          <div style={{ color: "var(--event-text)" }}>{d.col1 || ""}</div>
+          <div style={{ color: "var(--event-text)" }}>{d.col2 || ""}</div>
+        </div>
+      );
+    case "list": {
+      const items: string[] = d.items || [];
+      if (!items.length) return null;
+      return (
+        <ul className="list-disc pl-6 my-4 space-y-1" style={{ color: "var(--event-text)" }}>
+          {items.map((item, i) => <li key={i}>{item}</li>)}
+        </ul>
+      );
+    }
+    case "quote":
+      return (
+        <blockquote className="my-4 pl-4 italic" style={{ borderLeft: "3px solid var(--event-border)", color: "var(--event-muted)" }}>
+          <p>{d.text || ""}</p>
+          {d.author && <cite className="block text-sm mt-1 not-italic" style={{ color: "var(--event-muted)" }}>— {d.author}</cite>}
+        </blockquote>
+      );
+    case "countdown":
+      return d.date ? <CountdownBlock date={d.date} /> : null;
+    case "map":
+      return d.url ? (
+        <div className="my-4 aspect-video rounded-lg overflow-hidden">
+          <iframe src={d.url} className="w-full h-full" loading="lazy" referrerPolicy="no-referrer-when-downgrade" title="Map" />
+        </div>
+      ) : null;
+    case "venue":
+      return (
+        <div className="my-4 rounded-lg p-4" style={cardStyle}>
+          {d.name && <h3 className="font-event text-lg mb-1" style={{ color: "var(--event-heading)" }}>{d.name}</h3>}
+          {d.address && <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--event-text)" }}>{d.address}</p>}
+        </div>
+      );
+    case "faq":
+      return (d.question || d.answer) ? (
+        <div className="my-4 rounded-lg p-4" style={cardStyle}>
+          <h3 className="font-event text-base font-semibold mb-1" style={{ color: "var(--event-heading)" }}>{d.question}</h3>
+          <p className="text-sm" style={{ color: "var(--event-text)" }}>{d.answer}</p>
+        </div>
+      ) : null;
+    case "rsvp-form":
+      return (
+        <div className="my-4 rounded-lg p-4 text-center" style={cardStyle}>
+          <Link to="../rsvp" className="event-btn-primary inline-block">Go to RSVP</Link>
+        </div>
+      );
+    case "guest-list":
+    case "schedule":
+      return (
+        <div className="my-4 rounded-lg p-4 text-center text-sm" style={{ ...cardStyle, color: "var(--event-muted)" }}>
+          This content is available on the invitation website.
+        </div>
+      );
+    default:
+      return null;
+  }
+}
+
+function NotFound({ message, linkTo, linkLabel, themed }: {
+  message: string; linkTo: string; linkLabel: string; themed?: boolean;
+}) {
+  const inner = (
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="text-center max-w-md">
+        <p className="text-lg mb-4" style={themed ? { color: "var(--event-text)" } : { color: "#374151" }}>{message}</p>
+        <Link to={linkTo} className="underline" style={themed ? { color: "var(--event-primary)" } : { color: "#b45309" }}>{linkLabel}</Link>
+      </div>
+    </div>
+  );
+  return themed ? <EventThemeProvider initialTheme={DEFAULT_THEME}>{inner}</EventThemeProvider> : inner;
+}
 
 export default function GuestCustomPage() {
   const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
-  const { event } = useOutletContext<{ event: UserEvent }>();
 
-  const { data: page, isLoading } = useQuery({
-    queryKey: ["public-custom-page", event.id, pageSlug],
+  const { data: event, isLoading: eventLoading } = useQuery({
+    queryKey: ["published_event", slug],
     queryFn: async () => {
-      const { data, error } = await supabase.from("custom_pages").select("*").eq("event_id", event.id).eq("slug", pageSlug).eq("is_published", true).maybeSingle();
+      const { data, error } = await supabase
+        .from("user_events").select("*").eq("slug", slug!).eq("is_published", true).maybeSingle();
+      if (error) throw error;
+      return data as UserEvent | null;
+    },
+    enabled: !!slug,
+  });
+
+  const { data: page, isLoading: pageLoading, error } = useQuery({
+    queryKey: ["guest_custom_page", event?.id, pageSlug],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("custom_pages").select("*")
+        .eq("slug", pageSlug!).eq("event_id", event!.id).eq("is_published", true).maybeSingle();
       if (error) throw error;
       return data as CustomPage | null;
     },
     enabled: !!event?.id && !!pageSlug,
   });
 
-  if (isLoading) return <div className="text-center py-12 event-muted-text">Loading...</div>;
-  if (!page) return <div className="text-center py-12"><h2 className="text-2xl font-serif mb-2" style={{ color: "var(--event-primary)" }}>Page Not Found</h2></div>;
+  const isLoading = eventLoading || pageLoading;
+  const theme = (event?.theme || DEFAULT_THEME) as ThemeConfig;
+  const blocks = (page?.blocks || []) as unknown as Block[];
 
-  return (
-    <div>
-      <h1 className="text-3xl md:text-4xl font-serif text-center mb-8" style={{ color: "var(--event-primary)" }}>{page.title}</h1>
-      <div className="space-y-6">
-        {(page.blocks || []).map((block) => <BlockRenderer key={block.id} block={block} />)}
-      </div>
+  if (isLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="animate-spin h-8 w-8 border-2 border-amber-700 border-t-transparent rounded-full" />
     </div>
   );
-}
 
-function BlockRenderer({ block }: { block: ContentBlock }) {
-  const d = block.data;
-  switch (block.type) {
-    case "heading": return <h2 className="text-2xl font-serif" style={{ color: "var(--event-primary)" }}>{d.text || ""}</h2>;
-    case "subheading": return <h3 className="text-lg event-muted-text">{d.text || ""}</h3>;
-    case "richtext": return <RichTextContent html={d.html || ""} className="text-base leading-relaxed" />;
-    case "image": return d.url ? <img src={d.url} alt="" className="w-full rounded-xl" /> : null;
-    case "gallery": return (
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        {(d.images || []).map((img: string, i: number) => <img key={i} src={img} alt="" className="w-full rounded-lg object-cover" style={{ aspectRatio: "4/3" }} />)}
-      </div>
-    );
-    case "divider": return <hr className="border-t" style={{ borderColor: "var(--event-border)" }} />;
-    case "button": return d.url ? <div className="text-center"><a href={d.url} target="_blank" rel="noopener" className="inline-block px-6 py-2.5 rounded-lg text-white font-medium" style={{ background: "var(--event-primary)" }}>{d.label || "Click Here"}</a></div> : null;
-    case "quote": return (
-      <blockquote className="border-l-4 pl-4 italic" style={{ borderColor: "var(--event-primary)", color: "var(--event-muted)" }}>
-        <p className="text-lg">{d.text || ""}</p>
-        {d.author && <p className="text-sm mt-2">— {d.author}</p>}
-      </blockquote>
-    );
-    case "countdown": {
-      if (!d.date) return null;
-      const c = getCountdown(d.date);
-      if (c.isPast) return <p className="text-center event-muted-text">This date has passed.</p>;
-      return (
-        <div className="text-center py-4">
-          <div className="flex justify-center gap-4">
-            <div className="text-center"><p className="text-3xl font-bold" style={{ color: "var(--event-primary)" }}>{c.days}</p><p className="text-sm event-muted-text">Days</p></div>
-            <div className="text-center"><p className="text-3xl font-bold" style={{ color: "var(--event-primary)" }}>{c.hours}</p><p className="text-sm event-muted-text">Hours</p></div>
-            <div className="text-center"><p className="text-3xl font-bold" style={{ color: "var(--event-primary)" }}>{c.minutes}</p><p className="text-sm event-muted-text">Minutes</p></div>
-          </div>
-        </div>
-      );
-    }
-    case "maps": return d.address ? (
-      <div className="rounded-xl overflow-hidden border" style={{ borderColor: "var(--event-border)" }}>
-        <iframe src={`https://maps.google.com/maps?q=${encodeURIComponent(d.query || d.address)}&output=embed`} width="100%" height="300" style={{ border: 0 }} loading="lazy" />
-      </div>
-    ) : null;
-    case "video": {
-      if (!d.url) return null;
-      const ytMatch = d.url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\?]+)/);
-      const vimeoMatch = d.url.match(/vimeo\.com\/(\d+)/);
-      let embedUrl = d.url;
-      if (ytMatch) embedUrl = `https://www.youtube.com/embed/${ytMatch[1]}`;
-      else if (vimeoMatch) embedUrl = `https://player.vimeo.com/video/${vimeoMatch[1]}`;
-      return <div className="rounded-xl overflow-hidden" style={{ aspectRatio: "16/9" }}><iframe src={embedUrl} width="100%" height="100%" style={{ border: 0 }} allowFullScreen loading="lazy" /></div>;
-    }
-    case "contact": return (
-      <div className="space-y-2 text-center">
-        {d.email && <div className="flex items-center justify-center gap-2"><Mail className="w-4 h-4" style={{ color: "var(--event-primary)" }} /><a href={`mailto:${d.email}`} className="hover:underline">{d.email}</a></div>}
-        {d.phone && <div className="flex items-center justify-center gap-2"><Phone className="w-4 h-4" style={{ color: "var(--event-primary)" }} /><a href={`tel:${d.phone}`} className="hover:underline">{d.phone}</a></div>}
-        {d.address && <div className="flex items-center justify-center gap-2"><MapPin className="w-4 h-4" style={{ color: "var(--event-primary)" }} /><span className="event-muted-text">{d.address}</span></div>}
-      </div>
-    );
-    case "social": return (
-      <div className="flex flex-wrap gap-3 justify-center">
-        {(d.links || []).map((link: SocialLink, i: number) => link.url ? <a key={i} href={link.url} target="_blank" rel="noopener" className="px-4 py-2 rounded-lg text-white text-sm font-medium" style={{ background: "var(--event-primary)" }}>{link.label}</a> : null)}
-      </div>
-    );
-    case "spacer": return <div style={{ height: d.height || 40 }} />;
-    case "two-col": return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <RichTextContent html={d.left || ""} className="text-base leading-relaxed" />
-        <RichTextContent html={d.right || ""} className="text-base leading-relaxed" />
-      </div>
-    );
-    case "three-col": return (
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <RichTextContent html={d.col1 || ""} className="text-base leading-relaxed" />
-        <RichTextContent html={d.col2 || ""} className="text-base leading-relaxed" />
-        <RichTextContent html={d.col3 || ""} className="text-base leading-relaxed" />
-      </div>
-    );
-    case "faq": return <FaqAccordion items={d.items || []} />;
-    case "timeline": return (
-      <div className="space-y-4">
-        {(d.items || []).map((item: TimelineItem, i: number) => (
-          <div key={i} className="flex gap-4">
-            <div className="flex flex-col items-center">
-              <div className="w-3 h-3 rounded-full" style={{ background: "var(--event-primary)" }} />
-              {i < (d.items || []).length - 1 && <div className="w-0.5 flex-1" style={{ background: "var(--event-border)" }} />}
-            </div>
-            <div className="flex-1 pb-4">
-              <p className="text-sm font-medium" style={{ color: "var(--event-primary)" }}>{item.time}</p>
-              <p className="font-medium">{item.title}</p>
-              {item.description && <p className="text-sm event-muted-text">{item.description}</p>}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-    case "callout": {
-      const variants: Record<string, { bg: string; border: string; text: string }> = {
-        info: { bg: "var(--event-primary-light)", border: "var(--event-primary)", text: "var(--event-text)" },
-        success: { bg: "#dcfce7", border: "#15803d", text: "#15803d" },
-        warning: { bg: "#fef3c7", border: "#d97706", text: "#92400e" },
-        danger: { bg: "#fee2e2", border: "#dc2626", text: "#dc2626" },
-      };
-      const v = variants[d.variant || "info"] || variants.info;
-      return <div className="p-4 rounded-lg border-l-4" style={{ background: v.bg, borderColor: v.border, color: v.text }}>{d.text || ""}</div>;
-    }
-    default: return null;
-  }
-}
+  if (!event) return <NotFound message="This invitation website could not be found or is no longer available." linkTo="/" linkLabel="Back to Home" />;
 
-function FaqAccordion({ items }: { items: FaqItem[] }) {
-  const [open, setOpen] = useState<number | null>(null);
+  if (error || !page) return (
+    <EventThemeProvider initialTheme={theme}>
+      <NotFound message="This page could not be found or is no longer available." linkTo={`/e/${slug}/home`} linkLabel="Back to Home" themed />
+    </EventThemeProvider>
+  );
+
   return (
-    <div className="space-y-2">
-      {items.map((item, i) => (
-        <div key={i} className="border rounded-lg overflow-hidden" style={{ borderColor: "var(--event-border)" }}>
-          <button onClick={() => setOpen(open === i ? null : i)} className="w-full flex items-center justify-between p-4 text-left">
-            <span className="font-medium">{item.question}</span>
-            <ChevronDown className={`w-4 h-4 transition-transform ${open === i ? "rotate-180" : ""}`} style={{ color: "var(--event-primary)" }} />
-          </button>
-          {open === i && <div className="px-4 pb-4 text-sm event-muted-text">{item.answer}</div>}
+    <EventThemeProvider initialTheme={theme}>
+      <div className="min-h-screen">
+        <div className="max-w-2xl mx-auto px-4 py-12">
+          <h1 className="font-event text-3xl md:text-4xl text-center mb-8" style={{ color: "var(--event-heading)" }}>{page.title}</h1>
+          {page.cover_image_url && <div className="mb-8 rounded-lg overflow-hidden"><img src={page.cover_image_url} alt="" className="w-full" /></div>}
+          {page.inline_image_url && <div className="mb-8 rounded-lg overflow-hidden"><img src={page.inline_image_url} alt="" className="w-full" /></div>}
+          {page.body && <RichTextContent html={page.body} className="mb-6" />}
+          {blocks.length > 0 && (
+            <div>{blocks.map((block) => <BlockRenderer key={block.id} block={block} />)}</div>
+          )}
+          <div className="mt-12 text-center">
+            <Link to={`/e/${slug}/home`} className="text-sm underline" style={{ color: "var(--event-primary)" }}>← Back to Home</Link>
+          </div>
         </div>
-      ))}
-    </div>
+      </div>
+    </EventThemeProvider>
   );
 }

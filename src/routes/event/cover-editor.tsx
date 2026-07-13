@@ -1,56 +1,94 @@
-import React from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CoverConfig } from "../../lib/supabase";
+import { supabase, type UserEvent } from "../../lib/supabase";
+import { Input, Textarea } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, FormField } from "../../components/ui";
 import { ImageUpload } from "../../components/ui/ImageUpload";
-import { DatePicker } from "../../components/ui/DatePicker";
-import { TimePicker } from "../../components/ui/TimePicker";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
+import { LoadingSpinner } from "../../components/ui";
+
+type CoverConfig = { subtitle?: string };
 
 export default function CoverEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const cfg = event.draft_cover_config || event.cover_config || {};
-  const [title, setTitle] = React.useState(cfg.title || "");
-  const [subtitle, setSubtitle] = React.useState(cfg.subtitle || "");
-  const [coverImage, setCoverImage] = React.useState<string | null>(cfg.cover_image || null);
-  const [date, setDate] = React.useState<string | null>(cfg.date || event.draft_event_date || event.event_date || null);
-  const [time, setTime] = React.useState<string | null>(cfg.time || event.draft_event_time || event.event_time || null);
-  const [venue, setVenue] = React.useState(cfg.venue || event.draft_venue || event.venue || "");
-  const [logoImage, setLogoImage] = React.useState<string | null>(cfg.logo_image || null);
+  const [subtitle, setSubtitle] = useState("");
+  const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const cfg = (event.draft_cover_config ?? event.cover_config ?? {}) as CoverConfig;
+    setSubtitle(cfg.subtitle ?? "");
+    setCoverImage(event.draft_cover_image ?? event.cover_image ?? null);
+  }, [event.id]);
 
   const saveMutation = useMutation({
-    mutationFn: async () => {
-      const coverConfig: CoverConfig = { title, subtitle, cover_image: coverImage, date, time, venue, logo_image: logoImage };
-      const { error } = await supabase.from("user_events").update({ draft_cover_config: coverConfig, draft_cover_image: coverImage, draft_event_date: date, draft_event_time: time, draft_venue: venue }).eq("id", event.id);
+    mutationFn: async (payload: { draft_cover_image: string | null; draft_cover_config: CoverConfig }) => {
+      const { error } = await supabase
+        .from("user_events")
+        .update({
+          draft_cover_image: payload.draft_cover_image,
+          draft_cover_config: payload.draft_cover_config,
+        })
+        .eq("id", event.id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", event.id] }),
-    onError: (err: any) => alert("Failed to save: " + (err.message || "Unknown error")),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    },
   });
 
-  const previewEvent = { ...event, draft_cover_config: { title, subtitle, cover_image: coverImage, date, time, venue, logo_image: logoImage } };
+  // Auto-save with debounce
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      saveMutation.mutate({ draft_cover_image: coverImage, draft_cover_config: { subtitle } });
+    }, 800);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtitle, coverImage]);
+
+  const previewEvent: Partial<UserEvent> = {
+    ...event,
+    name: event.draft_name || event.name,
+    event_date: event.draft_event_date || event.event_date,
+    cover_image: coverImage,
+    cover_config: { subtitle },
+  };
 
   return (
-    <div>
-      <h2 className="text-xl font-semibold text-dash-text mb-6">Cover Page</h2>
-      <SplitEditor preview={<CoverPreview event={previewEvent} />}>
-        <div className="space-y-4">
-          <FormField label="Title"><Input value={title} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTitle(e.target.value)} placeholder="Event title" /></FormField>
-          <FormField label="Subtitle"><Textarea value={subtitle} onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setSubtitle(e.target.value)} rows={2} placeholder="Tagline or subtitle" /></FormField>
-          <FormField label="Cover Image"><ImageUpload value={coverImage} onChange={setCoverImage} eventId={event.id} /></FormField>
-          <FormField label="Logo Image"><ImageUpload value={logoImage} onChange={setLogoImage} eventId={event.id} aspectRatio="1/1" /></FormField>
-          <div className="grid grid-cols-2 gap-4">
-            <FormField label="Date"><DatePicker value={date} onChange={(d) => setDate(d)} /></FormField>
-            <FormField label="Time"><TimePicker value={time} onChange={(t) => setTime(t)} /></FormField>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-dash-text">Cover Editor</h2>
+        {saved && <span className="text-sm text-green-600">✓ Saved</span>}
+        {saveMutation.isPending && <LoadingSpinner className="h-4 w-4" />}
+      </div>
+      <SplitEditor
+        editor={
+          <div className="space-y-4">
+            <ImageUpload
+              label="Cover Image"
+              value={coverImage}
+              onChange={setCoverImage}
+              eventId={event.id}
+              aspect="aspect-video"
+            />
+            <Textarea
+              label="Subtitle"
+              value={subtitle}
+              onChange={(e) => setSubtitle(e.target.value)}
+              placeholder="A short tagline or message for your cover"
+              rows={2}
+            />
           </div>
-          <FormField label="Venue"><Input value={venue} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVenue(e.target.value)} placeholder="Venue name" /></FormField>
-          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>Save Changes</Button>
-        </div>
-      </SplitEditor>
+        }
+        preview={<CoverPreview event={previewEvent} />}
+      />
     </div>
   );
 }

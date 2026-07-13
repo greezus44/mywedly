@@ -1,0 +1,396 @@
+
+=== budget_items ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  category: text nullable=NO default=None
+  label: text nullable=NO default=None
+  estimated_cents: integer nullable=NO default=0
+  actual_cents: integer nullable=NO default=0
+  is_paid: boolean nullable=NO default=false
+  created_at: timestamp with time zone nullable=NO default=now()
+
+=== checklist_tasks ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  title: text nullable=NO default=None
+  category: text nullable=YES default=None
+  due_date: date nullable=YES default=None
+  is_done: boolean nullable=NO default=false
+  sort_order: integer nullable=NO default=0
+  created_at: timestamp with time zone nullable=NO default=now()
+
+=== custom_pages ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  slug: text nullable=NO default=None
+  title: text nullable=NO default=None
+  body: text nullable=NO default=''::text
+  cover_image_url: text nullable=YES default=None
+  inline_image_url: text nullable=YES default=None
+  sort_order: integer nullable=NO default=0
+  is_published: boolean nullable=NO default=true
+  created_at: timestamp with time zone nullable=NO default=now()
+  updated_at: timestamp with time zone nullable=NO default=now()
+  event_id: uuid nullable=YES default=None
+  nav_label: text nullable=YES default=''::text
+  icon: text nullable=YES default=None
+  show_in_nav: boolean nullable=NO default=true
+  blocks: jsonb nullable=NO default='[]'::jsonb
+  is_footer: boolean nullable=NO default=false
+
+=== event_guests ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  event_id: uuid nullable=NO default=None
+  name: text nullable=NO default=None
+  email: text nullable=YES default=''::text
+  phone: text nullable=YES default=''::text
+  group_name: text nullable=YES default=''::text
+  side: text nullable=YES default=''::text
+  token: text nullable=NO default=(gen_random_uuid())::text
+  rsvp_status: text nullable=NO default='pending'::text
+  rsvp_submitted_at: timestamp with time zone nullable=YES default=None
+  plus_ones: integer nullable=NO default=0
+  dietary: text nullable=YES default=''::text
+  message: text nullable=YES default=''::text
+  created_at: timestamp with time zone nullable=NO default=now()
+  table_number: text nullable=YES default=None
+  username: text nullable=YES default=None
+
+=== event_messages ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  event_id: uuid nullable=NO default=None
+  guest_name: text nullable=NO default='Anonymous'::text
+  message: text nullable=NO default=None
+  created_at: timestamp with time zone nullable=NO default=now()
+
+=== event_rsvps ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  event_id: uuid nullable=NO default=None
+  guest_id: uuid nullable=YES default=None
+  guest_name: text nullable=NO default=None
+  status: text nullable=NO default='pending'::text
+  plus_ones: integer nullable=NO default=0
+  dietary: text nullable=YES default=''::text
+  message: text nullable=YES default=''::text
+  answers: jsonb nullable=YES default='{}'::jsonb
+  submitted_at: timestamp with time zone nullable=NO default=now()
+  sub_event_id: uuid nullable=YES default=None
+
+=== event_schedule ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  event_id: uuid nullable=NO default=None
+  title: text nullable=NO default=None
+  description: text nullable=YES default=''::text
+  schedule_date: date nullable=YES default=None
+  start_time: time without time zone nullable=YES default=None
+  end_time: time without time zone nullable=YES default=None
+  venue: text nullable=YES default=''::text
+  address: text nullable=YES default=''::text
+  dress_code: text nullable=YES default=''::text
+  category: text nullable=YES default=''::text
+  cover_image: text nullable=YES default=''::text
+  order_index: integer nullable=NO default=0
+  created_at: timestamp with time zone nullable=NO default=now()
+  sub_event_id: uuid nullable=YES default=None
+
+=== event_slug_redirects ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  slug: text nullable=NO default=None
+  event_id: uuid nullable=NO default=None
+  created_at: timestamp with time zone nullable=YES default=now()
+
+=== events ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  name: text nullable=NO default=None
+  kind: USER-DEFINED nullable=NO default='ceremony'::event_kind
+  starts_at: timestamp with time zone nullable=YES default=None
+  venue_name: text nullable=YES default=None
+  venue_address: text nullable=YES default=None
+  dress_code: text nullable=YES default=None
+  notes: text nullable=YES default=None
+  visibility: USER-DEFINED nullable=NO default='public'::event_visibility
+  sort_order: integer nullable=NO default=0
+  created_at: timestamp with time zone nullable=NO default=now()
+  description: text nullable=YES default=None
+  maps_url: text nullable=YES default=None
+  image_url: text nullable=YES default=None
+  rsvp_deadline: date nullable=YES default=None
+  capacity: integer nullable=YES default=None
+  programme: text nullable=YES default=None
+
+=== galleries ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  title: text nullable=NO default=None
+  sort_order: integer nullable=YES default=0
+  created_at: timestamp with time zone nullable=YES default=now()
+
+=== gallery_items ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  image_url: text nullable=NO default=None
+  caption: text nullable=YES default=None
+  uploader_name: text nullable=YES default=None
+  is_featured: boolean nullable=NO default=false
+  is_approved: boolean nullable=NO default=true
+  created_at: timestamp with time zone nullable=NO default=now()
+  gallery_id: uuid nullable=YES default=None
+
+=== group_event_invites ===
+  group_id: uuid nullable=NO default=None
+  event_id: uuid nullable=NO default=None
+  created_at: timestamp with time zone nullable=NO default=now()
+  sub_event_id: uuid nullable=YES default=None
+
+=== guest_event_invites ===
+  guest_id: uuid nullable=NO default=None
+  event_id: uuid nullable=NO default=None
+  created_at: timestamp with time zone nullable=NO default=now()
+  invite_type: text nullable=NO default='include'::text
+  sub_event_id: uuid nullable=YES default=None
+
+=== guest_group_members ===
+  guest_id: uuid nullable=NO default=None
+  group_id: uuid nullable=NO default=None
+  created_at: timestamp with time zone nullable=YES default=now()
+
+=== guest_groups ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=YES default=None
+  name: text nullable=NO default=None
+  sort_order: integer nullable=NO default=0
+  created_at: timestamp with time zone nullable=NO default=now()
+  updated_at: timestamp with time zone nullable=NO default=now()
+  event_id: uuid nullable=YES default=None
+
+=== guest_invitation_overrides ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  sub_event_id: uuid nullable=NO default=None
+  guest_id: uuid nullable=NO default=None
+  is_invited: boolean nullable=NO default=None
+  created_at: timestamp with time zone nullable=YES default=now()
+
+=== guest_tokens ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  guest_id: uuid nullable=NO default=None
+  wedding_id: uuid nullable=NO default=None
+  token: text nullable=NO default=None
+  qr_code_url: text nullable=YES default=None
+  bypass_login: boolean nullable=NO default=false
+  created_at: timestamp with time zone nullable=YES default=now()
+  updated_at: timestamp with time zone nullable=YES default=now()
+
+=== guestbook_entries ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  author_name: text nullable=NO default=None
+  message: text nullable=NO default=None
+  is_approved: boolean nullable=NO default=true
+  created_at: timestamp with time zone nullable=NO default=now()
+
+=== guests ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  full_name: text nullable=NO default=None
+  email: text nullable=YES default=None
+  phone: text nullable=YES default=None
+  group_label: text nullable=YES default=None
+  tag: text nullable=YES default=None
+  plus_one_allowed: boolean nullable=NO default=false
+  address: text nullable=YES default=None
+  notes: text nullable=YES default=None
+  invite_code: text nullable=YES default=substr(md5((random())::text), 1, 8)
+  created_at: timestamp with time zone nullable=NO default=now()
+  group_id: uuid nullable=YES default=None
+  username: text nullable=YES default=None
+  first_name: text nullable=YES default=None
+  last_name: text nullable=YES default=None
+  rsvp_status: text nullable=YES default='pending'::text
+  dietary_requirements: text nullable=YES default=None
+
+=== profiles ===
+  id: uuid nullable=NO default=None
+  display_name: text nullable=YES default=None
+  avatar_url: text nullable=YES default=None
+  created_at: timestamp with time zone nullable=NO default=now()
+  updated_at: timestamp with time zone nullable=NO default=now()
+
+=== registry_items ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  title: text nullable=NO default=None
+  description: text nullable=YES default=None
+  url: text nullable=YES default=None
+  image_url: text nullable=YES default=None
+  price_cents: integer nullable=YES default=None
+  is_cash_fund: boolean nullable=NO default=false
+  sort_order: integer nullable=NO default=0
+  created_at: timestamp with time zone nullable=NO default=now()
+
+=== rsvps ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  guest_id: uuid nullable=YES default=None
+  guest_name: text nullable=NO default=None
+  guest_email: text nullable=YES default=None
+  status: USER-DEFINED nullable=NO default='pending'::rsvp_status
+  meal_choice: text nullable=YES default=None
+  dietary_restrictions: text nullable=YES default=None
+  song_request: text nullable=YES default=None
+  plus_one_name: text nullable=YES default=None
+  message: text nullable=YES default=None
+  created_at: timestamp with time zone nullable=NO default=now()
+  updated_at: timestamp with time zone nullable=NO default=now()
+  event_id: uuid nullable=YES default=None
+
+=== saved_themes ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  name: text nullable=NO default=None
+  theme_config: jsonb nullable=NO default='{}'::jsonb
+  cover_config: jsonb nullable=NO default='{}'::jsonb
+  created_at: timestamp with time zone nullable=YES default=now()
+  updated_at: timestamp with time zone nullable=YES default=now()
+
+=== sharing_events ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  event_type: text nullable=NO default=None
+  guest_id: uuid nullable=YES default=None
+  source: text nullable=YES default=None
+  device_type: text nullable=YES default=None
+  metadata: jsonb nullable=YES default='{}'::jsonb
+  created_at: timestamp with time zone nullable=YES default=now()
+
+=== sub_event_group_assignments ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  sub_event_id: uuid nullable=NO default=None
+  group_id: uuid nullable=NO default=None
+  created_at: timestamp with time zone nullable=YES default=now()
+
+=== sub_events ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  parent_event_id: uuid nullable=NO default=None
+  name: text nullable=NO default='New Event'::text
+  date: date nullable=YES default=None
+  time: time without time zone nullable=YES default=None
+  venue: text nullable=YES default=''::text
+  address: text nullable=YES default=''::text
+  description: text nullable=YES default=None
+  dress_code: text nullable=YES default=None
+  rsvp_deadline: timestamp with time zone nullable=YES default=None
+  rsvp_enabled: boolean nullable=NO default=true
+  order_index: integer nullable=NO default=0
+  created_at: timestamp with time zone nullable=NO default=now()
+  updated_at: timestamp with time zone nullable=NO default=now()
+  start_time: time without time zone nullable=YES default=None
+  end_time: time without time zone nullable=YES default=None
+  display_order: integer nullable=NO default=0
+  wedding_id: uuid nullable=YES default=None
+
+=== travel_items ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  kind: USER-DEFINED nullable=NO default='hotel'::travel_kind
+  title: text nullable=NO default=None
+  description: text nullable=YES default=None
+  url: text nullable=YES default=None
+  address: text nullable=YES default=None
+  sort_order: integer nullable=NO default=0
+  created_at: timestamp with time zone nullable=NO default=now()
+
+=== user_events ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  creator_id: uuid nullable=NO default=auth.uid()
+  name: text nullable=NO default='My Event'::text
+  event_type: text nullable=NO default='other'::text
+  event_date: date nullable=YES default=None
+  event_time: time without time zone nullable=YES default=None
+  venue: text nullable=YES default=''::text
+  address: text nullable=YES default=''::text
+  cover_image: text nullable=YES default=None
+  cover_config: jsonb nullable=YES default='{}'::jsonb
+  login_config: jsonb nullable=YES default='{}'::jsonb
+  theme: jsonb nullable=YES default='{}'::jsonb
+  logo_config: jsonb nullable=YES default='{}'::jsonb
+  content: jsonb nullable=YES default='{}'::jsonb
+  sharing_config: jsonb nullable=YES default='{}'::jsonb
+  draft_name: text nullable=YES default=None
+  draft_event_type: text nullable=YES default=None
+  draft_event_date: date nullable=YES default=None
+  draft_event_time: time without time zone nullable=YES default=None
+  draft_venue: text nullable=YES default=None
+  draft_address: text nullable=YES default=None
+  draft_cover_image: text nullable=YES default=None
+  draft_cover_config: jsonb nullable=YES default=None
+  draft_login_config: jsonb nullable=YES default=None
+  draft_theme: jsonb nullable=YES default=None
+  draft_logo_config: jsonb nullable=YES default=None
+  draft_content: jsonb nullable=YES default=None
+  draft_sharing_config: jsonb nullable=YES default=None
+  is_published: boolean nullable=NO default=false
+  is_archived: boolean nullable=NO default=false
+  published_at: timestamp with time zone nullable=YES default=None
+  created_at: timestamp with time zone nullable=NO default=now()
+  updated_at: timestamp with time zone nullable=NO default=now()
+  template_id: text nullable=NO default='default'::text
+  slug: text nullable=YES default=None
+  draft_slug: text nullable=YES default=None
+  rsvp_deadline: timestamp with time zone nullable=YES default=None
+  draft_rsvp_deadline: timestamp with time zone nullable=YES default=None
+
+=== website_content ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  section: text nullable=NO default=None
+  title: text nullable=YES default=None
+  body: text nullable=YES default=None
+  image_url: text nullable=YES default=None
+  sort_order: integer nullable=YES default=0
+  is_published: boolean nullable=YES default=true
+  created_at: timestamp with time zone nullable=YES default=now()
+  updated_at: timestamp with time zone nullable=YES default=now()
+  draft_title: text nullable=YES default=None
+  draft_body: text nullable=YES default=None
+  draft_image_url: text nullable=YES default=None
+  draft_is_published: boolean nullable=YES default=None
+
+=== wedding_members ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  wedding_id: uuid nullable=NO default=None
+  user_id: uuid nullable=NO default=None
+  role: USER-DEFINED nullable=NO default='owner'::wedding_role
+  created_at: timestamp with time zone nullable=NO default=now()
+
+=== weddings ===
+  id: uuid nullable=NO default=gen_random_uuid()
+  slug: text nullable=NO default=None
+  couple_name_one: text nullable=NO default=None
+  couple_name_two: text nullable=NO default=None
+  wedding_date: date nullable=YES default=None
+  location: text nullable=YES default=None
+  hero_image_url: text nullable=YES default=None
+  story: text nullable=YES default=None
+  hashtag: text nullable=YES default=None
+  theme: jsonb nullable=NO default='{}'::jsonb
+  is_published: boolean nullable=NO default=true
+  created_by: uuid nullable=NO default=None
+  created_at: timestamp with time zone nullable=NO default=now()
+  updated_at: timestamp with time zone nullable=NO default=now()
+  content: jsonb nullable=NO default='{}'::jsonb
+  signin_helper: text nullable=YES default=None
+  theme_config: jsonb nullable=YES default='{}'::jsonb
+  draft_content: jsonb nullable=YES default='{}'::jsonb
+  draft_theme_config: jsonb nullable=YES default=None
+  rsvp_deadline: date nullable=YES default=None
+  contact_phone: text nullable=YES default=None
+  full_name_one: text nullable=YES default=None
+  full_name_two: text nullable=YES default=None
+  cover_monogram_url: text nullable=YES default=None
+  cover_config: jsonb nullable=YES default='{}'::jsonb
+  sharing_config: jsonb nullable=YES default='{}'::jsonb
+  qr_token: text nullable=YES default=None
+  draft_cover_config: jsonb nullable=YES default=None
+  login_config: jsonb nullable=YES default=None
+  draft_login_config: jsonb nullable=YES default=None

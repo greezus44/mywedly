@@ -3,7 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventMessage } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { formatDateShort } from "../../lib/utils";
+import { formatDateTime } from "../../lib/utils";
 
 export default function GuestWishes() {
   const { event } = useOutletContext<{ event: UserEvent }>();
@@ -11,39 +11,134 @@ export default function GuestWishes() {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
 
-  const { data: messages } = useQuery({
-    queryKey: ["wishes", event.id],
+  // Query messages
+  const { data: messages, isLoading, error, refetch } = useQuery({
+    queryKey: ["guest_event_messages", event.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("event_messages").select("*").eq("event_id", event.id).order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("event_messages")
+        .select("*")
+        .eq("event_id", event.id)
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data as EventMessage[];
     },
   });
 
-  const submitMutation = useMutation({
+  // Post message mutation
+  const postMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("event_messages").insert({ event_id: event.id, guest_name: guestName || "Guest", message });
+      const { error } = await supabase.from("event_messages").insert({
+        event_id: event.id,
+        guest_name: guestName || "Anonymous",
+        message: message.trim(),
+      });
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["wishes", event.id] }); setMessage(""); },
-    onError: (err: any) => alert("Failed to post wish: " + (err.message || "Unknown error")),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guest_event_messages", event.id] });
+      setMessage("");
+    },
   });
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!message.trim()) return;
+    postMutation.mutate();
+  }
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h2 className="text-2xl font-serif text-center mb-6" style={{ color: "var(--event-primary)" }}>Wishes</h2>
-      <div className="mb-6">
-        <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Write a wish for the hosts..." rows={3} className="w-full px-4 py-2.5 rounded-lg border bg-white mb-2" style={{ borderColor: "var(--event-border)" }} />
-        <button onClick={() => submitMutation.mutate()} disabled={!message.trim() || submitMutation.isPending} className="px-6 py-2 rounded-lg text-white font-medium disabled:opacity-50" style={{ background: "var(--event-primary)" }}>{submitMutation.isPending ? "Posting..." : "Post Wish"}</button>
-      </div>
-      <div className="space-y-3">
-        {messages?.map((m) => (
-          <div key={m.id} className="p-4 rounded-lg border" style={{ borderColor: "var(--event-border)", background: "var(--event-surface)" }}>
-            <p className="text-sm mb-1">{m.message}</p>
-            <p className="text-xs event-muted-text">— {m.guest_name} on {formatDateShort(m.created_at)}</p>
+      <h2 className="font-event text-2xl mb-2 text-center" style={{ color: "var(--event-heading)" }}>
+        Wishes & Messages
+      </h2>
+      <p className="text-sm text-center mb-8" style={{ color: "var(--event-muted)" }}>
+        Leave a message for {event.name}.
+      </p>
+
+      {/* Message form */}
+      <form onSubmit={handleSubmit} className="mb-8">
+        <div
+          className="rounded-xl p-4"
+          style={{ backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}
+        >
+          <textarea
+            rows={3}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Write your message..."
+            className="event-input resize-none mb-3"
+            maxLength={500}
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs" style={{ color: "var(--event-muted)" }}>
+              Posting as {guestName || "Guest"}
+            </span>
+            <button
+              type="submit"
+              disabled={!message.trim() || postMutation.isPending}
+              className="event-btn-primary flex items-center gap-2"
+            >
+              {postMutation.isPending && (
+                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              )}
+              Post Message
+            </button>
           </div>
-        ))}
-      </div>
+          {postMutation.isError && (
+            <p className="text-sm text-red-600 mt-2">
+              Failed to post message. Please try again.
+            </p>
+          )}
+        </div>
+      </form>
+
+      {/* Messages list */}
+      {isLoading ? (
+        <div className="flex justify-center py-8">
+          <div className="animate-spin h-8 w-8 border-2 rounded-full" style={{ borderColor: "var(--event-primary)", borderTopColor: "transparent" }} />
+        </div>
+      ) : error ? (
+        <div className="text-center py-8">
+          <p className="text-sm" style={{ color: "var(--event-muted)" }}>
+            Failed to load messages.
+          </p>
+          <button onClick={() => refetch()} className="text-sm underline mt-2" style={{ color: "var(--event-primary)" }}>
+            Try again
+          </button>
+        </div>
+      ) : messages && messages.length > 0 ? (
+        <div className="space-y-4">
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className="rounded-xl p-4"
+              style={{ backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium text-sm" style={{ color: "var(--event-heading)" }}>
+                  {msg.guest_name}
+                </span>
+                <span className="text-xs" style={{ color: "var(--event-muted)" }}>
+                  {formatDateTime(msg.created_at)}
+                </span>
+              </div>
+              <p className="text-sm whitespace-pre-wrap" style={{ color: "var(--event-text)" }}>
+                {msg.message}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <p className="text-sm" style={{ color: "var(--event-muted)" }}>
+            No messages yet. Be the first to leave a wish!
+          </p>
+        </div>
+      )}
     </div>
   );
 }

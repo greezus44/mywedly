@@ -1,10 +1,10 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
-import { Input, FormField } from "../components/ui";
+import { Input } from "../components/ui/Input";
 
-export default function Auth() {
+export default function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -12,35 +12,77 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) navigate("/dashboard");
+    });
+  }, [navigate]);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true); setError(null);
+    setLoading(true);
+    setError(null);
     try {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .insert({ id: (await supabase.auth.getUser()).data.user?.id, display_name: email.split("@")[0] });
+        if (profileData) navigate("/dashboard");
+        else navigate("/dashboard");
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        navigate("/dashboard");
       }
-      navigate("/dashboard");
-    } catch (err: any) { setError(err.message || "Authentication failed"); }
-    finally { setLoading(false); }
-  };
+    } catch (err: any) {
+      setError(err.message || "Authentication failed");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
-        <h1 className="text-2xl font-semibold text-slate-900 mb-6 text-center">{mode === "signin" ? "Sign In" : "Create Account"}</h1>
-        {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+    <div className="min-h-screen flex items-center justify-center bg-dash-bg p-4">
+      <div className="max-w-md w-full rounded-xl border border-dash-border bg-dash-surface p-8 shadow-sm">
+        <div className="text-center mb-6">
+          <Link to="/" className="text-2xl font-bold text-dash-text">MyWedly</Link>
+          <p className="text-sm text-dash-muted mt-1">
+            {mode === "signin" ? "Sign in to your account" : "Create a new account"}
+          </p>
+        </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <FormField label="Email"><Input type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} required placeholder="you@example.com" /></FormField>
-          <FormField label="Password"><Input type="password" value={password} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)} required minLength={6} placeholder="At least 6 characters" /></FormField>
-          <Button type="submit" loading={loading} className="w-full">{mode === "signin" ? "Sign In" : "Sign Up"}</Button>
+          <Input
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            placeholder="you@example.com"
+          />
+          <Input
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            placeholder="••••••••"
+            minLength={6}
+          />
+          {error && <p className="text-sm text-dash-danger">{error}</p>}
+          <Button type="submit" loading={loading} className="w-full">
+            {mode === "signin" ? "Sign in" : "Sign up"}
+          </Button>
         </form>
-        <p className="mt-4 text-center text-sm text-slate-600">
+        <p className="text-center text-sm text-dash-muted mt-4">
           {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
-          <button onClick={() => setMode(mode === "signin" ? "signup" : "signin")} className="text-teal-700 hover:underline">{mode === "signin" ? "Sign up" : "Sign in"}</button>
+          <button
+            onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); }}
+            className="font-medium text-dash-primary hover:underline"
+          >
+            {mode === "signin" ? "Sign up" : "Sign in"}
+          </button>
         </p>
       </div>
     </div>

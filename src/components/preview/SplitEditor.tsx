@@ -1,12 +1,20 @@
 import React from "react";
+import { cn } from "../../lib/utils";
 
-export function SplitEditor({ preview, children }: { preview: React.ReactNode; children: React.ReactNode }) {
+export function SplitEditor({
+  editor,
+  preview,
+  previewClassName,
+}: {
+  editor: React.ReactNode;
+  preview: React.ReactNode;
+  previewClassName?: string;
+}) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div>{children}</div>
-      <div>
-        <div className="flex gap-2 mb-3 justify-center"><span className="text-xs text-dash-muted">Desktop</span></div>
-        <div className="border border-dash-border rounded-lg overflow-hidden bg-white" style={{ minHeight: 400 }}>{preview}</div>
+      <div className="space-y-4">{editor}</div>
+      <div className={cn("rounded-xl border border-dash-border overflow-hidden", previewClassName)}>
+        {preview}
       </div>
     </div>
   );

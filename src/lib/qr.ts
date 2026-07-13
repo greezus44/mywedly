@@ -1,17 +1,28 @@
-export async function generateQrDataUrl(text: string, size: number = 200): Promise<string> {
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}`;
+import QRCode from "qrcode";
+
+export async function generateQrDataUrl(url: string): Promise<string> {
+  return QRCode.toDataURL(url, {
+    width: 300,
+    margin: 2,
+    color: { dark: "#000000", light: "#ffffff" },
+  });
 }
-export async function downloadQrCode(text: string, filename: string = "qr-code.png"): Promise<void> {
-  const url = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(text)}`;
-  const response = await fetch(url); const blob = await response.blob();
-  const downloadUrl = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = downloadUrl; a.download = filename; a.click();
-  URL.revokeObjectURL(downloadUrl);
+
+export async function downloadQrCode(url: string, filename: string = "qr-code.png"): Promise<void> {
+  const dataUrl = await generateQrDataUrl(url);
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = filename;
+  link.click();
 }
-export async function downloadQrSvg(text: string, filename: string = "qr-code.svg"): Promise<void> {
-  const url = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&format=svg&data=${encodeURIComponent(text)}`;
-  const response = await fetch(url); const blob = await response.blob();
-  const downloadUrl = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = downloadUrl; a.download = filename; a.click();
-  URL.revokeObjectURL(downloadUrl);
+
+export async function downloadQrSvg(url: string, filename: string = "qr-code.svg"): Promise<void> {
+  const svg = await QRCode.toString(url, { type: "svg", margin: 2 });
+  const blob = new Blob([svg], { type: "image/svg+xml" });
+  const dataUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(dataUrl);
 }

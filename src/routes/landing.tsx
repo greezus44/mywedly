@@ -1,31 +1,44 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { CalendarHeart, Users, Share2 } from "lucide-react";
 import { SiteHeader } from "../components/site/SiteHeader";
 import { SiteFooter } from "../components/site/SiteFooter";
+import { Button } from "../components/ui/Button";
 
-export default function Landing() {
+export default function LandingPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div className="min-h-screen bg-dash-bg">
       <SiteHeader />
-      <main className="flex-1">
+      <main>
         <section className="max-w-6xl mx-auto px-4 py-20 text-center">
-          <h1 className="text-4xl md:text-6xl font-serif text-slate-900 mb-4">Create Beautiful Event Invitations</h1>
-          <p className="text-lg text-slate-600 mb-8 max-w-2xl mx-auto">Design, manage, and share stunning event websites for weddings, birthdays, corporate events, and more.</p>
-          <Link to="/auth" className="inline-flex items-center gap-2 px-6 py-3 bg-teal-700 text-white rounded-lg hover:bg-teal-800 text-base font-medium">Get Started Free</Link>
+          <h1 className="text-4xl md:text-5xl font-bold text-dash-text mb-4">
+            Invitation Websites for Any Event
+          </h1>
+          <p className="text-lg text-dash-muted max-w-2xl mx-auto mb-8">
+            Create a beautiful invitation website for your wedding, conference, birthday, festival, or any multi-event experience.
+          </p>
+          <div className="flex justify-center gap-4">
+            <Link to="/auth">
+              <Button size="lg">Get Started</Button>
+            </Link>
+            <Link to="/auth">
+              <Button variant="secondary" size="lg">Sign in</Button>
+            </Link>
+          </div>
         </section>
-        <section className="max-w-6xl mx-auto px-4 py-12 grid grid-cols-1 md:grid-cols-3 gap-8">
-          {[
-            { icon: CalendarHeart, title: "Custom Pages", desc: "Design cover, login, home, and RSVP pages with live preview." },
-            { icon: Users, title: "Guest Management", desc: "Manage guests, groups, RSVPs, and wishes all in one place." },
-            { icon: Share2, title: "Easy Sharing", desc: "Share with custom URLs, QR codes, and published guest pages." },
-          ].map((f, i) => (
-            <div key={i} className="bg-white p-6 rounded-xl border border-slate-200">
-              <f.icon className="w-8 h-8 text-teal-700 mb-3" />
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">{f.title}</h3>
-              <p className="text-sm text-slate-600">{f.desc}</p>
-            </div>
-          ))}
+
+        <section className="max-w-6xl mx-auto px-4 py-12">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              { title: "Multi-Event Support", desc: "Create invitation websites with multiple events — ceremonies, receptions, dinners, and more." },
+              { title: "Guest Management", desc: "Organize guests into groups, send bulk invitations, and track RSVPs all in one place." },
+              { title: "Custom Pages", desc: "Build custom pages with a drag-and-drop page builder. Share your story, venue details, and more." },
+            ].map((f) => (
+              <div key={f.title} className="rounded-xl border border-dash-border bg-dash-surface p-6">
+                <h3 className="text-lg font-semibold text-dash-text mb-2">{f.title}</h3>
+                <p className="text-sm text-dash-muted">{f.desc}</p>
+              </div>
+            ))}
+          </div>
         </section>
       </main>
       <SiteFooter />
