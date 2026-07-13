@@ -1,244 +1,220 @@
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Calendar, MapPin } from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import type { Wedding } from "@/lib/supabase";
-import { getTheme, getCoverContent, themeToCssVars } from "@/lib/theme";
-import { daysUntil, formatDate, cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { ChevronRight } from "lucide-react";
+import { supabase } from "../../lib/supabase";
+import { useLang } from "../../lib/lang-context";
+import { themeToCssVars, getTheme, getCoverContent } from "../../lib/theme";
+import { getCountdown } from "../../lib/utils";
+import { Button } from "../../components/ui/Button";
+import type { Wedding } from "../../lib/supabase";
 
-export function GuestCover() {
-  const { slug } = useParams<{ slug: string }>();
+export function Cover() {
+  const { slug } = useParams();
   const navigate = useNavigate();
-
+  const { lang, setLang, t } = useLang();
   const [wedding, setWedding] = useState<Wedding | null>(null);
   const [loading, setLoading] = useState(true);
-  const [scrollY, setScrollY] = useState(0);
+  const [notFound, setNotFound] = useState(false);
 
-  // ── Fetch wedding by slug ──
+  const theme = getTheme(wedding);
+  const cssVars = themeToCssVars(theme);
+  const content = getCoverContent(wedding || {});
+
   useEffect(() => {
-    if (!slug) return;
-    supabase
-      .from("weddings")
-      .select("*")
-      .eq("slug", slug)
-      .maybeSingle()
-      .then(({ data }) => {
-        setWedding((data as Wedding) ?? null);
-        setLoading(false);
-      });
+    if (!slug) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+    (async () => {
+      const { data, error } = await supabase
+        .from("weddings")
+        .select("*")
+        .eq("slug", slug)
+        .eq("is_published", true)
+        .single();
+      if (error || !data) {
+        setNotFound(true);
+      } else {
+        setWedding(data as Wedding);
+      }
+      setLoading(false);
+    })();
   }, [slug]);
 
-  // ── Parallax scroll listener ──
+  const [countdown, setCountdown] = useState(getCountdown(wedding?.wedding_date || null));
+
   useEffect(() => {
-    const onScroll = () => setScrollY(window.scrollY);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  const theme = useMemo(() => getTheme(wedding), [wedding]);
-  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
-  const content = useMemo(() => getCoverContent(wedding), [wedding]);
-
-  const bgUrl = content.cover_background_url || wedding?.hero_image_url || null;
-  const videoUrl = content.cover_background_video_url || null;
-  const overlay = content.cover_overlay_opacity ?? 0.3;
-  const textAlign = content.cover_text_align ?? "center";
-  const logoVisible = content.cover_logo_visible !== false;
-  const logoUrl = content.cover_logo_url || null;
-  const logoSize = content.cover_logo_size ?? "80px";
-  const logoPos = content.cover_logo_position ?? "center";
-  const countdownEnabled = content.cover_countdown_enabled !== false;
-  const heading = content.cover_heading || (wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "");
-  const subtitle = content.cover_subtitle || null;
-  const welcome = content.cover_welcome || null;
-  const buttonText = content.cover_button_text || "Enter Website";
-  const mainHeading = content.cover_main_heading || null;
-  const dUntil = daysUntil(wedding?.wedding_date ?? null);
+    if (!wedding?.wedding_date) return;
+    const interval = setInterval(() => {
+      setCountdown(getCountdown(wedding.wedding_date));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [wedding?.wedding_date]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--c-background, #fdfcf9)" }}>
-        <p className="text-sm tracking-widest uppercase animate-pulse" style={{ color: "var(--c-textMuted, #8c7e6a)", fontFamily: "var(--f-body, sans-serif)" }}>
-          Loading…
+      <div style={cssVars} className="min-h-screen flex items-center justify-center bg-[var(--color-bg)]">
+        <p className="font-ui text-sm uppercase tracking-wider-luxe text-[var(--color-text-muted)] animate-pulse">
+          {t("loading")}
         </p>
       </div>
     );
   }
 
-  if (!wedding) {
+  if (notFound) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--c-background, #fdfcf9)" }}>
-        <div className="text-center px-6">
-          <h1 className="text-3xl mb-2" style={{ fontFamily: "var(--f-heading, serif)" }}>Wedding Not Found</h1>
-          <p className="text-sm" style={{ color: "var(--c-textMuted, #8c7e6a)", fontFamily: "var(--f-body, sans-serif)" }}>
-            We couldn't find the wedding you're looking for.
+      <div style={cssVars} className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] px-6">
+        <div className="text-center animate-fade-in">
+          <h1 className="font-script text-3xl md:text-4xl text-[var(--color-primary)] mb-4">
+            Wedding Not Found
+          </h1>
+          <p className="font-ui text-sm text-[var(--color-text-muted)]">
+            The invitation you are looking for could not be found.
           </p>
         </div>
       </div>
     );
   }
 
-  const alignClass = textAlign === "left" ? "items-start text-left" : textAlign === "right" ? "items-end text-right" : "items-center text-center";
-  const logoAlign = logoPos === "left" ? "self-start" : logoPos === "right" ? "self-end" : "self-center";
+  const coupleNames =
+    content.cover_heading ||
+    (wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "");
+  const welcomeText = content.cover_welcome || t("welcome");
+  const subtitle = content.cover_subtitle || "";
+  const buttonText = content.cover_button_text || t("enterWebsite");
+  const bgUrl = content.cover_background_url || wedding?.hero_image_url || null;
+  const bgType = content.cover_background_type || "image";
+  const logoUrl = content.cover_logo_url || wedding?.cover_monogram_url || null;
+  const showCountdown = content.countdown_enabled !== false && wedding?.wedding_date && !countdown.isPast;
+
+  const handleEnter = () => {
+    if (slug) navigate(`/w/${slug}/login`);
+  };
 
   return (
     <div
-      className="relative min-h-screen w-full overflow-hidden"
-      style={cssVars as React.CSSProperties}
+      style={cssVars}
+      className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-[var(--color-bg)]"
     >
-      {/* ── Background layer with parallax ── */}
-      <div
-        className="absolute inset-0 will-change-transform"
-        style={{ transform: `translateY(${scrollY * 0.4}px) scale(1.1)` }}
-      >
-        {videoUrl ? (
-          <video
-            src={videoUrl}
-            autoPlay
-            muted
-            loop
-            playsInline
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        ) : bgUrl ? (
-          <img
-            src={bgUrl}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        ) : (
-          <div
-            className="absolute inset-0"
-            style={{ background: "linear-gradient(135deg, var(--c-secondary), var(--c-accent))" }}
-          />
-        )}
+      {/* Background image/video */}
+      {bgUrl && bgType === "video" ? (
+        <video
+          src={bgUrl}
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      ) : bgUrl ? (
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${bgUrl})` }}
+        />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-b from-[var(--color-bg-light)] via-[var(--color-bg)] to-[var(--color-bg)]" />
+      )}
+
+      {/* Overlay for readability */}
+      <div className="absolute inset-0 bg-black/30" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40" />
+
+      {/* Language toggle top right */}
+      <div className="absolute top-5 right-5 z-20 flex items-center gap-1.5">
+        <button
+          onClick={() => setLang("en")}
+          className={`font-ui text-xs uppercase tracking-wider-luxe px-2 py-1 transition-opacity ${
+            lang === "en" ? "text-white opacity-100" : "text-white/60 opacity-60 hover:opacity-90"
+          }`}
+        >
+          EN
+        </button>
+        <span className="text-white/40 text-xs">|</span>
+        <button
+          onClick={() => setLang("ms")}
+          className={`font-ui text-xs uppercase tracking-wider-luxe px-2 py-1 transition-opacity ${
+            lang === "ms" ? "text-white opacity-100" : "text-white/60 opacity-60 hover:opacity-90"
+          }`}
+        >
+          MS
+        </button>
       </div>
 
-      {/* ── Overlay ── */}
-      <div
-        className="absolute inset-0"
-        style={{ background: `rgba(0,0,0,${overlay})` }}
-      />
-
-      {/* ── Content ── */}
-      <div
-        className={cn("relative z-10 flex flex-col justify-center min-h-screen px-6 py-20 animate-fade-in", alignClass)}
-        style={{ maxWidth: "42rem", margin: "0 auto" }}
-      >
-        {logoVisible && logoUrl && (
+      {/* Centered content */}
+      <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 max-w-3xl mx-auto">
+        {/* Monogram / logo */}
+        {logoUrl && (
           <img
             src={logoUrl}
-            alt="monogram"
-            className={cn("mb-6 animate-slide-up", logoAlign)}
-            style={{ width: logoSize, maxWidth: "120px", height: "auto" }}
+            alt="Monogram"
+            className="w-20 h-20 md:w-24 md:h-24 object-contain mb-8 animate-fade-in opacity-0-init"
           />
         )}
 
-        {mainHeading && (
-          <p
-            className="text-xs uppercase tracking-[0.3em] mb-4 animate-slide-up"
-            style={{ color: "rgba(255,255,255,0.8)", fontFamily: "var(--f-body)", animationDelay: "0.1s", opacity: 0 }}
-          >
-            {mainHeading}
-          </p>
-        )}
+        {/* Welcome text */}
+        <p className="font-ui text-xs md:text-sm uppercase tracking-luxe text-white/80 mb-6 animate-fade-in-down opacity-0-init">
+          {welcomeText}
+        </p>
 
-        <h1
-          className="leading-tight mb-3 animate-slide-up"
-          style={{
-            color: "white",
-            fontSize: "clamp(2.5rem, 7vw, 4.5rem)",
-            fontFamily: "var(--f-heading)",
-            fontStyle: "var(--f-style)",
-            textShadow: "0 2px 20px rgba(0,0,0,0.3)",
-            animationDelay: "0.2s",
-            opacity: 0,
-          }}
-        >
-          {heading}
+        {/* Couple names */}
+        <h1 className="font-script text-5xl md:text-7xl lg:text-8xl text-white leading-tight mb-4 animate-fade-in-up opacity-0-init delay-100">
+          {coupleNames}
         </h1>
 
+        {/* Subtitle */}
         {subtitle && (
-          <p
-            className="text-base mb-4 animate-slide-up"
-            style={{ color: "rgba(255,255,255,0.85)", fontFamily: "var(--f-body)", animationDelay: "0.3s", opacity: 0 }}
-          >
+          <p className="font-heading text-lg md:text-xl text-white/90 italic mb-6 animate-fade-in-up opacity-0-init delay-200">
             {subtitle}
           </p>
         )}
 
-        <div
-          className="flex items-center gap-2 mb-2 animate-slide-up"
-          style={{ color: "rgba(255,255,255,0.9)", animationDelay: "0.4s", opacity: 0, justifyContent: textAlign === "left" ? "flex-start" : textAlign === "right" ? "flex-end" : "center" }}
-        >
-          <Calendar className="w-4 h-4" />
-          <span className="text-sm" style={{ fontFamily: "var(--f-body)" }}>
-            {formatDate(wedding.wedding_date)}
-          </span>
-        </div>
-
-        {wedding.location && (
-          <div
-            className="flex items-center gap-2 mb-5 animate-slide-up"
-            style={{ color: "rgba(255,255,255,0.9)", animationDelay: "0.5s", opacity: 0, justifyContent: textAlign === "left" ? "flex-start" : textAlign === "right" ? "flex-end" : "center" }}
-          >
-            <MapPin className="w-4 h-4" />
-            <span className="text-sm" style={{ fontFamily: "var(--f-body)" }}>
-              {wedding.location}
-            </span>
-          </div>
-        )}
-
-        {welcome && (
-          <p
-            className="text-sm max-w-md mb-6 animate-slide-up"
-            style={{ color: "rgba(255,255,255,0.8)", fontFamily: "var(--f-body)", lineHeight: 1.7, animationDelay: "0.6s", opacity: 0, textAlign }}
-          >
-            {welcome}
+        {/* Wedding date */}
+        {wedding?.wedding_date && (
+          <p className="font-ui text-sm md:text-base uppercase tracking-wider-luxe text-white/85 mb-10 animate-fade-in-up opacity-0-init delay-300">
+            {new Date(wedding.wedding_date).toLocaleDateString(lang === "ms" ? "ms-MY" : "en-US", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
           </p>
         )}
 
-        {countdownEnabled && dUntil !== null && dUntil > 0 && (
-          <div
-            className="mb-6 inline-flex items-baseline gap-1 px-5 py-2.5 rounded-full animate-slide-up"
-            style={{
-              background: "rgba(255,255,255,0.15)",
-              backdropFilter: "blur(8px)",
-              color: "white",
-              animationDelay: "0.7s",
-              opacity: 0,
-              alignSelf: textAlign === "left" ? "flex-start" : textAlign === "right" ? "flex-end" : "center",
-            }}
-          >
-            <span className="text-2xl" style={{ fontFamily: "var(--f-heading)" }}>{dUntil}</span>
-            <span className="text-xs ml-1" style={{ fontFamily: "var(--f-body)" }}>days to go</span>
+        {/* Countdown timer */}
+        {showCountdown && (
+          <div className="flex items-center justify-center gap-4 md:gap-8 mb-10 animate-fade-in-up opacity-0-init delay-400">
+            {[
+              { label: t("days"), value: countdown.days },
+              { label: t("hours"), value: countdown.hours },
+              { label: t("minutes"), value: countdown.minutes },
+              { label: t("seconds"), value: countdown.seconds },
+            ].map((item) => (
+              <div key={item.label} className="flex flex-col items-center">
+                <div className="font-script text-3xl md:text-4xl text-white tabular-nums">
+                  {String(item.value).padStart(2, "0")}
+                </div>
+                <div className="font-ui text-[10px] md:text-xs uppercase tracking-wider-luxe text-white/70 mt-1">
+                  {item.label}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
-        <button
-          onClick={() => navigate(`/w/${slug}/signin`)}
-          className="px-8 py-3 text-sm font-medium tracking-wide transition-all duration-300 hover:scale-105 animate-slide-up"
-          style={{
-            background: "rgba(255,255,255,0.95)",
-            color: "var(--c-text)",
-            borderRadius: "var(--ui-radius)",
-            fontFamily: "var(--f-body)",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.15)",
-            animationDelay: "0.8s",
-            opacity: 0,
-            alignSelf: textAlign === "left" ? "flex-start" : textAlign === "right" ? "flex-end" : "center",
-          }}
+        {/* Enter button */}
+        <Button
+          variant="outline"
+          size="lg"
+          onClick={handleEnter}
+          className="animate-fade-in-up opacity-0-init delay-500 text-white border-white/70 hover:bg-white hover:text-[var(--color-primary)]"
         >
           {buttonText}
-        </button>
-      </div>
-
-      {/* ── Scroll indicator ── */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 animate-bounce">
-        <div className="w-6 h-10 rounded-full border-2 border-white/50 flex items-start justify-center p-1">
-          <div className="w-1 h-2 rounded-full bg-white/70" />
-        </div>
+          <ChevronRight size={16} className="ml-2" />
+        </Button>
       </div>
     </div>
   );
 }
+
+export default Cover;

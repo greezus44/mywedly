@@ -1,38 +1,68 @@
-import { type InputHTMLAttributes, type TextareaHTMLAttributes, forwardRef } from "react";
-import { cn } from "@/lib/utils";
+import { type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes, type ReactNode, forwardRef } from "react";
+import { cn } from "../../lib/utils";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...props }, ref) => (
-    <input ref={ref} className={cn("w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-onyx placeholder:text-sepia/40 outline-none transition-all focus:border-sepia focus:ring-2 focus:ring-sepia/10", className)} {...props} />
+    <input
+      ref={ref}
+      className={cn(
+        "w-full px-4 py-3 bg-[var(--color-surface)] border border-[var(--color-border)]/30 text-[var(--color-text)] font-ui text-sm rounded-lg focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all",
+        className
+      )}
+      {...props}
+    />
   )
 );
 Input.displayName = "Input";
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
   ({ className, ...props }, ref) => (
-    <textarea ref={ref} className={cn("w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-onyx placeholder:text-sepia/40 outline-none transition-all focus:border-sepia focus:ring-2 focus:ring-sepia/10 resize-y", className)} {...props} />
+    <textarea
+      ref={ref}
+      className={cn(
+        "w-full px-4 py-3 bg-[var(--color-surface)] border border-[var(--color-border)]/30 text-[var(--color-text)] font-ui text-sm rounded-lg focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all resize-y min-h-[120px]",
+        className
+      )}
+      {...props}
+    />
   )
 );
 Textarea.displayName = "Textarea";
 
-export const Label = ({ children, className }: { children: React.ReactNode; className?: string }) => (
-  <label className={cn("text-xs font-medium uppercase tracking-widest text-sepia mb-1.5 block", className)}>{children}</label>
+export const Label = ({ children, className }: { children: ReactNode; className?: string }) => (
+  <label className={cn("block font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)] mb-2", className)}>
+    {children}
+  </label>
 );
 
-export const Select = forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
   ({ className, children, ...props }, ref) => (
-    <select ref={ref} className={cn("w-full rounded-lg border border-sand bg-white px-3 py-2 text-sm text-onyx outline-none transition-all focus:border-sepia focus:ring-2 focus:ring-sepia/10", className)} {...props}>{children}</select>
+    <select
+      ref={ref}
+      className={cn(
+        "w-full px-4 py-3 bg-[var(--color-surface)] border border-[var(--color-border)]/30 text-[var(--color-text)] font-ui text-sm rounded-lg focus:outline-none focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)] transition-all cursor-pointer",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </select>
   )
 );
 Select.displayName = "Select";
 
-export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className={cn("relative inline-flex h-6 w-11 items-center rounded-full transition-colors", checked ? "bg-onyx" : "bg-sand")}>
-        <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white transition-transform", checked ? "translate-x-6" : "translate-x-1")} />
-      </button>
-      {label && <span className="text-sm text-sepia">{label}</span>}
-    </div>
-  );
-}
+export const Toggle = ({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) => (
+  <label className="inline-flex items-center gap-3 cursor-pointer">
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "relative w-11 h-6 rounded-full transition-colors",
+        checked ? "bg-[var(--color-primary)]" : "bg-gray-300"
+      )}
+    >
+      <span className={cn("absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform", checked && "translate-x-5")} />
+    </button>
+    {label && <span className="font-ui text-sm text-[var(--color-text)]">{label}</span>}
+  </label>
+);

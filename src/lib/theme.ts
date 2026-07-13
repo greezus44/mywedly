@@ -1,157 +1,169 @@
-import type { CoverContent } from "@/lib/supabase";
-
-export type ThemeConfig = {
-  colors: {
-    primary: string; secondary: string; accent: string; background: string;
-    card: string; button: string; buttonText: string; link: string;
-    text: string; textMuted: string; navBg: string; navText: string;
-    footerBg: string; footerText: string;
-  };
-  typography: {
-    headingFont: string; bodyFont: string; headingSize: string;
-    bodySize: string; headingWeight: string; bodyWeight: string;
-    fontStyle: "normal" | "italic";
-  };
-  ui: {
-    borderRadius: string; shadowIntensity: "none" | "soft" | "medium" | "strong";
-    sectionSpacing: string;
-  };
-  preset?: string;
-};
+import type { ThemeConfig, WeddingContent } from "./supabase";
 
 export const DEFAULT_THEME: ThemeConfig = {
   colors: {
-    primary: "#8c7e6a", secondary: "#c4b8a8", accent: "#b8a06a",
-    background: "#fdfcf9", card: "#ffffff", button: "#1a1a1a", buttonText: "#fdfcf9",
-    link: "#8c7e6a", text: "#1a1a1a", textMuted: "#8c7e6a",
-    navBg: "#fdfcf9", navText: "#1a1a1a", footerBg: "#1a1a1a", footerText: "#fdfcf9",
+    primary: "#b8973a",
+    primaryLight: "#d4b85c",
+    primaryDark: "#8a6f28",
+    background: "#f5edda",
+    backgroundLight: "#faf5e8",
+    surface: "#ffffff",
+    text: "#2a2a2a",
+    textMuted: "#8a8a8a",
+    border: "#b8973a",
+    accent: "#c9a0a0",
+    success: "#8a9a7b",
+    warning: "#d4b85c",
+    error: "#c97070",
   },
   typography: {
-    headingFont: "Cormorant Garamond", bodyFont: "Inter",
-    headingSize: "1rem", bodySize: "1rem", headingWeight: "500", bodyWeight: "400", fontStyle: "normal",
+    scriptFont: "Playfair Display",
+    headingFont: "Cormorant Garamond",
+    bodyFont: "Cormorant Garamond",
+    uiFont: "Jost",
+    scriptSize: "3rem",
+    headingSize: "1.5rem",
+    bodySize: "1.0625rem",
+    letterSpacing: "0.15em",
   },
-  ui: { borderRadius: "0.5rem", shadowIntensity: "soft", sectionSpacing: "4rem" },
-  preset: "classic-white",
+  ui: {
+    radius: "8px",
+    buttonRadius: "8px",
+    buttonStyle: "outline",
+  },
 };
 
-export const THEME_PRESETS: { key: string; name: string; theme: ThemeConfig }[] = [
-  { key: "classic-white", name: "Classic White", theme: { ...DEFAULT_THEME, preset: "classic-white" } },
+export const THEME_PRESETS: { name: string; config: ThemeConfig }[] = [
+  { name: "Classic Gold", config: DEFAULT_THEME },
   {
-    key: "elegant-gold", name: "Elegant Gold", theme: {
-      colors: { primary: "#b8a06a", secondary: "#d4c4a8", accent: "#8a6b2a", background: "#f6efdd", card: "#fffdf5", button: "#8a6b2a", buttonText: "#fffdf5", link: "#8a6b2a", text: "#2a2a2a", textMuted: "#8a6b2a", navBg: "#f6efdd", navText: "#2a2a2a", footerBg: "#2a2a2a", footerText: "#f6efdd" },
-      typography: { headingFont: "Playfair Display", bodyFont: "Lora", headingSize: "1rem", bodySize: "1rem", headingWeight: "500", bodyWeight: "400", fontStyle: "normal" },
-      ui: { borderRadius: "0.25rem", shadowIntensity: "soft", sectionSpacing: "4rem" }, preset: "elegant-gold",
+    name: "Elegant White",
+    config: {
+      colors: { ...DEFAULT_THEME.colors!, background: "#ffffff", backgroundLight: "#fafafa", surface: "#ffffff", text: "#1a1a1a", border: "#c0c0c0", primary: "#888888", primaryLight: "#aaaaaa", primaryDark: "#666666" },
+      typography: { ...DEFAULT_THEME.typography! },
+      ui: { ...DEFAULT_THEME.ui! },
     },
   },
   {
-    key: "sage-green", name: "Sage Green", theme: {
-      colors: { primary: "#3f5d3a", secondary: "#7a8a72", accent: "#5a7a4a", background: "#ecefe4", card: "#f5f7f0", button: "#3f5d3a", buttonText: "#ecefe4", link: "#3f5d3a", text: "#2a3a2a", textMuted: "#5a7a5a", navBg: "#ecefe4", navText: "#2a3a2a", footerBg: "#2a3a2a", footerText: "#ecefe4" },
-      typography: { headingFont: "Cormorant Garamond", bodyFont: "Inter", headingSize: "1rem", bodySize: "1rem", headingWeight: "500", bodyWeight: "400", fontStyle: "normal" },
-      ui: { borderRadius: "0.75rem", shadowIntensity: "soft", sectionSpacing: "4rem" }, preset: "sage-green",
+    name: "Sage Green",
+    config: {
+      colors: { ...DEFAULT_THEME.colors!, background: "#f0f4ec", backgroundLight: "#f7f9f3", primary: "#7a8b6f", primaryLight: "#9aab8e", primaryDark: "#5a6b4f", border: "#7a8b6f" },
+      typography: { ...DEFAULT_THEME.typography! },
+      ui: { ...DEFAULT_THEME.ui! },
     },
   },
   {
-    key: "dusty-blue", name: "Dusty Blue", theme: {
-      colors: { primary: "#2e4a63", secondary: "#6a8aaa", accent: "#4a6a8a", background: "#eff4f8", card: "#f8fbfd", button: "#2e4a63", buttonText: "#eff4f8", link: "#2e4a63", text: "#1a2a3a", textMuted: "#5a7a9a", navBg: "#eff4f8", navText: "#1a2a3a", footerBg: "#1a2a3a", footerText: "#eff4f8" },
-      typography: { headingFont: "Playfair Display", bodyFont: "Open Sans", headingSize: "1rem", bodySize: "1rem", headingWeight: "500", bodyWeight: "400", fontStyle: "normal" },
-      ui: { borderRadius: "0.5rem", shadowIntensity: "soft", sectionSpacing: "4rem" }, preset: "dusty-blue",
+    name: "Dusty Blue",
+    config: {
+      colors: { ...DEFAULT_THEME.colors!, background: "#eef2f5", backgroundLight: "#f5f8fa", primary: "#7a9ab8", primaryLight: "#9ab4cc", primaryDark: "#5a7a98", border: "#7a9ab8" },
+      typography: { ...DEFAULT_THEME.typography! },
+      ui: { ...DEFAULT_THEME.ui! },
     },
   },
   {
-    key: "blush-pink", name: "Blush Pink", theme: {
-      colors: { primary: "#a0475a", secondary: "#d4a0a8", accent: "#c4a0a0", background: "#faeef0", card: "#fff5f6", button: "#a0475a", buttonText: "#faeef0", link: "#a0475a", text: "#3a2a2a", textMuted: "#a0475a", navBg: "#faeef0", navText: "#3a2a2a", footerBg: "#3a2a2a", footerText: "#faeef0" },
-      typography: { headingFont: "Cormorant Garamond", bodyFont: "Montserrat", headingSize: "1rem", bodySize: "1rem", headingWeight: "500", bodyWeight: "400", fontStyle: "normal" },
-      ui: { borderRadius: "0.75rem", shadowIntensity: "soft", sectionSpacing: "4rem" }, preset: "blush-pink",
+    name: "Blush Pink",
+    config: {
+      colors: { ...DEFAULT_THEME.colors!, background: "#faf0f0", backgroundLight: "#fdf5f5", primary: "#c9a0a0", primaryLight: "#dab5b5", primaryDark: "#a98080", border: "#c9a0a0" },
+      typography: { ...DEFAULT_THEME.typography! },
+      ui: { ...DEFAULT_THEME.ui! },
     },
   },
   {
-    key: "terracotta", name: "Terracotta", theme: {
-      colors: { primary: "#a04a2a", secondary: "#c48a6a", accent: "#b86a4a", background: "#f6ece0", card: "#fdf6ef", button: "#a04a2a", buttonText: "#f6ece0", link: "#a04a2a", text: "#3a2a1a", textMuted: "#a04a2a", navBg: "#f6ece0", navText: "#3a2a1a", footerBg: "#3a2a1a", footerText: "#f6ece0" },
-      typography: { headingFont: "Playfair Display", bodyFont: "Inter", headingSize: "1rem", bodySize: "1rem", headingWeight: "500", bodyWeight: "400", fontStyle: "normal" },
-      ui: { borderRadius: "0.5rem", shadowIntensity: "medium", sectionSpacing: "4rem" }, preset: "terracotta",
+    name: "Terracotta",
+    config: {
+      colors: { ...DEFAULT_THEME.colors!, background: "#f5ede6", backgroundLight: "#faf5f0", primary: "#c08060", primaryLight: "#d49a7a", primaryDark: "#a06040", border: "#c08060" },
+      typography: { ...DEFAULT_THEME.typography! },
+      ui: { ...DEFAULT_THEME.ui! },
     },
   },
   {
-    key: "modern-black", name: "Modern Black", theme: {
-      colors: { primary: "#e6dfd0", secondary: "#a0a0a0", accent: "#c4b8a8", background: "#12141a", card: "#1a1d26", button: "#e6dfd0", buttonText: "#12141a", link: "#e6dfd0", text: "#e6dfd0", textMuted: "#8a8a8a", navBg: "#12141a", navText: "#e6dfd0", footerBg: "#0a0b0f", footerText: "#8a8a8a" },
-      typography: { headingFont: "Playfair Display", bodyFont: "Inter", headingSize: "1rem", bodySize: "1rem", headingWeight: "500", bodyWeight: "300", fontStyle: "normal" },
-      ui: { borderRadius: "0.375rem", shadowIntensity: "medium", sectionSpacing: "5rem" }, preset: "modern-black",
+    name: "Modern Black",
+    config: {
+      colors: { ...DEFAULT_THEME.colors!, background: "#1a1a1a", backgroundLight: "#2a2a2a", surface: "#222222", text: "#f0f0f0", textMuted: "#999999", primary: "#d4af37", primaryLight: "#e8c55c", primaryDark: "#b8973a", border: "#d4af37" },
+      typography: { ...DEFAULT_THEME.typography! },
+      ui: { ...DEFAULT_THEME.ui! },
     },
   },
   {
-    key: "champagne", name: "Champagne", theme: {
-      colors: { primary: "#a88a5a", secondary: "#d4c4a8", accent: "#c4a878", background: "#f8f4ea", card: "#fdfaf2", button: "#a88a5a", buttonText: "#f8f4ea", link: "#a88a5a", text: "#3a3a2a", textMuted: "#a88a5a", navBg: "#f8f4ea", navText: "#3a3a2a", footerBg: "#3a3a2a", footerText: "#f8f4ea" },
-      typography: { headingFont: "Cormorant Garamond", bodyFont: "Lora", headingSize: "1rem", bodySize: "1rem", headingWeight: "500", bodyWeight: "400", fontStyle: "italic" },
-      ui: { borderRadius: "0.5rem", shadowIntensity: "soft", sectionSpacing: "4rem" }, preset: "champagne",
+    name: "Champagne",
+    config: {
+      colors: { ...DEFAULT_THEME.colors!, background: "#f7f0e6", backgroundLight: "#fcf7ef", primary: "#c4a878", primaryLight: "#d8be98", primaryDark: "#a48858", border: "#c4a878" },
+      typography: { ...DEFAULT_THEME.typography! },
+      ui: { ...DEFAULT_THEME.ui! },
     },
   },
   {
-    key: "garden-wedding", name: "Garden Wedding", theme: {
-      colors: { primary: "#4a7a3a", secondary: "#8aaa7a", accent: "#6a9a5a", background: "#f0f5ea", card: "#f8fbf2", button: "#4a7a3a", buttonText: "#f0f5ea", link: "#4a7a3a", text: "#2a3a2a", textMuted: "#6a8a5a", navBg: "#f0f5ea", navText: "#2a3a2a", footerBg: "#2a3a2a", footerText: "#f0f5ea" },
-      typography: { headingFont: "Cormorant Garamond", bodyFont: "Montserrat", headingSize: "1rem", bodySize: "1rem", headingWeight: "500", bodyWeight: "400", fontStyle: "normal" },
-      ui: { borderRadius: "1rem", shadowIntensity: "soft", sectionSpacing: "5rem" }, preset: "garden-wedding",
+    name: "Garden Wedding",
+    config: {
+      colors: { ...DEFAULT_THEME.colors!, background: "#f3f0e8", backgroundLight: "#f9f7f2", primary: "#6b8e6b", primaryLight: "#8aab8a", primaryDark: "#4b6e4b", border: "#6b8e6b" },
+      typography: { ...DEFAULT_THEME.typography! },
+      ui: { ...DEFAULT_THEME.ui! },
     },
   },
   {
-    key: "minimal-monochrome", name: "Minimal Monochrome", theme: {
-      colors: { primary: "#2a2a2a", secondary: "#8a8a8a", accent: "#4a4a4a", background: "#ffffff", card: "#fafafa", button: "#2a2a2a", buttonText: "#ffffff", link: "#2a2a2a", text: "#1a1a1a", textMuted: "#8a8a8a", navBg: "#ffffff", navText: "#1a1a1a", footerBg: "#1a1a1a", footerText: "#ffffff" },
-      typography: { headingFont: "Inter", bodyFont: "Inter", headingSize: "1rem", bodySize: "1rem", headingWeight: "600", bodyWeight: "400", fontStyle: "normal" },
-      ui: { borderRadius: "0.25rem", shadowIntensity: "none", sectionSpacing: "3rem" }, preset: "minimal-monochrome",
+    name: "Minimal Mono",
+    config: {
+      colors: { ...DEFAULT_THEME.colors!, background: "#fafafa", backgroundLight: "#ffffff", primary: "#1a1a1a", primaryLight: "#444444", primaryDark: "#000000", border: "#1a1a1a" },
+      typography: { ...DEFAULT_THEME.typography! },
+      ui: { ...DEFAULT_THEME.ui! },
     },
   },
 ];
 
-export const FONT_OPTIONS = [
-  "Cormorant Garamond", "Playfair Display", "Inter", "Lora", "Montserrat",
-  "Open Sans", "Merriweather", "Poppins", "Dancing Script", "Great Vibes",
-  "Imperial Script", "EB Garamond", "Cinzel", "Marcellus", "Cardo",
-  "Libre Baskerville", "Sacramento", "Parisienne", "Caveat", "Allura", "Tangerine",
-];
-
-export const SHADOW_MAP: Record<string, string> = {
-  none: "none",
-  soft: "0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)",
-  medium: "0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04)",
-  strong: "0 12px 32px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.06)",
-};
-
-export function themeToCssVars(theme: ThemeConfig): Record<string, string> {
-  const v: Record<string, string> = {};
-  for (const [k, val] of Object.entries(theme.colors)) v[`--c-${k}`] = val;
-  v["--f-heading"] = `"${theme.typography.headingFont}", serif`;
-  v["--f-body"] = `"${theme.typography.bodyFont}", sans-serif`;
-  v["--f-style"] = theme.typography.fontStyle;
-  v["--ui-radius"] = theme.ui.borderRadius;
-  v["--ui-shadow"] = SHADOW_MAP[theme.ui.shadowIntensity] ?? SHADOW_MAP.soft;
-  v["--ui-spacing"] = theme.ui.sectionSpacing;
-  return v;
-}
-
-export function getTheme(wedding: { theme_config?: Record<string, unknown> | null } | null): ThemeConfig {
-  if (!wedding?.theme_config) return DEFAULT_THEME;
-  const tc = wedding.theme_config as Record<string, unknown>;
-  if (!tc || Object.keys(tc).length === 0) return DEFAULT_THEME;
+export function themeToCssVars(theme: ThemeConfig | null | undefined): Record<string, string> {
+  const t = theme || DEFAULT_THEME;
+  const c = t.colors || {};
+  const ty = t.typography || {};
+  const u = t.ui || {};
   return {
-    colors: { ...DEFAULT_THEME.colors, ...((tc.colors as Record<string, string>) ?? {}) },
-    typography: { ...DEFAULT_THEME.typography, ...((tc.typography as Record<string, unknown>) ?? {}) } as ThemeConfig["typography"],
-    ui: { ...DEFAULT_THEME.ui, ...((tc.ui as Record<string, unknown>) ?? {}) } as ThemeConfig["ui"],
-    preset: (tc.preset as string) ?? undefined,
+    "--color-primary": c.primary || DEFAULT_THEME.colors!.primary!,
+    "--color-primary-light": c.primaryLight || DEFAULT_THEME.colors!.primaryLight!,
+    "--color-primary-dark": c.primaryDark || DEFAULT_THEME.colors!.primaryDark!,
+    "--color-bg": c.background || DEFAULT_THEME.colors!.background!,
+    "--color-bg-light": c.backgroundLight || DEFAULT_THEME.colors!.backgroundLight!,
+    "--color-surface": c.surface || DEFAULT_THEME.colors!.surface!,
+    "--color-text": c.text || DEFAULT_THEME.colors!.text!,
+    "--color-text-muted": c.textMuted || DEFAULT_THEME.colors!.textMuted!,
+    "--color-border": c.border || DEFAULT_THEME.colors!.border!,
+    "--color-accent": c.accent || DEFAULT_THEME.colors!.accent!,
+    "--color-success": c.success || DEFAULT_THEME.colors!.success!,
+    "--color-warning": c.warning || DEFAULT_THEME.colors!.warning!,
+    "--color-error": c.error || DEFAULT_THEME.colors!.error!,
+    "--font-script": `"${ty.scriptFont || "Playfair Display"}", serif`,
+    "--font-heading": `"${ty.headingFont || "Cormorant Garamond"}", serif`,
+    "--font-body": `"${ty.bodyFont || "Cormorant Garamond"}", serif`,
+    "--font-ui": `"${ty.uiFont || "Jost"}", sans-serif`,
+    "--radius": u.radius || "8px",
+    "--button-radius": u.buttonRadius || "8px",
   };
 }
 
-export function getDraftTheme(wedding: { draft_theme_config?: Record<string, unknown> | null; theme_config?: Record<string, unknown> | null } | null): ThemeConfig {
-  const draft = wedding?.draft_theme_config;
-  if (!draft || Object.keys(draft).length === 0) return getTheme(wedding);
-  return {
-    colors: { ...DEFAULT_THEME.colors, ...((draft.colors as Record<string, string>) ?? {}) },
-    typography: { ...DEFAULT_THEME.typography, ...((draft.typography as Record<string, unknown>) ?? {}) } as ThemeConfig["typography"],
-    ui: { ...DEFAULT_THEME.ui, ...((draft.ui as Record<string, unknown>) ?? {}) } as ThemeConfig["ui"],
-    preset: (draft.preset as string) ?? undefined,
-  };
+export function applyThemeToElement(el: HTMLElement | null, theme: ThemeConfig | null | undefined) {
+  if (!el) return;
+  const vars = themeToCssVars(theme);
+  Object.entries(vars).forEach(([k, v]) => el.style.setProperty(k, v));
 }
 
-export function getCoverContent(wedding: { draft_content?: Record<string, unknown> | null; content?: Record<string, unknown> | null } | null): CoverContent {
-  const draft = wedding?.draft_content;
-  const published = wedding?.content;
-  return { ...(published as CoverContent ?? {}), ...((draft ?? {}) as CoverContent) };
+export function getTheme(wedding: { theme_config?: ThemeConfig | Record<string, never> } | null): ThemeConfig {
+  if (wedding?.theme_config && "colors" in wedding.theme_config) return wedding.theme_config as ThemeConfig;
+  return DEFAULT_THEME;
+}
+
+export function getDraftTheme(wedding: { theme_config?: ThemeConfig | Record<string, never>; draft_theme_config?: ThemeConfig | null } | null): ThemeConfig {
+  if (wedding?.draft_theme_config && "colors" in wedding.draft_theme_config) return wedding.draft_theme_config;
+  return getTheme(wedding);
+}
+
+export function getCoverContent(wedding: { content?: WeddingContent | Record<string, never>; draft_content?: WeddingContent | Record<string, never> | null }): WeddingContent {
+  const pub = (wedding.content || {}) as WeddingContent;
+  const draft = (wedding.draft_content || {}) as WeddingContent;
+  return { ...pub, ...draft };
+}
+
+export function getContent(wedding: { content?: WeddingContent | Record<string, never>; draft_content?: WeddingContent | Record<string, never> | null }, useDraft = false): WeddingContent {
+  const pub = (wedding.content || {}) as WeddingContent;
+  if (useDraft && wedding.draft_content) {
+    const draft = (wedding.draft_content || {}) as WeddingContent;
+    return { ...pub, ...draft };
+  }
+  return pub;
 }

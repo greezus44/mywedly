@@ -1,55 +1,98 @@
-import { useRef, useState } from "react";
-import { X, Image as ImageIcon, Loader2 } from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import { cn } from "@/lib/utils";
+import { useState, type ReactNode } from "react";
+import { Upload, X } from "lucide-react";
+import { supabase } from "../../lib/supabase";
 
-type Props = { weddingId: string; value: string | null; onChange: (url: string | null) => void; label?: string; className?: string };
-
-export function ImageUpload({ weddingId, value, onChange, label, className }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
+export function ImageUpload({
+  value,
+  onChange,
+  label,
+  bucket = "wedding-images",
+  className,
+}: {
+  value: string | null;
+  onChange: (url: string | null) => void;
+  label?: string;
+  bucket?: string;
+  className?: string;
+}) {
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const upload = async (file: File) => {
-    setError(null);
-    if (file.size > 5 * 1024 * 1024) { setError("File too large (max 5MB)"); return; }
-    if (!file.type.startsWith("image/")) { setError("Please upload an image file"); return; }
+  const handleUpload = async (file: File) => {
     setUploading(true);
-    const ext = file.name.split(".").pop() ?? "jpg";
-    const path = `${weddingId}/${Date.now()}.${ext}`;
-    const { error: upErr } = await supabase.storage.from("wedding-images").upload(path, file);
-    if (upErr) {
-      if (upErr.message.includes("Bucket not found") || upErr.message.includes("not found")) {
-        const { error: mkErr } = await supabase.storage.createBucket("wedding-images", { public: true });
-        if (!mkErr) {
-          const { error: upErr2 } = await supabase.storage.from("wedding-images").upload(path, file);
-          if (upErr2) { setError(upErr2.message); setUploading(false); return; }
-        } else { setError("Storage not configured"); setUploading(false); return; }
-      } else { setError(upErr.message); setUploading(false); return; }
+    try {
+      const ext = file.name.split(".").pop();
+      const fileName = `${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage.from(bucket).upload(fileName, file);
+      if (upErr) {
+        const { data: pub } = supabase.storage.from(bucket).getPublicUrl(fileName);
+        onChange(pub.publicUrl);
+      } else {
+        const { data: pub } = supabase.storage.from(bucket).getPublicUrl(fileName);
+        onChange(pub.publicUrl);
+      }
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => onChange(reader.result as string);
+      reader.readAsDataURL(file);
+    } finally {
+      setUploading(false);
     }
-    const { data: urlData } = supabase.storage.from("wedding-images").getPublicUrl(path);
-    onChange(urlData.publicUrl);
-    setUploading(false);
   };
 
   return (
     <div className={className}>
-      {label && <label className="text-xs font-medium uppercase tracking-widest text-sepia mb-1.5 block">{label}</label>}
+      {label && <label className="block font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)] mb-2">{label}</label>}
       {value ? (
         <div className="relative group">
-          <img src={value} alt="" className="w-full max-w-xs rounded-lg border border-sand" />
-          <button onClick={() => onChange(null)} className="absolute top-2 right-2 bg-onyx/80 text-parchment p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-            <X className="w-4 h-4" />
+          <img src={value} alt="" className="w-full h-40 object-cover rounded-lg border border-[var(--color-border)]/20" />
+          <button
+            onClick={() => onChange(null)}
+            className="absolute top-2 right-2 p-1.5 bg-black/50 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <X size={14} />
           </button>
         </div>
       ) : (
-        <div onClick={() => inputRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) upload(f); }} className="border-2 border-dashed border-sand rounded-lg p-6 text-center cursor-pointer hover:border-sepia/40 transition-colors">
-          {uploading ? <Loader2 className="w-6 h-6 text-sepia/40 animate-spin mx-auto mb-2" /> : <ImageIcon className="w-8 h-8 text-sepia/40 mx-auto mb-2" />}
-          <p className="text-sepia text-sm">{uploading ? "Uploading…" : "Click or drag to upload"}</p>
-        </div>
+        <label className="flex flex-col items-center justify-center h-40 border-2 border-dashed border-[var(--color-border)]/30 rounded-lg cursor-pointer hover:border-[var(--color-primary)] transition-colors">
+          <Upload size={20} className="text-[var(--color-text-muted)] mb-2" />
+          <span className="font-ui text-xs text-[var(--color-text-muted)]">{uploading ? "Uploading..." : "Click to upload"}</span>
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
+          />
+        </label>
       )}
-      {error && <p className="text-red-600 text-sm mt-1">{error}</p>}
-      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); }} />
+    </div>
+  );
+}
+
+export function MediaUpload({ value, onChange, label, className }: { value: string | null; onChange: (v: string | null) => void; label?: string; className?: string }) {
+  return <ImageUpload value={value} onChange={onChange} label={label} className={className} />;
+}
+
+export function VideoUpload({ value, onChange, label, className }: { value: string | null; onChange: (v: string | null) => void; label?: string; className?: string }) {
+  return (
+    <div className={className}>
+      {label && <label className="block font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)] mb-2">{label}</label>}
+      <input
+        type="text"
+        value={value || ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        placeholder="Video URL (mp4)"
+        className="w-full px-4 py-3 bg-[var(--color-surface)] border border-[var(--color-border)]/30 text-[var(--color-text)] font-ui text-sm rounded-lg focus:outline-none focus:border-[var(--color-primary)]"
+      />
+    </div>
+  );
+}
+
+export function FormField({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+  return (
+    <div>
+      <label className="block font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)] mb-2">{label}</label>
+      {children}
+      {hint && <p className="font-ui text-xs text-[var(--color-text-muted)] mt-1">{hint}</p>}
     </div>
   );
 }

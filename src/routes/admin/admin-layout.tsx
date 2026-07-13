@@ -1,195 +1,183 @@
-import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { signOutHost } from "@/lib/auth";
-import { useHostWedding } from "@/lib/use-host-wedding";
-import { Button } from "@/components/ui/Button";
-import {
-  LayoutDashboard, Users, UsersRound, Calendar, Mail, MessageSquare,
-  FileText, Image, Settings, LogOut, Menu, X, Palette, Eye, ChevronDown,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { useState, type ReactNode } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
+import { Menu, X, LogOut, Heart } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase, type Wedding } from "../../lib/supabase";
+import { cn } from "../../lib/utils";
 
-type NavItem = { path: string; label: string; icon: React.ComponentType<{ className?: string }>; subtabs?: { path: string; label: string }[] };
+interface NavItem {
+  label: string;
+  path: string;
+  subtabs?: { label: string; path: string }[];
+}
 
 const NAV_ITEMS: NavItem[] = [
-  { path: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/admin/cover", label: "Cover Page", icon: Eye },
-  { path: "/admin/theme", label: "Theme", icon: Palette },
+  { label: "Dashboard", path: "/admin" },
+  { label: "Cover Page", path: "/admin/cover" },
+  { label: "Theme", path: "/admin/theme" },
   {
-    path: "/admin/content", label: "Content", icon: FileText,
+    label: "Content",
+    path: "/admin/content",
     subtabs: [
-      { path: "/admin/content", label: "Home" },
-      { path: "/admin/content/story", label: "Our Story" },
-      { path: "/admin/content/schedule", label: "Timeline" },
-      { path: "/admin/content/travel", label: "Travel" },
-      { path: "/admin/content/accommodation", label: "Accommodation" },
-      { path: "/admin/content/faq", label: "FAQ" },
-      { path: "/admin/content/registry", label: "Registry" },
-      { path: "/admin/content/contact", label: "Contact" },
-      { path: "/admin/content/footer", label: "Footer" },
+      { label: "Home", path: "/admin/content" },
+      { label: "Doa", path: "/admin/content/doa" },
+      { label: "Contact", path: "/admin/content/contact" },
+      { label: "Message", path: "/admin/content/message" },
     ],
   },
-  {
-    path: "/admin/guests", label: "Guests", icon: Users,
-    subtabs: [
-      { path: "/admin/guests", label: "Guest List" },
-      { path: "/admin/groups", label: "Guest Groups" },
-      { path: "/admin/guests?tab=import", label: "Imports" },
-    ],
-  },
-  {
-    path: "/admin/events", label: "Events", icon: Calendar,
-    subtabs: [
-      { path: "/admin/events", label: "All Events" },
-      { path: "/admin/events?tab=create", label: "Create Event" },
-      { path: "/admin/invitations", label: "Invitations" },
-    ],
-  },
-  { path: "/admin/gallery", label: "Gallery", icon: Image },
-  { path: "/admin/rsvps", label: "RSVPs", icon: MessageSquare },
-  { path: "/admin/settings", label: "Settings", icon: Settings },
+  { label: "Events", path: "/admin/events" },
+  { label: "Guests", path: "/admin/guests" },
+  { label: "Messages", path: "/admin/messages" },
+  { label: "Settings", path: "/admin/settings" },
 ];
 
-export function AdminLayout({ children }: { children: React.ReactNode }) {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { wedding, loading, createWedding } = useHostWedding();
+export function AdminLayout({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navigate = useNavigate();
 
-  const handleSignOut = async () => { await signOutHost(); navigate("/"); };
+  const { data: wedding } = useQuery({
+    queryKey: ["wedding"],
+    queryFn: async () => {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error("Not authenticated");
+      const { data, error } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).single();
+      if (error) throw error;
+      return data as Wedding;
+    },
+  });
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-sepia">Loading…</div>;
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/host-login");
+  };
 
-  if (!wedding) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-mist">
-        <div className="text-center max-w-sm">
-          <h1 className="text-2xl font-serif text-onyx mb-4">No Wedding Yet</h1>
-          <p className="text-sepia text-sm mb-6">Create your wedding to get started.</p>
-          <Button onClick={async () => { const w = await createWedding(); if (w) navigate("/admin"); }}>Create Wedding</Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Find active primary tab
-  const activeItem = NAV_ITEMS.find((item) => location.pathname.startsWith(item.path)) ?? NAV_ITEMS[0];
-  const subtabs = activeItem.subtabs;
+  const activeSubtabs = (() => {
+    const path = window.location.pathname;
+    const item = NAV_ITEMS.find((n) => n.subtabs && (path === n.path || path.startsWith(n.path + "/")));
+    return item?.subtabs;
+  })();
 
   return (
-    <div className="min-h-screen bg-mist flex flex-col">
-      {/* ─── Sticky header ─── */}
-      <header className="sticky top-0 z-40 bg-parchment/95 backdrop-blur-md border-b border-sand">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          {/* Top row: brand + actions */}
+    <div className="min-h-screen bg-[var(--color-bg)] flex flex-col">
+      {/* Primary nav */}
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-[var(--color-border)]/15">
+        <div className="px-4 md:px-6">
           <div className="flex items-center justify-between h-14">
-            <div className="flex items-center gap-3 min-w-0">
-              <button onClick={() => setMobileOpen(!mobileOpen)} className="lg:hidden text-sepia p-1.5 rounded-lg hover:bg-mist">
-                {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            <div className="flex items-center gap-3">
+              <button className="lg:hidden p-1.5 hover:bg-gray-100 rounded-lg" onClick={() => setMobileOpen(!mobileOpen)}>
+                {mobileOpen ? <X size={20} /> : <Menu size={20} />}
               </button>
-              <Link to="/admin" className="font-serif text-base text-onyx truncate whitespace-nowrap">
-                {wedding.couple_name_one} & {wedding.couple_name_two}
-              </Link>
-            </div>
-            <div className="flex items-center gap-2">
-              <a href={`/w/${wedding.slug}`} target="_blank" className="hidden sm:flex items-center gap-1.5 text-sepia text-sm hover:text-onyx transition-colors px-3 py-1.5 rounded-lg hover:bg-mist">
-                <Eye className="w-4 h-4" /> View Site
-              </a>
-              <button onClick={handleSignOut} className="hidden sm:flex items-center gap-1.5 text-sepia text-sm hover:text-onyx transition-colors px-3 py-1.5 rounded-lg hover:bg-mist">
-                <LogOut className="w-4 h-4" /> Sign Out
-              </button>
-            </div>
-          </div>
-
-          {/* ─── Primary navigation (horizontal scroll on small screens) ─── */}
-          <nav className="hidden lg:flex items-center gap-1 h-11 nav-scroll overflow-x-auto">
-            {NAV_ITEMS.map((item) => {
-              const isActive = location.pathname === item.path || (item.path !== "/admin" && location.pathname.startsWith(item.path));
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-all whitespace-nowrap",
-                    isActive ? "bg-onyx text-parchment" : "text-sepia hover:text-onyx hover:bg-mist"
-                  )}
-                >
-                  <item.icon className="w-4 h-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          {/* ─── Secondary navigation (subtabs) ─── */}
-          {subtabs && subtabs.length > 0 && (
-            <nav className="hidden lg:flex items-center gap-1 h-10 border-t border-sand/50 nav-scroll overflow-x-auto">
-              {subtabs.map((subtab) => {
-                const isActive = location.pathname + location.search === subtab.path;
-                return (
-                  <Link
-                    key={subtab.path}
-                    to={subtab.path}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap",
-                      isActive ? "text-onyx bg-mist" : "text-sepia/70 hover:text-onyx hover:bg-mist/50"
-                    )}
-                  >
-                    {subtab.label}
-                  </Link>
-                );
-              })}
-            </nav>
-          )}
-        </div>
-
-        {/* ─── Mobile navigation ─── */}
-        {mobileOpen && (
-          <nav className="lg:hidden border-t border-sand bg-parchment animate-slide-down max-h-[70vh] overflow-y-auto">
-            <div className="px-4 py-3 space-y-1">
-              {NAV_ITEMS.map((item) => {
-                const isActive = location.pathname === item.path || (item.path !== "/admin" && location.pathname.startsWith(item.path));
-                return (
-                  <div key={item.path}>
-                    <Link
-                      to={item.path}
-                      onClick={() => setMobileOpen(false)}
-                      className={cn("flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg", isActive ? "bg-mist text-onyx font-medium" : "text-sepia hover:bg-mist")}
-                    >
-                      <item.icon className="w-4 h-4" />
-                      {item.label}
-                    </Link>
-                    {item.subtabs && isActive && (
-                      <div className="ml-8 mt-1 space-y-0.5">
-                        {item.subtabs.map((subtab) => (
-                          <Link
-                            key={subtab.path}
-                            to={subtab.path}
-                            onClick={() => setMobileOpen(false)}
-                            className={cn(
-                              "block px-3 py-1.5 text-xs rounded-md",
-                              location.pathname + location.search === subtab.path ? "text-onyx bg-mist font-medium" : "text-sepia/70 hover:text-onyx"
-                            )}
-                          >
-                            {subtab.label}
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              <div className="pt-2 border-t border-sand space-y-1">
-                <a href={`/w/${wedding.slug}`} target="_blank" className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-sepia hover:bg-mist rounded-lg"><Eye className="w-4 h-4" /> View Site</a>
-                <button onClick={handleSignOut} className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-sepia hover:bg-mist rounded-lg w-full"><LogOut className="w-4 h-4" /> Sign Out</button>
+              <div className="flex items-center gap-2">
+                <Heart size={18} className="text-[var(--color-primary)]" />
+                <span className="font-heading text-base text-[var(--color-text)] hidden sm:inline">
+                  {wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "Wedding Dashboard"}
+                </span>
               </div>
             </div>
-          </nav>
+
+            {/* Desktop nav */}
+            <nav className="hidden lg:flex items-center gap-1">
+              {NAV_ITEMS.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end={item.path === "/admin"}
+                  className={({ isActive }) =>
+                    cn(
+                      "px-3 py-1.5 font-ui text-xs uppercase tracking-wider-luxe rounded-lg transition-all",
+                      isActive
+                        ? "bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
+                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                    )
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+
+            <button onClick={handleSignOut} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-ui text-gray-500 hover:text-[var(--color-error)] transition-colors">
+              <LogOut size={14} />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Secondary nav (subtabs) */}
+        {activeSubtabs && (
+          <div className="px-4 md:px-6 border-t border-[var(--color-border)]/10">
+            <div className="flex items-center gap-1 py-2 overflow-x-auto scrollbar-hide">
+              {activeSubtabs.map((sub) => (
+                <NavLink
+                  key={sub.path}
+                  to={sub.path}
+                  end={sub.path === activeSubtabs[0].path}
+                  className={({ isActive }) =>
+                    cn(
+                      "px-3 py-1.5 font-ui text-xs uppercase tracking-wider-luxe rounded-lg whitespace-nowrap transition-all",
+                      isActive
+                        ? "bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
+                        : "text-gray-400 hover:text-gray-600"
+                    )
+                  }
+                >
+                  {sub.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         )}
       </header>
 
-      {/* ─── Main content ─── */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-8">{children}</main>
+      {/* Mobile nav */}
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-30 bg-black/20" onClick={() => setMobileOpen(false)}>
+          <div className="absolute top-14 left-0 right-0 bg-white border-b border-[var(--color-border)]/15 shadow-lg max-h-[calc(100vh-3.5rem)] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <nav className="p-4 space-y-1">
+              {NAV_ITEMS.map((item) => (
+                <div key={item.path}>
+                  <NavLink
+                    to={item.path}
+                    end={item.path === "/admin"}
+                    onClick={() => setMobileOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        "block px-3 py-2.5 font-ui text-sm uppercase tracking-wider-luxe rounded-lg transition-all",
+                        isActive ? "bg-[var(--color-primary)]/10 text-[var(--color-primary)]" : "text-gray-600 hover:bg-gray-50"
+                      )
+                    }
+                  >
+                    {item.label}
+                  </NavLink>
+                  {item.subtabs && (
+                    <div className="ml-4 mt-1 space-y-0.5">
+                      {item.subtabs.map((sub) => (
+                        <NavLink
+                          key={sub.path}
+                          to={sub.path}
+                          end={sub.path === item.subtabs![0].path}
+                          onClick={() => setMobileOpen(false)}
+                          className={({ isActive }) =>
+                            cn(
+                              "block px-3 py-2 font-ui text-xs uppercase tracking-wider-luxe rounded-lg transition-all",
+                              isActive ? "text-[var(--color-primary)]" : "text-gray-400"
+                            )
+                          }
+                        >
+                          {sub.label}
+                        </NavLink>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </nav>
+          </div>
+        </div>
+      )}
+
+      {/* Content */}
+      <main className="flex-1 flex flex-col overflow-hidden">{children}</main>
     </div>
   );
 }

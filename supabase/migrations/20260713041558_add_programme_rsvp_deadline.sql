@@ -1,0 +1,6 @@
+ALTER TABLE events ADD COLUMN IF NOT EXISTS programme TEXT;
+ALTER TABLE weddings ADD COLUMN IF NOT EXISTS rsvp_deadline DATE;
+ALTER TABLE weddings ADD COLUMN IF NOT EXISTS contact_phone TEXT;
+ALTER TABLE weddings ADD COLUMN IF NOT EXISTS full_name_one TEXT;
+ALTER TABLE weddings ADD COLUMN IF NOT EXISTS full_name_two TEXT;
+ALTER TABLE weddings ADD COLUMN IF NOT EXISTS cover_monogram_url TEXT;

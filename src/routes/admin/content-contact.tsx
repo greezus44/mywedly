@@ -1,19 +1,21 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save, Upload, Eye } from "lucide-react";
+import { Save, Upload, Phone, Mail, MapPin } from "lucide-react";
 import { supabase, type Wedding, type WeddingContent } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
-import { CoverPreview } from "../../components/preview/PreviewRenderers";
+import { ContactPreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Label, Toggle } from "../../components/ui/Input";
-import { ImageUpload, VideoUpload, FormField } from "../../components/ui/ImageUpload";
+import { Input, Textarea } from "../../components/ui/Input";
+import { FormField } from "../../components/ui/ImageUpload";
 import { Toast } from "../../components/ui/index";
 import { getCoverContent } from "../../lib/theme";
 
-export function CoverEditorPage() {
+export function ContentContactPage() {
   const queryClient = useQueryClient();
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [content, setContent] = useState<WeddingContent>({});
+  const [initialized, setInitialized] = useState(false);
 
   const { data: wedding, isLoading } = useQuery({
     queryKey: ["wedding"],
@@ -30,13 +32,9 @@ export function CoverEditorPage() {
     },
   });
 
-  const [content, setContent] = useState<WeddingContent>({});
-  const [initialized, setInitialized] = useState(false);
-
   useEffect(() => {
     if (wedding && !initialized) {
-      const merged = getCoverContent(wedding);
-      setContent(merged);
+      setContent(getCoverContent(wedding));
       setInitialized(true);
     }
   }, [wedding, initialized]);
@@ -75,7 +73,7 @@ export function CoverEditorPage() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["wedding"], data);
-      setToast({ message: "Cover page published!", type: "success" });
+      setToast({ message: "Contact page published!", type: "success" });
     },
     onError: () => setToast({ message: "Failed to publish", type: "error" }),
   });
@@ -91,12 +89,8 @@ export function CoverEditorPage() {
     [saveDraftMutation]
   );
 
-  // Build a preview wedding object with the current draft content merged
   const previewWedding: Wedding | undefined = wedding
-    ? {
-        ...wedding,
-        draft_content: content,
-      }
+    ? { ...wedding, draft_content: content }
     : undefined;
 
   if (isLoading || !wedding || !previewWedding) {
@@ -111,12 +105,12 @@ export function CoverEditorPage() {
 
   return (
     <AdminLayout>
-      <SplitEditor title="Cover Page Editor" preview={<CoverPreview wedding={previewWedding} />}>
+      <SplitEditor title="Contact Page Content" preview={<ContactPreview wedding={previewWedding} />}>
         <div className="space-y-6">
           <div>
-            <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Cover Page</h2>
+            <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Contact Page</h2>
             <p className="font-ui text-sm text-[var(--color-text-muted)]">
-              The first page guests see. Make it memorable.
+              How guests can reach you for questions.
             </p>
           </div>
 
@@ -143,88 +137,55 @@ export function CoverEditorPage() {
             </Button>
           </div>
 
-          <FormField label="Welcome Text" hint="Small text above the couple names">
-            <Input
-              value={content.cover_welcome || ""}
-              onChange={(e) => updateField("cover_welcome", e.target.value)}
-              placeholder="Welcome"
-            />
-          </FormField>
-
-          <FormField label="Couple Name One" hint="Override the wedding record name if needed">
-            <Input
-              value={content.cover_heading || ""}
-              onChange={(e) => updateField("cover_heading", e.target.value)}
-              placeholder="First partner name"
-            />
-          </FormField>
-
-          <FormField label="Subtitle" hint="Text below the couple names">
-            <Textarea
-              value={content.cover_subtitle || ""}
-              onChange={(e) => updateField("cover_subtitle", e.target.value)}
-              placeholder="A celebration of love"
-              className="min-h-[80px]"
-            />
-          </FormField>
-
-          <FormField label="Button Text" hint="Call-to-action button on the cover">
-            <Input
-              value={content.cover_button_text || ""}
-              onChange={(e) => updateField("cover_button_text", e.target.value)}
-              placeholder="Enter Website"
-            />
-          </FormField>
-
-          <div className="pt-4 border-t border-[var(--color-border)]/15">
-            <h3 className="font-heading text-lg text-[var(--color-text)] mb-4">Background</h3>
-
-            <FormField label="Background Type">
-              <div className="flex items-center gap-4">
-                <Toggle
-                  checked={content.cover_background_type !== "video"}
-                  onChange={(v) => updateField("cover_background_type", v ? "image" : "video")}
-                  label={content.cover_background_type === "video" ? "Video" : "Image"}
-                />
-                <span className="font-ui text-xs text-[var(--color-text-muted)]">
-                  {content.cover_background_type === "video" ? "Video background" : "Image background"}
-                </span>
-              </div>
-            </FormField>
-
-            {content.cover_background_type === "video" ? (
-              <VideoUpload
-                value={content.cover_background_url || null}
-                onChange={(v) => updateField("cover_background_url", v || "")}
-                label="Background Video URL"
+          <FormField label="Phone Number" hint="Contact phone for inquiries">
+            <div className="relative">
+              <Phone
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none"
               />
-            ) : (
-              <ImageUpload
-                value={content.cover_background_url || null}
-                onChange={(v) => updateField("cover_background_url", v || "")}
-                label="Background Image"
+              <Input
+                value={content.contact_phone || ""}
+                onChange={(e) => updateField("contact_phone", e.target.value)}
+                placeholder="+60 12-345 6789"
+                className="pl-10"
               />
-            )}
-          </div>
+            </div>
+          </FormField>
 
-          <div className="pt-4 border-t border-[var(--color-border)]/15">
-            <h3 className="font-heading text-lg text-[var(--color-text)] mb-4">Logo / Monogram</h3>
-            <ImageUpload
-              value={content.cover_logo_url || null}
-              onChange={(v) => updateField("cover_logo_url", v || "")}
-              label="Cover Logo"
-            />
-          </div>
+          <FormField label="Email Address" hint="Contact email for inquiries">
+            <div className="relative">
+              <Mail
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none"
+              />
+              <Input
+                type="email"
+                value={content.contact_email || ""}
+                onChange={(e) => updateField("contact_email", e.target.value)}
+                placeholder="hello@ourwedding.com"
+                className="pl-10"
+              />
+            </div>
+          </FormField>
+
+          <FormField label="Address" hint="Venue or mailing address">
+            <div className="relative">
+              <MapPin
+                size={16}
+                className="absolute left-3 top-4 text-[var(--color-text-muted)] pointer-events-none"
+              />
+              <Textarea
+                value={content.contact_address || ""}
+                onChange={(e) => updateField("contact_address", e.target.value)}
+                placeholder="123 Wedding Venue Drive&#10;Kuala Lumpur, Malaysia"
+                className="pl-10 min-h-[100px]"
+              />
+            </div>
+          </FormField>
         </div>
       </SplitEditor>
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AdminLayout>
   );
 }

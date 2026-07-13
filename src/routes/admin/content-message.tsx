@@ -1,19 +1,21 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save, Upload, Eye } from "lucide-react";
+import { Save, Upload } from "lucide-react";
 import { supabase, type Wedding, type WeddingContent } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
-import { CoverPreview } from "../../components/preview/PreviewRenderers";
+import { SendMessagePreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Label, Toggle } from "../../components/ui/Input";
-import { ImageUpload, VideoUpload, FormField } from "../../components/ui/ImageUpload";
+import { Textarea } from "../../components/ui/Input";
+import { FormField } from "../../components/ui/ImageUpload";
 import { Toast } from "../../components/ui/index";
 import { getCoverContent } from "../../lib/theme";
 
-export function CoverEditorPage() {
+export function ContentMessagePage() {
   const queryClient = useQueryClient();
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [content, setContent] = useState<WeddingContent>({});
+  const [initialized, setInitialized] = useState(false);
 
   const { data: wedding, isLoading } = useQuery({
     queryKey: ["wedding"],
@@ -30,13 +32,9 @@ export function CoverEditorPage() {
     },
   });
 
-  const [content, setContent] = useState<WeddingContent>({});
-  const [initialized, setInitialized] = useState(false);
-
   useEffect(() => {
     if (wedding && !initialized) {
-      const merged = getCoverContent(wedding);
-      setContent(merged);
+      setContent(getCoverContent(wedding));
       setInitialized(true);
     }
   }, [wedding, initialized]);
@@ -75,7 +73,7 @@ export function CoverEditorPage() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["wedding"], data);
-      setToast({ message: "Cover page published!", type: "success" });
+      setToast({ message: "Message page published!", type: "success" });
     },
     onError: () => setToast({ message: "Failed to publish", type: "error" }),
   });
@@ -91,12 +89,8 @@ export function CoverEditorPage() {
     [saveDraftMutation]
   );
 
-  // Build a preview wedding object with the current draft content merged
   const previewWedding: Wedding | undefined = wedding
-    ? {
-        ...wedding,
-        draft_content: content,
-      }
+    ? { ...wedding, draft_content: content }
     : undefined;
 
   if (isLoading || !wedding || !previewWedding) {
@@ -111,12 +105,12 @@ export function CoverEditorPage() {
 
   return (
     <AdminLayout>
-      <SplitEditor title="Cover Page Editor" preview={<CoverPreview wedding={previewWedding} />}>
+      <SplitEditor title="Send Message Page Content" preview={<SendMessagePreview wedding={previewWedding} />}>
         <div className="space-y-6">
           <div>
-            <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Cover Page</h2>
+            <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Send Message Page</h2>
             <p className="font-ui text-sm text-[var(--color-text-muted)]">
-              The first page guests see. Make it memorable.
+              Where guests leave well wishes and messages.
             </p>
           </div>
 
@@ -143,88 +137,26 @@ export function CoverEditorPage() {
             </Button>
           </div>
 
-          <FormField label="Welcome Text" hint="Small text above the couple names">
-            <Input
-              value={content.cover_welcome || ""}
-              onChange={(e) => updateField("cover_welcome", e.target.value)}
-              placeholder="Welcome"
-            />
-          </FormField>
-
-          <FormField label="Couple Name One" hint="Override the wedding record name if needed">
-            <Input
-              value={content.cover_heading || ""}
-              onChange={(e) => updateField("cover_heading", e.target.value)}
-              placeholder="First partner name"
-            />
-          </FormField>
-
-          <FormField label="Subtitle" hint="Text below the couple names">
+          <FormField label="Message Intro" hint="Introductory text shown above the message form">
             <Textarea
-              value={content.cover_subtitle || ""}
-              onChange={(e) => updateField("cover_subtitle", e.target.value)}
-              placeholder="A celebration of love"
-              className="min-h-[80px]"
+              value={content.message_intro || ""}
+              onChange={(e) => updateField("message_intro", e.target.value)}
+              placeholder="Share your well wishes and blessings with the happy couple. Your message will appear in our guestbook."
+              className="min-h-[160px]"
             />
           </FormField>
 
-          <FormField label="Button Text" hint="Call-to-action button on the cover">
-            <Input
-              value={content.cover_button_text || ""}
-              onChange={(e) => updateField("cover_button_text", e.target.value)}
-              placeholder="Enter Website"
-            />
-          </FormField>
-
-          <div className="pt-4 border-t border-[var(--color-border)]/15">
-            <h3 className="font-heading text-lg text-[var(--color-text)] mb-4">Background</h3>
-
-            <FormField label="Background Type">
-              <div className="flex items-center gap-4">
-                <Toggle
-                  checked={content.cover_background_type !== "video"}
-                  onChange={(v) => updateField("cover_background_type", v ? "image" : "video")}
-                  label={content.cover_background_type === "video" ? "Video" : "Image"}
-                />
-                <span className="font-ui text-xs text-[var(--color-text-muted)]">
-                  {content.cover_background_type === "video" ? "Video background" : "Image background"}
-                </span>
-              </div>
-            </FormField>
-
-            {content.cover_background_type === "video" ? (
-              <VideoUpload
-                value={content.cover_background_url || null}
-                onChange={(v) => updateField("cover_background_url", v || "")}
-                label="Background Video URL"
-              />
-            ) : (
-              <ImageUpload
-                value={content.cover_background_url || null}
-                onChange={(v) => updateField("cover_background_url", v || "")}
-                label="Background Image"
-              />
-            )}
-          </div>
-
-          <div className="pt-4 border-t border-[var(--color-border)]/15">
-            <h3 className="font-heading text-lg text-[var(--color-text)] mb-4">Logo / Monogram</h3>
-            <ImageUpload
-              value={content.cover_logo_url || null}
-              onChange={(v) => updateField("cover_logo_url", v || "")}
-              label="Cover Logo"
-            />
+          <div className="p-4 rounded-lg bg-[var(--color-bg-light)] border border-[var(--color-border)]/15">
+            <p className="font-ui text-xs text-[var(--color-text-muted)] leading-relaxed">
+              <strong className="text-[var(--color-text)]">Note:</strong> Messages submitted by guests
+              are stored in the guestbook and can be reviewed and approved in the{" "}
+              <span className="text-[var(--color-primary)]">Messages</span> section of the dashboard.
+            </p>
           </div>
         </div>
       </SplitEditor>
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AdminLayout>
   );
 }

@@ -1,370 +1,185 @@
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate, useLocation, Link, Outlet } from "react-router-dom";
-import {
-  Menu, X, Home, Heart, Calendar, Image as ImageIcon,
-  HelpCircle, Gift, Mail, LogOut, ChevronDown, MapPin,
-} from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import type { Wedding, Guest, GuestSession } from "@/lib/supabase";
-import { getGuestSession, clearGuestSession } from "@/lib/guest-auth";
-import { getTheme, themeToCssVars } from "@/lib/theme";
-import { daysUntil, formatDate, cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
+import { Outlet, useNavigate, useLocation, useParams } from "react-router-dom";
+import { Menu, X, Globe } from "lucide-react";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { useLang } from "../../lib/lang-context";
+import { themeToCssVars, getTheme, getContent } from "../../lib/theme";
+import { cn } from "../../lib/utils";
+import type { TranslationKey } from "../../lib/i18n";
 
-type NavItem = {
-  path: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-};
-
-const NAV_ITEMS: NavItem[] = [
-  { path: "home", label: "Home", icon: Home },
-  { path: "events", label: "Events", icon: Calendar },
-  { path: "story", label: "Our Story", icon: Heart },
-  { path: "gallery", label: "Gallery", icon: ImageIcon },
-  { path: "travel", label: "Travel", icon: MapPin },
-  { path: "faq", label: "FAQ", icon: HelpCircle },
-  { path: "registry", label: "Registry", icon: Gift },
-  { path: "contact", label: "Contact", icon: Mail },
+const NAV_ITEMS: { key: TranslationKey; path: string }[] = [
+  { key: "home", path: "" },
+  { key: "rsvp", path: "rsvp" },
+  { key: "contact", path: "contact" },
+  { key: "doa", path: "doa" },
+  { key: "sendMessage", path: "send-message" },
 ];
 
 export function GuestLayout() {
-  const { slug } = useParams<{ slug: string }>();
+  const { session, loading } = useGuestAuth();
+  const { lang, setLang, t } = useLang();
   const navigate = useNavigate();
   const location = useLocation();
+  const params = useParams();
+  const slug = params.slug || session?.wedding.slug || "";
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  const [session, setSession] = useState<GuestSession | null>(null);
-  const [wedding, setWedding] = useState<Wedding | null>(null);
-  const [guest, setGuest] = useState<Guest | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const wedding = session?.wedding || null;
+  const theme = getTheme(wedding);
+  const cssVars = themeToCssVars(theme);
+  const content = getContent((wedding || {}) as never);
 
-  // ── Check session + fetch wedding/guest data ──
+  // Redirect to login if no session (except cover/login handled at route level)
   useEffect(() => {
-    const s = getGuestSession();
-
-    // No session → redirect to cover
-    if (!s || (slug && s.weddingSlug !== slug)) {
-      navigate(`/w/${slug}`, { replace: true });
-      return;
+    if (!loading && !session && slug) {
+      navigate(`/w/${slug}/login`, { replace: true });
     }
-
-    setSession(s);
-
-    Promise.all([
-      supabase.from("weddings").select("*").eq("id", s.weddingId).maybeSingle(),
-      supabase.from("guests").select("*").eq("id", s.guestId).maybeSingle(),
-    ]).then(([weddingRes, guestRes]) => {
-      if (weddingRes.data) setWedding(weddingRes.data as Wedding);
-      if (guestRes.data) setGuest(guestRes.data as Guest);
-      setLoading(false);
-    });
-  }, [slug, navigate]);
+  }, [loading, session, slug, navigate]);
 
   // Close mobile menu on route change
   useEffect(() => {
-    setMobileOpen(false);
+    setMenuOpen(false);
   }, [location.pathname]);
 
-  const theme = useMemo(() => getTheme(wedding), [wedding]);
-  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
-
-  const coupleNames = wedding
-    ? `${wedding.couple_name_one} & ${wedding.couple_name_two}`
-    : "";
-  const dUntil = daysUntil(wedding?.wedding_date ?? null);
-
-  const handleSignOut = () => {
-    clearGuestSession();
-    navigate(`/w/${slug}`, { replace: true });
-  };
-
-  // Determine active nav item from path
-  const activeSegment = location.pathname.split("/").pop() ?? "home";
-  const isActive = (item: NavItem) =>
-    item.path === activeSegment || (activeSegment === "" && item.path === "home");
+  // Lock body scroll when mobile menu open
+  useEffect(() => {
+    if (menuOpen) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [menuOpen]);
 
   if (loading) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ ...cssVars, background: "var(--c-background)" }}
+        style={cssVars}
+        className="min-h-screen flex items-center justify-center bg-[var(--color-bg)]"
       >
-        <p
-          className="text-sm tracking-widest uppercase animate-pulse"
-          style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}
-        >
-          Loading…
+        <p className="font-ui text-sm uppercase tracking-wider-luxe text-[var(--color-text-muted)] animate-pulse">
+          {t("loading")}
         </p>
       </div>
     );
   }
 
-  if (!wedding) {
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ ...cssVars, background: "var(--c-background)" }}
-      >
-        <div className="text-center px-6">
-          <h1
-            className="text-2xl mb-2"
-            style={{ color: "var(--c-text)", fontFamily: "var(--f-heading)" }}
-          >
-            Wedding Not Found
-          </h1>
-          <button
-            onClick={handleSignOut}
-            className="text-sm underline"
-            style={{ color: "var(--c-link)", fontFamily: "var(--f-body)" }}
-          >
-            Return to cover
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (!session) return null;
+
+  const handleNav = (path: string) => {
+    setMenuOpen(false);
+    navigate(`/w/${slug}/${path}`);
+  };
+
+  const isActive = (path: string) => {
+    const fullPath = `/w/${slug}/${path}`.replace(/\/$/, "");
+    return location.pathname === fullPath || (path && location.pathname.endsWith(`/${path}`));
+  };
+
+  const coupleName =
+    content.cover_heading ||
+    (wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "");
 
   return (
-    <div
-      className="min-h-screen flex flex-col"
-      style={{ ...cssVars, background: "var(--c-background)", fontFamily: "var(--f-body)" }}
-    >
-      {/* ═══════════════ Sticky Header ═══════════════ */}
-      <header
-        className="sticky top-0 z-50 backdrop-blur-md border-b transition-colors"
-        style={{
-          background: "color-mix(in srgb, var(--c-navBg) 92%, transparent)",
-          borderColor: "var(--c-secondary)",
-        }}
-      >
-        <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          {/* ── Top row: names + countdown + mobile toggle ── */}
-          <div className="flex items-center justify-between h-16">
-            <Link
-              to={`/w/${slug}/home`}
-              className="flex items-center gap-2 min-w-0"
+    <div style={cssVars} className="min-h-screen bg-[var(--color-bg)]">
+      {/* Navigation Bar */}
+      <nav className="fixed top-0 left-0 right-0 z-40 bg-[var(--color-bg)]/70 backdrop-blur-md border-b border-[var(--color-border)]/15">
+        <div className="max-w-6xl mx-auto px-5 md:px-8 h-16 flex items-center justify-between">
+          {/* Left: Hamburger (mobile) / Logo (desktop) */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="md:hidden p-2 -ml-2 text-[var(--color-primary)] hover:opacity-70 transition-opacity"
+              aria-label="Toggle menu"
             >
-              <span
-                className="text-base sm:text-lg truncate whitespace-nowrap"
-                style={{
-                  color: "var(--c-navText)",
-                  fontFamily: "var(--f-heading)",
-                  fontStyle: "var(--f-style)",
-                }}
-              >
-                {coupleNames}
-              </span>
-            </Link>
-
-            <div className="flex items-center gap-3">
-              {/* Countdown badge */}
-              {dUntil !== null && dUntil > 0 && (
-                <span
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs"
-                  style={{
-                    background: "color-mix(in srgb, var(--c-accent) 15%, transparent)",
-                    color: "var(--c-navText)",
-                    fontFamily: "var(--f-body)",
-                  }}
-                >
-                  <Calendar className="w-3 h-3" />
-                  {dUntil} days to go
-                </span>
-              )}
-
-              {/* Desktop sign out */}
-              <button
-                onClick={handleSignOut}
-                className="hidden sm:flex items-center gap-1.5 text-sm transition-opacity hover:opacity-70"
-                style={{ color: "var(--c-navText)", fontFamily: "var(--f-body)" }}
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden md:inline">Sign Out</span>
-              </button>
-
-              {/* Mobile hamburger */}
-              <button
-                onClick={() => setMobileOpen(!mobileOpen)}
-                className="lg:hidden p-2 rounded-lg transition-colors"
-                style={{ color: "var(--c-navText)" }}
-                aria-label="Toggle menu"
-              >
-                {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-              </button>
-            </div>
+              {menuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
+            <button
+              onClick={() => handleNav("")}
+              className="font-script text-lg md:text-xl text-[var(--color-primary)] hover:opacity-70 transition-opacity truncate max-w-[180px] md:max-w-none"
+            >
+              {coupleName}
+            </button>
           </div>
 
-          {/* ── Desktop horizontal nav ── */}
-          <nav className="hidden lg:flex items-center gap-1 h-12">
-            {NAV_ITEMS.map((item) => {
-              const active = isActive(item);
-              return (
-                <Link
-                  key={item.path}
-                  to={`/w/${slug}/${item.path}`}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-all whitespace-nowrap",
-                    active && "font-semibold"
-                  )}
-                  style={{
-                    color: active ? "var(--c-navText)" : "color-mix(in srgb, var(--c-navText) 70%, transparent)",
-                    background: active ? "color-mix(in srgb, var(--c-accent) 18%, transparent)" : "transparent",
-                    fontFamily: "var(--f-body)",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!active) e.currentTarget.style.background = "color-mix(in srgb, var(--c-accent) 8%, transparent)";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!active) e.currentTarget.style.background = "transparent";
-                  }}
-                >
-                  <item.icon className="w-4 h-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          {/* Center: Desktop nav links */}
+          <div className="hidden md:flex items-center gap-8">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.key}
+                onClick={() => handleNav(item.path)}
+                className={cn(
+                  "font-ui text-xs uppercase tracking-wider-luxe transition-opacity hover:opacity-100",
+                  isActive(item.path)
+                    ? "text-[var(--color-primary)] opacity-100"
+                    : "text-[var(--color-text-muted)] opacity-70"
+                )}
+              >
+                {t(item.key)}
+              </button>
+            ))}
+          </div>
+
+          {/* Right: Language toggle */}
+          <div className="flex items-center gap-1.5">
+            <Globe size={15} className="text-[var(--color-text-muted)] hidden sm:block" />
+            <button
+              onClick={() => setLang("en")}
+              className={cn(
+                "font-ui text-xs uppercase tracking-wider-luxe px-1.5 py-1 transition-opacity",
+                lang === "en"
+                  ? "text-[var(--color-primary)] opacity-100"
+                  : "text-[var(--color-text-muted)] opacity-50 hover:opacity-80"
+              )}
+            >
+              EN
+            </button>
+            <span className="text-[var(--color-border)]/40 text-xs">|</span>
+            <button
+              onClick={() => setLang("ms")}
+              className={cn(
+                "font-ui text-xs uppercase tracking-wider-luxe px-1.5 py-1 transition-opacity",
+                lang === "ms"
+                  ? "text-[var(--color-primary)] opacity-100"
+                  : "text-[var(--color-text-muted)] opacity-50 hover:opacity-80"
+              )}
+            >
+              MS
+            </button>
+          </div>
         </div>
 
-        {/* ── Mobile dropdown nav ── */}
-        {mobileOpen && (
-          <nav
-            className="lg:hidden border-t animate-slide-down max-h-[70vh] overflow-y-auto"
-            style={{
-              borderColor: "var(--c-secondary)",
-              background: "var(--c-navBg)",
-            }}
-          >
-            <div className="px-4 py-3 space-y-1">
-              {/* Mobile countdown */}
-              {dUntil !== null && dUntil > 0 && (
-                <div
-                  className="flex items-center gap-2 px-3 py-2 text-sm"
-                  style={{ color: "var(--c-navText)", fontFamily: "var(--f-body)" }}
-                >
-                  <Calendar className="w-4 h-4" />
-                  {dUntil} days to go
-                </div>
-              )}
-
-              {NAV_ITEMS.map((item) => {
-                const active = isActive(item);
-                return (
-                  <Link
-                    key={item.path}
-                    to={`/w/${slug}/${item.path}`}
-                    className={cn(
-                      "flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg transition-colors",
-                      active && "font-semibold"
-                    )}
-                    style={{
-                      color: "var(--c-navText)",
-                      background: active ? "color-mix(in srgb, var(--c-accent) 15%, transparent)" : "transparent",
-                      fontFamily: "var(--f-body)",
-                    }}
-                  >
-                    <item.icon className="w-4 h-4" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-
-              {/* Mobile sign out */}
+        {/* Mobile slide-down menu */}
+        <div
+          className={cn(
+            "md:hidden overflow-hidden transition-all duration-300 ease-out bg-[var(--color-bg)]/95 backdrop-blur-md border-b border-[var(--color-border)]/15",
+            menuOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+          )}
+        >
+          <div className="px-5 py-4 flex flex-col gap-1">
+            {NAV_ITEMS.map((item) => (
               <button
-                onClick={handleSignOut}
-                className="flex items-center gap-2.5 px-3 py-2.5 text-sm rounded-lg w-full transition-colors"
-                style={{ color: "var(--c-navText)", fontFamily: "var(--f-body)" }}
+                key={item.key}
+                onClick={() => handleNav(item.path)}
+                className={cn(
+                  "font-ui text-sm uppercase tracking-wider-luxe py-3 text-left border-b border-[var(--color-border)]/10 last:border-0 transition-colors",
+                  isActive(item.path)
+                    ? "text-[var(--color-primary)]"
+                    : "text-[var(--color-text)]"
+                )}
               >
-                <LogOut className="w-4 h-4" />
-                Sign Out
+                {t(item.key)}
               </button>
-            </div>
-          </nav>
-        )}
-      </header>
+            ))}
+          </div>
+        </div>
+      </nav>
 
-      {/* ═══════════════ Main Content ═══════════════ */}
-      <main
-        className="flex-1 w-full"
-        style={{ background: "var(--c-background)" }}
-      >
+      {/* Page content */}
+      <main className="pt-16 min-h-screen">
         <Outlet />
       </main>
-
-      {/* ═══════════════ Footer ═══════════════ */}
-      <footer
-        className="px-6 py-10 text-center"
-        style={{ background: "var(--c-footerBg)" }}
-      >
-        {/* Decorative divider */}
-        <div className="flex items-center justify-center gap-3 mb-5">
-          <div
-            className="h-px w-12"
-            style={{ background: "var(--c-footerText)", opacity: 0.3 }}
-          />
-          <Heart
-            className="w-4 h-4"
-            style={{ color: "var(--c-footerText)", opacity: 0.5 }}
-          />
-          <div
-            className="h-px w-12"
-            style={{ background: "var(--c-footerText)", opacity: 0.3 }}
-          />
-        </div>
-
-        {wedding.hashtag && (
-          <p
-            className="text-lg mb-2"
-            style={{
-              color: "var(--c-footerText)",
-              fontFamily: "var(--f-heading)",
-              fontStyle: "var(--f-style)",
-            }}
-          >
-            {wedding.hashtag}
-          </p>
-        )}
-
-        {wedding.wedding_date && (
-          <p
-            className="text-xs"
-            style={{
-              color: "var(--c-footerText)",
-              opacity: 0.7,
-              fontFamily: "var(--f-body)",
-            }}
-          >
-            {formatDate(wedding.wedding_date)}
-          </p>
-        )}
-
-        {wedding.location && (
-          <p
-            className="text-xs mt-1"
-            style={{
-              color: "var(--c-footerText)",
-              opacity: 0.5,
-              fontFamily: "var(--f-body)",
-            }}
-          >
-            {wedding.location}
-          </p>
-        )}
-
-        {/* Guest name + sign out */}
-        {guest && (
-          <p
-            className="text-xs mt-4"
-            style={{
-              color: "var(--c-footerText)",
-              opacity: 0.4,
-              fontFamily: "var(--f-body)",
-            }}
-          >
-            Signed in as {guest.full_name}
-          </p>
-        )}
-      </footer>
     </div>
   );
 }
+
+export default GuestLayout;

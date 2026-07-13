@@ -1,489 +1,493 @@
-import { useCallback, useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Save, X, Calendar, Clock, MapPin } from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import type { WeddingEvent } from "@/lib/supabase";
-import { useHostWedding } from "@/lib/use-host-wedding";
-import { getDraftTheme } from "@/lib/theme";
-import { formatDate, formatTime } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
-import { Input, Textarea, Label, Select } from "@/components/ui/Input";
-import { Card, Badge, Modal, EmptyState, SectionTitle, Toast } from "@/components/ui";
-import { ImageUpload } from "@/components/ui/ImageUpload";
-import { SplitEditor } from "@/components/preview/SplitEditor";
-import { EventCardPreview } from "@/components/preview/PreviewRenderers";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  CalendarDays,
+  MapPin,
+  Clock,
+  Users,
+  X,
+} from "lucide-react";
+import {
+  supabase,
+  type Wedding,
+  type WeddingEvent,
+  type EventKind,
+  type EventVisibility,
+} from "../../lib/supabase";
+import { AdminLayout } from "./admin-layout";
+import { SplitEditor } from "../../components/preview/SplitEditor";
+import { RsvpPreview } from "../../components/preview/PreviewRenderers";
+import { Button } from "../../components/ui/Button";
+import { Input, Textarea, Label, Select, Toggle } from "../../components/ui/Input";
+import { ImageUpload, FormField } from "../../components/ui/ImageUpload";
+import { Card, Badge, Modal, EmptyState, Toast } from "../../components/ui/index";
+import { formatDate, formatTime, cn } from "../../lib/utils";
+import { useLang } from "../../lib/lang-context";
 
-const EVENT_KINDS = [
-  "ceremony",
-  "reception",
-  "rehearsal",
-  "brunch",
-  "party",
-  "other",
-] as const;
+const EVENT_KINDS: { value: EventKind; label: string }[] = [
+  { value: "ceremony", label: "Ceremony" },
+  { value: "reception", label: "Reception" },
+  { value: "welcome", label: "Welcome Party" },
+  { value: "rehearsal", label: "Rehearsal" },
+  { value: "brunch", label: "Brunch" },
+  { value: "cultural", label: "Cultural" },
+  { value: "other", label: "Other" },
+];
 
-const KIND_COLORS: Record<string, "success" | "info" | "warning" | "default" | "danger"> = {
-  ceremony: "info",
-  reception: "success",
-  rehearsal: "warning",
-  brunch: "default",
-  party: "danger",
-  other: "default",
-};
-
-type EventForm = {
+interface EventFormData {
   name: string;
-  kind: string;
+  kind: EventKind;
   starts_at: string;
   venue_name: string;
   venue_address: string;
-  maps_url: string;
   dress_code: string;
-  description: string;
+  programme: string;
+  notes: string;
+  maps_url: string;
   image_url: string | null;
   rsvp_deadline: string;
   capacity: string;
-  notes: string;
+  visibility: EventVisibility;
+}
+
+const EMPTY_FORM: EventFormData = {
+  name: "",
+  kind: "ceremony",
+  starts_at: "",
+  venue_name: "",
+  venue_address: "",
+  dress_code: "",
+  programme: "",
+  notes: "",
+  maps_url: "",
+  image_url: null,
+  rsvp_deadline: "",
+  capacity: "",
+  visibility: "public",
 };
 
-function emptyForm(): EventForm {
-  return {
-    name: "",
-    kind: "ceremony",
-    starts_at: "",
-    venue_name: "",
-    venue_address: "",
-    maps_url: "",
-    dress_code: "",
-    description: "",
-    image_url: null,
-    rsvp_deadline: "",
-    capacity: "",
-    notes: "",
-  };
-}
-
-function toForm(event: WeddingEvent): EventForm {
-  return {
-    name: event.name,
-    kind: event.kind,
-    starts_at: event.starts_at ? new Date(event.starts_at).toISOString().slice(0, 16) : "",
-    venue_name: event.venue_name ?? "",
-    venue_address: event.venue_address ?? "",
-    maps_url: event.maps_url ?? "",
-    dress_code: event.dress_code ?? "",
-    description: event.description ?? "",
-    image_url: event.image_url,
-    rsvp_deadline: event.rsvp_deadline ? new Date(event.rsvp_deadline).toISOString().slice(0, 16) : "",
-    capacity: event.capacity != null ? String(event.capacity) : "",
-    notes: event.notes ?? "",
-  };
-}
-
-function toRow(form: EventForm, weddingId: string, sortOrder: number) {
-  return {
-    wedding_id: weddingId,
-    name: form.name,
-    kind: form.kind,
-    starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : null,
-    venue_name: form.venue_name || null,
-    venue_address: form.venue_address || null,
-    maps_url: form.maps_url || null,
-    dress_code: form.dress_code || null,
-    description: form.description || null,
-    image_url: form.image_url,
-    rsvp_deadline: form.rsvp_deadline ? new Date(form.rsvp_deadline).toISOString() : null,
-    capacity: form.capacity ? parseInt(form.capacity, 10) : null,
-    notes: form.notes || null,
-    sort_order: sortOrder,
-  };
-}
-
-export function AdminEvents() {
-  const { wedding, loading } = useHostWedding();
-  const theme = getDraftTheme(wedding);
-
-  const [events, setEvents] = useState<WeddingEvent[]>([]);
-  const [fetching, setFetching] = useState(true);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
-  const [form, setForm] = useState<EventForm>(emptyForm());
-  const [saving, setSaving] = useState(false);
+export function EventsPage() {
+  const queryClient = useQueryClient();
+  const { lang } = useLang();
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<WeddingEvent | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [formData, setFormData] = useState<EventFormData>(EMPTY_FORM);
 
-  const weddingId = wedding?.id ?? null;
+  const { data: wedding, isLoading: weddingLoading } = useQuery({
+    queryKey: ["wedding"],
+    queryFn: async () => {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error("Not authenticated");
+      const { data, error } = await supabase
+        .from("weddings")
+        .select("*")
+        .eq("created_by", user.user.id)
+        .single();
+      if (error) throw error;
+      return data as Wedding;
+    },
+  });
 
-  const fetchEvents = useCallback(async () => {
-    if (!weddingId) return;
-    setFetching(true);
-    const { data, error } = await supabase
-      .from("events")
-      .select("*")
-      .eq("wedding_id", weddingId)
-      .order("sort_order", { ascending: true });
-    if (!error && data) setEvents(data as WeddingEvent[]);
-    setFetching(false);
-  }, [weddingId]);
+  const { data: events = [], isLoading: eventsLoading } = useQuery({
+    queryKey: ["events", wedding?.id],
+    queryFn: async () => {
+      if (!wedding) return [];
+      const { data, error } = await supabase
+        .from("events")
+        .select("*")
+        .eq("wedding_id", wedding.id)
+        .order("starts_at", { ascending: true });
+      if (error) throw error;
+      return data as WeddingEvent[];
+    },
+    enabled: !!wedding,
+  });
 
-  useEffect(() => {
-    if (weddingId) fetchEvents();
-  }, [weddingId, fetchEvents]);
+  const createMutation = useMutation({
+    mutationFn: async (data: EventFormData) => {
+      if (!wedding) throw new Error("No wedding");
+      const maxSort = events.length > 0 ? Math.max(...events.map((e) => e.sort_order)) : 0;
+      const payload = {
+        wedding_id: wedding.id,
+        name: data.name,
+        kind: data.kind,
+        starts_at: data.starts_at || null,
+        venue_name: data.venue_name || null,
+        venue_address: data.venue_address || null,
+        dress_code: data.dress_code || null,
+        programme: data.programme || null,
+        notes: data.notes || null,
+        maps_url: data.maps_url || null,
+        image_url: data.image_url,
+        rsvp_deadline: data.rsvp_deadline || null,
+        capacity: data.capacity ? parseInt(data.capacity) : null,
+        visibility: data.visibility,
+        sort_order: maxSort + 1,
+      };
+      const { error } = await supabase.from("events").insert(payload);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      setToast({ message: "Event created!", type: "success" });
+      setShowForm(false);
+      setFormData(EMPTY_FORM);
+    },
+    onError: () => setToast({ message: "Failed to create event", type: "error" }),
+  });
 
-  const startCreate = () => {
-    setIsCreating(true);
-    setEditingId(null);
-    setForm(emptyForm());
-  };
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: EventFormData }) => {
+      const payload = {
+        name: data.name,
+        kind: data.kind,
+        starts_at: data.starts_at || null,
+        venue_name: data.venue_name || null,
+        venue_address: data.venue_address || null,
+        dress_code: data.dress_code || null,
+        programme: data.programme || null,
+        notes: data.notes || null,
+        maps_url: data.maps_url || null,
+        image_url: data.image_url,
+        rsvp_deadline: data.rsvp_deadline || null,
+        capacity: data.capacity ? parseInt(data.capacity) : null,
+        visibility: data.visibility,
+      };
+      const { error } = await supabase.from("events").update(payload).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      setToast({ message: "Event updated!", type: "success" });
+      setShowForm(false);
+      setEditingId(null);
+      setFormData(EMPTY_FORM);
+    },
+    onError: () => setToast({ message: "Failed to update event", type: "error" }),
+  });
 
-  const startEdit = (event: WeddingEvent) => {
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("events").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      setToast({ message: "Event deleted", type: "success" });
+    },
+    onError: () => setToast({ message: "Failed to delete event", type: "error" }),
+  });
+
+  const handleEdit = (event: WeddingEvent) => {
     setEditingId(event.id);
-    setIsCreating(false);
-    setForm(toForm(event));
+    setFormData({
+      name: event.name,
+      kind: event.kind,
+      starts_at: event.starts_at ? event.starts_at.slice(0, 16) : "",
+      venue_name: event.venue_name || "",
+      venue_address: event.venue_address || "",
+      dress_code: event.dress_code || "",
+      programme: event.programme || "",
+      notes: event.notes || "",
+      maps_url: event.maps_url || "",
+      image_url: event.image_url,
+      rsvp_deadline: event.rsvp_deadline ? event.rsvp_deadline.slice(0, 16) : "",
+      capacity: event.capacity?.toString() || "",
+      visibility: event.visibility,
+    });
+    setShowForm(true);
   };
 
-  const cancelEdit = () => {
+  const handleAdd = () => {
     setEditingId(null);
-    setIsCreating(false);
-    setForm(emptyForm());
+    setFormData(EMPTY_FORM);
+    setShowForm(true);
   };
 
-  const save = async () => {
-    if (!weddingId || !form.name.trim() || !form.starts_at) {
-      setToast({ message: "Name and start time are required", type: "error" });
+  const handleSubmit = () => {
+    if (!formData.name.trim()) {
+      setToast({ message: "Event name is required", type: "error" });
       return;
     }
-    setSaving(true);
-    if (isCreating) {
-      const maxSort = events.reduce((max, e) => Math.max(max, e.sort_order), -1);
-      const { error } = await supabase.from("events").insert(toRow(form, weddingId, maxSort + 1));
-      setSaving(false);
-      if (error) {
-        setToast({ message: "Failed to create event", type: "error" });
-      } else {
-        setToast({ message: "Event created", type: "success" });
-        cancelEdit();
-        await fetchEvents();
-      }
-    } else if (editingId) {
-      const existing = events.find((e) => e.id === editingId);
-      const sortOrder = existing?.sort_order ?? 0;
-      const { error } = await supabase
-        .from("events")
-        .update(toRow(form, weddingId, sortOrder))
-        .eq("id", editingId);
-      setSaving(false);
-      if (error) {
-        setToast({ message: "Failed to save event", type: "error" });
-      } else {
-        setToast({ message: "Event saved", type: "success" });
-        cancelEdit();
-        await fetchEvents();
-      }
-    }
-  };
-
-  const deleteEvent = async (event: WeddingEvent) => {
-    const { error } = await supabase.from("events").delete().eq("id", event.id);
-    setDeleteTarget(null);
-    if (error) {
-      setToast({ message: "Failed to delete event", type: "error" });
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: formData });
     } else {
-      setToast({ message: "Event deleted", type: "success" });
-      if (editingId === event.id) cancelEdit();
-      await fetchEvents();
+      createMutation.mutate(formData);
     }
   };
 
-  if (loading || fetching) {
-    return <div className="flex items-center justify-center py-24 text-sepia">Loading events…</div>;
-  }
-
-  if (!wedding) {
-    return <EmptyState title="No wedding found" description="Create a wedding to manage events." />;
-  }
-
-  const isEditing = isCreating || editingId !== null;
-
-  // Live preview event object derived from form
-  const previewEvent = {
-    name: form.name || "Untitled Event",
-    kind: form.kind,
-    starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : new Date().toISOString(),
-    venue_name: form.venue_name || null,
-    venue_address: form.venue_address || null,
-    dress_code: form.dress_code || null,
-    description: form.description || null,
-    maps_url: form.maps_url || null,
-    image_url: form.image_url,
-    rsvp_deadline: form.rsvp_deadline ? new Date(form.rsvp_deadline).toISOString() : null,
+  const handleDelete = (id: string) => {
+    if (confirm("Are you sure you want to delete this event?")) {
+      deleteMutation.mutate(id);
+    }
   };
+
+  const isLoading = weddingLoading || eventsLoading;
+
+  if (isLoading || !wedding) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-full">
+          <p className="font-ui text-sm text-[var(--color-text-muted)]">Loading events...</p>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
-    <div>
-      <SectionTitle
-        title="Events"
-        subtitle="Manage the events that make up your wedding weekend."
-        action={
-          !isEditing && (
-            <Button onClick={startCreate}>
-              <Plus className="w-4 h-4" /> New Event
-            </Button>
-          )
-        }
-      />
-
-      {/* ─── Editing / Creating mode ─── */}
-      {isEditing ? (
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-serif text-onyx">
-              {isCreating ? "Create Event" : "Edit Event"}
-            </h2>
-            <Button variant="ghost" size="sm" onClick={cancelEdit}>
-              <X className="w-4 h-4" /> Close
+    <AdminLayout>
+      <SplitEditor title="Events Manager" preview={<RsvpPreview wedding={wedding} events={events} />}>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Events</h2>
+              <p className="font-ui text-sm text-[var(--color-text-muted)]">
+                {events.length} {events.length === 1 ? "event" : "events"} configured
+              </p>
+            </div>
+            <Button variant="primary" size="sm" onClick={handleAdd}>
+              <Plus size={14} className="mr-1.5" /> Add
             </Button>
           </div>
 
-          <SplitEditor
-            previewLabel="Event Preview"
-            draftData={{ theme }}
-            actions={
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={cancelEdit} disabled={saving}>
-                  Cancel
-                </Button>
-                <Button variant="primary" size="sm" onClick={save} disabled={saving}>
-                  <Save className="w-4 h-4" /> Save
-                </Button>
-              </div>
-            }
-            editor={
-              <div className="space-y-5">
-                <div>
-                  <Label>Event Name</Label>
-                  <Input
-                    value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="e.g. Wedding Ceremony"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Kind</Label>
-                    <Select
-                      value={form.kind}
-                      onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
-                    >
-                      {EVENT_KINDS.map((k) => (
-                        <option key={k} value={k}>
-                          {k.charAt(0).toUpperCase() + k.slice(1)}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Starts At</Label>
-                    <Input
-                      type="datetime-local"
-                      value={form.starts_at}
-                      onChange={(e) => setForm((f) => ({ ...f, starts_at: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label>Venue Name</Label>
-                  <Input
-                    value={form.venue_name}
-                    onChange={(e) => setForm((f) => ({ ...f, venue_name: e.target.value }))}
-                    placeholder="e.g. St. Mary's Church"
-                  />
-                </div>
-                <div>
-                  <Label>Venue Address</Label>
-                  <Input
-                    value={form.venue_address}
-                    onChange={(e) => setForm((f) => ({ ...f, venue_address: e.target.value }))}
-                    placeholder="123 Main Street, City"
-                  />
-                </div>
-                <div>
-                  <Label>Google Maps URL</Label>
-                  <Input
-                    value={form.maps_url}
-                    onChange={(e) => setForm((f) => ({ ...f, maps_url: e.target.value }))}
-                    placeholder="https://maps.google.com/…"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Dress Code</Label>
-                    <Input
-                      value={form.dress_code}
-                      onChange={(e) => setForm((f) => ({ ...f, dress_code: e.target.value }))}
-                      placeholder="Black Tie"
-                    />
-                  </div>
-                  <div>
-                    <Label>Capacity</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={form.capacity}
-                      onChange={(e) => setForm((f) => ({ ...f, capacity: e.target.value }))}
-                      placeholder="100"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <Label>RSVP Deadline</Label>
-                  <Input
-                    type="datetime-local"
-                    value={form.rsvp_deadline}
-                    onChange={(e) => setForm((f) => ({ ...f, rsvp_deadline: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label>Description</Label>
-                  <Textarea
-                    value={form.description}
-                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                    placeholder="Tell guests what to expect…"
-                    rows={4}
-                  />
-                </div>
-                <div>
-                  <Label>Event Image</Label>
-                  <ImageUpload
-                    weddingId={wedding.id}
-                    value={form.image_url}
-                    onChange={(url) => setForm((f) => ({ ...f, image_url: url }))}
-                    label="Event image"
-                  />
-                </div>
-                <div>
-                  <Label>Notes (internal)</Label>
-                  <Textarea
-                    value={form.notes}
-                    onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                    placeholder="Private notes not shown to guests…"
-                    rows={3}
-                  />
-                </div>
-              </div>
-            }
-            preview={
-              <EventCardPreview event={previewEvent} theme={theme} />
-            }
-          />
-        </Card>
-      ) : (
-        /* ─── Grid mode ─── */
-        <>
-          {events.length === 0 ? (
+          {events.length === 0 && !showForm ? (
             <EmptyState
+              icon={<CalendarDays size={32} />}
               title="No events yet"
-              description="Add your ceremony, reception, and other events for guests to see."
+              description="Add your ceremony, reception, and other events for guests to RSVP to."
               action={
-                <Button onClick={startCreate}>
-                  <Plus className="w-4 h-4" /> New Event
+                <Button variant="primary" size="sm" onClick={handleAdd}>
+                  <Plus size={14} className="mr-1.5" /> Add Event
                 </Button>
               }
             />
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-3">
               {events.map((event) => (
-                <Card key={event.id} className="overflow-hidden flex flex-col">
-                  {event.image_url ? (
-                    <div className="relative h-36 overflow-hidden">
-                      <img src={event.image_url} alt="" className="w-full h-full object-cover" />
-                      <div className="absolute top-2 right-2">
-                        <Badge variant={KIND_COLORS[event.kind] ?? "default"}>
-                          {event.kind}
-                        </Badge>
+                <Card key={event.id} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-heading text-base text-[var(--color-text)]">{event.name}</h3>
+                        <Badge>{event.kind}</Badge>
+                        {event.visibility === "private" && (
+                          <Badge variant="warning">Private</Badge>
+                        )}
                       </div>
-                    </div>
-                  ) : (
-                    <div className="relative h-36 bg-gradient-to-br from-mist to-sand/40 flex items-center justify-center">
-                      <Calendar className="w-8 h-8 text-sepia/40" />
-                      <div className="absolute top-2 right-2">
-                        <Badge variant={KIND_COLORS[event.kind] ?? "default"}>
-                          {event.kind}
-                        </Badge>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="p-4 flex-1 flex flex-col">
-                    <h3 className="font-serif text-base text-onyx mb-2">{event.name}</h3>
-                    <div className="space-y-1.5 text-sm text-sepia/70 flex-1">
                       {event.starts_at && (
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-3.5 h-3.5 shrink-0" />
-                          <span>{formatDate(event.starts_at)}</span>
-                        </div>
-                      )}
-                      {event.starts_at && (
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-3.5 h-3.5 shrink-0" />
-                          <span>{formatTime(event.starts_at)}</span>
+                        <div className="flex items-center gap-3 mb-1">
+                          <span className="font-ui text-xs text-[var(--color-text-muted)] flex items-center gap-1">
+                            <CalendarDays size={12} />
+                            {formatDate(event.starts_at, lang)}
+                          </span>
+                          <span className="font-ui text-xs text-[var(--color-text-muted)] flex items-center gap-1">
+                            <Clock size={12} />
+                            {formatTime(event.starts_at, lang)}
+                          </span>
                         </div>
                       )}
                       {event.venue_name && (
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">{event.venue_name}</span>
-                        </div>
+                        <p className="font-ui text-xs text-[var(--color-text-muted)] flex items-center gap-1">
+                          <MapPin size={12} />
+                          {event.venue_name}
+                        </p>
+                      )}
+                      {event.capacity && (
+                        <p className="font-ui text-xs text-[var(--color-text-muted)] flex items-center gap-1 mt-1">
+                          <Users size={12} />
+                          Capacity: {event.capacity}
+                        </p>
                       )}
                     </div>
-
-                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-sand">
-                      <span className="text-xs text-sepia/50">
-                        {event.capacity != null ? `${event.capacity} guests` : "No limit"}
-                      </span>
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => startEdit(event)}>
-                          <Pencil className="w-3.5 h-3.5" /> Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setDeleteTarget(event)}
-                          className="text-red-600 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => handleEdit(event)}
+                        className="p-2 rounded-lg hover:bg-[var(--color-bg-light)] text-[var(--color-text-muted)] hover:text-[var(--color-primary)] transition-colors"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(event.id)}
+                        className="p-2 rounded-lg hover:bg-red-50 text-[var(--color-text-muted)] hover:text-[var(--color-error)] transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
                 </Card>
               ))}
             </div>
           )}
-        </>
-      )}
+        </div>
+      </SplitEditor>
 
-      {/* ─── Delete confirm modal ─── */}
-      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Event">
-        <p className="text-sm text-sepia mb-6">
-          Are you sure you want to delete{" "}
-          <span className="font-medium text-onyx">{deleteTarget?.name}</span>? This cannot be undone.
-        </p>
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-          <Button variant="danger" onClick={() => deleteTarget && deleteEvent(deleteTarget)}>
-            <Trash2 className="w-4 h-4" /> Delete
-          </Button>
+      {/* Event Form Modal */}
+      <Modal
+        open={showForm}
+        onClose={() => {
+          setShowForm(false);
+          setEditingId(null);
+          setFormData(EMPTY_FORM);
+        }}
+        title={editingId ? "Edit Event" : "New Event"}
+        maxWidth="max-w-xl"
+      >
+        <div className="space-y-4">
+          <FormField label="Event Name" hint="e.g. Akad Nikah, Wedding Reception">
+            <Input
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="Event name"
+            />
+          </FormField>
+
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Event Type">
+              <Select
+                value={formData.kind}
+                onChange={(e) => setFormData({ ...formData, kind: e.target.value as EventKind })}
+              >
+                {EVENT_KINDS.map((k) => (
+                  <option key={k.value} value={k.value}>
+                    {k.label}
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+            <FormField label="Start Date & Time">
+              <Input
+                type="datetime-local"
+                value={formData.starts_at}
+                onChange={(e) => setFormData({ ...formData, starts_at: e.target.value })}
+              />
+            </FormField>
+          </div>
+
+          <FormField label="Venue Name">
+            <Input
+              value={formData.venue_name}
+              onChange={(e) => setFormData({ ...formData, venue_name: e.target.value })}
+              placeholder="e.g. Grand Ballroom Hotel"
+            />
+          </FormField>
+
+          <FormField label="Venue Address">
+            <Textarea
+              value={formData.venue_address}
+              onChange={(e) => setFormData({ ...formData, venue_address: e.target.value })}
+              placeholder="Full address of the venue"
+              className="min-h-[80px]"
+            />
+          </FormField>
+
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Dress Code">
+              <Input
+                value={formData.dress_code}
+                onChange={(e) => setFormData({ ...formData, dress_code: e.target.value })}
+                placeholder="e.g. Formal, Smart Casual"
+              />
+            </FormField>
+            <FormField label="Capacity">
+              <Input
+                type="number"
+                value={formData.capacity}
+                onChange={(e) => setFormData({ ...formData, capacity: e.target.value })}
+                placeholder="e.g. 200"
+              />
+            </FormField>
+          </div>
+
+          <FormField label="Programme" hint="Schedule or programme details">
+            <Textarea
+              value={formData.programme}
+              onChange={(e) => setFormData({ ...formData, programme: e.target.value })}
+              placeholder="e.g. 6:00 PM - Arrival&#10;6:30 PM - Ceremony&#10;7:30 PM - Dinner"
+              className="min-h-[100px]"
+            />
+          </FormField>
+
+          <FormField label="Notes" hint="Additional notes for guests">
+            <Textarea
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              placeholder="Parking info, gift preferences, etc."
+              className="min-h-[80px]"
+            />
+          </FormField>
+
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Maps URL">
+              <Input
+                value={formData.maps_url}
+                onChange={(e) => setFormData({ ...formData, maps_url: e.target.value })}
+                placeholder="https://maps.google.com/..."
+              />
+            </FormField>
+            <FormField label="RSVP Deadline">
+              <Input
+                type="datetime-local"
+                value={formData.rsvp_deadline}
+                onChange={(e) => setFormData({ ...formData, rsvp_deadline: e.target.value })}
+              />
+            </FormField>
+          </div>
+
+          <FormField label="Event Image">
+            <ImageUpload
+              value={formData.image_url}
+              onChange={(v) => setFormData({ ...formData, image_url: v })}
+              label="Event Cover Image"
+            />
+          </FormField>
+
+          <div className="flex items-center justify-between p-3 rounded-lg border border-[var(--color-border)]/15">
+            <div>
+              <p className="font-ui text-sm text-[var(--color-text)]">Visibility</p>
+              <p className="font-ui text-xs text-[var(--color-text-muted)]">
+                {formData.visibility === "public" ? "All guests can see" : "Only invited guests"}
+              </p>
+            </div>
+            <Toggle
+              checked={formData.visibility === "public"}
+              onChange={(v) => setFormData({ ...formData, visibility: v ? "public" : "private" })}
+              label={formData.visibility === "public" ? "Public" : "Private"}
+            />
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setShowForm(false);
+                setEditingId(null);
+                setFormData(EMPTY_FORM);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSubmit}
+              disabled={createMutation.isPending || updateMutation.isPending}
+            >
+              {createMutation.isPending || updateMutation.isPending
+                ? "Saving..."
+                : editingId
+                ? "Update Event"
+                : "Create Event"}
+            </Button>
+          </div>
         </div>
       </Modal>
 
-      {/* ─── Toast ─── */}
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
-    </div>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    </AdminLayout>
   );
 }

@@ -1,198 +1,139 @@
-import { useEffect, useMemo, useState } from "react";
-import { Mail, Phone, MapPin, MessageCircle, Heart } from "lucide-react";
-import { supabase } from "@/lib/supabase";
-import type { WebsiteContent } from "@/lib/supabase";
-import { useGuestData } from "@/lib/use-guest-data";
-import { getTheme, themeToCssVars } from "@/lib/theme";
-import { Card, EmptyState } from "@/components/ui";
+import { Phone, Mail, MapPin } from "lucide-react";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { useLang } from "../../lib/lang-context";
+import { themeToCssVars, getTheme, getContent } from "../../lib/theme";
 
-type ContactInfo = {
-  email?: string;
-  phone?: string;
-  address?: string;
-  note?: string;
-};
+export function Contact() {
+  const { session } = useGuestAuth();
+  const { t } = useLang();
 
-function parseContactInfo(body: string): ContactInfo {
-  const info: ContactInfo = {};
-  const lines = body.split("\n");
+  const wedding = session?.wedding || null;
+  const theme = getTheme(wedding);
+  const cssVars = themeToCssVars(theme);
+  const content = getContent(wedding!);
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
+  if (!wedding) return null;
 
-    const lower = trimmed.toLowerCase();
-    if (lower.startsWith("email:") || lower.startsWith("e-mail:")) {
-      info.email = trimmed.slice(lower.startsWith("e-mail:") ? 7 : 6).trim();
-    } else if (lower.startsWith("phone:") || lower.startsWith("tel:")) {
-      info.phone = trimmed.slice(lower.startsWith("tel:") ? 4 : 6).trim();
-    } else if (lower.startsWith("address:")) {
-      info.address = trimmed.slice(8).trim();
-    } else if (lower.startsWith("note:")) {
-      info.note = trimmed.slice(5).trim();
-    }
-  }
+  const phone = content.contact_phone || wedding.contact_phone || null;
+  const email = content.contact_email || null;
+  const address = content.contact_address || wedding.location || null;
 
-  return info;
-}
-
-export function GuestContact() {
-  const { wedding, loading } = useGuestData();
-
-  const [content, setContent] = useState<WebsiteContent | null>(null);
-  const [fetching, setFetching] = useState(true);
-
-  const theme = useMemo(() => getTheme(wedding), [wedding]);
-  const cssVars = useMemo(() => themeToCssVars(theme), [theme]);
-
-  const weddingId = wedding?.id ?? null;
-
-  useEffect(() => {
-    if (!weddingId) return;
-    setFetching(true);
-    supabase
-      .from("website_content")
-      .select("*")
-      .eq("wedding_id", weddingId)
-      .eq("section", "contact")
-      .maybeSingle()
-      .then(({ data }) => {
-        setContent((data as WebsiteContent) ?? null);
-        setFetching(false);
-      });
-  }, [weddingId]);
-
-  if (loading || fetching) {
-    return (
-      <div className="flex items-center justify-center py-24 text-sepia animate-fade-in">
-        Loading contact info…
-      </div>
-    );
-  }
-
-  if (!wedding) {
-    return <EmptyState title="Wedding Not Found" description="We couldn't find the wedding you're looking for." />;
-  }
-
-  const title = content?.title ?? "Get in Touch";
-  const body = content?.body ?? null;
-  const contactInfo = body ? parseContactInfo(body) : {};
-  const hasAnyContact = contactInfo.email || contactInfo.phone || contactInfo.address || wedding.location;
-
-  if (!hasAnyContact) {
-    return (
-      <div style={cssVars as React.CSSProperties} className="animate-fade-in">
-        <section className="px-6 py-24 text-center" style={{ background: "var(--c-background)" }}>
-          <EmptyState
-            title="Contact info coming soon"
-            description="Check back later for contact details."
-          />
-        </section>
-      </div>
-    );
-  }
+  const hasAny = phone || email || address;
 
   return (
-    <div style={cssVars as React.CSSProperties} className="animate-fade-in">
-      {/* ── Header ── */}
-      <section className="px-6 pt-16 pb-8 text-center" style={{ background: "var(--c-background)" }}>
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full mb-4" style={{ background: "var(--c-secondary)" }}>
-          <MessageCircle className="w-6 h-6" style={{ color: "var(--c-accent)" }} />
-        </div>
-        <p className="text-xs uppercase tracking-[0.3em] mb-3" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
-          We'd love to hear from you
+    <div style={cssVars} className="bg-[var(--color-bg)] min-h-screen pb-20">
+      {/* Header */}
+      <section className="max-w-3xl mx-auto px-6 pt-16 md:pt-24 pb-10 text-center">
+        <p className="font-ui text-xs uppercase tracking-luxe text-[var(--color-text-muted)] mb-4 animate-fade-in-down opacity-0-init">
+          {t("contact")}
         </p>
-        <h1 className="text-4xl md:text-5xl font-serif" style={{ color: "var(--c-text)", fontFamily: "var(--f-heading)", fontStyle: "var(--f-style)" }}>
-          {title}
+        <h1 className="font-script text-4xl md:text-5xl text-[var(--color-primary)] mb-6 animate-fade-in-up opacity-0-init delay-100">
+          {t("contact")}
         </h1>
-      </section>
-
-      {/* ── Contact cards ── */}
-      <section className="px-6 pb-16 md:pb-24" style={{ background: "var(--c-background)" }}>
-        <div className="max-w-3xl mx-auto">
-          <div className="grid gap-4 sm:grid-cols-2">
-            {/* Email */}
-            {contactInfo.email && (
-              <Card
-                className="p-6 flex flex-col items-center text-center animate-fade-in"
-                style={{ borderColor: "var(--c-secondary)", background: "var(--c-card)" } as React.CSSProperties}
-              >
-                <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ background: "var(--c-secondary)" }}>
-                  <Mail className="w-6 h-6" style={{ color: "var(--c-primary)" }} />
-                </div>
-                <h3 className="text-sm uppercase tracking-widest mb-2" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
-                  Email
-                </h3>
-                <a
-                  href={`mailto:${contactInfo.email}`}
-                  className="text-sm hover:underline break-all"
-                  style={{ color: "var(--c-link)", fontFamily: "var(--f-body)" }}
-                >
-                  {contactInfo.email}
-                </a>
-              </Card>
-            )}
-
-            {/* Phone */}
-            {contactInfo.phone && (
-              <Card
-                className="p-6 flex flex-col items-center text-center animate-fade-in"
-                style={{ borderColor: "var(--c-secondary)", background: "var(--c-card)" } as React.CSSProperties}
-              >
-                <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ background: "var(--c-secondary)" }}>
-                  <Phone className="w-6 h-6" style={{ color: "var(--c-primary)" }} />
-                </div>
-                <h3 className="text-sm uppercase tracking-widest mb-2" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
-                  Phone
-                </h3>
-                <a
-                  href={`tel:${contactInfo.phone.replace(/\s/g, "")}`}
-                  className="text-sm hover:underline"
-                  style={{ color: "var(--c-link)", fontFamily: "var(--f-body)" }}
-                >
-                  {contactInfo.phone}
-                </a>
-              </Card>
-            )}
-
-            {/* Address / Venue */}
-            {(contactInfo.address || wedding.location) && (
-              <Card
-                className="p-6 flex flex-col items-center text-center animate-fade-in sm:col-span-2"
-                style={{ borderColor: "var(--c-secondary)", background: "var(--c-card)" } as React.CSSProperties}
-              >
-                <div className="w-12 h-12 rounded-full flex items-center justify-center mb-4" style={{ background: "var(--c-secondary)" }}>
-                  <MapPin className="w-6 h-6" style={{ color: "var(--c-primary)" }} />
-                </div>
-                <h3 className="text-sm uppercase tracking-widest mb-2" style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}>
-                  Venue Location
-                </h3>
-                <p className="text-sm leading-relaxed" style={{ color: "var(--c-text)", fontFamily: "var(--f-body)" }}>
-                  {contactInfo.address || wedding.location}
-                </p>
-              </Card>
-            )}
-          </div>
-
-          {/* Note */}
-          {contactInfo.note && (
-            <Card
-              className="p-6 mt-6 text-center animate-fade-in"
-              style={{ borderColor: "var(--c-secondary)", background: "var(--c-card)" } as React.CSSProperties}
-            >
-              <div className="inline-flex items-center justify-center w-10 h-10 rounded-full mb-3" style={{ background: "var(--c-secondary)" }}>
-                <Heart className="w-5 h-5" style={{ color: "var(--c-accent)" }} />
-              </div>
-              <p
-                className="text-sm leading-relaxed whitespace-pre-line"
-                style={{ color: "var(--c-textMuted)", fontFamily: "var(--f-body)" }}
-              >
-                {contactInfo.note}
-              </p>
-            </Card>
-          )}
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <div className="h-px w-12 bg-[var(--color-border)]/30" />
+          <div className="w-1.5 h-1.5 rounded-full border border-[var(--color-border)]/40" />
+          <div className="h-px w-12 bg-[var(--color-border)]/30" />
         </div>
       </section>
+
+      {/* Contact details */}
+      {hasAny ? (
+        <section className="max-w-xl mx-auto px-6">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)]/20 rounded-lg px-8 py-12 md:px-12 md:py-16 animate-fade-in-up opacity-0-init delay-200" style={{ borderRadius: "var(--button-radius, 8px)" }}>
+            <div className="flex flex-col gap-8">
+              {/* Phone */}
+              {phone && (
+                <div className="flex flex-col items-center text-center animate-fade-in-up opacity-0-init delay-300">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full border border-[var(--color-border)]/30 mb-4">
+                    <Phone size={20} className="text-[var(--color-primary)]" />
+                  </div>
+                  <p className="font-ui text-[10px] uppercase tracking-luxe text-[var(--color-text-muted)] mb-2">
+                    {t("contact")}
+                  </p>
+                  <a
+                    href={`tel:${phone}`}
+                    className="font-body text-lg text-[var(--color-text)] hover:text-[var(--color-primary)] transition-colors"
+                  >
+                    {phone}
+                  </a>
+                </div>
+              )}
+
+              {/* Divider */}
+              {phone && email && (
+                <div className="flex items-center justify-center gap-3">
+                  <div className="h-px w-10 bg-[var(--color-border)]/20" />
+                  <div className="w-1 h-1 rounded-full bg-[var(--color-border)]/30" />
+                  <div className="h-px w-10 bg-[var(--color-border)]/20" />
+                </div>
+              )}
+
+              {/* Email */}
+              {email && (
+                <div className="flex flex-col items-center text-center animate-fade-in-up opacity-0-init delay-400">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full border border-[var(--color-border)]/30 mb-4">
+                    <Mail size={20} className="text-[var(--color-primary)]" />
+                  </div>
+                  <p className="font-ui text-[10px] uppercase tracking-luxe text-[var(--color-text-muted)] mb-2">
+                    Email
+                  </p>
+                  <a
+                    href={`mailto:${email}`}
+                    className="font-body text-lg text-[var(--color-text)] hover:text-[var(--color-primary)] transition-colors break-all"
+                  >
+                    {email}
+                  </a>
+                </div>
+              )}
+
+              {/* Divider */}
+              {email && address && (
+                <div className="flex items-center justify-center gap-3">
+                  <div className="h-px w-10 bg-[var(--color-border)]/20" />
+                  <div className="w-1 h-1 rounded-full bg-[var(--color-border)]/30" />
+                  <div className="h-px w-10 bg-[var(--color-border)]/20" />
+                </div>
+              )}
+
+              {/* Address */}
+              {address && (
+                <div className="flex flex-col items-center text-center animate-fade-in-up opacity-0-init delay-500">
+                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full border border-[var(--color-border)]/30 mb-4">
+                    <MapPin size={20} className="text-[var(--color-primary)]" />
+                  </div>
+                  <p className="font-ui text-[10px] uppercase tracking-luxe text-[var(--color-text-muted)] mb-2">
+                    {t("address")}
+                  </p>
+                  <p className="font-body text-lg text-[var(--color-text)] leading-relaxed whitespace-pre-line">
+                    {address}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      ) : (
+        <div className="max-w-xl mx-auto px-6 py-16 text-center">
+          <p className="font-heading text-xl text-[var(--color-text-muted)] italic">
+            {t("error")}
+          </p>
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="max-w-2xl mx-auto px-6 pt-16 text-center">
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <div className="h-px w-16 bg-[var(--color-border)]/30" />
+          <div className="w-2 h-2 rounded-full border border-[var(--color-border)]/40" />
+          <div className="h-px w-16 bg-[var(--color-border)]/30" />
+        </div>
+        <p className="font-script text-2xl text-[var(--color-primary)]">
+          {wedding.couple_name_one} & {wedding.couple_name_two}
+        </p>
+      </div>
     </div>
   );
 }
+
+export default Contact;
