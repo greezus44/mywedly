@@ -3,7 +3,6 @@ import { GuestLayout } from "@/components/guest/GuestChrome";
 import { useLang } from "@/lib/wedding-guest";
 import { getWeddingBySlug, type Wedding } from "@/lib/wedding-queries";
 import { styleFor, getStyle } from "@/lib/text-styles";
-import { PreserveText } from "@/components/guest/PreserveText";
 
 export const Route = createFileRoute("/w/$slug/invitation")({
   head: () => ({ meta: [{ title: "Invitation" }] }),
@@ -89,7 +88,7 @@ function Body({ wedding }: { wedding: Wedding }) {
           ...styleFor(getStyle(content, "invitation_text")),
         }}
       >
-        <PreserveText>{invitationText}</PreserveText>
+        {invitationText}
       </p>
 
       <div className="mb-3">
@@ -108,7 +107,7 @@ function Body({ wedding }: { wedding: Wedding }) {
         className="text-sm italic leading-relaxed my-10 max-w-lg mx-auto"
         style={{ fontFamily: "var(--font-serif)", ...styleFor(getStyle(content, "closing_text")) }}
       >
-        <PreserveText>{closingText}</PreserveText>
+        {closingText}
       </p>
 
       <Link

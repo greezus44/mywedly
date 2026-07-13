@@ -20,7 +20,6 @@ import { CollapsibleStyle } from "@/components/dashboard/TextStyleEditor";
 import { ImageUpload } from "@/components/dashboard/ImageUpload";
 import { TimePicker12 } from "@/components/dashboard/TimePicker12";
 import { QrCodePanel } from "@/components/dashboard/QrCodePanel";
-import { WebsitePreview } from "@/components/dashboard/WebsitePreview";
 import { useTheme } from "@/hooks/use-theme";
 import {
   styleFor,
@@ -134,18 +133,6 @@ function ManagePage() {
   const [group, setGroup] = useState<string>("overview");
   const [sub, setSub] = useState<SubKey>("overview");
 
-  const previewMap: Partial<Record<SubKey, "cover" | "invitation" | "info" | "events">> = {
-    "web-cover": "cover",
-    "web-invitation": "invitation",
-    "web-info": "info",
-    "ev-list": "events",
-    "ev-manage": "events",
-    "ev-rsvp": "events",
-    "ap-appearance": "cover",
-  };
-  const previewPage = previewMap[sub];
-  const showPreview = !!previewPage;
-
   const currentGroup = GROUPS.find((g) => g.key === group) ?? GROUPS[0];
 
   return (
@@ -234,31 +221,22 @@ function ManagePage() {
       )}
 
       <main className="max-w-6xl mx-auto px-6 md:px-10 py-10">
-        <div className={showPreview ? "grid lg:grid-cols-[1fr_420px] gap-8" : ""}>
-          <div className="min-w-0">
-            {sub === "overview" && <OverviewTab wedding={wedding} />}
-            {sub === "web-cover" && <CoverEditor wedding={wedding} />}
-            {sub === "web-invitation" && <InvitationEditor wedding={wedding} />}
-            {sub === "web-info" && <InfoEditor wedding={wedding} />}
-            {sub === "web-pages" && <PagesTab wedding={wedding} />}
-            {sub === "ev-list" && <EventsList wedding={wedding} />}
-            {sub === "ev-manage" && <EventsManage wedding={wedding} />}
-            {sub === "ev-rsvp" && <RsvpsTab wedding={wedding} />}
-            {sub === "gu-list" && <GuestsTab wedding={wedding} />}
-            {sub === "gu-groups" && <GroupsTab wedding={wedding} />}
-            {sub === "gu-invites" && <InvitesTab wedding={wedding} />}
-            {sub === "gu-login" && <SigninEditor wedding={wedding} />}
-            {sub === "ap-appearance" && <AppearanceTab wedding={wedding} />}
-            {sub === "st-language" && <LanguageTab wedding={wedding} />}
-            {sub === "st-public" && <PublicWebsiteTab wedding={wedding} />}
-            {sub === "st-general" && <SiteTab wedding={wedding} />}
-          </div>
-          {showPreview && (
-            <div className="hidden lg:block">
-              <WebsitePreview slug={wedding.slug} page={previewPage} />
-            </div>
-          )}
-        </div>
+        {sub === "overview" && <OverviewTab wedding={wedding} />}
+        {sub === "web-cover" && <CoverEditor wedding={wedding} />}
+        {sub === "web-invitation" && <InvitationEditor wedding={wedding} />}
+        {sub === "web-info" && <InfoEditor wedding={wedding} />}
+        {sub === "web-pages" && <PagesTab wedding={wedding} />}
+        {sub === "ev-list" && <EventsList wedding={wedding} />}
+        {sub === "ev-manage" && <EventsManage wedding={wedding} />}
+        {sub === "ev-rsvp" && <RsvpsTab wedding={wedding} />}
+        {sub === "gu-list" && <GuestsTab wedding={wedding} />}
+        {sub === "gu-groups" && <GroupsTab wedding={wedding} />}
+        {sub === "gu-invites" && <InvitesTab wedding={wedding} />}
+        {sub === "gu-login" && <SigninEditor wedding={wedding} />}
+        {sub === "ap-appearance" && <AppearanceTab wedding={wedding} />}
+        {sub === "st-language" && <LanguageTab wedding={wedding} />}
+        {sub === "st-public" && <PublicWebsiteTab wedding={wedding} />}
+        {sub === "st-general" && <SiteTab wedding={wedding} />}
       </main>
     </div>
   );
@@ -543,9 +521,8 @@ function SigninEditor({ wedding }: { wedding: Wedding }) {
       >
         <p className="eyebrow">Guest sign-in</p>
         <p className="text-sm text-onyx/60">
-          Guests sign in with their unique username. Usernames must be unique per wedding — add each
-          guest under the <strong>Guest List</strong> tab and use the generate button to create
-          usernames. Guests will use their username to sign in.
+          Guests sign in with their name only. Names must be unique per wedding — add each guest
+          under the <strong>Guests</strong> tab so they can be recognised on sign-in.
         </p>
         <div>
           <label className="eyebrow block mb-2">Helper text on sign-in page</label>
@@ -678,17 +655,17 @@ function PagesTab({ wedding }: { wedding: Wedding }) {
           placeholder="URL slug (auto)"
           className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx"
         />
-        <ImageUpload
-          weddingId={wedding.id}
-          value={cover || null}
-          onChange={(url) => setCover(url ?? "")}
-          label="Cover image"
+        <input
+          value={cover}
+          onChange={(e) => setCover(e.target.value)}
+          placeholder="Cover image URL (optional)"
+          className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx"
         />
-        <ImageUpload
-          weddingId={wedding.id}
-          value={inline || null}
-          onChange={(url) => setInline(url ?? "")}
-          label="Inline image"
+        <input
+          value={inline}
+          onChange={(e) => setInline(e.target.value)}
+          placeholder="Inline image URL (optional)"
+          className="w-full border-b border-onyx/20 bg-transparent py-2 outline-none focus:border-onyx"
         />
         <textarea
           value={body}

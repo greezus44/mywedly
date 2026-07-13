@@ -4,7 +4,6 @@ import { GuestLayout } from "@/components/guest/GuestChrome";
 import type { Wedding } from "@/lib/wedding-queries";
 import { getWeddingBySlug } from "@/lib/wedding-queries";
 import { styleFor, getStyle } from "@/lib/text-styles";
-import { PreserveText } from "@/components/guest/PreserveText";
 
 export const Route = createFileRoute("/w/$slug/")({
   head: ({ loaderData }) => {
@@ -116,7 +115,7 @@ function Cover({ wedding }: { wedding: Wedding }) {
           className="text-sepia text-5xl md:text-6xl mb-8 text-center px-4"
           style={{ ...initialsStyle, ...styleFor(headingStyle) }}
         >
-          <PreserveText>{heading}</PreserveText>
+          {heading}
         </motion.h1>
 
         <motion.div
@@ -129,7 +128,13 @@ function Cover({ wedding }: { wedding: Wedding }) {
             className="text-sepia text-sm tracking-[0.35em] leading-loose font-medium"
             style={styleFor(subtitleStyle)}
           >
-            <PreserveText>{subtitle || `${month}${year ? `\n${year}` : ""}`}</PreserveText>
+            {month}
+            {year ? (
+              <>
+                <br />
+                {year}
+              </>
+            ) : null}
           </p>
         </motion.div>
 
@@ -141,7 +146,7 @@ function Cover({ wedding }: { wedding: Wedding }) {
             className="text-center max-w-md mx-auto italic text-sepia/80 mb-10"
             style={{ fontFamily: "var(--font-serif)", ...styleFor(welcomeStyle) }}
           >
-            <PreserveText>{welcome}</PreserveText>
+            {welcome}
           </motion.p>
         )}
 
