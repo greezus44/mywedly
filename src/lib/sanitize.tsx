@@ -1,132 +1,50 @@
 import React from "react";
 
-const ALLOWED_TAGS = new Set([
-  "p",
-  "br",
-  "strong",
-  "em",
-  "u",
-  "s",
-  "span",
-  "div",
-  "a",
-  "ul",
-  "ol",
-  "li",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "img",
-]);
+const ALLOWED_TAGS = new Set(["P", "BR", "STRONG", "EM", "U", "S", "UL", "OL", "LI", "A", "BLOCKQUOTE", "H1", "H2", "H3", "SPAN", "DIV"]);
+const ALLOWED_ATTRS: Record<string, Set<string>> = {
+  A: new Set(["href", "target"]),
+  SPAN: new Set(["style"]),
+  DIV: new Set(["style"]),
+};
+const ALLOWED_STYLES = new Set(["color", "font-weight", "font-style", "text-decoration", "text-align", "font-size", "background-color"]);
 
-const ALLOWED_ATTRS = new Set(["style", "href", "src", "alt"]);
-
-const ALLOWED_STYLE_PROPS = new Set([
-  "color",
-  "font-size",
-  "font-family",
-  "font-weight",
-  "font-style",
-  "text-decoration",
-  "text-align",
-  "background-color",
-  "margin",
-  "padding",
-]);
-
-/**
- * Sanitize an HTML string using DOMParser with an allowlist of tags, attributes, and style properties.
- */
-export function sanitizeHtml(html: string | null | undefined): string {
-  if (!html) return "";
-  if (typeof window === "undefined" || typeof DOMParser === "undefined") return html;
-
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-
-    const walk = (node: Node) => {
-      if (node.nodeType === Node.ELEMENT_NODE) {
-        const el = node as Element;
-        const tag = el.tagName.toLowerCase();
-
+export function sanitizeHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  function cleanNode(node: Node) {
+    const children = Array.from(node.childNodes);
+    for (const child of children) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const el = child as Element;
+        const tag = el.tagName;
         if (!ALLOWED_TAGS.has(tag)) {
-          // Replace disallowed element with its text content
-          const text = document.createTextNode(el.textContent || "");
-          el.parentNode?.replaceChild(text, el);
-          return;
+          const parent = el.parentNode;
+          if (parent) {
+            while (el.firstChild) parent.insertBefore(el.firstChild, el);
+            parent.removeChild(el);
+          }
+          continue;
         }
-
-        // Remove disallowed attributes
+        const allowedAttrs = ALLOWED_ATTRS[tag] || new Set();
         Array.from(el.attributes).forEach((attr) => {
-          if (!ALLOWED_ATTRS.has(attr.name.toLowerCase())) {
+          if (!allowedAttrs.has(attr.name)) {
             el.removeAttribute(attr.name);
-          } else if (attr.name.toLowerCase() === "style") {
-            // Filter style properties
-            const cleaned = filterStyles(attr.value);
-            if (cleaned) {
-              el.setAttribute("style", cleaned);
-            } else {
-              el.removeAttribute("style");
-            }
-          } else if (attr.name.toLowerCase() === "href") {
-            // Only allow http(s) and mailto
-            const val = attr.value;
-            if (!/^(https?:|mailto:|\/|#)/i.test(val)) {
-              el.removeAttribute("href");
-            }
-          } else if (attr.name.toLowerCase() === "src") {
-            // Only allow http(s) and relative
-            const val = attr.value;
-            if (!/^(https?:|\/|data:image)/i.test(val)) {
-              el.removeAttribute("src");
-            }
+          } else if (attr.name === "style") {
+            const styles = attr.value.split(";").filter((s) => {
+              const [prop] = s.split(":");
+              return ALLOWED_STYLES.has(prop.trim());
+            });
+            el.setAttribute("style", styles.join(";"));
           }
         });
       }
-
-      // Walk children (copy to handle removal)
-      const children = Array.from(node.childNodes);
-      children.forEach(walk);
-    };
-
-    walk(doc.body);
-
-    return doc.body.innerHTML;
-  } catch {
-    return html;
+      cleanNode(child);
+    }
   }
+  cleanNode(doc.body);
+  return doc.body.innerHTML;
 }
 
-function filterStyles(styleStr: string): string {
-  if (!styleStr) return "";
-  const parts = styleStr.split(";").map((s) => s.trim()).filter(Boolean);
-  const filtered = parts.filter((part) => {
-    const colonIdx = part.indexOf(":");
-    if (colonIdx === -1) return false;
-    const prop = part.substring(0, colonIdx).trim().toLowerCase();
-    return ALLOWED_STYLE_PROPS.has(prop);
-  });
-  return filtered.join("; ");
-}
-
-interface RichTextContentProps {
-  html: string | null | undefined;
-  className?: string;
-}
-
-/**
- * Render sanitized HTML content
- */
-export function RichTextContent({ html, className }: RichTextContentProps) {
-  const sanitized = React.useMemo(() => sanitizeHtml(html), [html]);
-  return (
-    <div
-      className={className}
-      dangerouslySetInnerHTML={{ __html: sanitized }}
-    />
-  );
+export function RichTextContent({ html, className }: { html: string; className?: string }) {
+  const sanitized = React.useMemo(() => sanitizeHtml(html || ""), [html]);
+  return <div className={className} dangerouslySetInnerHTML={{ __html: sanitized }} />;
 }

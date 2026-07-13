@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useState, useCallback } from "react";
 
 interface GuestAuthState {
   guestName: string | null;
@@ -10,8 +10,6 @@ interface GuestAuthContextValue extends GuestAuthState {
   signOut: () => void;
 }
 
-const STORAGE_KEY = "guest-auth";
-
 const GuestAuthContext = createContext<GuestAuthContextValue>({
   guestName: null,
   eventId: null,
@@ -19,74 +17,35 @@ const GuestAuthContext = createContext<GuestAuthContextValue>({
   signOut: () => {},
 });
 
-interface GuestAuthProviderProps {
-  children: React.ReactNode;
-}
+const STORAGE_KEY = "guest-auth";
 
-function readStorage(): GuestAuthState {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { guestName: null, eventId: null };
-    const parsed = JSON.parse(raw);
-    return {
-      guestName: parsed.guestName || null,
-      eventId: parsed.eventId || null,
-    };
-  } catch {
-    return { guestName: null, eventId: null };
-  }
-}
-
-export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
+export function GuestAuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GuestAuthState>(() => {
-    if (typeof window === "undefined") return { guestName: null, eventId: null };
-    return readStorage();
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return { guestName: null, eventId: null };
   });
 
   const signIn = useCallback((name: string, eventId: string) => {
     const newState = { guestName: name, eventId };
     setState(newState);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
-    } catch {
-      // ignore storage errors
-    }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(newState)); } catch {}
   }, []);
 
   const signOut = useCallback(() => {
-    const newState = { guestName: null, eventId: null };
-    setState(newState);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // ignore
-    }
+    setState({ guestName: null, eventId: null });
+    try { localStorage.removeItem(STORAGE_KEY); } catch {}
   }, []);
-
-  useEffect(() => {
-    const handler = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) {
-        setState(readStorage());
-      }
-    };
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
-  }, []);
-
-  const value: GuestAuthContextValue = {
-    guestName: state.guestName,
-    eventId: state.eventId,
-    signIn,
-    signOut,
-  };
 
   return (
-    <GuestAuthContext.Provider value={value}>
+    <GuestAuthContext.Provider value={{ ...state, signIn, signOut }}>
       {children}
     </GuestAuthContext.Provider>
   );
 }
 
-export function useGuestAuth(): GuestAuthContextValue {
+export function useGuestAuth() {
   return useContext(GuestAuthContext);
 }

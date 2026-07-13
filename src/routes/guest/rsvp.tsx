@@ -1,263 +1,84 @@
 import React, { useState } from "react";
-import { useOutletContext, useNavigate } from "react-router-dom";
-import { Check, X, Loader2 } from "lucide-react";
+import { useOutletContext } from "react-router-dom";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { isRsvpClosed } from "../../lib/utils";
-import { Toast } from "../../components/ui";
+import { Button } from "../../components/ui/Button";
+import { Textarea } from "../../components/ui";
+import { Check, X, Minus, Plus } from "lucide-react";
 
-export default function GuestRsvpPage() {
+export default function GuestRsvp() {
   const { event } = useOutletContext<{ event: UserEvent }>();
-  const navigate = useNavigate();
   const { guestName } = useGuestAuth();
-  const [status, setStatus] = useState<"attending" | "declined" | null>(null);
+  const [attending, setAttending] = useState<boolean | null>(null);
   const [plusOnes, setPlusOnes] = useState(0);
-  const [dietary, setDietary] = useState("");
   const [message, setMessage] = useState("");
+  const [dietary, setDietary] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-
-  const rsvpDeadline = event.rsvp_deadline;
-  const rsvpClosed = isRsvpClosed(rsvpDeadline);
-  const content = event.content || {};
-  const rsvpButtonText = content.rsvp_button_text || "Submit RSVP";
-
-  // If not signed in, redirect to login
-  React.useEffect(() => {
-    if (!guestName) {
-      navigate("login");
-    }
-  }, [guestName, navigate]);
-
-  if (!guestName) {
-    return null;
-  }
+  const [done, setDone] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!status) {
-      setToast({ message: "Please select attending or declining", type: "error" });
-      return;
-    }
-
+    if (attending === null) return;
     setSubmitting(true);
     try {
       const { error } = await supabase.from("event_rsvps").insert({
         event_id: event.id,
-        guest_name: guestName,
-        status,
-        plus_ones: status === "attending" ? plusOnes : 0,
-        dietary: dietary || null,
-        message: message || null,
-        submitted_at: new Date().toISOString(),
+        guest_name: guestName || "Anonymous",
+        attending,
+        plus_ones: attending ? plusOnes : 0,
+        message,
+        dietary,
       });
-
       if (error) throw error;
-      setToast({ message: "RSVP submitted successfully!", type: "success" });
-      setTimeout(() => navigate("home"), 1500);
-    } catch (err) {
-      setToast({
-        message: err instanceof Error ? err.message : "Failed to submit RSVP",
-        type: "error",
-      });
+      setDone(true);
+    } catch (err: any) {
+      alert("Failed to submit RSVP: " + (err.message || "Unknown error"));
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (rsvpClosed) {
+  if (done) {
     return (
-      <div className="event-themed flex min-h-screen flex-col items-center justify-center p-8 text-center">
-        <h1
-          className="text-3xl font-semibold"
-          style={{ fontFamily: "var(--event-heading-font)", color: "var(--event-text)" }}
-        >
-          RSVP Closed
-        </h1>
-        <p className="mt-4 text-sm opacity-70" style={{ color: "var(--event-text)" }}>
-          The RSVP deadline for this event has passed.
-        </p>
+      <div className="min-h-screen flex items-center justify-center p-8 text-center">
+        <div>
+          <h2 className="text-2xl font-serif mb-2" style={{ color: "var(--event-primary)" }}>Thank You!</h2>
+          <p style={{ color: "var(--event-muted)" }}>Your RSVP has been submitted.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="event-themed flex min-h-screen flex-col items-center px-6 py-12">
-      <div className="flex w-full max-w-md flex-col gap-6">
-        <div className="text-center">
-          <h1
-            className="text-3xl font-semibold"
-            style={{ fontFamily: "var(--event-heading-font)", color: "var(--event-text)" }}
-          >
-            RSVP
-          </h1>
-          <p
-            className="mt-1 text-sm opacity-70"
-            style={{ color: "var(--event-text)" }}
-          >
-            {event.name}
-          </p>
-          {event.event_date && (
-            <p className="text-xs opacity-60" style={{ color: "var(--event-text)" }}>
-              {event.event_date}
-            </p>
-          )}
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-          {/* Name */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
-              Full Name
-            </label>
-            <input
-              type="text"
-              value={guestName}
-              readOnly
-              className="rounded-md border px-3 py-2 text-sm"
-              style={{
-                borderColor: "var(--event-border)",
-                backgroundColor: "var(--event-surface)",
-                color: "var(--event-text)",
-              }}
-            />
+    <div className="min-h-screen p-6">
+      <div className="max-w-md mx-auto">
+        <h2 className="text-2xl font-serif text-center mb-6" style={{ color: "var(--event-primary)" }}>RSVP</h2>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="flex gap-3">
+            <button type="button" onClick={() => setAttending(true)} className={`flex-1 p-4 rounded-lg border-2 transition-colors ${attending === true ? "border-green-500 bg-green-50" : "border-slate-200"}`}>
+              <Check className="w-6 h-6 mx-auto mb-1" /> Joyfully Accept
+            </button>
+            <button type="button" onClick={() => setAttending(false)} className={`flex-1 p-4 rounded-lg border-2 transition-colors ${attending === false ? "border-red-500 bg-red-50" : "border-slate-200"}`}>
+              <X className="w-6 h-6 mx-auto mb-1" /> Regretfully Decline
+            </button>
           </div>
-
-          {/* Status */}
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
-              Will you attend?
-            </label>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setStatus("attending")}
-                className="flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2.5 text-sm transition-colors"
-                style={{
-                  borderColor: status === "attending" ? "var(--event-primary)" : "var(--event-border)",
-                  backgroundColor: status === "attending" ? "var(--event-primary)" : "transparent",
-                  color: status === "attending" ? "var(--event-bg)" : "var(--event-text)",
-                }}
-              >
-                <Check className="h-4 w-4" />
-                Joyfully Accepts
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatus("declined")}
-                className="flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2.5 text-sm transition-colors"
-                style={{
-                  borderColor: status === "declined" ? "var(--event-primary)" : "var(--event-border)",
-                  backgroundColor: status === "declined" ? "var(--event-primary)" : "transparent",
-                  color: status === "declined" ? "var(--event-bg)" : "var(--event-text)",
-                }}
-              >
-                <X className="h-4 w-4" />
-                Regretfully Declines
-              </button>
-            </div>
-          </div>
-
-          {/* Plus ones */}
-          {status === "attending" && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                Number of Additional Guests
-              </label>
+          {attending === true && (
+            <div className="flex items-center justify-between p-4 rounded-lg border" style={{ borderColor: "var(--event-border)" }}>
+              <span>Number of Guests</span>
               <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPlusOnes((n) => Math.max(0, n - 1))}
-                  className="flex h-9 w-9 items-center justify-center rounded-md border text-lg"
-                  style={{ borderColor: "var(--event-border)", color: "var(--event-text)" }}
-                >
-                  −
-                </button>
-                <span
-                  className="w-12 text-center text-lg font-semibold"
-                  style={{ color: "var(--event-text)" }}
-                >
-                  {plusOnes}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPlusOnes((n) => Math.min(10, n + 1))}
-                  className="flex h-9 w-9 items-center justify-center rounded-md border text-lg"
-                  style={{ borderColor: "var(--event-border)", color: "var(--event-text)" }}
-                >
-                  +
-                </button>
+                <button type="button" onClick={() => setPlusOnes(Math.max(0, plusOnes - 1))} className="p-1 rounded"><Minus className="w-4 h-4" /></button>
+                <span className="w-8 text-center">{plusOnes + 1}</span>
+                <button type="button" onClick={() => setPlusOnes(plusOnes + 1)} className="p-1 rounded"><Plus className="w-4 h-4" /></button>
               </div>
             </div>
           )}
-
-          {/* Dietary */}
-          {status === "attending" && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                Dietary Requirements
-              </label>
-              <textarea
-                value={dietary}
-                onChange={(e) => setDietary(e.target.value)}
-                placeholder="Any dietary restrictions?"
-                className="min-h-[80px] rounded-md border px-3 py-2 text-sm"
-                style={{
-                  borderColor: "var(--event-border)",
-                  backgroundColor: "var(--event-surface)",
-                  color: "var(--event-text)",
-                }}
-              />
-            </div>
+          {attending === true && (
+            <Textarea placeholder="Dietary requirements" value={dietary} onChange={(e) => setDietary(e.target.value)} rows={2} />
           )}
-
-          {/* Message */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
-              Message
-            </label>
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Leave a message for the host…"
-              className="min-h-[80px] rounded-md border px-3 py-2 text-sm"
-              style={{
-                borderColor: "var(--event-border)",
-                backgroundColor: "var(--event-surface)",
-                color: "var(--event-text)",
-              }}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={submitting || !status}
-            className="rounded px-6 py-3 text-sm font-medium uppercase tracking-wider transition-opacity hover:opacity-90 disabled:opacity-50"
-            style={{
-              backgroundColor: "var(--event-primary)",
-              color: "var(--event-bg)",
-              borderRadius: "var(--event-button-radius, 6px)",
-            }}
-          >
-            {submitting ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Submitting…
-              </span>
-            ) : (
-              rsvpButtonText
-            )}
-          </button>
+          <Textarea placeholder="Leave a message for the host" value={message} onChange={(e) => setMessage(e.target.value)} rows={3} />
+          <Button type="submit" loading={submitting} disabled={attending === null} className="w-full py-3">Submit RSVP</Button>
         </form>
       </div>
-
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
     </div>
   );
 }

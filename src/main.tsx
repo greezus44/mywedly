@@ -1,201 +1,116 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { createRoot } from "react-dom/client";
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate,
-  Outlet,
-  useNavigate,
-} from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { supabase } from "./lib/supabase";
-import { ErrorBoundary } from "./components/ErrorBoundary";
 import { GuestAuthProvider } from "./lib/guest-auth";
-import { LoadingSpinner } from "./components/ui";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+
+import Landing from "./routes/landing";
+import Auth from "./routes/auth";
+import Dashboard from "./routes/dashboard";
+import EventLayout from "./routes/event/event-layout";
+import CoverEditor from "./routes/event/cover-editor";
+import LoginEditor from "./routes/event/login-editor";
+import HomeEditor from "./routes/event/home-editor";
+import ThemeEditor from "./routes/event/theme-editor";
+import EventsEditor from "./routes/event/events";
+import GuestsEditor from "./routes/event/guests";
+import GroupsEditor from "./routes/event/groups";
+import RsvpEditor from "./routes/event/rsvp";
+import TimelineEditor from "./routes/event/timeline";
+import SharingEditor from "./routes/event/sharing";
+import AnalyticsEditor from "./routes/event/analytics";
+import SettingsEditor from "./routes/event/settings";
+
+import GuestLayout from "./routes/guest/guest-layout";
+import GuestCover from "./routes/guest/cover";
+import GuestLogin from "./routes/guest/guest-login";
+import GuestHome from "./routes/guest/home";
+import GuestRsvp from "./routes/guest/rsvp";
+import GuestWishes from "./routes/guest/wishes";
+import GuestContact from "./routes/guest/contact";
+
+import RustyLayout from "./routes/rusty/rusty-layout";
+import RustyCover from "./routes/rusty/rusty-cover";
+import RustyLogin from "./routes/rusty/rusty-login";
+import RustyHome from "./routes/rusty/rusty-home";
+import RustyRsvp from "./routes/rusty/rusty-rsvp";
+import RustyWishes from "./routes/rusty/rusty-wishes";
+import RustyContact from "./routes/rusty/rusty-contact";
+
 import "./index.css";
 
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      refetchOnWindowFocus: false,
-      staleTime: 30 * 1000,
-    },
-  },
+  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 });
 
-/* ── Protected Route ───────────────────────────────── */
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = React.useState<any>(null);
+  const [loading, setLoading] = React.useState(true);
 
-function ProtectedRoute() {
-  const navigate = useNavigate();
-  const [checking, setChecking] = useState(true);
-  const [authenticated, setAuthenticated] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-
+  React.useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      if (data.session) {
-        setAuthenticated(true);
-        setChecking(false);
-      } else {
-        setAuthenticated(false);
-        setChecking(false);
-        navigate("/auth");
-      }
+      setSession(data.session);
+      setLoading(false);
     });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (!mounted) return;
-        if (session) {
-          setAuthenticated(true);
-        } else {
-          setAuthenticated(false);
-          navigate("/auth");
-        }
-      }
-    );
-
-    return () => {
-      mounted = false;
-      listener?.subscription?.unsubscribe();
-    };
-  }, [navigate]);
-
-  if (checking) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <LoadingSpinner className="h-8 w-8" />
-      </div>
-    );
-  }
-
-  if (!authenticated) {
-    return null;
-  }
-
-  return <Outlet />;
-}
-
-/* ── Lazy-ish imports (static for simplicity) ──────── */
-
-import LandingPage from "./routes/landing";
-import AuthPage from "./routes/auth";
-import DashboardPage from "./routes/dashboard";
-import EventLayoutPage from "./routes/event/event-layout";
-import CoverEditorPage from "./routes/event/cover-editor";
-import LoginEditorPage from "./routes/event/login-editor";
-import HomeEditorPage from "./routes/event/home-editor";
-import ThemeEditorPage from "./routes/event/theme-editor";
-import EventsPage from "./routes/event/events";
-import GuestsPage from "./routes/event/guests";
-import GroupsPage from "./routes/event/groups";
-import RsvpPage from "./routes/event/rsvp";
-import TimelinePage from "./routes/event/timeline";
-import SharingPage from "./routes/event/sharing";
-import AnalyticsPage from "./routes/event/analytics";
-import SettingsPage from "./routes/event/settings";
-import GuestLayoutPage from "./routes/guest/guest-layout";
-import GuestCoverPage from "./routes/guest/cover";
-import GuestLoginPage from "./routes/guest/guest-login";
-import GuestHomePage from "./routes/guest/home";
-import GuestRsvpPage from "./routes/guest/rsvp";
-import GuestWishesPage from "./routes/guest/wishes";
-import GuestContactPage from "./routes/guest/contact";
-import RustyLayoutPage from "./routes/rusty/rusty-layout";
-import RustyCoverPage from "./routes/rusty/rusty-cover";
-import RustyLoginPage from "./routes/rusty/rusty-login";
-import RustyHomePage from "./routes/rusty/rusty-home";
-import RustyRsvpPage from "./routes/rusty/rusty-rsvp";
-import RustyWishesPage from "./routes/rusty/rusty-wishes";
-import RustyContactPage from "./routes/rusty/rusty-contact";
-
-/* ── App Routes ────────────────────────────────────── */
-
-function AppRoutes() {
-  return (
-    <Routes>
-      {/* Landing */}
-      <Route path="/" element={<LandingPage />} />
-
-      {/* Auth */}
-      <Route path="/auth" element={<AuthPage />} />
-
-      {/* Dashboard (protected) */}
-      <Route
-        path="/dashboard"
-        element={<ProtectedRoute />}
-      >
-        <Route index element={<DashboardPage />} />
-      </Route>
-
-      {/* Event editor (protected) */}
-      <Route
-        path="/event/:eventId"
-        element={<ProtectedRoute />}
-      >
-        <Route element={<EventLayoutPage />}>
-          <Route index element={<Navigate to="cover" replace />} />
-        <Route path="cover" element={<CoverEditorPage />} />
-        <Route path="login" element={<LoginEditorPage />} />
-        <Route path="home" element={<HomeEditorPage />} />
-        <Route path="theme" element={<ThemeEditorPage />} />
-        <Route path="events" element={<EventsPage />} />
-        <Route path="guests" element={<GuestsPage />} />
-        <Route path="groups" element={<GroupsPage />} />
-        <Route path="rsvp" element={<RsvpPage />} />
-        <Route path="timeline" element={<TimelinePage />} />
-        <Route path="sharing" element={<SharingPage />} />
-        <Route path="analytics" element={<AnalyticsPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        </Route>
-      </Route>
-
-      {/* Guest view */}
-      <Route path="/e/:slug" element={<GuestLayoutPage />}>
-        <Route index element={<GuestCoverPage />} />
-        <Route path="login" element={<GuestLoginPage />} />
-        <Route path="home" element={<GuestHomePage />} />
-        <Route path="rsvp" element={<GuestRsvpPage />} />
-        <Route path="wishes" element={<GuestWishesPage />} />
-        <Route path="contact" element={<GuestContactPage />} />
-      </Route>
-
-      {/* Rusty view */}
-      <Route path="/r/:slug" element={<RustyLayoutPage />}>
-        <Route index element={<RustyCoverPage />} />
-        <Route path="login" element={<RustyLoginPage />} />
-        <Route path="home" element={<RustyHomePage />} />
-        <Route path="rsvp" element={<RustyRsvpPage />} />
-        <Route path="wishes" element={<RustyWishesPage />} />
-        <Route path="contact" element={<RustyContactPage />} />
-      </Route>
-
-      {/* Catch-all */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
-}
-
-function Main() {
-  return (
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <GuestAuthProvider>
-            <AppRoutes />
-          </GuestAuthProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
-    </ErrorBoundary>
-  );
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-slate-600">Loading...</div>;
+  if (!session) return <Navigate to="/auth" replace />;
+  return <>{children}</>;
 }
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Main />
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <GuestAuthProvider>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/event/:eventId" element={<ProtectedRoute><EventLayout /></ProtectedRoute>}>
+                <Route index element={<Navigate to="cover" replace />} />
+                <Route path="cover" element={<CoverEditor />} />
+                <Route path="login" element={<LoginEditor />} />
+                <Route path="home" element={<HomeEditor />} />
+                <Route path="theme" element={<ThemeEditor />} />
+                <Route path="events" element={<EventsEditor />} />
+                <Route path="guests" element={<GuestsEditor />} />
+                <Route path="groups" element={<GroupsEditor />} />
+                <Route path="rsvp" element={<RsvpEditor />} />
+                <Route path="timeline" element={<TimelineEditor />} />
+                <Route path="sharing" element={<SharingEditor />} />
+                <Route path="analytics" element={<AnalyticsEditor />} />
+                <Route path="settings" element={<SettingsEditor />} />
+              </Route>
+              <Route path="/e/:slug" element={<GuestLayout />}>
+                <Route index element={<GuestCover />} />
+                <Route path="login" element={<GuestLogin />} />
+                <Route path="home" element={<GuestHome />} />
+                <Route path="rsvp" element={<GuestRsvp />} />
+                <Route path="wishes" element={<GuestWishes />} />
+                <Route path="contact" element={<GuestContact />} />
+              </Route>
+              <Route path="/r/:slug" element={<RustyLayout />}>
+                <Route index element={<RustyCover />} />
+                <Route path="login" element={<RustyLogin />} />
+                <Route path="home" element={<RustyHome />} />
+                <Route path="rsvp" element={<RustyRsvp />} />
+                <Route path="wishes" element={<RustyWishes />} />
+                <Route path="contact" element={<RustyContact />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </GuestAuthProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

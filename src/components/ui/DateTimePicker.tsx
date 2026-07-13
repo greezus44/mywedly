@@ -1,458 +1,105 @@
 import React, { useState } from "react";
 import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from "lucide-react";
-import { cn, formatDate, formatTime12, to12Hour, to24Hour, roundTo5Min } from "../../lib/utils";
+import { cn } from "../../lib/utils";
+import { to12Hour, to24Hour, roundTo5Min, formatDate, formatTime12 } from "../../lib/utils";
 
-export interface DateTimePickerProps {
+interface DateTimePickerProps {
   date: string | null;
   time: string | null;
-  onChange: (date: string, time: string) => void;
+  onChange: (date: string | null, time: string | null) => void;
   label?: string;
   showTime?: boolean;
-  minDate?: string | null;
+  minDate?: string;
   previewPrefix?: string;
 }
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-
-const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-
-function toDateInput(dateStr: string | null | undefined): Date | null {
-  if (!dateStr) return null;
-  try {
-    const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? null : d;
-  } catch {
-    return null;
-  }
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-export function DateTimePicker({
-  date,
-  time,
-  onChange,
-  label,
-  showTime = true,
-  minDate,
-  previewPrefix,
-}: DateTimePickerProps) {
+export function DateTimePicker({ date, time, onChange, label, showTime = true, minDate, previewPrefix }: DateTimePickerProps) {
+  const [tab, setTab] = useState<"date" | "time">("date");
   const [open, setOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"date" | "time">("date");
-  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [viewDate, setViewDate] = useState(date ? new Date(date + "T00:00:00") : new Date());
 
-  const selectedDate = toDateInput(date);
-  const min = toDateInput(minDate);
-
-  const [viewYear, setViewYear] = useState(() => {
-    const d = selectedDate || new Date();
-    return d.getFullYear();
-  });
-  const [viewMonth, setViewMonth] = useState(() => {
-    const d = selectedDate || new Date();
-    return d.getMonth();
-  });
-
-  React.useEffect(() => {
-    const d = selectedDate || new Date();
-    setViewYear(d.getFullYear());
-    setViewMonth(d.getMonth());
-  }, [selectedDate]);
-
-  React.useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  // Time state
-  const parsedTime = to12Hour(time);
-  const [hour, setHour] = useState(parsedTime?.hour ?? 12);
-  const [minute, setMinute] = useState(parsedTime ? roundTo5Min(parsedTime.minute) : 0);
-  const [period, setPeriod] = useState<"AM" | "PM">(parsedTime?.period ?? "AM");
-
-  React.useEffect(() => {
-    const p = to12Hour(time);
-    if (p) {
-      setHour(p.hour);
-      setMinute(roundTo5Min(p.minute));
-      setPeriod(p.period);
-    }
-  }, [time]);
-
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const firstDayOfMonth = new Date(viewYear, viewMonth, 1).getDay();
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const days: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i++) days.push(null);
+  for (let d = 1; d <= daysInMonth; d++) days.push(d);
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
-  const prevMonth = () => {
-    if (viewMonth === 0) {
-      setViewMonth(11);
-      setViewYear((y) => y - 1);
-    } else {
-      setViewMonth((m) => m - 1);
-    }
-  };
+  const selectDate = (day: number) => { onChange(`${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`, time); };
+  const isToday = (day: number) => today.getFullYear() === year && today.getMonth() === month && today.getDate() === day;
+  const isSelected = (day: number) => { if (!date) return false; const [vy, vm, vd] = date.split("-").map(Number); return vy === year && vm === month + 1 && vd === day; };
 
-  const nextMonth = () => {
-    if (viewMonth === 11) {
-      setViewMonth(0);
-      setViewYear((y) => y + 1);
-    } else {
-      setViewMonth((m) => m + 1);
-    }
-  };
+  const h12 = to12Hour(time);
+  const hour = h12?.hour || 12;
+  const minute = h12 ? roundTo5Min(h12.minute) : 0;
+  const period = h12?.period || "AM";
+  const setHour = (h: number) => { const nh = ((h - 1 + 12) % 12) + 1; onChange(date, to24Hour(nh, minute, period)); };
+  const setMinute = (m: number) => { const nm = ((m % 60) + 60) % 60; onChange(date, to24Hour(hour, nm, period)); };
+  const setPeriod = (p: "AM" | "PM") => onChange(date, to24Hour(hour, minute, p));
+  const minutes = Array.from({ length: 12 }, (_, i) => i * 5);
 
-  const prevYear = () => setViewYear((y) => y - 1);
-  const nextYear = () => setViewYear((y) => y + 1);
-
-  const handleSelectDate = (day: number) => {
-    const d = new Date(viewYear, viewMonth, day);
-    const yyyy = d.getFullYear();
-    const mm = (d.getMonth() + 1).toString().padStart(2, "0");
-    const dd = d.getDate().toString().padStart(2, "0");
-    onChange(`${yyyy}-${mm}-${dd}`, time || "");
-    if (showTime) {
-      setActiveTab("time");
-    } else {
-      setOpen(false);
-    }
-  };
-
-  const handleToday = () => {
-    const yyyy = today.getFullYear();
-    const mm = (today.getMonth() + 1).toString().padStart(2, "0");
-    const dd = today.getDate().toString().padStart(2, "0");
-    onChange(`${yyyy}-${mm}-${dd}`, time || "");
-  };
-
-  const handleClearDate = () => {
-    onChange("", time || "");
-  };
-
-  const isDisabled = (day: number): boolean => {
-    if (!min) return false;
-    const d = new Date(viewYear, viewMonth, day);
-    d.setHours(0, 0, 0, 0);
-    const minCopy = new Date(min);
-    minCopy.setHours(0, 0, 0, 0);
-    return d < minCopy;
-  };
-
-  // Time adjustments
-  const adjustHour = (delta: number) => {
-    let h = hour + delta;
-    if (h < 1) h = 12;
-    if (h > 12) h = 1;
-    setHour(h);
-    onChange(date || "", to24Hour(h, minute, period));
-  };
-
-  const adjustMinute = (delta: number) => {
-    let m = minute + delta;
-    if (m < 0) m = 55;
-    if (m > 55) m = 0;
-    setMinute(m);
-    onChange(date || "", to24Hour(hour, m, period));
-  };
-
-  const togglePeriod = () => {
-    const p = period === "AM" ? "PM" : "AM";
-    setPeriod(p);
-    onChange(date || "", to24Hour(hour, minute, p));
-  };
-
-  const handleClearTime = () => {
-    onChange(date || "", "");
-  };
-
-  const handleDone = () => {
-    setOpen(false);
-  };
-
-  // Preview text
-  const dateDisplay = date ? formatDate(date) : "";
-  const timeDisplay = time ? formatTime12(time) : "";
-  let preview = "";
-  if (dateDisplay && timeDisplay) {
-    preview = `${dateDisplay} at ${timeDisplay}`;
-  } else if (dateDisplay) {
-    preview = dateDisplay;
-  } else if (timeDisplay) {
-    preview = timeDisplay;
-  }
-  if (previewPrefix && preview) {
-    preview = `${previewPrefix} ${preview}`;
-  }
-
-  // Build calendar grid
-  const cells: (number | null)[] = [];
-  for (let i = 0; i < firstDayOfMonth; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-  while (cells.length % 7 !== 0) cells.push(null);
+  const preview = date ? `${formatDate(date)}${showTime && time ? " at " + formatTime12(time) : ""}` : "Not set";
 
   return (
-    <div className="relative flex flex-col gap-1.5" ref={containerRef}>
-      {label && (
-        <label className="text-sm font-medium text-gray-700">{label}</label>
-      )}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-left text-sm text-gray-900 transition-colors",
-          "hover:border-gray-300 focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400",
-          !preview && "text-gray-400"
-        )}
-      >
-        {preview || "Select date and time…"}
+    <div className="relative">
+      {label && <label className="block text-sm font-medium text-dash-text mb-1">{label}</label>}
+      <button type="button" onClick={() => setOpen(!open)} className="w-full px-3 py-2 rounded-lg border border-dash-border bg-white text-dash-text text-left flex items-center justify-between">
+        <span className="text-sm">{previewPrefix ? `${previewPrefix}: ` : ""}{preview}</span>
+        <ChevronRight className="w-4 h-4 text-dash-muted rotate-90" />
       </button>
-
       {open && (
-        <div className="absolute z-50 mt-9 w-80 rounded-lg border border-gray-200 bg-white shadow-lg animate-fade-in">
-          {/* Tabs */}
+        <div className="absolute z-50 mt-1 bg-white border border-dash-border rounded-lg shadow-lg p-3 w-80">
           {showTime && (
-            <div className="flex border-b border-gray-200">
-              <button
-                type="button"
-                onClick={() => setActiveTab("date")}
-                className={cn(
-                  "flex-1 px-4 py-2 text-sm font-medium transition-colors",
-                  activeTab === "date"
-                    ? "border-b-2 border-gray-900 text-gray-900"
-                    : "text-gray-500 hover:text-gray-700"
-                )}
-              >
-                Date
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("time")}
-                className={cn(
-                  "flex-1 px-4 py-2 text-sm font-medium transition-colors",
-                  activeTab === "time"
-                    ? "border-b-2 border-gray-900 text-gray-900"
-                    : "text-gray-500 hover:text-gray-700"
-                )}
-              >
-                Time
-              </button>
+            <div className="flex gap-1 mb-3 border-b border-dash-border pb-2">
+              <button type="button" onClick={() => setTab("date")} className={cn("px-3 py-1 rounded text-sm", tab === "date" ? "bg-dash-primary text-white" : "bg-slate-100")}>Date</button>
+              <button type="button" onClick={() => setTab("time")} className={cn("px-3 py-1 rounded text-sm", tab === "time" ? "bg-dash-primary text-white" : "bg-slate-100")}>Time</button>
             </div>
           )}
-
-          {/* Date Panel */}
-          {activeTab === "date" && (
-            <div className="p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={prevYear}
-                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                    title="Previous year"
-                  >
-                    <ChevronLeft className="h-3 w-3" />
-                    <ChevronLeft className="-ml-3.5 h-3 w-3" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={prevMonth}
-                    className="rounded p-1 text-gray-500 hover:bg-gray-100"
-                    title="Previous month"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                </div>
-                <span className="text-sm font-semibold text-gray-900">
-                  {MONTHS[viewMonth]} {viewYear}
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={nextMonth}
-                    className="rounded p-1 text-gray-500 hover:bg-gray-100"
-                    title="Next month"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={nextYear}
-                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-                    title="Next year"
-                  >
-                    <ChevronRight className="h-3 w-3" />
-                    <ChevronRight className="-ml-3.5 h-3 w-3" />
-                  </button>
-                </div>
+          {tab === "date" && (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <button type="button" onClick={() => setViewDate(new Date(year, month - 1, 1))} className="p-1 hover:bg-slate-100 rounded"><ChevronLeft className="w-4 h-4" /></button>
+                <span className="font-medium">{monthNames[month]} {year}</span>
+                <button type="button" onClick={() => setViewDate(new Date(year, month + 1, 1))} className="p-1 hover:bg-slate-100 rounded"><ChevronRight className="w-4 h-4" /></button>
               </div>
-
-              <div className="mb-1 grid grid-cols-7 gap-1 text-center">
-                {WEEKDAYS.map((wd) => (
-                  <div
-                    key={wd}
-                    className="py-1 text-[10px] font-medium uppercase text-gray-400"
-                  >
-                    {wd}
-                  </div>
-                ))}
+              <div className="grid grid-cols-7 gap-1 mb-1">{dayNames.map((d) => <div key={d} className="text-center text-xs text-dash-muted py-1">{d}</div>)}</div>
+              <div className="grid grid-cols-7 gap-1">
+                {days.map((day, i) => day ? (
+                  <button key={i} type="button" onClick={() => selectDate(day)} className={cn("aspect-square rounded text-sm hover:bg-slate-100", isToday(day) && "ring-1 ring-dash-primary", isSelected(day) && "bg-dash-primary text-white hover:bg-dash-primary-hover")}>{day}</button>
+                ) : <div key={i} />)}
               </div>
-
-              <div className="grid grid-cols-7 gap-1 text-center">
-                {cells.map((day, idx) => {
-                  if (day === null) return <div key={idx} />;
-                  const dayDate = new Date(viewYear, viewMonth, day);
-                  const isSelected = selectedDate && isSameDay(selectedDate, dayDate);
-                  const isToday = isSameDay(today, dayDate);
-                  const disabled = isDisabled(day);
-
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => handleSelectDate(day)}
-                      className={cn(
-                        "h-8 w-8 rounded text-xs transition-colors",
-                        disabled && "cursor-not-allowed text-gray-300",
-                        !disabled && !isSelected && "text-gray-700 hover:bg-gray-100",
-                        isToday && !isSelected && "ring-1 ring-gray-400",
-                        isSelected && "bg-gray-900 text-white hover:bg-gray-700"
-                      )}
-                    >
-                      {day}
-                    </button>
-                  );
-                })}
+              <div className="flex justify-between mt-3 pt-2 border-t border-dash-border">
+                <button type="button" onClick={() => { const t = new Date(); onChange(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`, time); }} className="text-sm text-dash-primary hover:underline">Today</button>
+                <button type="button" onClick={() => { onChange(null, time); }} className="text-sm text-dash-muted hover:underline">Clear</button>
               </div>
-
-              <div className="mt-3 flex justify-between gap-2 border-t border-gray-100 pt-3">
-                <button
-                  type="button"
-                  onClick={handleClearDate}
-                  className="rounded px-3 py-1 text-xs text-gray-500 hover:text-gray-700"
-                >
-                  Clear
-                </button>
-                <button
-                  type="button"
-                  onClick={handleToday}
-                  className="rounded bg-gray-900 px-3 py-1 text-xs font-medium text-white hover:bg-gray-700"
-                >
-                  Today
-                </button>
+            </>
+          )}
+          {tab === "time" && (
+            <div className="flex gap-4 justify-center py-4">
+              <div className="flex flex-col items-center gap-1">
+                <button type="button" onClick={() => setHour(hour + 1)} className="p-1 hover:bg-slate-100 rounded"><ChevronUp className="w-4 h-4" /></button>
+                <span className="text-lg font-medium w-10 text-center">{hour}</span>
+                <button type="button" onClick={() => setHour(hour - 1)} className="p-1 hover:bg-slate-100 rounded"><ChevronDown className="w-4 h-4" /></button>
+              </div>
+              <div className="flex flex-col items-center gap-1">
+                <button type="button" onClick={() => setMinute(minute + 5)} className="p-1 hover:bg-slate-100 rounded"><ChevronUp className="w-4 h-4" /></button>
+                <select value={minute} onChange={(e) => setMinute(Number(e.target.value))} className="text-lg font-medium w-16 text-center border border-dash-border rounded">
+                  {minutes.map((m) => <option key={m} value={m}>{String(m).padStart(2, "0")}</option>)}
+                </select>
+                <button type="button" onClick={() => setMinute(minute - 5)} className="p-1 hover:bg-slate-100 rounded"><ChevronDown className="w-4 h-4" /></button>
+              </div>
+              <div className="flex flex-col gap-1">
+                <button type="button" onClick={() => setPeriod("AM")} className={cn("px-3 py-1 rounded text-sm", period === "AM" ? "bg-dash-primary text-white" : "bg-slate-100")}>AM</button>
+                <button type="button" onClick={() => setPeriod("PM")} className={cn("px-3 py-1 rounded text-sm", period === "PM" ? "bg-dash-primary text-white" : "bg-slate-100")}>PM</button>
               </div>
             </div>
           )}
-
-          {/* Time Panel */}
-          {activeTab === "time" && (
-            <div className="p-4">
-              <div className="flex items-center justify-center gap-4">
-                {/* Hour */}
-                <div className="flex flex-col items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => adjustHour(1)}
-                    className="rounded p-1 text-gray-500 hover:bg-gray-100"
-                  >
-                    <ChevronUp className="h-4 w-4" />
-                  </button>
-                  <div className="flex h-10 w-12 items-center justify-center rounded border border-gray-200 text-lg font-semibold">
-                    {hour}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => adjustHour(-1)}
-                    className="rounded p-1 text-gray-500 hover:bg-gray-100"
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <span className="text-lg font-semibold text-gray-400">:</span>
-
-                {/* Minute */}
-                <div className="flex flex-col items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => adjustMinute(5)}
-                    className="rounded p-1 text-gray-500 hover:bg-gray-100"
-                  >
-                    <ChevronUp className="h-4 w-4" />
-                  </button>
-                  <div className="flex h-10 w-12 items-center justify-center rounded border border-gray-200 text-lg font-semibold">
-                    {minute.toString().padStart(2, "0")}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => adjustMinute(-5)}
-                    className="rounded p-1 text-gray-500 hover:bg-gray-100"
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {/* AM/PM */}
-                <div className="flex flex-col gap-1">
-                  <button
-                    type="button"
-                    onClick={togglePeriod}
-                    className={cn(
-                      "rounded px-3 py-1.5 text-sm font-semibold transition-colors",
-                      period === "AM"
-                        ? "bg-gray-900 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    )}
-                  >
-                    AM
-                  </button>
-                  <button
-                    type="button"
-                    onClick={togglePeriod}
-                    className={cn(
-                      "rounded px-3 py-1.5 text-sm font-semibold transition-colors",
-                      period === "PM"
-                        ? "bg-gray-900 text-white"
-                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                    )}
-                  >
-                    PM
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-3 flex justify-between gap-2 border-t border-gray-100 pt-3">
-                <button
-                  type="button"
-                  onClick={handleClearTime}
-                  className="rounded px-3 py-1 text-xs text-gray-500 hover:text-gray-700"
-                >
-                  Clear
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDone}
-                  className="rounded bg-gray-900 px-3 py-1 text-xs font-medium text-white hover:bg-gray-700"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          )}
+          <button type="button" onClick={() => setOpen(false)} className="w-full mt-3 py-2 bg-dash-primary text-white rounded text-sm hover:bg-dash-primary-hover">Done</button>
         </div>
       )}
     </div>

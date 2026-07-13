@@ -1,54 +1,34 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
+import { useParams, Outlet, Link, NavLink } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Outlet, useLocation, useNavigate, useParams, Link } from "react-router-dom";
-import { Loader2, Check } from "lucide-react";
 import { supabase, type UserEvent } from "../../lib/supabase";
-import {
-  Button,
-  Badge,
-  Toast,
-  LoadingSpinner,
-  ErrorState,
-} from "../../components/ui";
+import { Button } from "../../components/ui/Button";
+import { Badge } from "../../components/ui";
+import { ArrowLeft, Globe } from "lucide-react";
 
-const TABS = [
-  { label: "Cover", path: "cover" },
-  { label: "Login", path: "login" },
-  { label: "Home", path: "home" },
-  { label: "Theme", path: "theme" },
-  { label: "Events", path: "events" },
-  { label: "Guests", path: "guests" },
-  { label: "Groups", path: "groups" },
-  { label: "RSVP", path: "rsvp" },
-  { label: "Timeline", path: "timeline" },
-  { label: "Sharing", path: "sharing" },
-  { label: "Stats", path: "analytics" },
-  { label: "Settings", path: "settings" },
-] as const;
+const NAV_TABS = [
+  { path: "cover", label: "Cover" },
+  { path: "login", label: "Login" },
+  { path: "home", label: "Home" },
+  { path: "theme", label: "Theme" },
+  { path: "events", label: "Events" },
+  { path: "guests", label: "Guests" },
+  { path: "groups", label: "Groups" },
+  { path: "rsvp", label: "RSVP" },
+  { path: "timeline", label: "Timeline" },
+  { path: "sharing", label: "Sharing" },
+  { path: "analytics", label: "Analytics" },
+  { path: "settings", label: "Settings" },
+];
 
-export default function EventLayoutPage() {
+export default function EventLayout() {
   const { eventId } = useParams<{ eventId: string }>();
-  const location = useLocation();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  // Auth check
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) navigate("/auth");
-    });
-  }, [navigate]);
-
-  const { data: event, isLoading, error, refetch } = useQuery<UserEvent>({
+  const { data: event, isLoading } = useQuery({
     queryKey: ["event", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("id", eventId!)
-        .single();
-
+      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId).single();
       if (error) throw error;
       return data as UserEvent;
     },
@@ -57,141 +37,97 @@ export default function EventLayoutPage() {
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      if (!event) throw new Error("No event data");
-
-      const updateData: Record<string, unknown> = {
-        name: event.draft_name,
-        event_type: event.draft_event_type,
-        event_date: event.draft_event_date,
-        event_time: event.draft_event_time,
-        venue: event.draft_venue,
-        address: event.draft_address,
-        cover_image: event.draft_cover_image,
-        cover_config: event.draft_cover_config,
-        login_config: event.draft_login_config,
-        theme: event.draft_theme,
-        content: event.draft_content,
-        sharing_config: event.draft_sharing_config,
-        slug: event.draft_slug,
-        rsvp_deadline: event.draft_rsvp_deadline,
+      const updates: Record<string, any> = {
         is_published: true,
         published_at: new Date().toISOString(),
       };
+      if (event?.draft_name) updates.name = event.draft_name;
+      if (event?.draft_event_type) updates.event_type = event.draft_event_type;
+      if (event?.draft_event_date !== undefined) updates.event_date = event.draft_event_date;
+      if (event?.draft_event_time !== undefined) updates.event_time = event.draft_event_time;
+      if (event?.draft_venue !== undefined) updates.venue = event.draft_venue;
+      if (event?.draft_address !== undefined) updates.address = event.draft_address;
+      if (event?.draft_cover_image !== undefined) updates.cover_image = event.draft_cover_image;
+      if (event?.draft_cover_config) updates.cover_config = event.draft_cover_config;
+      if (event?.draft_login_config) updates.login_config = event.draft_login_config;
+      if (event?.draft_theme) updates.theme = event.draft_theme;
+      if (event?.draft_logo_config) updates.logo_config = event.draft_logo_config;
+      if (event?.draft_content) updates.content = event.draft_content;
+      if (event?.draft_sharing_config) updates.sharing_config = event.draft_sharing_config;
+      if (event?.draft_slug) updates.slug = event.draft_slug;
+      if (event?.draft_rsvp_deadline !== undefined) updates.rsvp_deadline = event.draft_rsvp_deadline;
 
-      const { data, error } = await supabase
-        .from("user_events")
-        .update(updateData)
-        .eq("id", event.id)
-        .select()
-        .single();
-
+      const { data, error } = await supabase.from("user_events").update(updates).eq("id", eventId).select().single();
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
       queryClient.invalidateQueries({ queryKey: ["events"] });
-      setToast({ message: "Event published successfully!", type: "success" });
     },
-    onError: (err: Error) => {
-      setToast({ message: err.message, type: "error" });
-    },
+    onError: (err: any) => alert("Failed to publish: " + (err.message || "Unknown error")),
   });
 
-  // Determine active tab
-  const currentPath = location.pathname.split("/").pop() || "cover";
-  const activeTab = TABS.find((t) => t.path === currentPath)?.path || "cover";
+  const unpublishMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("user_events").update({ is_published: false }).eq("id", eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+    },
+    onError: (err: any) => alert("Failed to unpublish: " + (err.message || "Unknown error")),
+  });
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <LoadingSpinner className="h-8 w-8" />
-      </div>
-    );
-  }
-
-  if (error || !event) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <ErrorState
-          title="Event not found"
-          message={error instanceof Error ? error.message : "This event may have been deleted."}
-          onRetry={() => refetch()}
-        />
-      </div>
-    );
-  }
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center text-dash-muted">Loading...</div>;
+  if (!event) return <div className="min-h-screen flex items-center justify-center text-red-600">Event not found</div>;
 
   return (
-    <div className="flex min-h-screen flex-col bg-gray-50">
-      {/* Sticky Header */}
-      <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur-md">
-        <div className="mx-auto max-w-6xl px-4 py-3">
-          {/* Top row: name + publish */}
-          <div className="mb-3 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <Link to="/dashboard" className="text-sm text-gray-500 hover:text-gray-900 shrink-0">
-                ← Dashboard
-              </Link>
-              <span className="text-gray-300 shrink-0">/</span>
-              <h1 className="truncate text-base font-semibold text-gray-900">
-                {event.draft_name || event.name || "Untitled Event"}
-              </h1>
-              <Badge variant={event.is_published ? "success" : "default"} className="shrink-0">
+    <div className="min-h-screen bg-dash-bg">
+      <header className="sticky top-0 z-40 bg-dash-surface border-b border-dash-border">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="h-16 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Link to="/dashboard" className="text-dash-muted hover:text-dash-text"><ArrowLeft className="w-5 h-5" /></Link>
+              <h1 className="text-lg font-semibold text-dash-text">{event.name}</h1>
+              <Badge variant={event.is_published ? "success" : "default"}>
                 {event.is_published ? "Published" : "Draft"}
               </Badge>
             </div>
-
-            <Button
-              size="sm"
-              onClick={() => publishMutation.mutate()}
-              disabled={publishMutation.isPending}
-            >
-              {publishMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Publishing…
-                </>
-              ) : (
-                <>
-                  <Check className="h-4 w-4" />
-                  Publish
-                </>
+            <div className="flex items-center gap-2">
+              {event.is_published && event.slug && (
+                <a href={`/e/${event.slug}`} target="_blank" rel="noopener" className="text-sm text-teal-700 hover:underline flex items-center gap-1">
+                  <Globe className="w-4 h-4" /> View
+                </a>
               )}
-            </Button>
+              {event.is_published ? (
+                <Button variant="secondary" size="sm" onClick={() => unpublishMutation.mutate()} loading={unpublishMutation.isPending}>Unpublish</Button>
+              ) : (
+                <Button size="sm" onClick={() => publishMutation.mutate()} loading={publishMutation.isPending}>
+                  <Globe className="w-4 h-4" /> Publish
+                </Button>
+              )}
+            </div>
           </div>
-
-          {/* Wrapping navigation tabs */}
-          <nav className="flex flex-wrap gap-1">
-            {TABS.map((tab) => (
-              <Link
+          <nav className="flex flex-wrap gap-1 pb-2">
+            {NAV_TABS.map((tab) => (
+              <NavLink
                 key={tab.path}
-                to={tab.path}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                  activeTab === tab.path
-                    ? "bg-gray-900 text-white"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                }`}
+                to={`/event/${eventId}/${tab.path}`}
+                className={({ isActive }) =>
+                  `px-3 py-1.5 rounded-full text-sm transition-colors ${isActive ? "bg-dash-primary text-white" : "text-dash-muted hover:bg-dash-primary-light hover:text-dash-primary"}`
+                }
               >
                 {tab.label}
-              </Link>
+              </NavLink>
             ))}
           </nav>
         </div>
       </header>
-
-      {/* Content */}
-      <main className="flex-1">
+      <main className="max-w-7xl mx-auto px-4 py-6">
         <Outlet context={{ event }} />
       </main>
-
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
     </div>
   );
 }

@@ -1,44 +1,18 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { CalendarHeart } from "lucide-react";
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/80 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+    <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-slate-200">
+      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <span
-            className="text-xl font-semibold text-gray-900"
-            style={{ fontFamily: '"Cormorant Garamond", serif' }}
-          >
-            MyWedly
-          </span>
+          <CalendarHeart className="w-6 h-6 text-teal-700" />
+          <span className="text-lg font-semibold text-slate-900">MyWedly</span>
         </Link>
-
-        <nav className="flex items-center gap-6">
-          <Link
-            to="/"
-            className="text-sm text-gray-600 transition-colors hover:text-gray-900"
-          >
-            Home
-          </Link>
-          <Link
-            to="/features"
-            className="text-sm text-gray-600 transition-colors hover:text-gray-900"
-          >
-            Features
-          </Link>
-          <Link
-            to="/pricing"
-            className="text-sm text-gray-600 transition-colors hover:text-gray-900"
-          >
-            Pricing
-          </Link>
-          <Link
-            to="/login"
-            className="rounded-md bg-gray-900 px-4 py-2 text-xs font-medium uppercase tracking-wider text-white transition-colors hover:bg-gray-700"
-          >
-            Sign In
-          </Link>
+        <nav className="flex items-center gap-4">
+          <Link to="/dashboard" className="text-sm text-slate-600 hover:text-slate-900">Dashboard</Link>
+          <Link to="/auth" className="text-sm px-4 py-2 bg-teal-700 text-white rounded-lg hover:bg-teal-800">Sign In</Link>
         </nav>
       </div>
     </header>

@@ -1,41 +1,34 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ["index.html", "src/**/*.{js,ts,jsx,tsx}"],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
-      fontFamily: {
-        heading: ["Cormorant Garamond", "serif"],
-        body: ["Inter", "sans-serif"],
-        script: ["Dancing Script", "cursive"],
-      },
       colors: {
         dash: {
-          bg: "#f9fafb",
-          surface: "#ffffff",
-          border: "#e5e7eb",
-          text: "#111827",
-          muted: "#6b7280",
-          primary: "#111827",
+          bg: "var(--dash-bg)",
+          surface: "var(--dash-surface)",
+          border: "var(--dash-border)",
+          text: "var(--dash-text)",
+          muted: "var(--dash-muted)",
+          primary: "var(--dash-primary)",
+          "primary-hover": "var(--dash-primary-hover)",
+          "primary-light": "var(--dash-primary-light)",
+        },
+        event: {
+          bg: "var(--event-bg)",
+          surface: "var(--event-surface)",
+          border: "var(--event-border)",
+          text: "var(--event-text)",
+          muted: "var(--event-muted)",
+          primary: "var(--event-primary)",
+          "primary-hover": "var(--event-primary-hover)",
+          "primary-light": "var(--event-primary-light)",
+          accent: "var(--event-accent)",
         },
       },
-      keyframes: {
-        "fade-in": {
-          "0%": { opacity: "0" },
-          "100%": { opacity: "1" },
-        },
-        "fade-in-up": {
-          "0%": { opacity: "0", transform: "translateY(12px)" },
-          "100%": { opacity: "1", transform: "translateY(0)" },
-        },
-        "slide-up": {
-          "0%": { transform: "translateY(24px)", opacity: "0" },
-          "100%": { transform: "translateY(0)", opacity: "1" },
-        },
-      },
-      animation: {
-        "fade-in": "fade-in 0.4s ease-out",
-        "fade-in-up": "fade-in-up 0.5s ease-out",
-        "slide-up": "slide-up 0.4s ease-out",
+      fontFamily: {
+        event: "var(--event-font)",
+        dash: ["Inter", "system-ui", "sans-serif"],
       },
     },
   },

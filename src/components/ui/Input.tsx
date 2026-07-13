@@ -1,55 +1,23 @@
 import React, { forwardRef } from "react";
 import { cn } from "../../lib/utils";
 
-const baseInputClasses =
-  "w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 transition-colors disabled:cursor-not-allowed disabled:bg-gray-50";
-
-export interface InputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {}
-
-export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, ...props }, ref) => {
-    return (
-      <input
-        ref={ref}
-        className={cn(baseInputClasses, className)}
-        {...props}
-      />
-    );
-  }
+export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  ({ className, ...props }, ref) => (
+    <input ref={ref} className={cn("w-full px-3 py-2 rounded-lg border border-dash-border bg-white text-dash-text placeholder:text-dash-muted focus:outline-none focus:ring-2 focus:ring-dash-primary/30", className)} {...props} />
+  )
 );
 Input.displayName = "Input";
 
-export interface TextareaProps
-  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {}
-
-export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, ...props }, ref) => {
-    return (
-      <textarea
-        ref={ref}
-        className={cn(baseInputClasses, "min-h-[80px] resize-y", className)}
-        {...props}
-      />
-    );
-  }
+export const Textarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  ({ className, ...props }, ref) => (
+    <textarea ref={ref} className={cn("w-full px-3 py-2 rounded-lg border border-dash-border bg-white text-dash-text placeholder:text-dash-muted focus:outline-none focus:ring-2 focus:ring-dash-primary/30", className)} {...props} />
+  )
 );
 Textarea.displayName = "Textarea";
 
-export interface SelectProps
-  extends React.SelectHTMLAttributes<HTMLSelectElement> {}
-
-export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, children, ...props }, ref) => {
-    return (
-      <select
-        ref={ref}
-        className={cn(baseInputClasses, "cursor-pointer", className)}
-        {...props}
-      >
-        {children}
-      </select>
-    );
-  }
+export const Select = forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(
+  ({ className, ...props }, ref) => (
+    <select ref={ref} className={cn("w-full px-3 py-2 rounded-lg border border-dash-border bg-white text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30", className)} {...props} />
+  )
 );
 Select.displayName = "Select";

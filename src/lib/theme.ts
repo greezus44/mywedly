@@ -1,301 +1,140 @@
 import type { ThemeConfig } from "./supabase";
 
 export const DEFAULT_THEME: ThemeConfig = {
-  preset: "classic",
-  primaryColor: "#111827",
-  secondaryColor: "#6b7280",
-  accentColor: "#d4af37",
-  bgColor: "#ffffff",
-  surfaceColor: "#ffffff",
-  textColor: "#111827",
-  textMutedColor: "#6b7280",
-  borderColor: "#e5e7eb",
-  headingFont: "Cormorant Garamond",
-  bodyFont: "Inter",
-  scriptFont: "Dancing Script",
-  buttonRadius: 6,
-  shadowStyle: "soft",
+  bg: "#faf7f2",
+  surface: "#ffffff",
+  border: "#e8e0d5",
+  text: "#2d2424",
+  muted: "#8a7a72",
+  primary: "#b8860b",
+  primaryHover: "#9a7209",
+  primaryLight: "#f5e6c8",
+  accent: "#d4a574",
+  font: '"Cormorant Garamond", serif',
 };
 
 export const RUSTY_THEME: ThemeConfig = {
-  preset: "rusty",
-  primaryColor: "#8b7355",
-  secondaryColor: "#a89072",
-  accentColor: "#d4af37",
-  bgColor: "#fdfbf7",
-  surfaceColor: "#ffffff",
-  textColor: "#3d3528",
-  textMutedColor: "#8a7a65",
-  borderColor: "#e8dfd0",
-  headingFont: "Cormorant Garamond",
-  bodyFont: "EB Garamond",
-  scriptFont: "Great Vibes",
-  buttonRadius: 4,
-  shadowStyle: "soft",
+  bg: "#f5f0e8",
+  surface: "#fffaf3",
+  border: "#d4c4a8",
+  text: "#3d2f1f",
+  muted: "#8a7560",
+  primary: "#8b6914",
+  primaryHover: "#6e5410",
+  primaryLight: "#f0e4c8",
+  accent: "#c4a767",
+  font: '"Playfair Display", serif',
 };
 
-export const RUSTY_COVER_CONFIG = {
-  bgImage: null,
-  bgColor: "#fdfbf7",
-  overlayColor: "#000000",
-  overlayOpacity: 0.2,
-  textColor: "#3d3528",
-  buttonColor: "#8b7355",
-  buttonText: "Enter",
-  font: "Cormorant Garamond",
-  scriptFont: "Great Vibes",
-  customText: null,
-  showDate: true,
-  showCountdown: true,
-  logo: null,
-  logoWidth: 120,
-};
-
-export const RUSTY_LOGIN_CONFIG = {
-  bgImage: null,
-  bgColor: "#fdfbf7",
-  overlayColor: "#000000",
-  overlayOpacity: 0.15,
-  textColor: "#3d3528",
-  buttonColor: "#8b7355",
-  buttonText: "Continue",
-  heading: "Welcome",
-  subheading: "Please enter your name to continue",
-  inputPlaceholder: "Your full name",
-  logo: null,
-  logoWidth: 100,
-};
-
-export const RUSTY_CONTENT = {
-  rich_title: null,
-  rich_subtitle: null,
-  rich_body: null,
-  story: null,
-  story_image: null,
-  invitation_title: "You're Invited",
-  invitation_subtitle: "We would be honored by your presence",
-  invitation_body:
-    "Together with our families, we invite you to share in our celebration of love.",
-  invitation_text: null,
-  rsvp_button_text: "RSVP",
-  sections: [],
-};
-
-export interface ThemePreset {
-  id: string;
-  name: string;
-  theme: ThemeConfig;
-}
-
-export const THEME_PRESETS: ThemePreset[] = [
+export const THEME_PRESETS: { name: string; theme: ThemeConfig }[] = [
+  { name: "Classic Gold", theme: DEFAULT_THEME },
+  { name: "Rustic", theme: RUSTY_THEME },
   {
-    id: "classic",
-    name: "Classic",
+    name: "Modern Blue",
     theme: {
-      preset: "classic",
-      primaryColor: "#111827",
-      secondaryColor: "#6b7280",
-      accentColor: "#d4af37",
-      bgColor: "#ffffff",
-      surfaceColor: "#ffffff",
-      textColor: "#111827",
-      textMutedColor: "#6b7280",
-      borderColor: "#e5e7eb",
-      headingFont: "Cormorant Garamond",
-      bodyFont: "Inter",
-      scriptFont: "Dancing Script",
-      buttonRadius: 6,
-      shadowStyle: "soft",
+      bg: "#f0f4f8",
+      surface: "#ffffff",
+      border: "#c3d4e0",
+      text: "#1a2e3f",
+      muted: "#6b8299",
+      primary: "#2563eb",
+      primaryHover: "#1d4ed8",
+      primaryLight: "#dbeafe",
+      accent: "#60a5fa",
+      font: '"Montserrat", sans-serif',
     },
   },
   {
-    id: "rusty",
-    name: "Rusty",
+    name: "Forest Green",
     theme: {
-      preset: "rusty",
-      primaryColor: "#8b7355",
-      secondaryColor: "#a89072",
-      accentColor: "#d4af37",
-      bgColor: "#fdfbf7",
-      surfaceColor: "#ffffff",
-      textColor: "#3d3528",
-      textMutedColor: "#8a7a65",
-      borderColor: "#e8dfd0",
-      headingFont: "Cormorant Garamond",
-      bodyFont: "EB Garamond",
-      scriptFont: "Great Vibes",
-      buttonRadius: 4,
-      shadowStyle: "soft",
+      bg: "#f0f5f0",
+      surface: "#ffffff",
+      border: "#c8d8c8",
+      text: "#1a3a1a",
+      muted: "#6b8a6b",
+      primary: "#15803d",
+      primaryHover: "#166534",
+      primaryLight: "#dcfce7",
+      accent: "#86efac",
+      font: '"Lora", serif',
     },
   },
   {
-    id: "mono",
-    name: "Mono",
+    name: "Blush Pink",
     theme: {
-      preset: "mono",
-      primaryColor: "#000000",
-      secondaryColor: "#525252",
-      accentColor: "#a3a3a3",
-      bgColor: "#ffffff",
-      surfaceColor: "#fafafa",
-      textColor: "#000000",
-      textMutedColor: "#737373",
-      borderColor: "#e5e5e5",
-      headingFont: "Montserrat",
-      bodyFont: "Inter",
-      scriptFont: "Dancing Script",
-      buttonRadius: 0,
-      shadowStyle: "none",
+      bg: "#fdf5f5",
+      surface: "#ffffff",
+      border: "#f0d4d4",
+      text: "#3d1f1f",
+      muted: "#a07070",
+      primary: "#be185d",
+      primaryHover: "#9f1239",
+      primaryLight: "#fce7f3",
+      accent: "#f9a8d4",
+      font: '"EB Garamond", serif',
     },
   },
   {
-    id: "ocean",
-    name: "Ocean",
+    name: "Midnight",
     theme: {
-      preset: "ocean",
-      primaryColor: "#1e3a5f",
-      secondaryColor: "#3b6e9e",
-      accentColor: "#7eb8d9",
-      bgColor: "#f0f6fb",
-      surfaceColor: "#ffffff",
-      textColor: "#1e3a5f",
-      textMutedColor: "#5a7a99",
-      borderColor: "#cfe0ee",
-      headingFont: "Playfair Display",
-      bodyFont: "Lora",
-      scriptFont: "Dancing Script",
-      buttonRadius: 8,
-      shadowStyle: "soft",
-    },
-  },
-  {
-    id: "forest",
-    name: "Forest",
-    theme: {
-      preset: "forest",
-      primaryColor: "#2d4a2b",
-      secondaryColor: "#5b7a56",
-      accentColor: "#a3c293",
-      bgColor: "#f5f7f2",
-      surfaceColor: "#ffffff",
-      textColor: "#2d4a2b",
-      textMutedColor: "#6b7a66",
-      borderColor: "#d5e0cf",
-      headingFont: "Cormorant Garamond",
-      bodyFont: "Lora",
-      scriptFont: "Great Vibes",
-      buttonRadius: 6,
-      shadowStyle: "soft",
-    },
-  },
-  {
-    id: "rose",
-    name: "Rose",
-    theme: {
-      preset: "rose",
-      primaryColor: "#9d5b6b",
-      secondaryColor: "#c08a97",
-      accentColor: "#e8c5cf",
-      bgColor: "#fdf5f7",
-      surfaceColor: "#ffffff",
-      textColor: "#6b3a4a",
-      textMutedColor: "#9a7a85",
-      borderColor: "#f0d9e0",
-      headingFont: "Playfair Display",
-      bodyFont: "Lora",
-      scriptFont: "Dancing Script",
-      buttonRadius: 10,
-      shadowStyle: "soft",
+      bg: "#1a1a2e",
+      surface: "#252542",
+      border: "#3d3d5c",
+      text: "#e0e0f0",
+      muted: "#9090b0",
+      primary: "#c4a574",
+      primaryHover: "#b08d5e",
+      primaryLight: "#3d3d5c",
+      accent: "#e8c89a",
+      font: '"Cinzel", serif',
     },
   },
 ];
 
-export interface FontOption {
-  value: string;
-  label: string;
-  stack: string;
-}
-
-export const FONT_OPTIONS: FontOption[] = [
-  { value: "Cormorant Garamond", label: "Cormorant Garamond", stack: '"Cormorant Garamond", serif' },
-  { value: "Inter", label: "Inter", stack: '"Inter", sans-serif' },
-  { value: "Playfair Display", label: "Playfair Display", stack: '"Playfair Display", serif' },
-  { value: "Montserrat", label: "Montserrat", stack: '"Montserrat", sans-serif' },
-  { value: "Lora", label: "Lora", stack: '"Lora", serif' },
-  { value: "Crimson Text", label: "Crimson Text", stack: '"Crimson Text", serif' },
-  { value: "EB Garamond", label: "EB Garamond", stack: '"EB Garamond", serif' },
+export const RICH_FONT_OPTIONS = [
+  { value: '"Cormorant Garamond", serif', label: "Cormorant Garamond" },
+  { value: '"Playfair Display", serif', label: "Playfair Display" },
+  { value: '"Montserrat", sans-serif', label: "Montserrat" },
+  { value: '"Lora", serif', label: "Lora" },
+  { value: '"EB Garamond", serif', label: "EB Garamond" },
+  { value: '"Cinzel", serif', label: "Cinzel" },
+  { value: '"Great Vibes", cursive', label: "Great Vibes" },
+  { value: '"Bebas Neue", sans-serif', label: "Bebas Neue" },
+  { value: '"Inter", sans-serif', label: "Inter" },
 ];
 
-export const RICH_FONT_OPTIONS: FontOption[] = [
-  { value: "Cormorant Garamond", label: "Cormorant Garamond", stack: '"Cormorant Garamond", serif' },
-  { value: "Inter", label: "Inter", stack: '"Inter", sans-serif' },
-  { value: "Playfair Display", label: "Playfair Display", stack: '"Playfair Display", serif' },
-  { value: "Montserrat", label: "Montserrat", stack: '"Montserrat", sans-serif' },
-  { value: "Lora", label: "Lora", stack: '"Lora", serif' },
-  { value: "Crimson Text", label: "Crimson Text", stack: '"Crimson Text", serif' },
-  { value: "EB Garamond", label: "EB Garamond", stack: '"EB Garamond", serif' },
-  { value: "Dancing Script", label: "Dancing Script", stack: '"Dancing Script", cursive' },
-  { value: "Great Vibes", label: "Great Vibes", stack: '"Great Vibes", cursive' },
+export const FONT_SIZE_OPTIONS = [
+  { value: "0.875rem", label: "Small" },
+  { value: "1rem", label: "Medium" },
+  { value: "1.125rem", label: "Large" },
+  { value: "1.25rem", label: "Extra Large" },
 ];
 
-export interface FontSizeOption {
-  value: string;
-  label: string;
-}
-
-export const FONT_SIZE_OPTIONS: FontSizeOption[] = [
-  { value: "12px", label: "Small" },
-  { value: "14px", label: "Medium" },
-  { value: "16px", label: "Normal" },
-  { value: "18px", label: "Large" },
-  { value: "24px", label: "Heading 3" },
-  { value: "32px", label: "Heading 2" },
-  { value: "48px", label: "Heading 1" },
-];
-
-/**
- * Convert a ThemeConfig to CSS variables for the .event-themed scope
- */
 export function themeToEventCssVars(theme: ThemeConfig | null | undefined): Record<string, string> {
-  if (!theme) return {};
-
-  const vars: Record<string, string> = {};
-
-  if (theme.primaryColor) vars["--event-primary"] = theme.primaryColor;
-  if (theme.secondaryColor) vars["--event-secondary"] = theme.secondaryColor;
-  if (theme.accentColor) vars["--event-accent"] = theme.accentColor;
-  if (theme.bgColor) vars["--event-bg"] = theme.bgColor;
-  if (theme.surfaceColor) vars["--event-surface"] = theme.surfaceColor;
-  if (theme.textColor) vars["--event-text"] = theme.textColor;
-  if (theme.textMutedColor) vars["--event-muted"] = theme.textMutedColor;
-  if (theme.borderColor) vars["--event-border"] = theme.borderColor;
-  if (theme.headingFont) vars["--event-heading-font"] = `"${theme.headingFont}", serif`;
-  if (theme.bodyFont) vars["--event-body-font"] = `"${theme.bodyFont}", sans-serif`;
-  if (theme.scriptFont) vars["--event-script-font"] = `"${theme.scriptFont}", cursive`;
-  if (theme.buttonRadius != null) vars["--event-button-radius"] = `${theme.buttonRadius}px`;
-
-  return vars;
+  const t = theme || DEFAULT_THEME;
+  return {
+    "--event-bg": t.bg || DEFAULT_THEME.bg!,
+    "--event-surface": t.surface || DEFAULT_THEME.surface!,
+    "--event-border": t.border || DEFAULT_THEME.border!,
+    "--event-text": t.text || DEFAULT_THEME.text!,
+    "--event-muted": t.muted || DEFAULT_THEME.muted!,
+    "--event-primary": t.primary || DEFAULT_THEME.primary!,
+    "--event-primary-hover": t.primaryHover || DEFAULT_THEME.primaryHover!,
+    "--event-primary-light": t.primaryLight || DEFAULT_THEME.primaryLight!,
+    "--event-accent": t.accent || DEFAULT_THEME.accent!,
+    "--event-font": t.font || DEFAULT_THEME.font!,
+  };
 }
 
-/**
- * Convert text to a URL-safe slug
- */
-export function slugify(text: string | null | undefined): string {
-  if (!text) return "";
+export function slugify(text: string): string {
   return text
-    .toString()
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
 
-/**
- * Validate a slug string
- */
-export function isValidSlug(slug: string | null | undefined): boolean {
-  if (!slug) return false;
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
+export function isValidSlug(slug: string): boolean {
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) && slug.length >= 3;
 }

@@ -13,106 +13,23 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 export const EVENT_TYPES = [
-  "Wedding",
-  "Birthday",
-  "Corporate",
-  "Anniversary",
-  "Graduation",
-  "Baby Shower",
-  "Other",
+  { value: "wedding", label: "Wedding" },
+  { value: "birthday", label: "Birthday" },
+  { value: "corporate", label: "Corporate" },
+  { value: "graduation", label: "Graduation" },
+  { value: "baby_shower", label: "Baby Shower" },
+  { value: "anniversary", label: "Anniversary" },
+  { value: "engagement", label: "Engagement" },
+  { value: "other", label: "Other" },
 ] as const;
-
-export type EventType = (typeof EVENT_TYPES)[number];
 
 export const EVENT_TEMPLATES = [
-  {
-    id: "default",
-    name: "Classic",
-    description: "A clean, modern event template",
-  },
-  {
-    id: "rusty",
-    name: "Rusty's Template",
-    description: "Luxury wedding with cream & gold aesthetic",
-  },
+  { id: "default", name: "Classic", event_type: "other" },
+  { id: "rusty", name: "Rustic", event_type: "wedding" },
+  { id: "elegant", name: "Elegant", event_type: "wedding" },
+  { id: "modern", name: "Modern", event_type: "corporate" },
+  { id: "playful", name: "Playful", event_type: "birthday" },
 ] as const;
-
-export interface CoverConfig {
-  bgImage?: string | null;
-  bgColor?: string | null;
-  overlayColor?: string | null;
-  overlayOpacity?: number | null;
-  textColor?: string | null;
-  buttonColor?: string | null;
-  buttonText?: string | null;
-  font?: string | null;
-  scriptFont?: string | null;
-  customText?: string | null;
-  showDate?: boolean | null;
-  showCountdown?: boolean | null;
-  logo?: string | null;
-  logoWidth?: number | null;
-}
-
-export interface LoginConfig {
-  bgImage?: string | null;
-  bgColor?: string | null;
-  overlayColor?: string | null;
-  overlayOpacity?: number | null;
-  textColor?: string | null;
-  buttonColor?: string | null;
-  buttonText?: string | null;
-  heading?: string | null;
-  subheading?: string | null;
-  inputPlaceholder?: string | null;
-  logo?: string | null;
-  logoWidth?: number | null;
-}
-
-export interface ThemeConfig {
-  preset?: string | null;
-  primaryColor?: string | null;
-  secondaryColor?: string | null;
-  accentColor?: string | null;
-  bgColor?: string | null;
-  surfaceColor?: string | null;
-  textColor?: string | null;
-  textMutedColor?: string | null;
-  borderColor?: string | null;
-  headingFont?: string | null;
-  bodyFont?: string | null;
-  scriptFont?: string | null;
-  buttonRadius?: number | null;
-  shadowStyle?: string | null;
-}
-
-export interface ContentSection {
-  id: string;
-  title: string;
-  body: string;
-  image?: string | null;
-  visible: boolean;
-  order_index: number;
-}
-
-export interface EventContent {
-  rich_title?: string | null;
-  rich_subtitle?: string | null;
-  rich_body?: string | null;
-  story?: string | null;
-  story_image?: string | null;
-  invitation_title?: string | null;
-  invitation_subtitle?: string | null;
-  invitation_body?: string | null;
-  invitation_text?: string | null;
-  rsvp_button_text?: string | null;
-  sections?: ContentSection[] | null;
-}
-
-export interface SharingConfig {
-  showShareButtons?: boolean | null;
-  shareMessage?: string | null;
-}
 
 export interface UserEvent {
   id: string;
@@ -124,11 +41,12 @@ export interface UserEvent {
   venue: string | null;
   address: string | null;
   cover_image: string | null;
-  cover_config: CoverConfig | null;
-  login_config: LoginConfig | null;
-  theme: ThemeConfig | null;
-  content: EventContent | null;
-  sharing_config: SharingConfig | null;
+  cover_config: CoverConfig;
+  login_config: LoginConfig;
+  theme: ThemeConfig;
+  logo_config: LogoConfig;
+  content: EventContent;
+  sharing_config: SharingConfig;
   draft_name: string | null;
   draft_event_type: string | null;
   draft_event_date: string | null;
@@ -139,6 +57,7 @@ export interface UserEvent {
   draft_cover_config: CoverConfig | null;
   draft_login_config: LoginConfig | null;
   draft_theme: ThemeConfig | null;
+  draft_logo_config: LogoConfig | null;
   draft_content: EventContent | null;
   draft_sharing_config: SharingConfig | null;
   is_published: boolean;
@@ -146,31 +65,81 @@ export interface UserEvent {
   published_at: string | null;
   created_at: string;
   updated_at: string;
-  template_id: string | null;
+  template_id: string;
   slug: string | null;
   draft_slug: string | null;
   rsvp_deadline: string | null;
   draft_rsvp_deadline: string | null;
 }
 
+export interface CoverConfig {
+  title?: string;
+  subtitle?: string;
+  cover_image?: string | null;
+  date?: string | null;
+  time?: string | null;
+  venue?: string | null;
+  logo_image?: string | null;
+}
+
+export interface LoginConfig {
+  heading?: string;
+  subheading?: string;
+  background_image?: string | null;
+  logo_image?: string | null;
+  require_password?: boolean;
+  password?: string;
+}
+
+export interface ThemeConfig {
+  bg?: string;
+  surface?: string;
+  border?: string;
+  text?: string;
+  muted?: string;
+  primary?: string;
+  primaryHover?: string;
+  primaryLight?: string;
+  accent?: string;
+  font?: string;
+}
+
+export interface LogoConfig {
+  image?: string | null;
+  position?: string;
+}
+
+export interface EventContent {
+  title?: string;
+  subtitle?: string;
+  body?: string;
+}
+
+export interface SharingConfig {
+  slug?: string;
+  custom_message?: string;
+}
+
 export interface SubEvent {
   id: string;
-  parent_eventId: string;
+  parent_event_id: string;
+  wedding_id?: string | null;
   name: string;
+  description?: string | null;
   date: string | null;
   time: string | null;
+  start_time: string | null;
+  end_time: string | null;
   venue: string | null;
   address: string | null;
-  description: string | null;
   dress_code: string | null;
   rsvp_deadline: string | null;
   rsvp_enabled: boolean;
   order_index: number;
+  display_order: number;
   created_at: string;
   updated_at: string;
 }
-
-export type RsvpStatus = "pending" | "attending" | "declined";
 
 export interface EventGuest {
   id: string;
@@ -178,14 +147,14 @@ export interface EventGuest {
   name: string;
   email: string;
   phone: string;
-  group_name: string | null;
-  side: string | null;
+  group_name: string;
+  side: string;
   token: string;
-  rsvp_status: RsvpStatus;
+  rsvp_status: string;
   rsvp_submitted_at: string | null;
   plus_ones: number;
-  dietary: string | null;
-  message: string | null;
+  dietary: string;
+  message: string;
   created_at: string;
   table_number: string | null;
 }
@@ -193,32 +162,30 @@ export interface EventGuest {
 export interface EventRsvp {
   id: string;
   event_id: string;
-  sub_event_id: string | null;
   guest_id: string | null;
   guest_name: string;
-  status: "attending" | "declined" | "pending";
+  attending: boolean;
   plus_ones: number;
-  dietary: string | null;
-  message: string | null;
-  answers: Record<string, unknown> | null;
+  message: string;
+  dietary: string;
   submitted_at: string;
 }
 
 export interface ScheduleItem {
   id: string;
   event_id: string;
-  sub_event_id: string | null;
   title: string;
-  description: string | null;
+  description: string;
   schedule_date: string | null;
   start_time: string | null;
   end_time: string | null;
-  venue: string | null;
-  address: string | null;
-  dress_code: string | null;
-  category: string | null;
-  cover_image: string | null;
+  venue: string;
+  address: string;
+  dress_code: string;
+  category: string;
+  cover_image: string;
   order_index: number;
+  sub_event_id: string | null;
   created_at: string;
 }
 
@@ -232,8 +199,8 @@ export interface EventMessage {
 
 export interface GuestGroup {
   id: string;
+  wedding_id: string | null;
   event_id: string | null;
-  wedding_id: string;
   name: string;
   sort_order: number;
   created_at: string;
@@ -246,15 +213,8 @@ export interface GuestGroupMember {
   created_at: string;
 }
 
-export interface GuestEventInvite {
-  guest_id: string;
-  event_id: string;
-  sub_event_id: string | null;
-  invite_type: string;
-  created_at: string;
-}
-
 export interface GroupEventInvite {
+  id: string;
   group_id: string;
   event_id: string;
   sub_event_id: string | null;

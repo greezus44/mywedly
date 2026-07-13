@@ -1,88 +1,112 @@
 import React, { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useOutletContext } from "react-router-dom";
-import { Plus, Trash2, Loader2, Calendar, Clock, MapPin } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type SubEvent } from "../../lib/supabase";
+import { Button } from "../../components/ui/Button";
+import { Input, Textarea, Modal, Card, EmptyState, FormField } from "../../components/ui";
+import { DatePicker } from "../../components/ui/DatePicker";
+import { TimePicker } from "../../components/ui/TimePicker";
+import { Plus, Calendar, Trash2, Edit2, GripVertical } from "lucide-react";
 import { formatDateShort, formatTime12 } from "../../lib/utils";
-import {
-  Button,
-  Card,
-  Badge,
-  Modal,
-  FormField,
-  Input,
-  Textarea,
-  EmptyState,
-  ErrorState,
-  LoadingSpinner,
-  Toast,
-} from "../../components/ui";
-import { DatePicker, TimePicker } from "../../components/ui";
 
-export default function EventsPage() {
+interface SubEventForm {
+  name: string;
+  description: string;
+  date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  venue: string;
+  address: string;
+  dress_code: string;
+}
+
+const EMPTY_FORM: SubEventForm = {
+  name: "",
+  description: "",
+  date: null,
+  start_time: null,
+  end_time: null,
+  venue: "",
+  address: "",
+  dress_code: "",
+};
+
+export default function EventsEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const [showAdd, setShowAdd] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<SubEventForm>(EMPTY_FORM);
+  const [error, setError] = useState<string | null>(null);
 
-  // Form state
-  const [name, setName] = useState("");
-  const [date, setDate] = useState<string | null>(null);
-  const [time, setTime] = useState<string | null>(null);
-  const [venue, setVenue] = useState("");
-  const [address, setAddress] = useState("");
-  const [description, setDescription] = useState("");
-  const [dressCode, setDressCode] = useState("");
-
-  const { data: subEvents, isLoading, error, refetch } = useQuery<SubEvent[]>({
+  const { data: subEvents, isLoading } = useQuery({
     queryKey: ["sub-events", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sub_events")
         .select("*")
-        .eq("parent_eventId", event.id)
-        .order("order_index", { ascending: true });
-
+        .eq("parent_event_id", event.id)
+        .order("display_order", { ascending: true });
       if (error) throw error;
-      return (data || []) as SubEvent[];
+      return data as SubEvent[];
     },
   });
 
-  const addMutation = useMutation({
+  const createMutation = useMutation({
     mutationFn: async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) throw new Error("Not authenticated");
-
-      const maxOrder = subEvents?.length || 0;
-      const { data, error } = await supabase
-        .from("sub_events")
-        .insert({
-          parent_eventId: event.id,
-          name,
-          date,
-          time,
-          venue: venue || null,
-          address: address || null,
-          description: description || null,
-          dress_code: dressCode || null,
-          rsvp_enabled: false,
-          order_index: maxOrder,
-        })
-        .select()
-        .single();
-
+      const { error } = await supabase.from("sub_events").insert({
+        parent_event_id: event.id,
+        name: form.name,
+        description: form.description || null,
+        date: form.date,
+        start_time: form.start_time,
+        end_time: form.end_time,
+        venue: form.venue,
+        address: form.address,
+        dress_code: form.dress_code,
+        display_order: (subEvents?.length || 0),
+      });
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sub-events", event.id] });
-      setShowAdd(false);
-      resetForm();
-      setToast({ message: "Sub-event added", type: "success" });
+      setShowModal(false);
+      setForm(EMPTY_FORM);
+      setError(null);
     },
-    onError: (err: Error) => {
-      setToast({ message: err.message, type: "error" });
+    onError: (err: any) => {
+      const msg = err?.message || "";
+      if (msg.includes("parent_eventId") || msg.includes("column") || msg.includes("schema")) {
+        setError("Sub-events are temporarily unavailable due to a configuration issue. Please try again later.");
+      } else {
+        setError("Unable to create sub-event: " + msg);
+      }
+      console.error("Sub-event creation error:", err);
     },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("sub_events").update({
+        name: form.name,
+        description: form.description || null,
+        date: form.date,
+        start_time: form.start_time,
+        end_time: form.end_time,
+        venue: form.venue,
+        address: form.address,
+        dress_code: form.dress_code,
+      }).eq("id", editingId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sub-events", event.id] });
+      setShowModal(false);
+      setEditingId(null);
+      setForm(EMPTY_FORM);
+      setError(null);
+    },
+    onError: (err: any) => alert("Failed to update: " + (err.message || "Unknown error")),
   });
 
   const deleteMutation = useMutation({
@@ -90,213 +114,82 @@ export default function EventsPage() {
       const { error } = await supabase.from("sub_events").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sub-events", event.id] });
-      setToast({ message: "Sub-event deleted", type: "success" });
-    },
-    onError: (err: Error) => {
-      setToast({ message: err.message, type: "error" });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sub-events", event.id] }),
+    onError: (err: any) => alert("Failed to delete: " + (err.message || "Unknown error")),
   });
 
-  const resetForm = () => {
-    setName("");
-    setDate(null);
-    setTime(null);
-    setVenue("");
-    setAddress("");
-    setDescription("");
-    setDressCode("");
+  const openCreate = () => { setForm(EMPTY_FORM); setEditingId(null); setError(null); setShowModal(true); };
+  const openEdit = (se: SubEvent) => {
+    setForm({
+      name: se.name,
+      description: se.description || "",
+      date: se.date,
+      start_time: se.start_time || se.time,
+      end_time: se.end_time,
+      venue: se.venue || "",
+      address: se.address || "",
+      dress_code: se.dress_code || "",
+    });
+    setEditingId(se.id);
+    setError(null);
+    setShowModal(true);
   };
 
-  const handleAdd = () => {
-    if (!name.trim()) {
-      setToast({ message: "Please enter a name", type: "error" });
-      return;
-    }
-    addMutation.mutate();
+  const handleSubmit = () => {
+    if (editingId) updateMutation.mutate();
+    else createMutation.mutate();
   };
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Sub-Events</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Add individual events within your main event (e.g. ceremony, reception)
-          </p>
-        </div>
-        <Button onClick={() => setShowAdd(true)}>
-          <Plus className="h-4 w-4" />
-          Add Event
-        </Button>
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold text-dash-text">Sub-Events</h2>
+        <Button onClick={openCreate}><Plus className="w-4 h-4" /> Add Sub-Event</Button>
       </div>
-
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <LoadingSpinner className="h-8 w-8" />
-        </div>
-      ) : error ? (
-        <ErrorState
-          message={error instanceof Error ? error.message : "Failed to load events"}
-          onRetry={() => refetch()}
-        />
+        <div className="text-center py-12 text-dash-muted">Loading...</div>
       ) : !subEvents || subEvents.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={<Calendar className="h-12 w-12" />}
-            title="No sub-events yet"
-            description="Add events like ceremony, reception, or after-party."
-            action={
-              <Button onClick={() => setShowAdd(true)}>
-                <Plus className="h-4 w-4" />
-                Add Event
-              </Button>
-            }
-          />
-        </Card>
+        <EmptyState icon={<Calendar className="w-12 h-12" />} title="No sub-events yet" description="Add sub-events like ceremony, reception, or after-party." action={<Button onClick={openCreate}><Plus className="w-4 h-4" /> Add Sub-Event</Button>} />
       ) : (
-        <div className="flex flex-col gap-3">
-          {subEvents.map((sub) => (
-            <Card key={sub.id} className="p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <h3 className="text-base font-semibold text-gray-900">
-                    {sub.name || "Untitled"}
-                  </h3>
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-500">
-                    {sub.date && (
-                      <Badge>
-                        <Calendar className="h-3 w-3" />
-                        {formatDateShort(sub.date)}
-                      </Badge>
-                    )}
-                    {sub.time && (
-                      <Badge>
-                        <Clock className="h-3 w-3" />
-                        {formatTime12(sub.time)}
-                      </Badge>
-                    )}
-                    {sub.venue && (
-                      <span className="flex items-center gap-1">
-                        <MapPin className="h-3.5 w-3.5" />
-                        {sub.venue}
-                      </span>
-                    )}
-                  </div>
-                  {sub.description && (
-                    <p className="mt-2 text-sm text-gray-600">{sub.description}</p>
-                  )}
-                  {sub.dress_code && (
-                    <p className="mt-1 text-xs text-gray-400">
-                      Dress code: {sub.dress_code}
-                    </p>
-                  )}
+        <div className="space-y-3">
+          {subEvents.map((se, i) => (
+            <Card key={se.id} className="p-4 flex items-start gap-3">
+              <GripVertical className="w-5 h-5 text-dash-muted mt-1 cursor-grab" />
+              <div className="flex-1">
+                <h3 className="font-medium text-dash-text">{se.name}</h3>
+                <div className="flex flex-wrap gap-3 text-sm text-dash-muted mt-1">
+                  {se.date && <span>{formatDateShort(se.date)}</span>}
+                  {se.start_time && <span>{formatTime12(se.start_time)}</span>}
+                  {se.venue && <span>{se.venue}</span>}
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => deleteMutation.mutate(sub.id)}
-                  disabled={deleteMutation.isPending}
-                >
-                  <Trash2 className="h-4 w-4 text-red-500" />
-                </Button>
+                {se.description && <p className="text-sm text-dash-muted mt-1">{se.description}</p>}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => openEdit(se)} className="text-dash-muted hover:text-dash-primary"><Edit2 className="w-4 h-4" /></button>
+                <button onClick={() => { if (confirm("Delete this sub-event?")) deleteMutation.mutate(se.id); }} className="text-red-500 hover:text-red-700"><Trash2 className="w-4 h-4" /></button>
               </div>
             </Card>
           ))}
         </div>
       )}
-
-      {/* Add Modal */}
-      <Modal
-        open={showAdd}
-        onClose={() => setShowAdd(false)}
-        title="Add Sub-Event"
-      >
-        <div className="flex flex-col gap-4">
-          <FormField label="Name">
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Ceremony"
-              autoFocus
-            />
-          </FormField>
-
+      <Modal open={showModal} onClose={() => { setShowModal(false); setError(null); }} title={editingId ? "Edit Sub-Event" : "New Sub-Event"}>
+        <div className="space-y-4">
+          {error && <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+          <FormField label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ceremony" /></FormField>
+          <FormField label="Description"><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} /></FormField>
+          <FormField label="Date"><DatePicker value={form.date} onChange={(d) => setForm({ ...form, date: d })} /></FormField>
           <div className="grid grid-cols-2 gap-4">
-            <DatePicker
-              value={date}
-              onChange={(d) => setDate(d || null)}
-              label="Date"
-            />
-            <TimePicker
-              value={time}
-              onChange={(t) => setTime(t || null)}
-              label="Time"
-            />
+            <FormField label="Start Time"><TimePicker value={form.start_time} onChange={(t) => setForm({ ...form, start_time: t })} /></FormField>
+            <FormField label="End Time"><TimePicker value={form.end_time} onChange={(t) => setForm({ ...form, end_time: t })} /></FormField>
           </div>
-
-          <FormField label="Venue">
-            <Input
-              value={venue}
-              onChange={(e) => setVenue(e.target.value)}
-              placeholder="Venue name"
-            />
-          </FormField>
-
-          <FormField label="Address">
-            <Input
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Full address"
-            />
-          </FormField>
-
-          <FormField label="Description">
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Additional details"
-              rows={2}
-            />
-          </FormField>
-
-          <FormField label="Dress Code">
-            <Input
-              value={dressCode}
-              onChange={(e) => setDressCode(e.target.value)}
-              placeholder="e.g. Black tie"
-            />
-          </FormField>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setShowAdd(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleAdd}
-              disabled={addMutation.isPending || !name.trim()}
-            >
-              {addMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Adding…
-                </>
-              ) : (
-                "Add Event"
-              )}
-            </Button>
-          </div>
+          <FormField label="Venue"><Input value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} /></FormField>
+          <FormField label="Address"><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></FormField>
+          <FormField label="Dress Code"><Input value={form.dress_code} onChange={(e) => setForm({ ...form, dress_code: e.target.value })} /></FormField>
+          <Button onClick={handleSubmit} loading={createMutation.isPending || updateMutation.isPending} disabled={!form.name.trim()} className="w-full">
+            {editingId ? "Save Changes" : "Create Sub-Event"}
+          </Button>
         </div>
       </Modal>
-
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
     </div>
   );
 }

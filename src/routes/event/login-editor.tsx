@@ -1,199 +1,61 @@
-import React, { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import React from "react";
 import { useOutletContext } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type LoginConfig } from "../../lib/supabase";
-import {
-  Button,
-  FormField,
-  Input,
-  Textarea,
-  ImageUpload,
-  ColorInput,
-  RangeInput,
-  Toast,
-} from "../../components/ui";
+import { Button } from "../../components/ui/Button";
+import { Input, Textarea, FormField, Card, Toggle } from "../../components/ui";
+import { ImageUpload } from "../../components/ui/ImageUpload";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { LoginPreview } from "../../components/preview/PreviewRenderers";
 
-export default function LoginEditorPage() {
+export default function LoginEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-
-  const [config, setConfig] = useState<LoginConfig>(
-    event.draft_login_config || {
-      heading: `Welcome to ${event.draft_name || event.name || "Our Event"}`,
-      subheading: "Please enter your name to continue",
-      inputPlaceholder: "Your full name",
-      buttonText: "Continue",
-      bgColor: "#1a1a2e",
-      textColor: "#ffffff",
-      buttonColor: "#ffffff",
-      bgImage: null,
-      logo: null,
-      logoWidth: 100,
-    }
-  );
-
-  useEffect(() => {
-    setConfig(
-      event.draft_login_config || {
-        heading: `Welcome to ${event.draft_name || event.name || "Our Event"}`,
-        subheading: "Please enter your name to continue",
-        inputPlaceholder: "Your full name",
-        buttonText: "Continue",
-        bgColor: "#1a1a2e",
-        textColor: "#ffffff",
-        buttonColor: "#ffffff",
-        bgImage: null,
-        logo: null,
-        logoWidth: 100,
-      }
-    );
-  }, [event]);
-
-  const previewEvent: UserEvent = {
-    ...event,
-    draft_login_config: config,
-  };
-
-  const updateConfig = (patch: Partial<LoginConfig>) => {
-    setConfig((prev) => ({ ...prev, ...patch }));
-  };
+  const cfg = event.draft_login_config || event.login_config || {};
 
   const saveMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from("user_events")
-        .update({ draft_login_config: config })
-        .eq("id", event.id);
-
+    mutationFn: async (newCfg: LoginConfig) => {
+      const { error } = await supabase.from("user_events").update({ draft_login_config: newCfg }).eq("id", event.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
-      setToast({ message: "Login page saved", type: "success" });
-    },
-    onError: (err: Error) => {
-      setToast({ message: err.message, type: "error" });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", event.id] }),
+    onError: (err: any) => alert("Failed to save: " + (err.message || "Unknown error")),
   });
 
+  const [local, setLocal] = React.useState<LoginConfig>(cfg);
+  React.useEffect(() => setLocal(cfg), [JSON.stringify(cfg)]);
+  const update = (patch: Partial<LoginConfig>) => setLocal((prev) => ({ ...prev, ...patch }));
+
   return (
-    <div className="h-full p-4">
-      <SplitEditor preview={<LoginPreview event={previewEvent} />}>
-        <div className="flex flex-col gap-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
-            Login Page Editor
-          </h2>
-
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold text-dash-text">Login Page</h2>
+        <Button onClick={() => saveMutation.mutate(local)} loading={saveMutation.isPending}>Save Changes</Button>
+      </div>
+      <SplitEditor preview={<LoginPreview event={{ ...event, draft_login_config: local } as UserEvent} />}>
+        <Card className="p-4 space-y-4">
           <FormField label="Heading">
-            <Input
-              value={config.heading || ""}
-              onChange={(e) => updateConfig({ heading: e.target.value })}
-              placeholder="Welcome to our event"
-            />
+            <Input value={local.heading || ""} onChange={(e) => update({ heading: e.target.value })} />
           </FormField>
-
           <FormField label="Subheading">
-            <Textarea
-              value={config.subheading || ""}
-              onChange={(e) => updateConfig({ subheading: e.target.value })}
-              placeholder="Please enter your name to continue"
-              rows={2}
-            />
+            <Textarea value={local.subheading || ""} onChange={(e) => update({ subheading: e.target.value })} rows={2} />
           </FormField>
-
-          <FormField label="Input Placeholder">
-            <Input
-              value={config.inputPlaceholder || ""}
-              onChange={(e) => updateConfig({ inputPlaceholder: e.target.value })}
-              placeholder="Your full name"
-            />
+          <FormField label="Background Image">
+            <ImageUpload value={local.background_image || null} onChange={(url) => update({ background_image: url })} eventId={event.id} />
           </FormField>
-
-          <FormField label="Button Text">
-            <Input
-              value={config.buttonText || ""}
-              onChange={(e) => updateConfig({ buttonText: e.target.value })}
-              placeholder="Continue"
-            />
+          <FormField label="Logo Image">
+            <ImageUpload value={local.logo_image || null} onChange={(url) => update({ logo_image: url })} eventId={event.id} aspectRatio="1/1" />
           </FormField>
-
-          <hr className="border-gray-100" />
-
-          <h3 className="text-sm font-semibold text-gray-700">Design</h3>
-
-          <ImageUpload
-            value={config.bgImage || null}
-            onChange={(url) => updateConfig({ bgImage: url })}
-            eventId={event.id}
-            label="Background Image"
-            aspectRatio="16/9"
-          />
-
-          <ImageUpload
-            value={config.logo || null}
-            onChange={(url) => updateConfig({ logo: url })}
-            eventId={event.id}
-            label="Logo"
-            aspectRatio="auto"
-          />
-
-          {config.logo && (
-            <RangeInput
-              value={config.logoWidth || 100}
-              onChange={(v) => updateConfig({ logoWidth: v })}
-              min={40}
-              max={300}
-              step={10}
-              label="Logo Width"
-            />
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            <ColorInput
-              value={config.bgColor || "#1a1a2e"}
-              onChange={(v) => updateConfig({ bgColor: v })}
-              label="Background Color"
-            />
-            <ColorInput
-              value={config.textColor || "#ffffff"}
-              onChange={(v) => updateConfig({ textColor: v })}
-              label="Text Color"
-            />
+          <div className="flex items-center gap-3">
+            <Toggle checked={local.require_password || false} onChange={(v) => update({ require_password: v })} label="Require Password" />
           </div>
-
-          <ColorInput
-            value={config.buttonColor || "#ffffff"}
-            onChange={(v) => updateConfig({ buttonColor: v })}
-            label="Button Color"
-          />
-
-          <Button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
-          >
-            {saveMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Saving…
-              </>
-            ) : (
-              "Save Changes"
-            )}
-          </Button>
-        </div>
+          {local.require_password && (
+            <FormField label="Password">
+              <Input type="password" value={local.password || ""} onChange={(e) => update({ password: e.target.value })} />
+            </FormField>
+          )}
+        </Card>
       </SplitEditor>
-
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
     </div>
   );
 }
