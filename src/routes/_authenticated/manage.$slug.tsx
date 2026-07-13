@@ -678,7 +678,7 @@ function GuestsTab({ wedding }: { wedding: Wedding }) {
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">{g.full_name}</p>
                     <p className="text-xs text-onyx/50">
-                      {[g.access_code && `code: ${g.access_code}`, (groups ?? []).find((gr: any) => gr.id === g.group_id)?.name].filter(Boolean).join(" · ") || "—"}
+                      {(groups ?? []).find((gr: any) => gr.id === g.group_id)?.name || "—"}
                     </p>
                   </div>
                   <select value={g.group_id ?? ""} onChange={(e) => updateGuest.mutate({ id: g.id, patch: { group_id: e.target.value || null } })} className="text-xs border border-onyx/20 bg-transparent px-2 py-1">
