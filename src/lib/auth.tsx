@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase, type Wedding } from "./supabase";
+import { supabase } from "./supabase";
 import type { Session } from "@supabase/supabase-js";
 
 export function useSession() {

@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useWedding } from "@/lib/use-wedding";
-import { styleFor, getStyle } from "@/lib/text-styles";
+import { styleWithGlobal } from "@/lib/text-styles";
 import { PreserveText } from "@/components/guest/PreserveText";
 import type { WeddingContent } from "@/lib/supabase";
 
@@ -21,10 +21,10 @@ export function GuestCover() {
     <div className="min-h-screen flex flex-col items-center justify-center text-center px-6" style={{ background: bgUrl ? undefined : "#fdfcf9" }}>
       {bgUrl && <div className="fixed inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${bgUrl})`, opacity: 0.25 }} />}
       <div className="relative z-10 max-w-2xl">
-        <p className="text-sepia text-sm tracking-[0.35em] uppercase mb-6" style={styleFor(getStyle(content, "cover_subtitle"))}><PreserveText>{subtitle || `${month}${year ? `\n${year}` : ""}`}</PreserveText></p>
-        <h1 className="text-5xl md:text-7xl font-script text-onyx mb-8" style={styleFor(getStyle(content, "cover_heading"))}><PreserveText>{heading}</PreserveText></h1>
-        {welcome && <p className="text-sepia text-base italic max-w-md mx-auto mb-10" style={styleFor(getStyle(content, "cover_welcome"))}><PreserveText>{welcome}</PreserveText></p>}
-        <Link to={`/w/${slug}/invitation`} className="inline-block border-2 border-sepia/70 rounded-md px-8 py-3 text-sepia text-xs uppercase tracking-widest hover:bg-sepia hover:text-parchment transition-colors">View Invitation</Link>
+        <p className="mb-6" style={styleWithGlobal(content, "cover_subtitle")}><PreserveText>{subtitle || `${month}${year ? `\n${year}` : ""}`}</PreserveText></p>
+        <h1 className="mb-8" style={styleWithGlobal(content, "cover_heading")}><PreserveText>{heading}</PreserveText></h1>
+        {welcome && <p className="max-w-md mx-auto mb-10" style={styleWithGlobal(content, "cover_welcome")}><PreserveText>{welcome}</PreserveText></p>}
+        <Link to={`/w/${slug}/invitation`} className="inline-block border-2 border-sepia/70 rounded-md px-8 py-3 transition-colors hover:bg-sepia hover:text-parchment" style={styleWithGlobal(content, "cover_button")}>View Invitation</Link>
       </div>
     </div>
   );

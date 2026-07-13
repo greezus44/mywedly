@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { supabase, type Wedding, type WeddingContent, type GuestEvent, type Guest, type GuestGroup, type CustomPage, type Rsvp } from "@/lib/supabase";
+import { supabase, type Wedding, type WeddingContent, type GuestEvent, type Guest, type GuestGroup, type CustomPage, type Rsvp, type TypographySettings } from "@/lib/supabase";
 import { useWedding } from "@/lib/use-wedding";
-import { FONT_OPTIONS, THEME_PRESETS } from "@/lib/text-styles";
+import { THEME_PRESETS } from "@/lib/text-styles";
 import { formatEventDate, formatEventTime } from "@/lib/wedding-guest";
 import { ImageUpload } from "@/components/dashboard/ImageUpload";
 import { TimePicker12 } from "@/components/dashboard/TimePicker12";
 import { QrCodePanel } from "@/components/dashboard/QrCodePanel";
 import { WebsitePreview } from "@/components/dashboard/WebsitePreview";
+import { TextStyleEditor } from "@/components/dashboard/TextStyleEditor";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 type SubKey = "overview" | "web-cover" | "web-invitation" | "web-info" | "web-pages" | "ev-list" | "ev-rsvp" | "gu-list" | "gu-groups" | "gu-login" | "ap-appearance" | "st-general" | "st-public";
@@ -292,34 +293,30 @@ function SigninEditor({ wedding }: { wedding: Wedding }) {
 function AppearanceTab({ wedding }: { wedding: Wedding }) {
   const qc = useQueryClient();
   const content = (wedding.content ?? {}) as WeddingContent;
-  const [styles, setStyles] = useState<Record<string, any>>((content.text_styles as Record<string, any>) ?? {});
-  const updateStyle = (key: string, prop: string, val: string) => { const m = { ...styles, [key]: { ...styles[key], [prop]: val } }; setStyles(m); saveContent(wedding.id, { ...content, text_styles: m }, qc); };
-  const applyPreset = (preset: typeof THEME_PRESETS[number]) => { saveContent(wedding.id, { ...content, theme_preset: preset.name }, qc); };
+
+  const updateTypography = (typography: TypographySettings) => {
+    const m = { ...content, typography };
+    saveContent(wedding.id, m, qc);
+  };
+
+  const applyPreset = (preset: typeof THEME_PRESETS[number]) => {
+    const m = { ...content, theme_preset: preset.name };
+    saveContent(wedding.id, m, qc);
+  };
+
   return (
     <div>
       <h2 className="text-xl font-serif text-onyx mb-6">Appearance</h2>
       <div className="space-y-8">
         <section>
-          <h3 className="text-sm uppercase tracking-widest text-sepia mb-3">Presets</h3>
+          <h3 className="text-sm uppercase tracking-widest text-sepia mb-3">Theme Presets</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {THEME_PRESETS.map((p) => <button key={p.name} onClick={() => applyPreset(p)} className="border border-onyx/10 rounded-md p-3 text-center hover:border-sepia/40 transition-colors" style={{ background: p.bg }}><div className="h-8 rounded mb-2" style={{ background: p.accent }} /><span className="text-xs text-onyx">{p.name}</span></button>)}
           </div>
         </section>
         <section>
-          <h3 className="text-sm uppercase tracking-widest text-sepia mb-3">Typography</h3>
-          <div className="space-y-4">
-            {["cover_heading", "cover_subtitle", "invitation_text"].map((key) => (
-              <div key={key} className="border border-onyx/10 bg-card p-4 rounded-md">
-                <h4 className="text-xs uppercase tracking-widest text-sepia mb-2">{key.replace(/_/g, " ")}</h4>
-                <div className="grid grid-cols-2 gap-2">
-                  <select value={styles[key]?.fontFamily ?? ""} onChange={(e) => updateStyle(key, "fontFamily", e.target.value)} className="border border-onyx/20 p-2 text-sm bg-transparent"><option value="">Default</option>{FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}</select>
-                  <input type="color" value={styles[key]?.color ?? "#1a1a1a"} onChange={(e) => updateStyle(key, "color", e.target.value)} className="border border-onyx/20 p-1 h-10" />
-                  <input value={styles[key]?.size ?? ""} onChange={(e) => updateStyle(key, "size", e.target.value)} placeholder="Size (e.g. 2rem)" className="border border-onyx/20 p-2 text-sm bg-transparent" />
-                  <select value={styles[key]?.weight ?? ""} onChange={(e) => updateStyle(key, "weight", e.target.value)} className="border border-onyx/20 p-2 text-sm bg-transparent"><option value="">Default weight</option><option value="300">Light</option><option value="400">Regular</option><option value="500">Medium</option><option value="600">Semibold</option><option value="700">Bold</option></select>
-                </div>
-              </div>
-            ))}
-          </div>
+          <h3 className="text-sm uppercase tracking-widest text-sepia mb-4">Typography & Text Customization</h3>
+          <TextStyleEditor content={content} onChange={updateTypography} />
         </section>
       </div>
     </div>

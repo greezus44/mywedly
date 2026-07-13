@@ -7,6 +7,25 @@ export const supabase = createClient(url, anonKey, {
   auth: { persistSession: true, autoRefreshToken: true },
 });
 
+export type TextStyle = {
+  fontFamily?: string;
+  size?: string;
+  weight?: string;
+  fontStyle?: "normal" | "italic";
+  color?: string;
+  letterSpacing?: string;
+  lineHeight?: string;
+  textTransform?: "none" | "uppercase" | "lowercase" | "capitalize";
+  textAlign?: "left" | "center" | "right" | "justify";
+  textShadow?: string;
+  opacity?: string;
+};
+
+export type TypographySettings = {
+  global: TextStyle;
+  elements: Record<string, TextStyle>;
+};
+
 export type Wedding = {
   id: string; slug: string; couple_name_one: string; couple_name_two: string;
   wedding_date: string | null; location: string | null; hero_image_url: string | null;
@@ -15,18 +34,14 @@ export type Wedding = {
   content: Record<string, unknown>; signin_helper: Record<string, unknown>;
 };
 
-export type TextStyle = {
-  fontFamily?: string; size?: string; color?: string; weight?: string;
-  letterSpacing?: string; lineHeight?: string; textTransform?: string;
-  align?: string; italic?: boolean; bold?: boolean;
-};
-
 export type WeddingContent = {
   cover_heading?: string; cover_subtitle?: string; cover_welcome?: string;
   cover_background_url?: string; cover_logo_url?: string;
   invitation_text?: string; closing_text?: string; parents?: string;
   info_heading?: string; info_body?: string; info_image_url?: string;
-  text_styles?: Record<string, TextStyle>; theme_preset?: string;
+  text_styles?: Record<string, TextStyle>;
+  typography?: TypographySettings;
+  theme_preset?: string;
   [key: string]: unknown;
 };
 
