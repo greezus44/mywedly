@@ -1,184 +1,256 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type Wedding, type SharingEvent, type Rsvp, type Guest } from "../../lib/supabase";
+import { supabase, type Wedding, type SharingEvent, type Rsvp, type GuestbookEntry } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { Card, Badge, EmptyState } from "../../components/ui/index";
-import { formatDate, formatTime } from "../../lib/utils";
-import { Eye, QrCode, MousePointerClick, Heart, Monitor, Tablet, Smartphone, TrendingUp, Users, Clock } from "lucide-react";
+import { formatDate } from "../../lib/utils";
+import { Eye, QrCode, MousePointerClick, Heart, Smartphone, Monitor, Tablet, TrendingUp, Activity } from "lucide-react";
 
 export function AnalyticsPage() {
-  const [wedding, setWedding] = useState<Wedding | null>(null);
-  const [events, setEvents] = useState<SharingEvent[]>([]);
-  const [rsvps, setRsvps] = useState<Rsvp[]>([]);
-  const [guests, setGuests] = useState<Guest[]>([]);
-
   const { data: user } = useQuery({
     queryKey: ["auth-user"],
-    queryFn: async () => { const { data: { user } } = await supabase.auth.getUser(); return user; },
+    queryFn: async () => {
+      const { data } = await supabase.auth.getUser();
+      return data.user;
+    },
   });
 
-  const { data: wed, isLoading, error } = useQuery({
+  const { data: wedding } = useQuery({
     queryKey: ["wedding", user?.id],
-    enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase.from("weddings").select("*").eq("created_by", user!.id).maybeSingle();
-      if (error) throw error;
+      if (!user) return null;
+      const { data } = await supabase.from("weddings").select("*").eq("created_by", user.id).maybeSingle();
       return data as Wedding | null;
     },
+    enabled: !!user,
   });
 
-  const { data: eventData } = useQuery({
-    queryKey: ["sharing-events", wed?.id],
-    enabled: !!wed,
+  const { data: events, isLoading } = useQuery({
+    queryKey: ["sharing-events", wedding?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("sharing_events").select("*").eq("wedding_id", wed!.id).order("created_at", { ascending: false });
-      if (error) throw error;
+      if (!wedding) return [];
+      const { data } = await supabase.from("sharing_events").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false });
       return (data || []) as SharingEvent[];
     },
+    enabled: !!wedding,
   });
 
-  const { data: rsvpData } = useQuery({
-    queryKey: ["rsvps-analytics", wed?.id],
-    enabled: !!wed,
+  const { data: rsvps } = useQuery({
+    queryKey: ["rsvps", wedding?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("rsvps").select("*").eq("wedding_id", wed!.id);
-      if (error) throw error;
+      if (!wedding) return [];
+      const { data } = await supabase.from("rsvps").select("*").eq("wedding_id", wedding.id);
       return (data || []) as Rsvp[];
     },
+    enabled: !!wedding,
   });
 
-  const { data: guestData } = useQuery({
-    queryKey: ["guests-analytics", wed?.id],
-    enabled: !!wed,
+  const { data: messages } = useQuery({
+    queryKey: ["guestbook", wedding?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("guests").select("*").eq("wedding_id", wed!.id);
-      if (error) throw error;
-      return (data || []) as Guest[];
+      if (!wedding) return [];
+      const { data } = await supabase.from("guestbook_entries").select("*").eq("wedding_id", wedding.id);
+      return (data || []) as GuestbookEntry[];
     },
+    enabled: !!wedding,
   });
-
-  useEffect(() => { if (wed) setWedding(wed); }, [wed]);
-  useEffect(() => { if (eventData) setEvents(eventData); }, [eventData]);
-  useEffect(() => { if (rsvpData) setRsvps(rsvpData); }, [rsvpData]);
-  useEffect(() => { if (guestData) setGuests(guestData); }, [guestData]);
 
   const stats = useMemo(() => {
-    const visits = events.filter((e) => e.event_type === "visit").length;
-    const qrScans = events.filter((e) => e.event_type === "qr_scan").length;
-    const linkClicks = events.filter((e) => e.event_type === "link_click").length;
-    const rsvpCount = events.filter((e) => e.event_type === "rsvp").length;
+    const all = events || [];
+    const visits = all.filter((e) => e.event_type === "visit");
+    const scans = all.filter((e) => e.event_type === "qr_scan");
+    const clicks = all.filter((e) => e.event_type === "link_click");
 
-    const last14Days: { date: string; count: number }[] = [];
+    // 14-day bar chart data
+    const days: { date: string; count: number; label: string }[] = [];
     for (let i = 13; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().slice(0, 10);
-      const count = events.filter((e) => e.created_at.slice(0, 10) === dateStr).length;
-      last14Days.push({ date: dateStr, count });
+      const count = all.filter((e) => e.created_at.slice(0, 10) === dateStr).length;
+      days.push({ date: dateStr, count, label: d.toLocaleDateString("en-US", { weekday: "short", day: "numeric" }) });
     }
-    const maxCount = Math.max(...last14Days.map((d) => d.count), 1);
+    const maxCount = Math.max(...days.map((d) => d.count), 1);
 
+    // Device breakdown
     const deviceCounts: Record<string, number> = {};
-    events.forEach((e) => {
+    all.forEach((e) => {
       const dt = e.device_type || "unknown";
       deviceCounts[dt] = (deviceCounts[dt] || 0) + 1;
     });
+    const totalDevices = Object.values(deviceCounts).reduce((a, b) => a + b, 0) || 1;
 
-    const trafficSources = {
-      qr_scan: qrScans,
-      link_click: linkClicks,
-      direct: visits - qrScans - linkClicks < 0 ? 0 : visits - qrScans - linkClicks,
+    // Traffic sources
+    const sourceCounts: Record<string, number> = {};
+    all.forEach((e) => {
+      sourceCounts[e.event_type] = (sourceCounts[e.event_type] || 0) + 1;
+    });
+
+    // RSVP conversion
+    const totalVisits = visits.length || 1;
+    const rsvpCount = (rsvps || []).length;
+    const conversionRate = ((rsvpCount / totalVisits) * 100).toFixed(1);
+
+    return {
+      visits: visits.length,
+      scans: scans.length,
+      clicks: clicks.length,
+      rsvps: rsvpCount,
+      messages: (messages || []).length,
+      days,
+      maxCount,
+      deviceCounts,
+      totalDevices,
+      sourceCounts,
+      conversionRate,
     };
+  }, [events, rsvps, messages]);
 
-    const attending = rsvps.filter((r) => r.status === "attending").length;
-    const conversionRate = guests.length > 0 ? Math.round((rsvps.length / guests.length) * 100) : 0;
-
-    return { visits, qrScans, linkClicks, rsvpCount, last14Days, maxCount, deviceCounts, trafficSources, attending, conversionRate };
-  }, [events, rsvps, guests]);
-
-  if (isLoading) return <AdminLayout><div className="py-20 text-center text-gray-500">Loading…</div></AdminLayout>;
-  if (error) return <AdminLayout><div className="py-20 text-center text-red-600">{error.message}</div></AdminLayout>;
-  if (!wedding) return <AdminLayout><div className="py-20 text-center text-gray-500">No wedding found.</div></AdminLayout>;
+  if (!wedding) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center py-20">
+          <div className="text-gray-500">Loading analytics...</div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   const statCards = [
-    { label: "Total Visits", value: stats.visits, icon: Eye, color: "text-gray-900", bg: "bg-gray-100" },
-    { label: "QR Scans", value: stats.qrScans, icon: QrCode, color: "text-gray-900", bg: "bg-gray-100" },
-    { label: "Link Clicks", value: stats.linkClicks, icon: MousePointerClick, color: "text-gray-900", bg: "bg-gray-100" },
-    { label: "RSVP Actions", value: stats.rsvpCount, icon: Heart, color: "text-gray-900", bg: "bg-gray-100" },
+    { label: "Total Visits", value: stats.visits, icon: Eye, color: "text-gray-900" },
+    { label: "QR Scans", value: stats.scans, icon: QrCode, color: "text-gray-900" },
+    { label: "Link Clicks", value: stats.clicks, icon: MousePointerClick, color: "text-gray-900" },
+    { label: "RSVPs", value: stats.rsvps, icon: Heart, color: "text-gray-900" },
   ];
 
-  const deviceIcons: Record<string, typeof Monitor> = { desktop: Monitor, tablet: Tablet, mobile: Smartphone, unknown: Monitor };
-  const totalDevices = Object.values(stats.deviceCounts).reduce((a, b) => a + b, 0) || 1;
+  const deviceIcons: Record<string, typeof Monitor> = {
+    desktop: Monitor,
+    tablet: Tablet,
+    mobile: Smartphone,
+    unknown: Monitor,
+  };
 
-  const recentActivity = events.slice(0, 10);
+  const sourceLabels: Record<string, string> = {
+    visit: "Direct Visits",
+    qr_scan: "QR Scans",
+    link_click: "Link Clicks",
+    rsvp: "RSVP Actions",
+  };
 
   return (
     <AdminLayout>
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Analytics</h2>
-          <p className="text-sm text-gray-500">Track visits, scans, and engagement.</p>
+          <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+          <p className="mt-1 text-sm text-gray-500">Track visits, scans, and engagement for your wedding invitation.</p>
         </div>
 
+        {/* Stat Cards */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {statCards.map((s) => (
-            <Card key={s.label}>
-              <div className="flex items-center gap-3">
-                <div className={`rounded-lg p-2.5 ${s.bg}`}><s.icon className={`h-5 w-5 ${s.color}`} /></div>
+          {statCards.map((stat) => (
+            <Card key={stat.label}>
+              <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-medium text-gray-500">{s.label}</p>
-                  <p className="text-xl font-bold text-gray-900">{s.value}</p>
+                  <p className="text-sm font-medium text-gray-500">{stat.label}</p>
+                  <p className="mt-2 text-3xl font-bold text-gray-900">{stat.value}</p>
+                </div>
+                <div className="rounded-lg bg-gray-100 p-3">
+                  <stat.icon className={`h-6 w-6 ${stat.color}`} />
                 </div>
               </div>
             </Card>
           ))}
         </div>
 
+        {/* RSVP Conversion */}
         <Card>
-          <div className="mb-4 flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-gray-700" />
-            <h3 className="text-sm font-semibold text-gray-900">Activity (Last 14 Days)</h3>
-          </div>
-          <div className="flex items-end justify-between gap-1.5" style={{ height: "180px" }}>
-            {stats.last14Days.map((d) => (
-              <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
-                <div className="flex w-full items-end justify-center" style={{ height: "140px" }}>
-                  <div
-                    className="w-full max-w-[28px] rounded-t bg-gray-900 transition-all hover:bg-gray-700"
-                    style={{ height: `${(d.count / stats.maxCount) * 100}%`, minHeight: d.count > 0 ? "4px" : "2px" }}
-                    title={`${d.count} events on ${formatDate(d.date)}`}
-                  />
-                </div>
-                <span className="text-[10px] text-gray-400">{new Date(d.date).getDate()}</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-gray-100 p-2">
+                <TrendingUp className="h-5 w-5 text-gray-900" />
               </div>
-            ))}
+              <div>
+                <p className="text-sm text-gray-500">RSVP Conversion Rate</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.conversionRate}%</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-500">{stats.rsvps} RSVPs from {stats.visits} visits</p>
+            </div>
+          </div>
+          {/* Conversion bar */}
+          <div className="mt-4">
+            <div className="h-3 w-full rounded-full bg-gray-100">
+              <div
+                className="h-3 rounded-full bg-gray-900 transition-all"
+                style={{ width: `${Math.min(Number(stats.conversionRate), 100)}%` }}
+              />
+            </div>
           </div>
         </Card>
 
+        {/* 14-Day Bar Chart */}
+        <Card>
+          <div className="mb-4 flex items-center gap-2">
+            <Activity className="h-5 w-5 text-gray-500" />
+            <h2 className="text-lg font-semibold text-gray-900">Activity (Last 14 Days)</h2>
+          </div>
+          {isLoading ? (
+            <div className="text-gray-500">Loading chart...</div>
+          ) : (
+            <div>
+              <div className="flex items-end gap-1.5" style={{ height: "200px" }}>
+                {stats.days.map((day) => (
+                  <div key={day.date} className="flex flex-1 flex-col items-center gap-1">
+                    <div className="flex w-full flex-1 items-end">
+                      <div
+                        className="w-full rounded-t bg-gray-900 transition-all hover:bg-gray-700"
+                        style={{
+                          height: `${(day.count / stats.maxCount) * 100}%`,
+                          minHeight: day.count > 0 ? "4px" : "0px",
+                        }}
+                        title={`${day.count} events on ${day.date}`}
+                      />
+                    </div>
+                    <span className="text-[10px] text-gray-400">{day.label}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+                <span>14 days ago</span>
+                <span>Today</span>
+              </div>
+            </div>
+          )}
+        </Card>
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Device Breakdown */}
           <Card>
             <div className="mb-4 flex items-center gap-2">
-              <Monitor className="h-5 w-5 text-gray-700" />
-              <h3 className="text-sm font-semibold text-gray-900">Device Breakdown</h3>
+              <Smartphone className="h-5 w-5 text-gray-500" />
+              <h2 className="text-lg font-semibold text-gray-900">Device Breakdown</h2>
             </div>
-            {Object.keys(stats.deviceCounts).length === 0 ? (
-              <EmptyState icon={<Monitor className="h-8 w-8" />} title="No data yet" />
+            {stats.totalDevices <= 1 ? (
+              <EmptyState title="No data yet" description="Device data will appear as guests visit." />
             ) : (
               <div className="space-y-3">
                 {Object.entries(stats.deviceCounts).map(([device, count]) => {
                   const Icon = deviceIcons[device] || Monitor;
-                  const pct = Math.round((count / totalDevices) * 100);
+                  const pct = ((count / stats.totalDevices) * 100).toFixed(1);
                   return (
-                    <div key={device} className="flex items-center gap-3">
-                      <Icon className="h-5 w-5 text-gray-500" />
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="capitalize text-gray-700">{device}</span>
-                          <span className="text-gray-500">{count} ({pct}%)</span>
-                        </div>
-                        <div className="mt-1 h-2 w-full rounded-full bg-gray-100">
-                          <div className="h-2 rounded-full bg-gray-900" style={{ width: `${pct}%` }} />
-                        </div>
+                    <div key={device}>
+                      <div className="mb-1 flex items-center justify-between text-sm">
+                        <span className="flex items-center gap-1.5 text-gray-700">
+                          <Icon className="h-4 w-4" /> {device}
+                        </span>
+                        <span className="text-gray-500">{count} ({pct}%)</span>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-gray-100">
+                        <div
+                          className="h-2 rounded-full bg-gray-900"
+                          style={{ width: `${pct}%` }}
+                        />
                       </div>
                     </div>
                   );
@@ -187,80 +259,67 @@ export function AnalyticsPage() {
             )}
           </Card>
 
+          {/* Traffic Sources */}
           <Card>
             <div className="mb-4 flex items-center gap-2">
-              <MousePointerClick className="h-5 w-5 text-gray-700" />
-              <h3 className="text-sm font-semibold text-gray-900">Traffic Sources</h3>
+              <TrendingUp className="h-5 w-5 text-gray-500" />
+              <h2 className="text-lg font-semibold text-gray-900">Traffic Sources</h2>
             </div>
-            <div className="space-y-3">
-              {Object.entries(stats.trafficSources).map(([source, count]) => {
-                const total = Object.values(stats.trafficSources).reduce((a, b) => a + b, 0) || 1;
-                const pct = Math.round((count / total) * 100);
-                return (
-                  <div key={source} className="flex items-center gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="capitalize text-gray-700">{source.replace("_", " ")}</span>
+            {Object.keys(stats.sourceCounts).length === 0 ? (
+              <EmptyState title="No data yet" description="Traffic source data will appear here." />
+            ) : (
+              <div className="space-y-3">
+                {Object.entries(stats.sourceCounts).map(([source, count]) => {
+                  const total = Object.values(stats.sourceCounts).reduce((a, b) => a + b, 0) || 1;
+                  const pct = ((count / total) * 100).toFixed(1);
+                  return (
+                    <div key={source}>
+                      <div className="mb-1 flex items-center justify-between text-sm">
+                        <span className="text-gray-700">{sourceLabels[source] || source}</span>
                         <span className="text-gray-500">{count} ({pct}%)</span>
                       </div>
-                      <div className="mt-1 h-2 w-full rounded-full bg-gray-100">
-                        <div className="h-2 rounded-full bg-gray-900" style={{ width: `${pct}%` }} />
+                      <div className="h-2 w-full rounded-full bg-gray-100">
+                        <div
+                          className="h-2 rounded-full bg-gray-900"
+                          style={{ width: `${pct}%` }}
+                        />
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </Card>
         </div>
 
+        {/* Recent Activity */}
         <Card>
           <div className="mb-4 flex items-center gap-2">
-            <Heart className="h-5 w-5 text-gray-700" />
-            <h3 className="text-sm font-semibold text-gray-900">RSVP Conversion</h3>
+            <Activity className="h-5 w-5 text-gray-500" />
+            <h2 className="text-lg font-semibold text-gray-900">Recent Activity</h2>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="rounded-lg border border-gray-200 p-4 text-center">
-              <Users className="mx-auto h-6 w-6 text-gray-500" />
-              <p className="mt-2 text-2xl font-bold text-gray-900">{guests.length}</p>
-              <p className="text-xs text-gray-500">Total Guests</p>
-            </div>
-            <div className="rounded-lg border border-gray-200 p-4 text-center">
-              <Heart className="mx-auto h-6 w-6 text-gray-500" />
-              <p className="mt-2 text-2xl font-bold text-gray-900">{rsvps.length}</p>
-              <p className="text-xs text-gray-500">RSVPs Received</p>
-            </div>
-            <div className="rounded-lg border border-gray-200 p-4 text-center">
-              <TrendingUp className="mx-auto h-6 w-6 text-gray-500" />
-              <p className="mt-2 text-2xl font-bold text-gray-900">{stats.conversionRate}%</p>
-              <p className="text-xs text-gray-500">Conversion Rate</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <div className="mb-4 flex items-center gap-2">
-            <Clock className="h-5 w-5 text-gray-700" />
-            <h3 className="text-sm font-semibold text-gray-900">Recent Activity</h3>
-          </div>
-          {recentActivity.length === 0 ? (
-            <EmptyState icon={<Clock className="h-8 w-8" />} title="No activity yet" description="Visitor events will appear here." />
+          {isLoading ? (
+            <div className="text-gray-500">Loading activity...</div>
+          ) : (events || []).length === 0 ? (
+            <EmptyState icon={<Activity className="h-8 w-8" />} title="No activity yet" description="Visitor activity will appear here." />
           ) : (
-            <ul className="space-y-2">
-              {recentActivity.map((e) => (
-                <li key={e.id} className="flex items-center justify-between border-b border-gray-100 pb-2 last:border-0">
+            <div className="space-y-2">
+              {(events || []).slice(0, 10).map((event) => (
+                <div key={event.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
                   <div className="flex items-center gap-2">
-                    {e.event_type === "visit" && <Eye className="h-4 w-4 text-gray-400" />}
-                    {e.event_type === "qr_scan" && <QrCode className="h-4 w-4 text-gray-400" />}
-                    {e.event_type === "link_click" && <MousePointerClick className="h-4 w-4 text-gray-400" />}
-                    {e.event_type === "rsvp" && <Heart className="h-4 w-4 text-gray-400" />}
-                    <span className="text-sm text-gray-700 capitalize">{e.event_type.replace("_", " ")}</span>
-                    {e.device_type && <Badge variant="default">{e.device_type}</Badge>}
+                    {event.event_type === "visit" && <Eye className="h-4 w-4 text-gray-500" />}
+                    {event.event_type === "qr_scan" && <QrCode className="h-4 w-4 text-gray-500" />}
+                    {event.event_type === "link_click" && <MousePointerClick className="h-4 w-4 text-gray-500" />}
+                    {event.event_type === "rsvp" && <Heart className="h-4 w-4 text-gray-500" />}
+                    <span className="text-sm font-medium text-gray-900">{sourceLabels[event.event_type] || event.event_type}</span>
+                    {event.device_type && (
+                      <Badge variant="default">{event.device_type}</Badge>
+                    )}
                   </div>
-                  <span className="text-xs text-gray-400">{formatDate(e.created_at)} {formatTime(e.created_at)}</span>
-                </li>
+                  <span className="text-xs text-gray-400">{formatDate(event.created_at)}</span>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </Card>
       </div>

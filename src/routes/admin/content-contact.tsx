@@ -5,81 +5,88 @@ import { AdminLayout } from "./admin-layout";
 import { SplitEditor, type DeviceType } from "../../components/preview/SplitEditor";
 import { ContactPreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
-import { FormField } from "../../components/ui/ImageUpload";
-import { Toast } from "../../components/ui/index";
-import { Save, Upload, Phone, Mail, MapPin } from "lucide-react";
+import { Input, Textarea, Label } from "../../components/ui/Input";
+import { Save, Upload } from "lucide-react";
 
 export function ContentContactPage() {
   const queryClient = useQueryClient();
-  const [wedding, setWedding] = useState<Wedding | null>(null);
   const [content, setContent] = useState<WeddingContent>({});
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const [device, setDevice] = useState<DeviceType>("desktop");
+  const [toast, setToast] = useState<string | null>(null);
 
   const { data: user } = useQuery({
     queryKey: ["auth-user"],
-    queryFn: async () => { const { data: { user } } = await supabase.auth.getUser(); return user; },
-  });
-
-  const { data: wed, isLoading, error } = useQuery({
-    queryKey: ["wedding", user?.id],
-    enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase.from("weddings").select("*").eq("created_by", user!.id).maybeSingle();
-      if (error) throw error;
-      return data as Wedding | null;
+      const { data } = await supabase.auth.getUser();
+      return data.user;
     },
   });
 
+  const { data: wedding } = useQuery({
+    queryKey: ["wedding", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data } = await supabase.from("weddings").select("*").eq("created_by", user.id).maybeSingle();
+      return data as Wedding | null;
+    },
+    enabled: !!user,
+  });
+
   useEffect(() => {
-    if (wed) {
-      setWedding(wed);
-      setContent(wed.draft_content || wed.content || {});
+    if (wedding) {
+      setContent(wedding.draft_content || wedding.content || {});
     }
-  }, [wed]);
+  }, [wedding]);
 
   const saveDraftMutation = useMutation({
-    mutationFn: async (newContent: WeddingContent) => {
-      const { error } = await supabase.from("weddings").update({ draft_content: newContent }).eq("id", wedding!.id);
+    mutationFn: async () => {
+      if (!wedding) throw new Error("No wedding");
+      const { error } = await supabase.from("weddings").update({ draft_content: content }).eq("id", wedding.id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wedding", user?.id] });
-      setToast({ message: "Draft saved", type: "success" });
+      setToast("Draft saved");
+      setTimeout(() => setToast(null), 2000);
     },
-    onError: () => setToast({ message: "Failed to save draft", type: "error" }),
   });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("weddings").update({ draft_content: content, content: content, is_published: true }).eq("id", wedding!.id);
+      if (!wedding) throw new Error("No wedding");
+      const { error } = await supabase.from("weddings").update({ draft_content: content, content }).eq("id", wedding.id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wedding", user?.id] });
-      setToast({ message: "Contact content published!", type: "success" });
+      setToast("Contact content published!");
+      setTimeout(() => setToast(null), 2000);
     },
-    onError: () => setToast({ message: "Failed to publish", type: "error" }),
   });
 
-  if (isLoading) return <AdminLayout><div className="py-20 text-center text-gray-500">Loading…</div></AdminLayout>;
-  if (error) return <AdminLayout><div className="py-20 text-center text-red-600">{error.message}</div></AdminLayout>;
-  if (!wedding) return <AdminLayout><div className="py-20 text-center text-gray-500">No wedding found.</div></AdminLayout>;
+  const update = <K extends keyof WeddingContent>(key: K, value: WeddingContent[K]) => {
+    setContent((prev) => ({ ...prev, [key]: value }));
+  };
 
-  const update = (patch: Partial<WeddingContent>) => setContent((prev) => ({ ...prev, ...patch }));
-  const previewWedding = { ...wedding, draft_content: content } as Wedding;
+  if (!wedding) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center py-20">
+          <div className="text-gray-500">Loading contact editor...</div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">Contact Content</h2>
-            <p className="text-sm text-gray-500">Edit the contact information for your invitation.</p>
+            <h1 className="text-2xl font-bold text-gray-900">Contact Content</h1>
+            <p className="mt-1 text-sm text-gray-500">Edit your contact information shown to guests.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => saveDraftMutation.mutate(content)} disabled={saveDraftMutation.isPending}>
+            <Button variant="outline" onClick={() => saveDraftMutation.mutate()} disabled={saveDraftMutation.isPending}>
               <Save className="mr-1.5 h-4 w-4" /> Save Draft
             </Button>
             <Button onClick={() => publishMutation.mutate()} disabled={publishMutation.isPending}>
@@ -88,30 +95,43 @@ export function ContentContactPage() {
           </div>
         </div>
 
-        <SplitEditor device={device} onDeviceChange={setDevice} preview={(d) => <ContactPreview wedding={previewWedding} device={d} />}>
-          <div className="space-y-4">
-            <FormField label="Phone Number">
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input className="pl-10" value={content.contact_phone || ""} onChange={(e) => update({ contact_phone: e.target.value })} placeholder="+60 12 345 6789" />
+        <SplitEditor
+          preview={(device: DeviceType) => <ContactPreview wedding={{ ...wedding, draft_content: content } as Wedding} device={device} />}
+        >
+          <div className="space-y-6">
+            <div>
+              <Label className="mb-3">Contact Information</Label>
+              <div className="space-y-3">
+                <Input
+                  label="Phone Number"
+                  value={content.contact_phone || ""}
+                  onChange={(e) => update("contact_phone", e.target.value)}
+                  placeholder="+60 12 345 6789"
+                />
+                <Input
+                  label="Email Address"
+                  value={content.contact_email || ""}
+                  onChange={(e) => update("contact_email", e.target.value)}
+                  placeholder="hello@example.com"
+                />
+                <Textarea
+                  label="Address"
+                  value={content.contact_address || ""}
+                  onChange={(e) => update("contact_address", e.target.value)}
+                  placeholder="123 Wedding Venue, Kuala Lumpur, Malaysia"
+                  rows={3}
+                />
               </div>
-            </FormField>
-            <FormField label="Email Address">
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input className="pl-10" value={content.contact_email || ""} onChange={(e) => update({ contact_email: e.target.value })} placeholder="contact@example.com" />
-              </div>
-            </FormField>
-            <FormField label="Address">
-              <div className="relative">
-                <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Textarea className="pl-10" value={content.contact_address || ""} onChange={(e) => update({ contact_address: e.target.value })} placeholder="Venue address…" />
-              </div>
-            </FormField>
+            </div>
           </div>
         </SplitEditor>
+
+        {toast && (
+          <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">
+            {toast}
+          </div>
+        )}
       </div>
-      {toast && <Toast message={toast.message} type={toast.type} />}
     </AdminLayout>
   );
 }

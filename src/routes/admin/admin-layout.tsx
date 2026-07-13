@@ -25,12 +25,12 @@ const navItems = [
 export function AdminLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
-  const handleSignOut = async () => { await supabase.auth.signOut(); navigate("/admin-login"); };
+  const handleSignOut = async () => { await supabase.auth.signOut(); navigate("/login"); };
   return (
     <div className="min-h-screen bg-gray-50 dash-root">
       <aside className={cn("fixed inset-y-0 left-0 z-50 w-64 transform bg-white border-r border-gray-200 transition-transform lg:translate-x-0", sidebarOpen ? "translate-x-0" : "-translate-x-full")}>
         <div className="flex h-16 items-center justify-between border-b border-gray-200 px-4">
-          <span className="text-lg font-semibold text-gray-900">Admin Panel</span>
+          <span className="text-lg font-semibold text-gray-900">Wedding Creator</span>
           <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-gray-500"><X className="h-5 w-5" /></button>
         </div>
         <nav className="flex-1 overflow-y-auto p-3 space-y-1" style={{ maxHeight: "calc(100vh - 4rem)" }}>
@@ -47,8 +47,8 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       <div className="lg:pl-64">
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-gray-200 bg-white/80 px-4 backdrop-blur">
           <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-gray-600"><Menu className="h-6 w-6" /></button>
-          <h1 className="text-lg font-semibold text-gray-900 hidden lg:block">Wedding Invitation Manager</h1>
-          <div className="flex items-center gap-2 text-sm text-gray-500"><Heart className="h-4 w-4 text-gray-400" /><span>Admin Dashboard</span></div>
+          <h1 className="text-lg font-semibold text-gray-900 hidden lg:block">Wedding Invitation Studio</h1>
+          <div className="flex items-center gap-2 text-sm text-gray-500"><Heart className="h-4 w-4 text-gray-400" /><span>Creator Dashboard</span></div>
         </header>
         <main className="p-4 lg:p-6">{children}</main>
       </div>

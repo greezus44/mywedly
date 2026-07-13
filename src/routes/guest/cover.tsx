@@ -10,7 +10,7 @@ import {
   getLogoStyle,
   getLogoPositionClasses,
 } from "../../lib/theme";
-import { getCountdown, getDeviceType } from "../../lib/utils";
+import { getCountdown, formatDate, getDeviceType } from "../../lib/utils";
 import { ArrowRight } from "lucide-react";
 
 export function Cover() {
@@ -22,33 +22,40 @@ export function Cover() {
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false });
   const [slideIndex, setSlideIndex] = useState(0);
 
-  // Fetch wedding + handle QR token
   useEffect(() => {
     if (!slug) return;
+    supabase
+      .from("weddings")
+      .select("*")
+      .eq("slug", slug)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setWedding(data as Wedding);
+        setLoading(false);
+      });
+  }, [slug]);
+
+  // Track visit
+  useEffect(() => {
+    if (!wedding) return;
+    supabase.from("sharing_events").insert({
+      wedding_id: wedding.id,
+      event_type: "visit",
+      device_type: getDeviceType(),
+    }).then(() => {});
+  }, [wedding]);
+
+  // Handle QR token login via ?t=token
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("t");
-
-    supabase.from("weddings").select("*").eq("slug", slug).maybeSingle().then(async ({ data }) => {
-      if (data) {
-        setWedding(data as Wedding);
-        // Track visit
-        supabase.from("sharing_events").insert({
-          wedding_id: (data as Wedding).id,
-          event_type: "visit",
-          device_type: getDeviceType(),
-        }).then(() => {});
-        // QR token login
-        if (token) {
-          const { error } = await signInWithToken(token);
-          if (!error) {
-            navigate(`/w/${slug}/home`, { replace: true });
-            return;
-          }
-        }
+    if (!token || !wedding) return;
+    signInWithToken(token).then(({ error }) => {
+      if (!error) {
+        navigate(`/w/${slug}/home`, { replace: true });
       }
-      setLoading(false);
     });
-  }, [slug, navigate, signInWithToken]);
+  }, [wedding, slug, signInWithToken, navigate]);
 
   // Countdown
   useEffect(() => {
@@ -62,17 +69,17 @@ export function Cover() {
   // Slideshow
   const cover = getCoverConfig(wedding);
   useEffect(() => {
-    if (cover.background.type !== "slideshow" || cover.background.slideshow_urls.length <= 1) return;
+    if (cover.background.type !== "slideshow" || !cover.background.slideshow_urls?.length) return;
     const id = setInterval(() => {
       setSlideIndex((prev) => (prev + 1) % cover.background.slideshow_urls.length);
     }, 5000);
     return () => clearInterval(id);
-  }, [cover.background.type, cover.background.slideshow_urls.length]);
+  }, [cover.background.type, cover.background.slideshow_urls]);
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: cover.background.color }}>
-        <div className="animate-pulse text-sm font-light tracking-widest uppercase text-white/60">Loading...</div>
+      <div className="flex min-h-screen items-center justify-center bg-black">
+        <div className="animate-pulse text-gray-600">Loading...</div>
       </div>
     );
   }
@@ -80,8 +87,8 @@ export function Cover() {
   const theme = getTheme(wedding);
   const bg = cover.background;
   const logo = cover.branding.logo;
+  const logoPos = getLogoPositionClasses(logo.position);
   const device = getDeviceType();
-  const pos = getLogoPositionClasses(logo.position || "top-center");
 
   const bgStyle: React.CSSProperties = {};
   if (bg.type === "image" && bg.image_url) {
@@ -90,21 +97,38 @@ export function Cover() {
     bgStyle.backgroundPosition = "center";
   } else if (bg.type === "color") {
     bgStyle.background = bg.color;
+  } else if (bg.type === "slideshow" && bg.slideshow_urls?.length) {
+    bgStyle.backgroundImage = `url(${bg.slideshow_urls[slideIndex]})`;
+    bgStyle.backgroundSize = "cover";
+    bgStyle.backgroundPosition = "center";
+    bgStyle.transition = "background-image 1s ease-in-out";
   }
 
-  const vPosClass = cover.layout.vertical_position === "top" ? "justify-start" : cover.layout.vertical_position === "bottom" ? "justify-end" : "justify-center";
-  const alignClass = cover.layout.content_alignment === "left" ? "items-start text-left" : cover.layout.content_alignment === "right" ? "items-end text-right" : "items-center text-center";
+  const alignmentClass =
+    cover.layout.content_alignment === "left"
+      ? "items-start text-left"
+      : cover.layout.content_alignment === "right"
+      ? "items-end text-right"
+      : "items-center text-center";
 
-  const handleEnter = () => {
-    if (slug) navigate(`/w/${slug}/login`);
-  };
+  const vPosClass =
+    cover.layout.vertical_position === "top"
+      ? "justify-start"
+      : cover.layout.vertical_position === "bottom"
+      ? "justify-end"
+      : "justify-center";
 
-  const countdownKeys = ["days", "hours", "minutes", "seconds"] as const;
+  const enterUrl = slug ? `/w/${slug}/login` : "/";
 
   return (
     <div
       className="relative flex min-h-screen flex-col overflow-hidden"
-      style={{ ...themeToCssVars(theme), ...coverToCssVars(cover), ...bgStyle, filter: `brightness(${cover.brightness}) blur(${cover.blur})` } as React.CSSProperties}
+      style={{
+        ...themeToCssVars(theme),
+        ...coverToCssVars(cover),
+        ...bgStyle,
+        filter: `brightness(${cover.brightness}) blur(${cover.blur})`,
+      } as React.CSSProperties}
     >
       {/* Video background */}
       {bg.type === "video" && bg.video_url && (
@@ -118,99 +142,92 @@ export function Cover() {
         />
       )}
 
-      {/* Slideshow background */}
-      {bg.type === "slideshow" && bg.slideshow_urls.length > 0 && (
-        <div className="absolute inset-0">
-          {bg.slideshow_urls.map((url, i) => (
-            <div
-              key={i}
-              className="absolute inset-0 bg-cover bg-center transition-opacity duration-1000"
-              style={{
-                backgroundImage: `url(${url})`,
-                opacity: i === slideIndex ? 1 : 0,
-              }}
-            />
-          ))}
-        </div>
-      )}
-
       {/* Overlay */}
       {cover.overlay.enabled && (
         <div
           className="absolute inset-0"
-          style={{ background: cover.overlay.color, opacity: cover.overlay.opacity }}
+          style={{
+            background: cover.overlay.color,
+            opacity: cover.overlay.opacity,
+          }}
         />
       )}
 
       {/* Content */}
       <div
-        className={`relative z-10 flex min-h-screen flex-col p-6 ${vPosClass} ${alignClass}`}
-        style={{ maxWidth: cover.layout.max_width, margin: "0 auto", width: "100%", padding: cover.layout.padding }}
+        className={`relative z-10 flex min-h-screen flex-col p-6 md:p-10 ${vPosClass} ${alignmentClass}`}
+        style={{ maxWidth: cover.layout.max_width, margin: "0 auto", width: "100%" }}
       >
         {/* Logo */}
-        {logo.visible && logo.url && (
-          <div className={`flex w-full ${pos.container} animate-fade-in`}>
-            <div className={pos.item} style={{ transform: `translate(${logo.offsetX}, ${logo.offsetY})` }}>
+        {logo.url && logo.visible && (
+          <div className={`flex w-full ${logoPos.container} animate-fade-in`} style={{ padding: logo.padding }}>
+            <div className={logoPos.item} style={{ transform: `translate(${logo.offsetX}, ${logo.offsetY})` }}>
               <img src={logo.url} alt="logo" style={getLogoStyle(logo, device)} />
             </div>
           </div>
         )}
 
         {/* Couple names */}
-        <h1
-          className="mt-4 animate-fade-in-up font-heading"
-          style={{
-            color: cover.typography.heading_color,
-            fontSize: cover.typography.heading_size,
-            fontWeight: cover.typography.heading_weight,
-            letterSpacing: cover.typography.letter_spacing,
-            animationDelay: "0.1s",
-          }}
-        >
-          {cover.branding.couple_name_one || wedding?.couple_name_one || ""}
-        </h1>
-
-        <p className="my-2 animate-fade-in-up font-script text-3xl" style={{ color: cover.typography.body_color, animationDelay: "0.2s" }}>
-          &
-        </p>
-
-        <h1
-          className="animate-fade-in-up font-heading"
-          style={{
-            color: cover.typography.heading_color,
-            fontSize: cover.typography.heading_size,
-            fontWeight: cover.typography.heading_weight,
-            letterSpacing: cover.typography.letter_spacing,
-            animationDelay: "0.3s",
-          }}
-        >
-          {cover.branding.couple_name_two || wedding?.couple_name_two || ""}
-        </h1>
+        <div className="animate-fade-in-up" style={{ animationDelay: "0.2s", opacity: 0 }}>
+          <h1
+            className="font-heading"
+            style={{
+              color: "var(--cover-text)",
+              fontSize: cover.typography.heading_size,
+              fontWeight: cover.typography.heading_weight,
+              letterSpacing: cover.typography.letter_spacing,
+            }}
+          >
+            {cover.branding.couple_name_one || wedding?.couple_name_one || ""}
+          </h1>
+          <p className="my-2 font-script text-3xl md:text-4xl" style={{ color: "var(--cover-body-color)" }}>
+            &
+          </p>
+          <h1
+            className="font-heading"
+            style={{
+              color: "var(--cover-text)",
+              fontSize: cover.typography.heading_size,
+              fontWeight: cover.typography.heading_weight,
+              letterSpacing: cover.typography.letter_spacing,
+            }}
+          >
+            {cover.branding.couple_name_two || wedding?.couple_name_two || ""}
+          </h1>
+        </div>
 
         {/* Date */}
         {cover.show_date && (cover.branding.date || wedding?.wedding_date) && (
           <p
             className="mt-4 animate-fade-in-up font-body"
-            style={{ color: cover.typography.body_color, fontSize: cover.typography.body_size, animationDelay: "0.4s" }}
+            style={{
+              color: "var(--cover-body-color)",
+              fontSize: cover.typography.body_size,
+              animationDelay: "0.4s",
+              opacity: 0,
+            }}
           >
-            {cover.branding.date || wedding?.wedding_date}
+            {cover.branding.date || formatDate(wedding?.wedding_date || null)}
           </p>
         )}
 
         {/* Countdown */}
         {cover.show_countdown && !countdown.isPast && (
-          <div className="mt-8 flex animate-fade-in-up gap-6 md:gap-10" style={{ animationDelay: "0.5s" }}>
-            {countdownKeys.map((k) => (
+          <div
+            className="mt-8 flex animate-fade-in-up gap-6 md:gap-10"
+            style={{ animationDelay: "0.6s", opacity: 0 }}
+          >
+            {(["days", "hours", "minutes", "seconds"] as const).map((k) => (
               <div key={k} className="text-center">
                 <div
-                  className="font-heading text-2xl md:text-4xl"
-                  style={{ color: cover.typography.heading_color }}
+                  className="font-heading text-3xl md:text-4xl"
+                  style={{ color: "var(--cover-text)" }}
                 >
-                  {String(countdown[k]).padStart(2, "0")}
+                  {countdown[k]}
                 </div>
                 <div
-                  className="mt-1 text-[0.625rem] uppercase tracking-widest md:text-xs"
-                  style={{ color: cover.typography.body_color }}
+                  className="mt-1 text-xs uppercase tracking-widest"
+                  style={{ color: "var(--cover-body-color)" }}
                 >
                   {k}
                 </div>
@@ -221,18 +238,21 @@ export function Cover() {
 
         {/* Enter button */}
         <button
-          onClick={handleEnter}
-          className="mt-10 flex animate-fade-in-up items-center gap-2 font-body transition hover:scale-105"
+          onClick={() => navigate(enterUrl)}
+          className="mt-10 animate-fade-in-up font-body transition-transform hover:scale-105"
           style={{
             background: cover.button.bg_color,
             color: cover.button.text_color,
             borderRadius: cover.button.border_radius,
             padding: `${cover.button.padding_y} ${cover.button.padding_x}`,
-            animationDelay: "0.6s",
+            animationDelay: "0.8s",
+            opacity: 0,
           }}
         >
-          {cover.enter_button_text || "Enter Website"}
-          <ArrowRight className="h-4 w-4" />
+          <span className="inline-flex items-center gap-2">
+            {cover.enter_button_text || "Enter Website"}
+            <ArrowRight className="h-4 w-4" />
+          </span>
         </button>
       </div>
     </div>

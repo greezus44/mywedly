@@ -1,197 +1,261 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Wedding, type Rsvp, type Guest, type WeddingEvent, type RsvpStatus } from "../../lib/supabase";
+import { supabase, type Wedding, type Rsvp, type WeddingEvent, type Guest, type RsvpStatus } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { Button } from "../../components/ui/Button";
 import { Input, Select } from "../../components/ui/Input";
-import { Card, Badge, EmptyState, Toast } from "../../components/ui/index";
-import { formatDate, formatTime } from "../../lib/utils";
-import { Search, Heart, Check, X, Clock, Download } from "lucide-react";
+import { Card, Badge, EmptyState } from "../../components/ui/index";
+import { formatDate } from "../../lib/utils";
+import { Search, Heart, Check, X, Clock, Users } from "lucide-react";
 
 export function RsvpsPage() {
   const queryClient = useQueryClient();
-  const [wedding, setWedding] = useState<Wedding | null>(null);
-  const [rsvps, setRsvps] = useState<Rsvp[]>([]);
-  const [guests, setGuests] = useState<Guest[]>([]);
-  const [events, setEvents] = useState<WeddingEvent[]>([]);
-  const [filterStatus, setFilterStatus] = useState<"all" | RsvpStatus>("all");
-  const [filterEvent, setFilterEvent] = useState<"all" | string>("all");
   const [search, setSearch] = useState("");
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | RsvpStatus>("all");
+  const [eventFilter, setEventFilter] = useState<string>("all");
+  const [toast, setToast] = useState<string | null>(null);
 
   const { data: user } = useQuery({
     queryKey: ["auth-user"],
-    queryFn: async () => { const { data: { user } } = await supabase.auth.getUser(); return user; },
+    queryFn: async () => {
+      const { data } = await supabase.auth.getUser();
+      return data.user;
+    },
   });
 
-  const { data: wed, isLoading, error } = useQuery({
+  const { data: wedding } = useQuery({
     queryKey: ["wedding", user?.id],
-    enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase.from("weddings").select("*").eq("created_by", user!.id).maybeSingle();
-      if (error) throw error;
+      if (!user) return null;
+      const { data } = await supabase.from("weddings").select("*").eq("created_by", user.id).maybeSingle();
       return data as Wedding | null;
     },
+    enabled: !!user,
   });
 
-  const { data: rsvpData, refetch } = useQuery({
-    queryKey: ["rsvps", wed?.id],
-    enabled: !!wed,
+  const { data: rsvps, isLoading } = useQuery({
+    queryKey: ["rsvps", wedding?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("rsvps").select("*").eq("wedding_id", wed!.id).order("created_at", { ascending: false });
-      if (error) throw error;
+      if (!wedding) return [];
+      const { data } = await supabase.from("rsvps").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false });
       return (data || []) as Rsvp[];
     },
+    enabled: !!wedding,
   });
 
-  const { data: guestData } = useQuery({
-    queryKey: ["guests-all", wed?.id],
-    enabled: !!wed,
+  const { data: events } = useQuery({
+    queryKey: ["events", wedding?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("guests").select("*").eq("wedding_id", wed!.id);
-      if (error) throw error;
-      return (data || []) as Guest[];
-    },
-  });
-
-  const { data: eventData } = useQuery({
-    queryKey: ["events-all", wed?.id],
-    enabled: !!wed,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("events").select("*").eq("wedding_id", wed!.id).order("sort_order", { ascending: true });
-      if (error) throw error;
+      if (!wedding) return [];
+      const { data } = await supabase.from("events").select("*").eq("wedding_id", wedding.id);
       return (data || []) as WeddingEvent[];
     },
+    enabled: !!wedding,
   });
 
-  useEffect(() => { if (wed) setWedding(wed); }, [wed]);
-  useEffect(() => { if (rsvpData) setRsvps(rsvpData); }, [rsvpData]);
-  useEffect(() => { if (guestData) setGuests(guestData); }, [guestData]);
-  useEffect(() => { if (eventData) setEvents(eventData); }, [eventData]);
+  const { data: guests } = useQuery({
+    queryKey: ["guests", wedding?.id],
+    queryFn: async () => {
+      if (!wedding) return [];
+      const { data } = await supabase.from("guests").select("*").eq("wedding_id", wedding.id);
+      return (data || []) as Guest[];
+    },
+    enabled: !!wedding,
+  });
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: RsvpStatus }) => {
       const { error } = await supabase.from("rsvps").update({ status }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { refetch(); queryClient.invalidateQueries({ queryKey: ["rsvps", wed?.id] }); setToast({ message: "RSVP updated", type: "success" }); },
-    onError: (e) => setToast({ message: e.message, type: "error" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["rsvps", wedding?.id] });
+      setToast("RSVP updated");
+      setTimeout(() => setToast(null), 2000);
+    },
   });
 
-  const guestMap = new Map(guests.map((g) => [g.id, g]));
-  const eventMap = new Map(events.map((e) => [e.id, e]));
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("rsvps").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["rsvps", wedding?.id] });
+      setToast("RSVP deleted");
+      setTimeout(() => setToast(null), 2000);
+    },
+  });
 
-  const filtered = rsvps.filter((r) => {
-    if (filterStatus !== "all" && r.status !== filterStatus) return false;
-    if (filterEvent !== "all" && r.event_id !== filterEvent) return false;
-    const q = search.toLowerCase();
+  const guestMap = new Map((guests || []).map((g) => [g.id, g]));
+  const eventMap = new Map((events || []).map((e) => [e.id, e]));
+
+  const filteredRsvps = (rsvps || []).filter((r) => {
     const guest = guestMap.get(r.guest_id);
-    return (guest?.name || "").toLowerCase().includes(q) || (r.message || "").toLowerCase().includes(q);
+    const matchesSearch = !search || (guest?.name || "").toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === "all" || r.status === statusFilter;
+    const matchesEvent = eventFilter === "all" || r.event_id === eventFilter;
+    return matchesSearch && matchesStatus && matchesEvent;
   });
 
-  const attending = rsvps.filter((r) => r.status === "attending").length;
-  const declined = rsvps.filter((r) => r.status === "declined").length;
-  const pending = rsvps.filter((r) => r.status === "pending").length;
-  const totalGuests = rsvps.filter((r) => r.status === "attending").reduce((sum, r) => sum + r.number_of_guests, 0);
+  const attendingCount = (rsvps || []).filter((r) => r.status === "attending").length;
+  const declinedCount = (rsvps || []).filter((r) => r.status === "declined").length;
+  const pendingCount = (rsvps || []).filter((r) => r.status === "pending").length;
+  const totalGuests = (rsvps || []).filter((r) => r.status === "attending").reduce((sum, r) => sum + r.number_of_guests, 0);
 
-  if (isLoading) return <AdminLayout><div className="py-20 text-center text-gray-500">Loading…</div></AdminLayout>;
-  if (error) return <AdminLayout><div className="py-20 text-center text-red-600">{error.message}</div></AdminLayout>;
-  if (!wedding) return <AdminLayout><div className="py-20 text-center text-gray-500">No wedding found.</div></AdminLayout>;
-
-  const summaryCards = [
-    { label: "Attending", value: attending, icon: Check, color: "text-green-600", bg: "bg-green-50" },
-    { label: "Declined", value: declined, icon: X, color: "text-red-600", bg: "bg-red-50" },
-    { label: "Pending", value: pending, icon: Clock, color: "text-yellow-600", bg: "bg-yellow-50" },
-    { label: "Total Guests", value: totalGuests, icon: Heart, color: "text-gray-900", bg: "bg-gray-100" },
-  ];
+  if (!wedding) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center py-20">
+          <div className="text-gray-500">Loading RSVPs...</div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
       <div className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">RSVPs</h2>
-          <p className="text-sm text-gray-500">Manage guest RSVP responses.</p>
+          <h1 className="text-2xl font-bold text-gray-900">RSVPs</h1>
+          <p className="mt-1 text-sm text-gray-500">Track and manage RSVP responses from your guests.</p>
         </div>
 
+        {/* Summary Cards */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {summaryCards.map((s) => (
-            <Card key={s.label}>
-              <div className="flex items-center gap-3">
-                <div className={`rounded-lg p-2.5 ${s.bg}`}><s.icon className={`h-5 w-5 ${s.color}`} /></div>
-                <div>
-                  <p className="text-xs font-medium text-gray-500">{s.label}</p>
-                  <p className="text-xl font-bold text-gray-900">{s.value}</p>
-                </div>
+          <Card>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-green-100 p-2">
+                <Check className="h-5 w-5 text-green-600" />
               </div>
-            </Card>
-          ))}
+              <div>
+                <p className="text-sm text-gray-500">Attending</p>
+                <p className="text-xl font-bold text-gray-900">{attendingCount}</p>
+              </div>
+            </div>
+          </Card>
+          <Card>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-red-100 p-2">
+                <X className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Declined</p>
+                <p className="text-xl font-bold text-gray-900">{declinedCount}</p>
+              </div>
+            </div>
+          </Card>
+          <Card>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-yellow-100 p-2">
+                <Clock className="h-5 w-5 text-yellow-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Pending</p>
+                <p className="text-xl font-bold text-gray-900">{pendingCount}</p>
+              </div>
+            </div>
+          </Card>
+          <Card>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-gray-100 p-2">
+                <Users className="h-5 w-5 text-gray-900" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Total Guests</p>
+                <p className="text-xl font-bold text-gray-900">{totalGuests}</p>
+              </div>
+            </div>
+          </Card>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Select className="w-auto" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as "all" | RsvpStatus)}>
+        {/* Filters */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by guest name..."
+              className="pl-10"
+            />
+          </div>
+          <Select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as "all" | RsvpStatus)}
+          >
             <option value="all">All Statuses</option>
             <option value="attending">Attending</option>
             <option value="declined">Declined</option>
             <option value="pending">Pending</option>
           </Select>
-          <Select className="w-auto" value={filterEvent} onChange={(e) => setFilterEvent(e.target.value)}>
+          <Select
+            value={eventFilter}
+            onChange={(e) => setEventFilter(e.target.value)}
+          >
             <option value="all">All Events</option>
-            {events.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            {(events || []).map((ev) => (
+              <option key={ev.id} value={ev.id}>{ev.name}</option>
+            ))}
           </Select>
-          <div className="relative ml-auto">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input className="pl-10 w-64" placeholder="Search by guest or message…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
         </div>
 
-        {filtered.length === 0 ? (
-          <Card><EmptyState icon={<Heart className="h-10 w-10" />} title="No RSVPs found" description={search ? "Try a different search." : "RSVP responses will appear here."} /></Card>
-        ) : (
-          <Card className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
-                    <th className="px-4 py-3">Guest</th>
-                    <th className="px-4 py-3">Event</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Guests</th>
-                    <th className="px-4 py-3">Message</th>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filtered.map((r) => {
-                    const guest = guestMap.get(r.guest_id);
-                    const event = eventMap.get(r.event_id);
-                    return (
-                      <tr key={r.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{guest?.name || "Unknown"}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{event?.name || "—"}</td>
-                        <td className="px-4 py-3">
-                          <Badge variant={r.status === "attending" ? "success" : r.status === "declined" ? "error" : "warning"}>{r.status}</Badge>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{r.number_of_guests}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{r.message || "—"}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{formatDate(r.created_at)}</td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => updateStatusMutation.mutate({ id: r.id, status: "attending" })} title="Mark attending"><Check className="h-4 w-4 text-green-600" /></Button>
-                            <Button variant="ghost" size="sm" onClick={() => updateStatusMutation.mutate({ id: r.id, status: "declined" })} title="Mark declined"><X className="h-4 w-4 text-red-500" /></Button>
-                            <Button variant="ghost" size="sm" onClick={() => updateStatusMutation.mutate({ id: r.id, status: "pending" })} title="Mark pending"><Clock className="h-4 w-4 text-yellow-600" /></Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+        {/* RSVP List */}
+        {isLoading ? (
+          <div className="text-gray-500">Loading RSVPs...</div>
+        ) : filteredRsvps.length === 0 ? (
+          <Card>
+            <EmptyState icon={<Heart className="h-8 w-8" />} title={search ? "No RSVPs found" : "No RSVPs yet"} description={search ? "Try a different search." : "RSVP responses will appear here."} />
           </Card>
+        ) : (
+          <div className="space-y-2">
+            {filteredRsvps.map((rsvp) => {
+              const guest = guestMap.get(rsvp.guest_id);
+              const event = eventMap.get(rsvp.event_id);
+              return (
+                <Card key={rsvp.id}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-900">{guest?.name || "Unknown Guest"}</h3>
+                        <Badge variant={rsvp.status === "attending" ? "success" : rsvp.status === "declined" ? "error" : "warning"}>
+                          {rsvp.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 space-y-0.5 text-sm text-gray-500">
+                        <p>Event: {event?.name || "Unknown Event"}</p>
+                        <p>Guests: {rsvp.number_of_guests}</p>
+                        {rsvp.message && <p className="mt-1 italic text-gray-600">"{rsvp.message}"</p>}
+                        <p className="text-xs text-gray-400">{formatDate(rsvp.created_at)}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <select
+                        value={rsvp.status}
+                        onChange={(e) => updateStatusMutation.mutate({ id: rsvp.id, status: e.target.value as RsvpStatus })}
+                        className="rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-900 focus:border-gray-900 outline-none"
+                      >
+                        <option value="attending">Attending</option>
+                        <option value="declined">Declined</option>
+                        <option value="pending">Pending</option>
+                      </select>
+                      <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(rsvp.id)}>
+                        <X className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {toast && (
+          <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">
+            {toast}
+          </div>
         )}
       </div>
-      {toast && <Toast message={toast.message} type={toast.type} />}
     </AdminLayout>
   );
 }

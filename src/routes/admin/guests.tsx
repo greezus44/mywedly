@@ -3,72 +3,94 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Wedding, type Guest } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { Card, Badge, Modal, EmptyState, Toast } from "../../components/ui/index";
-import { FormField } from "../../components/ui/ImageUpload";
-import { generateToken, formatDate } from "../../lib/utils";
-import { Plus, Pencil, Trash2, Search, Users, Copy } from "lucide-react";
+import { Input, Label } from "../../components/ui/Input";
+import { Card, Badge, Modal, EmptyState } from "../../components/ui/index";
+import { generateToken } from "../../lib/utils";
+import { Plus, Pencil, Trash2, Search, Users, Mail, Phone } from "lucide-react";
 
 export function GuestsPage() {
   const queryClient = useQueryClient();
-  const [wedding, setWedding] = useState<Wedding | null>(null);
-  const [guests, setGuests] = useState<Guest[]>([]);
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const [form, setForm] = useState({ name: "", username: "", email: "", phone: "" });
+  const [form, setForm] = useState<{ name: string; username: string; email: string; phone: string }>({ name: "", username: "", email: "", phone: "" });
+  const [toast, setToast] = useState<string | null>(null);
 
   const { data: user } = useQuery({
     queryKey: ["auth-user"],
-    queryFn: async () => { const { data: { user } } = await supabase.auth.getUser(); return user; },
+    queryFn: async () => {
+      const { data } = await supabase.auth.getUser();
+      return data.user;
+    },
   });
 
-  const { data: wed, isLoading, error } = useQuery({
+  const { data: wedding } = useQuery({
     queryKey: ["wedding", user?.id],
-    enabled: !!user,
     queryFn: async () => {
-      const { data, error } = await supabase.from("weddings").select("*").eq("created_by", user!.id).maybeSingle();
-      if (error) throw error;
+      if (!user) return null;
+      const { data } = await supabase.from("weddings").select("*").eq("created_by", user.id).maybeSingle();
       return data as Wedding | null;
     },
+    enabled: !!user,
   });
 
-  const { data: guestData, refetch } = useQuery({
-    queryKey: ["guests", wed?.id],
-    enabled: !!wed,
+  const { data: guests, isLoading } = useQuery({
+    queryKey: ["guests", wedding?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("guests").select("*").eq("wedding_id", wed!.id).order("created_at", { ascending: false });
-      if (error) throw error;
+      if (!wedding) return [];
+      const { data } = await supabase.from("guests").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false });
       return (data || []) as Guest[];
     },
+    enabled: !!wedding,
   });
 
-  useEffect(() => { if (wed) setWedding(wed); }, [wed]);
-  useEffect(() => { if (guestData) setGuests(guestData); }, [guestData]);
+  useEffect(() => {
+    if (editingGuest) {
+      setForm({ name: editingGuest.name, username: editingGuest.username, email: editingGuest.email || "", phone: editingGuest.phone || "" });
+    } else {
+      setForm({ name: "", username: generateToken().slice(0, 8), email: "", phone: "" });
+    }
+  }, [editingGuest]);
 
-  const saveMutation = useMutation({
+  const createMutation = useMutation({
     mutationFn: async () => {
-      if (editingGuest) {
-        const { error } = await supabase.from("guests").update({
-          name: form.name, username: form.username, email: form.email || null, phone: form.phone || null,
-        }).eq("id", editingGuest.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("guests").insert({
-          wedding_id: wedding!.id, name: form.name, username: form.username || generateToken().slice(0, 8),
-          email: form.email || null, phone: form.phone || null,
-        });
-        if (error) throw error;
-      }
+      if (!wedding) throw new Error("No wedding");
+      const { error } = await supabase.from("guests").insert({
+        wedding_id: wedding.id,
+        name: form.name,
+        username: form.username,
+        email: form.email || null,
+        phone: form.phone || null,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
-      refetch();
-      queryClient.invalidateQueries({ queryKey: ["guests", wed?.id] });
+      queryClient.invalidateQueries({ queryKey: ["guests", wedding?.id] });
       setModalOpen(false);
-      setToast({ message: editingGuest ? "Guest updated" : "Guest added", type: "success" });
+      setEditingGuest(null);
+      setToast("Guest added");
+      setTimeout(() => setToast(null), 2000);
     },
-    onError: (e) => setToast({ message: e.message, type: "error" }),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingGuest) throw new Error("No guest");
+      const { error } = await supabase.from("guests").update({
+        name: form.name,
+        username: form.username,
+        email: form.email || null,
+        phone: form.phone || null,
+      }).eq("id", editingGuest.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guests", wedding?.id] });
+      setModalOpen(false);
+      setEditingGuest(null);
+      setToast("Guest updated");
+      setTimeout(() => setToast(null), 2000);
+    },
   });
 
   const deleteMutation = useMutation({
@@ -76,111 +98,150 @@ export function GuestsPage() {
       const { error } = await supabase.from("guests").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => { refetch(); queryClient.invalidateQueries({ queryKey: ["guests", wed?.id] }); setToast({ message: "Guest deleted", type: "success" }); },
-    onError: (e) => setToast({ message: e.message, type: "error" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guests", wedding?.id] });
+      setToast("Guest removed");
+      setTimeout(() => setToast(null), 2000);
+    },
   });
 
-  const openCreate = () => {
-    setEditingGuest(null);
-    setForm({ name: "", username: "", email: "", phone: "" });
-    setModalOpen(true);
+  const handleSubmit = () => {
+    if (editingGuest) updateMutation.mutate();
+    else createMutation.mutate();
   };
 
-  const openEdit = (g: Guest) => {
-    setEditingGuest(g);
-    setForm({ name: g.name, username: g.username, email: g.email || "", phone: g.phone || "" });
-    setModalOpen(true);
-  };
-
-  const filtered = guests.filter((g) => {
+  const filteredGuests = (guests || []).filter((g) => {
     const q = search.toLowerCase();
-    return g.name.toLowerCase().includes(q) || g.username.toLowerCase().includes(q) || (g.email || "").toLowerCase().includes(q) || (g.phone || "").includes(q);
+    return g.name.toLowerCase().includes(q) || g.username.toLowerCase().includes(q) || (g.email || "").toLowerCase().includes(q);
   });
 
-  if (isLoading) return <AdminLayout><div className="py-20 text-center text-gray-500">Loading…</div></AdminLayout>;
-  if (error) return <AdminLayout><div className="py-20 text-center text-red-600">{error.message}</div></AdminLayout>;
-  if (!wedding) return <AdminLayout><div className="py-20 text-center text-gray-500">No wedding found.</div></AdminLayout>;
+  if (!wedding) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center py-20">
+          <div className="text-gray-500">Loading guests...</div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
   return (
     <AdminLayout>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">Guests</h2>
-            <p className="text-sm text-gray-500">{guests.length} total guests</p>
+            <h1 className="text-2xl font-bold text-gray-900">Guests</h1>
+            <p className="mt-1 text-sm text-gray-500">Manage your guest list and invitation access.</p>
           </div>
-          <Button onClick={openCreate}><Plus className="mr-1.5 h-4 w-4" /> Add Guest</Button>
+          <Button onClick={() => { setEditingGuest(null); setModalOpen(true); }}>
+            <Plus className="mr-1.5 h-4 w-4" /> Add Guest
+          </Button>
         </div>
 
+        {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input className="pl-10" placeholder="Search guests by name, username, email, or phone…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, username, or email..."
+            className="pl-10"
+          />
         </div>
 
-        {filtered.length === 0 ? (
-          <Card><EmptyState icon={<Users className="h-10 w-10" />} title={search ? "No matching guests" : "No guests yet"} description={search ? "Try a different search term." : "Click 'Add Guest' to invite your first guest."} /></Card>
-        ) : (
-          <Card className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
-                    <th className="px-4 py-3">Name</th>
-                    <th className="px-4 py-3">Username</th>
-                    <th className="px-4 py-3">Email</th>
-                    <th className="px-4 py-3">Phone</th>
-                    <th className="px-4 py-3">Added</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filtered.map((g) => (
-                    <tr key={g.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{g.name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        <button onClick={() => { navigator.clipboard.writeText(g.username); setToast({ message: "Username copied", type: "success" }); }} className="flex items-center gap-1 hover:text-gray-900">
-                          {g.username} <Copy className="h-3 w-3 text-gray-400" />
-                        </button>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{g.email || "—"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{g.phone || "—"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(g.created_at)}</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEdit(g)}><Pencil className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="sm" onClick={() => { if (confirm("Delete this guest?")) deleteMutation.mutate(g.id); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        {/* Stats */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Card>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-gray-100 p-2">
+                <Users className="h-5 w-5 text-gray-900" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Total Guests</p>
+                <p className="text-xl font-bold text-gray-900">{guests?.length || 0}</p>
+              </div>
             </div>
           </Card>
+        </div>
+
+        {/* Guest List */}
+        {isLoading ? (
+          <div className="text-gray-500">Loading guests...</div>
+        ) : filteredGuests.length === 0 ? (
+          <Card>
+            <EmptyState icon={<Users className="h-8 w-8" />} title={search ? "No guests found" : "No guests yet"} description={search ? "Try a different search." : "Add your first guest to get started."} />
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {filteredGuests.map((guest) => (
+              <Card key={guest.id}>
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-gray-900">{guest.name}</h3>
+                      <Badge variant="default">@{guest.username}</Badge>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-3 text-sm text-gray-500">
+                      {guest.email && <span className="flex items-center gap-1"><Mail className="h-3.5 w-3.5" /> {guest.email}</span>}
+                      {guest.phone && <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" /> {guest.phone}</span>}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => { setEditingGuest(guest); setModalOpen(true); }}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(guest.id)}>
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingGuest ? "Edit Guest" : "Add Guest"}>
+          <div className="space-y-4">
+            <Input
+              label="Guest Name"
+              value={form.name}
+              onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+              placeholder="Ahmad bin Ali"
+            />
+            <Input
+              label="Username (for sign-in)"
+              value={form.username}
+              onChange={(e) => setForm((p) => ({ ...p, username: e.target.value }))}
+              placeholder="ahmad"
+            />
+            <Input
+              label="Email"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
+              placeholder="ahmad@example.com"
+            />
+            <Input
+              label="Phone"
+              value={form.phone}
+              onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+              placeholder="+60 12 345 6789"
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+              <Button onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
+                {editingGuest ? "Update" : "Add"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {toast && (
+          <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">
+            {toast}
+          </div>
         )}
       </div>
-
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingGuest ? "Edit Guest" : "Add Guest"}>
-        <div className="space-y-4">
-          <FormField label="Full Name">
-            <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="John Doe" />
-          </FormField>
-          <FormField label="Username" hint="Used for guest sign-in. Leave blank to auto-generate.">
-            <Input value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} placeholder="johndoe" />
-          </FormField>
-          <FormField label="Email">
-            <Input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="john@example.com" />
-          </FormField>
-          <FormField label="Phone">
-            <Input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+60 12 345 6789" />
-          </FormField>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || !form.name}>{editingGuest ? "Update" : "Add"}</Button>
-          </div>
-        </div>
-      </Modal>
-      {toast && <Toast message={toast.message} type={toast.type} />}
     </AdminLayout>
   );
 }

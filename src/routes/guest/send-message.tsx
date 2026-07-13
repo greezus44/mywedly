@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { supabase, type Wedding, type WeddingContent } from "../../lib/supabase";
-import { useLang } from "../../lib/lang-context";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { useLang } from "../../lib/lang-context";
 import {
   themeToCssVars,
   getTheme,
@@ -10,65 +10,59 @@ import {
   getLogoStyle,
   shouldShowLogo,
 } from "../../lib/theme";
-import { getDeviceType, cn } from "../../lib/utils";
-import { Button } from "../../components/ui/Button";
-import { Textarea } from "../../components/ui/Input";
+import { getDeviceType } from "../../lib/utils";
 import { Send, Check } from "lucide-react";
 
 const MAX_CHARS = 500;
 
 export function SendMessage() {
   const { slug } = useParams<{ slug: string }>();
-  const { t, lang } = useLang();
   const { session } = useGuestAuth();
+  const { lang, t } = useLang();
   const [wedding, setWedding] = useState<Wedding | null>(null);
-  const [authorName, setAuthorName] = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!slug) return;
-    supabase.from("weddings").select("*").eq("slug", slug).maybeSingle().then(({ data }) => {
-      if (data) setWedding(data as Wedding);
-    });
+    supabase
+      .from("weddings")
+      .select("*")
+      .eq("slug", slug)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setWedding(data as Wedding);
+      });
   }, [slug]);
 
-  // Auto-fill name from session
-  useEffect(() => {
-    if (session?.guest_name) {
-      setAuthorName(session.guest_name);
-    }
-  }, [session?.guest_name]);
-
   const theme = getTheme(wedding);
-  const content = (wedding?.draft_content || wedding?.content || {}) as WeddingContent;
+  const content = (wedding?.content || {}) as WeddingContent;
   const logo = getLogoConfig(wedding);
   const device = getDeviceType();
-  const showLogo = shouldShowLogo(logo, "send-message");
+  const showLogo = shouldShowLogo(logo, "send-message") && logo.url;
 
-  const charCount = message.length;
-  const remaining = MAX_CHARS - charCount;
+  const authorName = session?.guest_name || "";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || !wedding) return;
+    if (!message.trim() || !wedding || !session) return;
     setSubmitting(true);
     setError(null);
 
     const { error: insertError } = await supabase.from("guestbook_entries").insert({
       wedding_id: wedding.id,
-      guest_id: session?.guest_id || null,
-      author_name: authorName.trim() || (lang === "ms" ? "Tetamu" : "Guest"),
+      guest_id: session.guest_id,
+      author_name: authorName,
       message: message.trim(),
-      status: "pending",
+      status: "pending" as const,
     });
 
     if (insertError) {
-      setError(lang === "ms" ? "Gagal menghantar. Sila cuba lagi." : "Failed to send. Please try again.");
+      setError(lang === "ms" ? "Gagal menghantar mesej. Sila cuba lagi." : "Failed to send message. Please try again.");
     } else {
-      setSuccess(true);
+      setSubmitted(true);
       setMessage("");
     }
     setSubmitting(false);
@@ -77,125 +71,143 @@ export function SendMessage() {
   return (
     <div
       className="min-h-screen"
-      style={{ ...themeToCssVars(theme), background: "var(--color-bg)", color: "var(--color-text)", fontFamily: "var(--font-body)" } as React.CSSProperties}
+      style={{
+        ...themeToCssVars(theme),
+        background: "var(--color-bg)",
+        color: "var(--color-text)",
+        fontFamily: "var(--font-body)",
+      } as React.CSSProperties}
     >
-      {/* Logo */}
-      {showLogo && logo.url && (
-        <div className="flex justify-center pt-12">
-          <img src={logo.url} alt="logo" style={getLogoStyle(logo, device)} />
-        </div>
-      )}
-
       {/* Header */}
-      <div className="px-6 py-12 text-center md:py-16">
-        <p className="animate-fade-in-up text-[0.625rem] uppercase tracking-[0.4em]" style={{ color: "var(--color-text-muted)" }}>
-          {lang === "ms" ? "Buku Tetamu" : "Guestbook"}
+      <section className="px-6 py-16 md:py-20">
+        {/* Logo */}
+        {showLogo && (
+          <div className="mb-10 flex justify-center animate-fade-in" style={{ animationDelay: "0.1s", opacity: 0 }}>
+            <img src={logo.url!} alt="logo" style={getLogoStyle(logo, device)} />
+          </div>
+        )}
+
+        <p
+          className="mb-4 text-center font-body text-xs uppercase tracking-[0.3em] text-gray-400 animate-fade-in-up"
+          style={{ animationDelay: "0.2s", opacity: 0 }}
+        >
+          {lang === "ms" ? "Tinggalkan Pesanan" : "Leave a Message"}
         </p>
-        <h1 className="mt-4 animate-fade-in-up font-heading text-3xl md:text-5xl" style={{ color: "var(--color-primary)", animationDelay: "0.1s" }}>
-          {t.sendMessage}
+        <h1
+          className="text-center font-heading text-3xl font-light md:text-5xl animate-fade-in-up"
+          style={{
+            animationDelay: "0.3s",
+            opacity: 0,
+            color: "var(--color-text)",
+            fontFamily: "var(--font-heading)",
+          }}
+        >
+          {lang === "ms" ? "Hantar Mesej" : "Send Message"}
         </h1>
+
+        {/* Message intro */}
         {content.message_intro && (
-          <p className="mx-auto mt-4 max-w-lg animate-fade-in-up font-body text-sm leading-relaxed md:text-base" style={{ color: "var(--color-text-muted)", animationDelay: "0.2s" }}>
+          <p
+            className="mx-auto mt-6 max-w-lg text-center font-body text-sm leading-relaxed text-gray-500 md:text-base animate-fade-in-up"
+            style={{ animationDelay: "0.4s", opacity: 0 }}
+          >
             {content.message_intro}
           </p>
         )}
-      </div>
+      </section>
 
       {/* Form */}
-      <div className="mx-auto max-w-xl px-6 pb-16">
-        {success ? (
-          <div className="animate-fade-in-up rounded-2xl border p-8 text-center" style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}>
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full" style={{ background: "var(--color-primary)" }}>
-              <Check className="h-6 w-6" style={{ color: "var(--color-button-text)" }} />
-            </div>
-            <h3 className="font-heading text-xl" style={{ color: "var(--color-primary)" }}>{t.thankYou}</h3>
-            <p className="mt-2 font-body text-sm" style={{ color: "var(--color-text-muted)" }}>
-              {t.messageSent}
-            </p>
-            <Button
-              onClick={() => setSuccess(false)}
-              variant="outline"
-              className="mt-6"
-              style={{ borderColor: "var(--color-border)", color: "var(--color-text)" } as React.CSSProperties}
+      <section className="px-6 pb-20">
+        <div className="mx-auto max-w-xl">
+          {submitted ? (
+            <div
+              className="flex flex-col items-center justify-center border border-gray-200 bg-white px-6 py-16 animate-fade-in-up"
+              style={{ animationDelay: "0.1s", opacity: 0, borderRadius: "0px" }}
             >
-              {lang === "ms" ? "Hantar Mesej Lain" : "Send Another Message"}
-            </Button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="animate-fade-in-up space-y-5" style={{ animationDelay: "0.1s" }}>
-            {/* Name */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium" style={{ color: "var(--color-text)" }}>
-                {lang === "ms" ? "Nama Anda" : "Your Name"}
-              </label>
-              <input
-                type="text"
-                value={authorName}
-                onChange={(e) => setAuthorName(e.target.value)}
-                placeholder={t.namePlaceholder}
-                className="w-full rounded-lg border px-4 py-2.5 font-body text-sm outline-none transition"
-                style={{
-                  borderColor: "var(--color-border)",
-                  background: "var(--color-surface)",
-                  color: "var(--color-text)",
+              <div
+                className="mb-4 flex h-12 w-12 items-center justify-center rounded-full"
+                style={{ background: "var(--color-text)" }}
+              >
+                <Check className="h-6 w-6" style={{ color: "var(--color-bg)" }} />
+              </div>
+              <p className="font-heading text-xl font-light text-gray-800">{t.thankYou}</p>
+              <p className="mt-2 font-body text-sm text-gray-500">{t.messageSent}</p>
+              <button
+                onClick={() => {
+                  setSubmitted(false);
+                  setMessage("");
                 }}
-              />
+                className="mt-6 font-body text-xs uppercase tracking-[0.2em] text-gray-400 transition-opacity hover:opacity-70"
+              >
+                {lang === "ms" ? "Tulis lagi" : "Write another"}
+              </button>
             </div>
+          ) : (
+            <form
+              onSubmit={handleSubmit}
+              className="border border-gray-200 bg-white p-6 md:p-8 animate-fade-in-up"
+              style={{ animationDelay: "0.2s", opacity: 0, borderRadius: "0px", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}
+            >
+              {/* Auto-filled name */}
+              <div className="mb-5">
+                <label className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-gray-400">
+                  {lang === "ms" ? "Nama" : "Name"}
+                </label>
+                <div
+                  className="w-full border border-gray-200 px-4 py-3 font-body text-sm text-gray-700"
+                  style={{ background: "var(--color-surface)" }}
+                >
+                  {authorName}
+                </div>
+              </div>
 
-            {/* Message */}
-            <div className="space-y-1.5">
-              <label className="block text-sm font-medium" style={{ color: "var(--color-text)" }}>
-                {lang === "ms" ? "Mesej Anda" : "Your Message"}
-              </label>
-              <Textarea
-                value={message}
-                onChange={(e) => {
-                  if (e.target.value.length <= MAX_CHARS) setMessage(e.target.value);
-                }}
-                placeholder={t.messagePlaceholder}
-                rows={5}
-                className="resize-none"
-                style={{
-                  borderColor: "var(--color-border)",
-                  background: "var(--color-surface)",
-                  color: "var(--color-text)",
-                } as React.CSSProperties}
-              />
+              {/* Message textarea */}
+              <div className="mb-3">
+                <label className="mb-2 block font-body text-xs uppercase tracking-[0.2em] text-gray-400">
+                  {lang === "ms" ? "Mesej" : "Message"}
+                </label>
+                <textarea
+                  value={message}
+                  onChange={(e) => {
+                    if (e.target.value.length <= MAX_CHARS) setMessage(e.target.value);
+                  }}
+                  placeholder={t.messagePlaceholder}
+                  rows={5}
+                  className="w-full resize-none border border-gray-200 px-4 py-3 font-body text-sm text-gray-800 placeholder-gray-300 outline-none transition focus:border-gray-400"
+                  style={{ background: "var(--color-bg)" }}
+                  disabled={submitting}
+                />
+              </div>
+
               {/* Character counter */}
-              <div className="flex justify-end">
-                <span className={cn("text-xs", remaining < 50 ? "text-red-500" : "")} style={remaining >= 50 ? { color: "var(--color-text-muted)" } : undefined}>
-                  {charCount} / {MAX_CHARS}
+              <div className="mb-5 flex justify-end">
+                <span className={`font-body text-xs ${message.length > MAX_CHARS * 0.9 ? "text-gray-600" : "text-gray-300"}`}>
+                  {message.length} / {MAX_CHARS}
                 </span>
               </div>
-            </div>
 
-            {/* Error */}
-            {error && (
-              <p className="font-body text-sm text-red-500">{error}</p>
-            )}
-
-            {/* Submit */}
-            <Button
-              type="submit"
-              disabled={submitting || !message.trim()}
-              className="flex w-full items-center justify-center gap-2 transition"
-              style={{
-                background: "var(--color-button-bg)",
-                color: "var(--color-button-text)",
-              } as React.CSSProperties}
-            >
-              {submitting ? (
-                t.loading
-              ) : (
-                <>
-                  <Send className="h-4 w-4" />
-                  {t.submit}
-                </>
+              {/* Error */}
+              {error && (
+                <p className="mb-4 font-body text-sm text-red-500">{error}</p>
               )}
-            </Button>
-          </form>
-        )}
-      </div>
+
+              {/* Submit button */}
+              <button
+                type="submit"
+                disabled={submitting || !message.trim()}
+                className="flex w-full items-center justify-center gap-2 px-6 py-3 font-body text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{
+                  background: "var(--color-text)",
+                  color: "var(--color-bg)",
+                } as React.CSSProperties}
+              >
+                <Send className="h-4 w-4" />
+                {submitting ? (lang === "ms" ? "Menghantar..." : "Sending...") : t.submit}
+              </button>
+            </form>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

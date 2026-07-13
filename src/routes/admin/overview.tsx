@@ -1,133 +1,219 @@
 import { useState, useEffect } from "react";
-import { supabase, type Wedding, type WeddingEvent, type Guest, type Rsvp, type GuestbookEntry, type SharingEvent } from "../../lib/supabase";
+import { useQuery } from "@tanstack/react-query";
+import { supabase, type Wedding, type WeddingEvent, type GuestbookEntry, type Guest, type Rsvp, type SharingEvent } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { Card, Badge, EmptyState } from "../../components/ui/index";
 import { formatDate, formatTime } from "../../lib/utils";
 import { Users, Calendar, Heart, MessageSquare, Globe, Eye, TrendingUp, Clock } from "lucide-react";
 
 export function OverviewPage() {
-  const [wedding, setWedding] = useState<Wedding | null>(null);
-  const [events, setEvents] = useState<WeddingEvent[]>([]);
-  const [guests, setGuests] = useState<Guest[]>([]);
-  const [rsvps, setRsvps] = useState<Rsvp[]>([]);
-  const [messages, setMessages] = useState<GuestbookEntry[]>([]);
-  const [visits, setVisits] = useState<SharingEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: user } = useQuery({
+    queryKey: ["auth-user"],
+    queryFn: async () => {
+      const { data } = await supabase.auth.getUser();
+      return data.user;
+    },
+  });
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) { setError("Not authenticated"); setLoading(false); return; }
-        const { data: wed, error: wErr } = await supabase.from("weddings").select("*").eq("created_by", user.id).maybeSingle();
-        if (wErr) throw wErr;
-        if (!wed) { setLoading(false); return; }
-        setWedding(wed as Wedding);
-        const [evRes, guRes, rsRes, msRes, shRes] = await Promise.all([
-          supabase.from("events").select("*").eq("wedding_id", wed.id).order("starts_at", { ascending: true }),
-          supabase.from("guests").select("*").eq("wedding_id", wed.id),
-          supabase.from("rsvps").select("*").eq("wedding_id", wed.id),
-          supabase.from("guestbook").select("*").eq("wedding_id", wed.id).order("created_at", { ascending: false }),
-          supabase.from("sharing_events").select("*").eq("wedding_id", wed.id).order("created_at", { ascending: false }),
-        ]);
-        setEvents((evRes.data || []) as WeddingEvent[]);
-        setGuests((guRes.data || []) as Guest[]);
-        setRsvps((rsRes.data || []) as Rsvp[]);
-        setMessages((msRes.data || []) as GuestbookEntry[]);
-        setVisits((shRes.data || []) as SharingEvent[]);
-      } catch (e) { setError(e instanceof Error ? e.message : "Failed to load data"); }
-      finally { setLoading(false); }
-    })();
-  }, []);
+  const { data: wedding, isLoading: weddingLoading } = useQuery({
+    queryKey: ["wedding", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      const { data } = await supabase.from("weddings").select("*").eq("created_by", user.id).maybeSingle();
+      return data as Wedding | null;
+    },
+    enabled: !!user,
+  });
 
-  if (loading) return <AdminLayout><div className="flex items-center justify-center py-20 text-gray-500">Loading dashboard…</div></AdminLayout>;
-  if (error) return <AdminLayout><div className="py-20 text-center text-red-600">{error}</div></AdminLayout>;
-  if (!wedding) return <AdminLayout><EmptyState icon={<Calendar className="h-10 w-10" />} title="No wedding found" description="Create a wedding to get started." /></AdminLayout>;
+  const { data: guests } = useQuery({
+    queryKey: ["guests", wedding?.id],
+    queryFn: async () => {
+      if (!wedding) return [];
+      const { data } = await supabase.from("guests").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false });
+      return (data || []) as Guest[];
+    },
+    enabled: !!wedding,
+  });
 
-  const attending = rsvps.filter((r) => r.status === "attending").length;
-  const declined = rsvps.filter((r) => r.status === "declined").length;
-  const pendingMessages = messages.filter((m) => m.status === "pending").length;
-  const recentMessages = messages.slice(0, 5);
-  const upcomingEvents = events.filter((e) => !e.starts_at || new Date(e.starts_at) >= new Date()).slice(0, 5);
+  const { data: events } = useQuery({
+    queryKey: ["events", wedding?.id],
+    queryFn: async () => {
+      if (!wedding) return [];
+      const { data } = await supabase.from("events").select("*").eq("wedding_id", wedding.id).order("starts_at", { ascending: true });
+      return (data || []) as WeddingEvent[];
+    },
+    enabled: !!wedding,
+  });
+
+  const { data: rsvps } = useQuery({
+    queryKey: ["rsvps", wedding?.id],
+    queryFn: async () => {
+      if (!wedding) return [];
+      const { data } = await supabase.from("rsvps").select("*").eq("wedding_id", wedding.id);
+      return (data || []) as Rsvp[];
+    },
+    enabled: !!wedding,
+  });
+
+  const { data: messages } = useQuery({
+    queryKey: ["guestbook", wedding?.id],
+    queryFn: async () => {
+      if (!wedding) return [];
+      const { data } = await supabase.from("guestbook_entries").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false });
+      return (data || []) as GuestbookEntry[];
+    },
+    enabled: !!wedding,
+  });
+
+  const { data: visits } = useQuery({
+    queryKey: ["sharing-events", wedding?.id],
+    queryFn: async () => {
+      if (!wedding) return [];
+      const { data } = await supabase.from("sharing_events").select("*").eq("wedding_id", wedding.id);
+      return (data || []) as SharingEvent[];
+    },
+    enabled: !!wedding,
+  });
+
+  if (weddingLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center py-20">
+          <div className="text-gray-500">Loading your Wedding Creator Dashboard...</div>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  const upcomingEvents = (events || [])
+    .filter((e) => e.starts_at && new Date(e.starts_at) > new Date())
+    .sort((a, b) => new Date(a.starts_at!).getTime() - new Date(b.starts_at!).getTime())
+    .slice(0, 5);
+
+  const recentMessages = (messages || []).slice(0, 5);
+  const attendingCount = (rsvps || []).filter((r) => r.status === "attending").length;
+  const pendingMessages = (messages || []).filter((m) => m.status === "pending").length;
 
   const stats = [
-    { label: "Total Guests", value: guests.length, icon: Users, color: "text-gray-900" },
-    { label: "Events", value: events.length, icon: Calendar, color: "text-gray-900" },
-    { label: "RSVPs", value: rsvps.length, icon: Heart, color: "text-gray-900", sub: `${attending} attending · ${declined} declined` },
-    { label: "Guestbook Messages", value: messages.length, icon: MessageSquare, color: "text-gray-900", sub: pendingMessages > 0 ? `${pendingMessages} pending` : undefined },
-    { label: "Published", value: wedding.is_published ? "Live" : "Draft", icon: Globe, color: wedding.is_published ? "text-green-600" : "text-gray-500" },
-    { label: "Total Visits", value: visits.length, icon: Eye, color: "text-gray-900" },
+    { label: "Total Guests", value: guests?.length || 0, icon: Users, color: "text-gray-900" },
+    { label: "Events", value: events?.length || 0, icon: Calendar, color: "text-gray-900" },
+    { label: "RSVPs Received", value: rsvps?.length || 0, icon: Heart, color: "text-gray-900" },
+    { label: "Guestbook Messages", value: messages?.length || 0, icon: MessageSquare, color: "text-gray-900" },
+    { label: "Published", value: wedding?.is_published ? "Live" : "Draft", icon: Globe, color: wedding?.is_published ? "text-green-600" : "text-gray-500" },
+    { label: "Total Visits", value: visits?.length || 0, icon: Eye, color: "text-gray-900" },
   ];
 
   return (
     <AdminLayout>
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Overview</h2>
-          <p className="text-sm text-gray-500">Welcome to your wedding invitation dashboard.</p>
+          <h1 className="text-2xl font-bold text-gray-900">Wedding Creator Dashboard</h1>
+          <p className="mt-1 text-sm text-gray-500">Welcome back! Here's an overview of your wedding invitation.</p>
         </div>
 
+        {/* Stat Cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {stats.map((s) => (
-            <Card key={s.label}>
+          {stats.map((stat) => (
+            <Card key={stat.label}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-500">{s.label}</p>
-                  <p className={`mt-1 text-2xl font-bold ${s.color}`}>{s.value}</p>
-                  {s.sub && <p className="mt-1 text-xs text-gray-500">{s.sub}</p>}
+                  <p className="text-sm font-medium text-gray-500">{stat.label}</p>
+                  <p className="mt-2 text-3xl font-bold text-gray-900">{stat.value}</p>
                 </div>
-                <div className="rounded-lg bg-gray-100 p-3"><s.icon className="h-6 w-6 text-gray-700" /></div>
+                <div className="rounded-lg bg-gray-100 p-3">
+                  <stat.icon className={`h-6 w-6 ${stat.color}`} />
+                </div>
               </div>
             </Card>
           ))}
         </div>
 
+        {/* Quick Summary */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Card>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-green-100 p-2">
+                <Heart className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Attending</p>
+                <p className="text-xl font-bold text-gray-900">{attendingCount}</p>
+              </div>
+            </div>
+          </Card>
+          <Card>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-yellow-100 p-2">
+                <MessageSquare className="h-5 w-5 text-yellow-600" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Pending Messages</p>
+                <p className="text-xl font-bold text-gray-900">{pendingMessages}</p>
+              </div>
+            </div>
+          </Card>
+          <Card>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-gray-100 p-2">
+                <TrendingUp className="h-5 w-5 text-gray-900" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Engagement</p>
+                <p className="text-xl font-bold text-gray-900">{visits?.length || 0} visits</p>
+              </div>
+            </div>
+          </Card>
+        </div>
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Upcoming Events */}
           <Card>
             <div className="mb-4 flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-gray-700" />
-              <h3 className="text-sm font-semibold text-gray-900">Recent Messages</h3>
+              <Clock className="h-5 w-5 text-gray-500" />
+              <h2 className="text-lg font-semibold text-gray-900">Upcoming Events</h2>
             </div>
-            {recentMessages.length === 0 ? (
-              <EmptyState icon={<MessageSquare className="h-8 w-8" />} title="No messages yet" />
+            {upcomingEvents.length === 0 ? (
+              <EmptyState icon={<Calendar className="h-8 w-8" />} title="No upcoming events" description="Add events to share your schedule with guests." />
             ) : (
-              <ul className="space-y-3">
-                {recentMessages.map((m) => (
-                  <li key={m.id} className="border-b border-gray-100 pb-3 last:border-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-900">{m.author_name}</span>
-                      <Badge variant={m.status === "approved" ? "success" : m.status === "rejected" ? "error" : "warning"}>{m.status}</Badge>
+              <div className="space-y-3">
+                {upcomingEvents.map((event) => (
+                  <div key={event.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
+                    <div>
+                      <p className="font-medium text-gray-900">{event.name}</p>
+                      <p className="text-sm text-gray-500">{event.venue_name || "No venue set"}</p>
                     </div>
-                    <p className="mt-1 text-sm text-gray-600 line-clamp-2">{m.message}</p>
-                    <p className="mt-1 text-xs text-gray-400">{formatDate(m.created_at)}</p>
-                  </li>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-gray-900">{formatDate(event.starts_at)}</p>
+                      <p className="text-sm text-gray-500">{formatTime(event.starts_at)}</p>
+                    </div>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </Card>
 
+          {/* Recent Messages */}
           <Card>
             <div className="mb-4 flex items-center gap-2">
-              <Clock className="h-5 w-5 text-gray-700" />
-              <h3 className="text-sm font-semibold text-gray-900">Upcoming Events</h3>
+              <MessageSquare className="h-5 w-5 text-gray-500" />
+              <h2 className="text-lg font-semibold text-gray-900">Recent Messages</h2>
             </div>
-            {upcomingEvents.length === 0 ? (
-              <EmptyState icon={<Calendar className="h-8 w-8" />} title="No upcoming events" />
+            {recentMessages.length === 0 ? (
+              <EmptyState icon={<MessageSquare className="h-8 w-8" />} title="No messages yet" description="Guestbook messages will appear here." />
             ) : (
-              <ul className="space-y-3">
-                {upcomingEvents.map((e) => (
-                  <li key={e.id} className="flex items-start gap-3 border-b border-gray-100 pb-3 last:border-0">
-                    <div className="rounded-lg bg-gray-100 p-2"><Calendar className="h-4 w-4 text-gray-700" /></div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">{e.name}</p>
-                      <p className="text-xs text-gray-500">{formatDate(e.starts_at)} {e.starts_at && `· ${formatTime(e.starts_at)}`}</p>
-                      {e.venue_name && <p className="text-xs text-gray-400">{e.venue_name}</p>}
+              <div className="space-y-3">
+                {recentMessages.map((msg) => (
+                  <div key={msg.id} className="rounded-lg border border-gray-200 p-3">
+                    <div className="mb-1 flex items-center justify-between">
+                      <p className="font-medium text-gray-900">{msg.author_name}</p>
+                      <Badge variant={msg.status === "approved" ? "success" : msg.status === "rejected" ? "error" : "warning"}>
+                        {msg.status}
+                      </Badge>
                     </div>
-                    <Badge variant={e.visibility === "public" ? "info" : "default"}>{e.visibility}</Badge>
-                  </li>
+                    <p className="text-sm text-gray-600 line-clamp-2">{msg.message}</p>
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </Card>
         </div>
