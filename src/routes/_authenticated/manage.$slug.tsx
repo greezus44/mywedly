@@ -584,7 +584,7 @@ function GuestsTab({ wedding }: { wedding: Wedding }) {
   const [filterGroup, setFilterGroup] = useState<string>("");
   const [showImport, setShowImport] = useState(false);
 
-  const emptyForm = { full_name: "", access_code: "", group_id: "" };
+  const emptyForm = { full_name: "", group_id: "" };
   const [form, setForm] = useState(emptyForm);
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -602,7 +602,6 @@ function GuestsTab({ wedding }: { wedding: Wedding }) {
       const payload = {
         wedding_id: wedding.id,
         full_name: form.full_name.trim(),
-        access_code: form.access_code.trim() || null,
         group_id: form.group_id || null,
       };
       if (!payload.full_name) throw new Error("Name required");
@@ -635,11 +634,11 @@ function GuestsTab({ wedding }: { wedding: Wedding }) {
     return (guests ?? []).filter((g: any) => {
       if (filterGroup && g.group_id !== filterGroup) return false;
       if (!q) return true;
-      return g.full_name.toLowerCase().includes(q) || (g.access_code ?? "").toLowerCase().includes(q);
+      return g.full_name.toLowerCase().includes(q);
     });
   }, [guests, search, filterGroup]);
 
-  const load = (g: any) => { setEditing(g.id); setForm({ full_name: g.full_name ?? "", access_code: g.access_code ?? "", group_id: g.group_id ?? "" }); };
+  const load = (g: any) => { setEditing(g.id); setForm({ full_name: g.full_name ?? "", group_id: g.group_id ?? "" }); };
 
   return (
     <div className="space-y-6">
