@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "allow_public_read_event_images" ON storage.objects;
