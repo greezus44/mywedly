@@ -1,252 +1,229 @@
-import { useState, useEffect, CSSProperties } from "react";
+import { useState, useEffect, type FormEvent, type CSSProperties } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase, Wedding } from "../../lib/supabase";
+import { useQuery } from "@tanstack/react-query";
+import { Loader2, AlertCircle } from "lucide-react";
+import { supabase, UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { useLang } from "../../lib/lang-context";
-import { loginToCssVars, DEFAULT_LOGIN_CONFIG } from "../../lib/theme";
-import { cn } from "../../lib/utils";
-import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { ErrorState } from "../../components/ui/index";
+import {
+  DEFAULT_LOGIN_CONFIG,
+  DEFAULT_LOGO_CONFIG,
+  shouldShowLogo,
+  getLogoStyle,
+} from "../../lib/theme";
+import { ErrorState, Skeleton } from "../../components/ui/index";
 
-/**
- * GuestLogin — the guest sign-in page at `/:weddingId/login`.
- *
- * Guests enter their name; we call `signIn(name, weddingId)` which looks them
- * up in the `guests` table. On success we navigate to the home page. If the
- * name isn't found, an error is shown.
- */
 export default function GuestLogin() {
-  const { weddingId } = useParams<{ weddingId: string }>();
+  const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  const { signIn, weddingId: authWeddingId } = useGuestAuth();
-  const { t } = useLang();
+  const { signIn, token, guestName } = useGuestAuth();
+  const isAuthenticated = !!token;
 
-  const [wedding, setWedding] = useState<Wedding | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: event, isLoading, error: queryError, refetch } = useQuery<
+    UserEvent | null
+  >({
+    queryKey: ["public-event", eventId],
+    queryFn: async () => {
+      if (!eventId) return null;
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("id", eventId)
+        .eq("is_published", true)
+        .maybeSingle();
+      if (error) throw error;
+      return data as UserEvent | null;
+    },
+    enabled: !!eventId,
+  });
 
   useEffect(() => {
-    // If already authenticated for this wedding, skip straight to home
-    if (authWeddingId && weddingId && authWeddingId === weddingId) {
-      navigate(`/${weddingId}/home`, { replace: true });
-      return;
+    if (isAuthenticated && eventId) {
+      navigate(`/${eventId}/home`, { replace: true });
     }
+  }, [isAuthenticated, eventId, navigate]);
 
-    if (!weddingId) {
-      setError("No wedding specified");
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const { data, error: fetchError } = await supabase
-          .from("weddings")
-          .select("*")
-          .eq("id", weddingId)
-          .limit(1)
-          .maybeSingle();
-
-        if (cancelled) return;
-        if (fetchError) throw fetchError;
-        if (!data) throw new Error("Wedding not found");
-
-        setWedding(data as Wedding);
-      } catch (err: any) {
-        if (!cancelled) setError(err.message || "Failed to load wedding");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [weddingId, authWeddingId, navigate]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !weddingId) return;
-
-    setFormError("");
+    if (!name.trim() || !eventId) return;
     setSubmitting(true);
-
-    try {
-      const result = await signIn(name, weddingId);
-      if (!result.success) {
-        setFormError(result.error || t("nameNotFound"));
-      } else {
-        navigate(`/${weddingId}/home`, { replace: true });
-      }
-    } catch (err: any) {
-      setFormError(err.message || t("nameNotFound"));
-    } finally {
+    setError(null);
+    const result = await signIn(name, eventId);
+    if (result.success) {
+      navigate(`/${eventId}/home`, { replace: true });
+    } else {
+      setError(result.error || "Unable to sign in. Please check your name.");
       setSubmitting(false);
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen" style={{ background: "var(--wed-login-bg, #faf8f5)" }}>
-        <div className="w-8 h-8 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-gray-50 p-6 space-y-6">
+        <Skeleton className="h-96 w-full max-w-md mx-auto" />
       </div>
     );
   }
 
-  if (error || !wedding) {
+  if (queryError || !event) {
     return (
-      <div className="flex items-center justify-center min-h-screen px-4 bg-gray-50">
-        <ErrorState message={error || "Wedding not found"} onRetry={() => navigate("/")} />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <ErrorState
+          message={
+            queryError ? queryError.message : "Event not found or not published."
+          }
+          onRetry={() => refetch()}
+        />
       </div>
     );
   }
 
-  const login = wedding.login_config || DEFAULT_LOGIN_CONFIG;
-  const loginVars = loginToCssVars(login) as CSSProperties;
-
-  const hasBgImage = !!login.bgImage;
+  const loginConfig = event.login_config || DEFAULT_LOGIN_CONFIG;
+  const logo = event.logo_config || DEFAULT_LOGO_CONFIG;
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden px-4"
+      className="relative min-h-screen w-full flex flex-col items-center justify-center p-6"
       style={{
-        ...loginVars,
-        background: hasBgImage
-          ? `linear-gradient(rgba(0,0,0,${login.overlayOpacity}), rgba(0,0,0,${login.overlayOpacity})), url(${login.bgImage})`
-          : login.bgColor,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        color: hasBgImage ? "#ffffff" : login.textColor,
+        backgroundColor: loginConfig.bgColor,
+        color: loginConfig.textColor,
+        fontFamily: `"${loginConfig.font}", sans-serif`,
       }}
     >
+      {loginConfig.bgImage && (
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${loginConfig.bgImage})` }}
+        />
+      )}
+      {loginConfig.bgImage && (
+        <div
+          className="absolute inset-0"
+          style={{ backgroundColor: "#000", opacity: loginConfig.overlayOpacity }}
+        />
+      )}
+
       <div
-        className="w-full max-w-md animate-fade-in"
+        className="relative z-10 w-full max-w-sm p-8 md:p-10 rounded-2xl shadow-2xl"
         style={{
-          background: hasBgImage ? "rgba(255,255,255,0.95)" : login.cardBgColor,
-          borderRadius: "12px",
-          padding: "2.5rem",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+          backgroundColor: loginConfig.cardBgColor,
+          border: `1px solid ${loginConfig.borderColor}`,
         }}
       >
-        {/* Logo */}
-        {login.showLogo && (
+        {loginConfig.showLogo && shouldShowLogo(logo) && (
           <div className="text-center mb-6">
+            {logo.image ? (
+              <img
+                src={logo.image}
+                alt={event.name}
+                className="mx-auto max-h-16 object-contain"
+              />
+            ) : (
+              <div
+                style={{
+                  ...getLogoStyle(logo),
+                  fontSize: `${loginConfig.logoSize * 1.5}px`,
+                  color: loginConfig.accentColor,
+                }}
+              >
+                {logo.text}
+              </div>
+            )}
+          </div>
+        )}
+
+        <h2
+          className="text-center mb-2"
+          style={{
+            fontFamily: `"${loginConfig.headingFont}", serif`,
+            fontSize: `${loginConfig.headingFontSize}px`,
+            fontWeight: loginConfig.headingWeight as CSSProperties["fontWeight"],
+            color: loginConfig.textColor,
+          }}
+        >
+          {loginConfig.title}
+        </h2>
+
+        <p
+          className="text-center mb-1 opacity-70"
+          style={{ fontSize: `${loginConfig.bodyFontSize}px` }}
+        >
+          {loginConfig.subtitle}
+        </p>
+
+        {loginConfig.welcomeMessage && (
+          <p
+            className="text-center mb-6 opacity-60 italic"
+            style={{
+              fontSize: `${loginConfig.bodyFontSize}px`,
+              fontFamily: `"${loginConfig.headingFont}", serif`,
+            }}
+          >
+            {loginConfig.welcomeMessage}
+          </p>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={loginConfig.inputPlaceholder}
+            autoFocus
+            disabled={submitting}
+            className="w-full px-4 py-3 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0"
+            style={{
+              borderColor: loginConfig.borderColor,
+              backgroundColor: loginConfig.inputBgColor,
+              color: loginConfig.textColor,
+              fontSize: `${loginConfig.bodyFontSize + 2}px`,
+            }}
+          />
+
+          {error && (
             <div
-              className="inline-block"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm"
               style={{
-                fontSize: `${login.logoSize}px`,
-                color: login.accentColor,
-                fontFamily: `"Great Vibes", cursive`,
+                backgroundColor: `color-mix(in srgb, #dc2626 10%, transparent)`,
+                color: "#dc2626",
               }}
             >
-              {wedding.groom_name?.[0]}&{wedding.bride_name?.[0]}
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{error}</span>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Title */}
-        <div className="text-center mb-8">
-          <h1
-            className="mb-2"
-            style={{
-              fontFamily: `"${login.headingFont}", serif`,
-              fontSize: `${login.headingFontSize}px`,
-              fontWeight: login.headingWeight,
-              color: login.textColor,
-            }}
-          >
-            {login.title || t("enterInvitation")}
-          </h1>
-          <p
-            style={{
-              fontFamily: `"${login.font}", sans-serif`,
-              fontSize: `${login.bodyFontSize}px`,
-              fontWeight: login.bodyWeight,
-              color: login.textColor,
-              opacity: 0.7,
-            }}
-          >
-            {login.subtitle || t("pleaseEnterName")}
-          </p>
-        </div>
-
-        {/* Welcome message */}
-        {login.welcomeMessage && (
-          <p
-            className="text-center mb-6 italic"
-            style={{
-              fontFamily: `"${login.headingFont}", serif`,
-              fontSize: "15px",
-              color: login.accentColor,
-            }}
-          >
-            {login.welcomeMessage}
-          </p>
-        )}
-
-        {/* Error */}
-        {formError && (
-          <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">
-            {formError}
-          </div>
-        )}
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <Input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={login.inputPlaceholder || t("yourFullName")}
-              required
-              autoFocus
-              disabled={submitting}
-              className="text-center"
-              style={{
-                background: login.inputBgColor,
-                borderColor: login.borderColor,
-                borderRadius: "8px",
-                padding: "12px 16px",
-                fontSize: "15px",
-              }}
-            />
-          </div>
-
-          <Button
+          <button
             type="submit"
-            className="w-full"
-            size="lg"
-            loading={submitting}
-            disabled={!name.trim()}
+            disabled={submitting || !name.trim()}
+            className="w-full py-3 rounded-lg font-medium transition-all duration-200 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             style={{
-              background: login.buttonColor,
+              backgroundColor: loginConfig.buttonColor,
               color: "#ffffff",
-              borderRadius: "8px",
-              padding: "12px 24px",
-              fontSize: "15px",
-              fontWeight: "500",
-              border: "none",
+              fontSize: `${loginConfig.bodyFontSize + 1}px`,
             }}
           >
-            {login.buttonText || t("continue")}
-          </Button>
+            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            {loginConfig.buttonText}
+          </button>
         </form>
+
+        {guestName && (
+          <p className="text-center mt-4 text-xs opacity-50">
+            Signed in as {guestName}
+          </p>
+        )}
       </div>
 
-      {/* Back to cover */}
       <button
-        onClick={() => weddingId && navigate(`/${weddingId}`)}
-        className="mt-6 text-xs opacity-60 hover:opacity-100 transition-opacity"
-        style={{ color: hasBgImage ? "#ffffff" : login.textColor }}
+        onClick={() => navigate(`/${eventId}`)}
+        className="relative z-10 mt-6 text-xs opacity-60 hover:opacity-100 transition-opacity"
+        style={{ color: loginConfig.textColor }}
       >
-        ← Back
+        ← Back to cover
       </button>
     </div>
   );

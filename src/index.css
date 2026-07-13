@@ -32,13 +32,7 @@
 }
 
 @layer base {
-  body {
-    @apply antialiased;
-    margin: 0;
-    font-family: var(--wed-body-font);
-    color: var(--wed-body-color);
-    background: var(--wed-bg);
-  }
+  body { @apply antialiased; margin: 0; font-family: var(--wed-body-font); color: var(--wed-body-color); background: var(--wed-bg); }
   * { box-sizing: border-box; }
 }
 
@@ -55,39 +49,16 @@
   .animation-delay-1200 { animation-delay: 1200ms; }
   .animation-delay-1500 { animation-delay: 1500ms; }
   .animation-delay-2000 { animation-delay: 2000ms; }
-
-  .dash-root {
-    --dash-bg: #ffffff;
-    --dash-surface: #ffffff;
-    --dash-border: #e5e7eb;
-    --dash-text: #111827;
-    --dash-muted: #6b7280;
-    --dash-primary: #111827;
-    --dash-primary-hover: #374151;
-    --dash-accent: #6366f1;
-    --dash-radius: 8px;
-  }
-
+  .dash-root { --dash-bg: #ffffff; --dash-surface: #ffffff; --dash-border: #e5e7eb; --dash-text: #111827; --dash-muted: #6b7280; --dash-primary: #111827; --dash-primary-hover: #374151; --dash-accent: #6366f1; --dash-radius: 8px; }
   .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
   .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
   .scrollbar-thin::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
-
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
-.preview-frame {
-  transition: width 0.3s ease, height 0.3s ease;
-}
+.preview-frame { transition: width 0.3s ease, height 0.3s ease; }
 
-@keyframes shimmer {
-  0% { background-position: -1000px 0; }
-  100% { background-position: 1000px 0; }
-}
-
-.skeleton {
-  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite linear;
-}
+@keyframes shimmer { 0% { background-position: -1000px 0; } 100% { background-position: 1000px 0; } }
+.skeleton { background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%); background-size: 1000px 100%; animation: shimmer 2s infinite linear; }

@@ -1,5 +1,5 @@
 import { useState, useEffect, CSSProperties } from "react";
-import type { Wedding, CoverConfig, LoginConfig, ThemeConfig, LogoConfig, WeddingContent } from "../../lib/supabase";
+import type { UserEvent, CoverConfig, LoginConfig, ThemeConfig, LogoConfig, EventContent } from "../../lib/supabase";
 import { themeToCssVars, coverToCssVars, loginToCssVars, getLogoStyle, shouldShowLogo } from "../../lib/theme";
 import { getCountdown, formatDate, formatTime } from "../../lib/utils";
 
@@ -11,14 +11,14 @@ export function LogoRenderer({ logo, className = "" }: { logo: LogoConfig; class
   return <div className={className} style={getLogoStyle(logo)}>{logo.text}</div>;
 }
 
-export function CoverPreview({ wedding, coverConfig }: { wedding: Partial<Wedding>; coverConfig: CoverConfig }) {
-  const [countdown, setCountdown] = useState(getCountdown(wedding.draft_wedding_date || wedding.wedding_date || null));
+export function CoverPreview({ event, coverConfig }: { event: Partial<UserEvent>; coverConfig: CoverConfig }) {
+  const [countdown, setCountdown] = useState(getCountdown(event.draft_event_date || event.event_date || null));
   useEffect(() => {
-    const target = wedding.draft_wedding_date || wedding.wedding_date || null;
+    const target = event.draft_event_date || event.event_date || null;
     if (!target) return;
     const interval = setInterval(() => setCountdown(getCountdown(target)), 1000);
     return () => clearInterval(interval);
-  }, [wedding.wedding_date, wedding.draft_wedding_date]);
+  }, [event.event_date, event.draft_event_date]);
 
   return (
     <div className="w-full h-full relative overflow-hidden flex flex-col items-center justify-center" style={{ backgroundColor: coverConfig.bgColor, color: coverConfig.textColor, fontFamily: `"${coverConfig.font}", serif` }}>
@@ -26,28 +26,17 @@ export function CoverPreview({ wedding, coverConfig }: { wedding: Partial<Weddin
       <div className="absolute inset-0" style={{ backgroundColor: coverConfig.overlayColor, opacity: coverConfig.overlayOpacity }} />
       <div className="relative z-10 text-center px-8">
         {coverConfig.customText && <p className="text-sm uppercase tracking-widest mb-4 opacity-80">{coverConfig.customText}</p>}
-        <p className="text-lg mb-2 opacity-90" style={{ fontFamily: `"${coverConfig.scriptFont}", cursive` }}>The Wedding of</p>
-        <h1 className="text-5xl md:text-6xl font-bold mb-4" style={{ fontFamily: `"${coverConfig.font}", serif` }}>
-          {wedding.draft_groom_name || wedding.groom_name} & {wedding.draft_bride_name || wedding.bride_name}
-        </h1>
-        {coverConfig.showDate && (wedding.draft_wedding_date || wedding.wedding_date) && (
-          <p className="text-base opacity-90 mb-4">{formatDate(wedding.draft_wedding_date || wedding.wedding_date || null)}</p>
-        )}
+        <p className="text-lg mb-2 opacity-90" style={{ fontFamily: `"${coverConfig.scriptFont}", cursive` }}>The Event of</p>
+        <h1 className="text-5xl md:text-6xl font-bold mb-4" style={{ fontFamily: `"${coverConfig.font}", serif` }}>{event.draft_name || event.name}</h1>
+        {coverConfig.showDate && (event.draft_event_date || event.event_date) && <p className="text-base opacity-90 mb-4">{formatDate(event.draft_event_date || event.event_date || null)}</p>}
         {coverConfig.showCountdown && !countdown.expired && (
           <div className="flex justify-center gap-6 mt-6">
             {[{ label: "Days", value: countdown.days }, { label: "Hours", value: countdown.hours }, { label: "Min", value: countdown.minutes }, { label: "Sec", value: countdown.seconds }].map(item => (
-              <div key={item.label} className="text-center">
-                <div className="text-2xl font-bold">{String(item.value).padStart(2, "0")}</div>
-                <div className="text-xs uppercase tracking-wider opacity-70">{item.label}</div>
-              </div>
+              <div key={item.label} className="text-center"><div className="text-2xl font-bold">{String(item.value).padStart(2, "0")}</div><div className="text-xs uppercase tracking-wider opacity-70">{item.label}</div></div>
             ))}
           </div>
         )}
-        {coverConfig.buttonText && (
-          <div className="mt-8">
-            <button disabled className="px-6 py-2.5 rounded-lg font-medium text-sm" style={{ backgroundColor: coverConfig.buttonColor, color: "#fff" }}>{coverConfig.buttonText}</button>
-          </div>
-        )}
+        {coverConfig.buttonText && <div className="mt-8"><button disabled className="px-6 py-2.5 rounded-lg font-medium text-sm" style={{ backgroundColor: coverConfig.buttonColor, color: "#fff" }}>{coverConfig.buttonText}</button></div>}
       </div>
     </div>
   );
@@ -72,22 +61,19 @@ export function LoginPreview({ loginConfig, logo }: { loginConfig: LoginConfig; 
   );
 }
 
-export function HomePreview({ wedding, theme, content }: { wedding: Partial<Wedding>; theme: ThemeConfig; content: WeddingContent }) {
+export function HomePreview({ event, theme, content }: { event: Partial<UserEvent>; theme: ThemeConfig; content: EventContent }) {
   const style = buildStyle(themeToCssVars(theme));
-  const groom = wedding.draft_groom_name || wedding.groom_name;
-  const bride = wedding.draft_bride_name || wedding.bride_name;
-  const date = wedding.draft_wedding_date || wedding.wedding_date;
-  const time = wedding.draft_wedding_time || wedding.wedding_time;
-  const venue = wedding.draft_venue || wedding.venue;
-  const address = wedding.draft_address || wedding.address;
+  const name = event.draft_name || event.name;
+  const date = event.draft_event_date || event.event_date;
+  const time = event.draft_event_time || event.event_time;
+  const venue = event.draft_venue || event.venue;
+  const address = event.draft_address || event.address;
 
   return (
     <div className="w-full min-h-full" style={style}>
       <div className="py-16 px-6 text-center" style={{ padding: `${theme.sectionPadding}px 24px` }}>
-        <p className="text-lg mb-4 opacity-80" style={{ fontFamily: `"${theme.scriptFont}", cursive` }}>Together with their families</p>
-        <h1 className="text-5xl font-bold mb-2" style={{ fontFamily: `"${theme.headingFont}", serif`, color: theme.headingColor }}>{groom}</h1>
-        <p className="text-2xl mb-2 opacity-60" style={{ fontFamily: `"${theme.scriptFont}", cursive` }}>&</p>
-        <h1 className="text-5xl font-bold mb-6" style={{ fontFamily: `"${theme.headingFont}", serif`, color: theme.headingColor }}>{bride}</h1>
+        <p className="text-lg mb-4 opacity-80" style={{ fontFamily: `"${theme.scriptFont}", cursive` }}>Join us for</p>
+        <h1 className="text-5xl font-bold mb-6" style={{ fontFamily: `"${theme.headingFont}", serif`, color: theme.headingColor }}>{name}</h1>
         {date && <p className="text-base opacity-80 mb-1">{formatDate(date)}</p>}
         {time && <p className="text-sm opacity-60">{formatTime(time)}</p>}
         {venue && <p className="text-base opacity-80 mt-4">{venue}</p>}
@@ -112,7 +98,7 @@ export function HomePreview({ wedding, theme, content }: { wedding: Partial<Wedd
   );
 }
 
-export function RsvpPreview({ theme, content }: { theme: ThemeConfig; content: WeddingContent }) {
+export function RsvpPreview({ theme, content }: { theme: ThemeConfig; content: EventContent }) {
   const style = buildStyle(themeToCssVars(theme));
   return (
     <div className="w-full min-h-full p-8" style={style}>
@@ -135,11 +121,11 @@ export function RsvpPreview({ theme, content }: { theme: ThemeConfig; content: W
   );
 }
 
-export function DoaPreview({ theme, content }: { theme: ThemeConfig; content: WeddingContent }) {
+export function DoaPreview({ theme, content }: { theme: ThemeConfig; content: EventContent }) {
   const style = buildStyle(themeToCssVars(theme));
   return (
     <div className="w-full min-h-full p-8 text-center" style={style}>
-      <h2 className="text-3xl font-bold mb-4" style={{ fontFamily: `"${theme.headingFont}", serif`, color: theme.headingColor }}>{content.doa_title || "Doa & Wishes"}</h2>
+      <h2 className="text-3xl font-bold mb-4" style={{ fontFamily: `"${theme.headingFont}", serif`, color: theme.headingColor }}>{content.doa_title || "Wishes"}</h2>
       <p className="text-sm opacity-70 max-w-md mx-auto">{content.doa_description}</p>
     </div>
   );
@@ -158,7 +144,7 @@ export function SendMessagePreview({ theme }: { theme: ThemeConfig }) {
   );
 }
 
-export function ContactPreview({ theme, content }: { theme: ThemeConfig; content: WeddingContent }) {
+export function ContactPreview({ theme, content }: { theme: ThemeConfig; content: EventContent }) {
   const style = buildStyle(themeToCssVars(theme));
   return (
     <div className="w-full min-h-full p-8" style={style}>

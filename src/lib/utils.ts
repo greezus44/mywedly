@@ -1,6 +1,4 @@
-export function cn(...classes: (string | undefined | false | null)[]): string {
-  return classes.filter(Boolean).join(" ");
-}
+export function cn(...classes: (string | undefined | false | null)[]): string { return classes.filter(Boolean).join(" "); }
 
 export function formatDate(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -28,16 +26,9 @@ export function formatTime(timeStr: string | null): string {
 export function getCountdown(targetDate: string | null) {
   if (!targetDate) return { days: 0, hours: 0, minutes: 0, seconds: 0, expired: true };
   const target = new Date(targetDate).getTime();
-  const now = Date.now();
-  const diff = target - now;
+  const diff = target - Date.now();
   if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, expired: true };
-  return {
-    days: Math.floor(diff / 86400000),
-    hours: Math.floor((diff % 86400000) / 3600000),
-    minutes: Math.floor((diff % 3600000) / 60000),
-    seconds: Math.floor((diff % 60000) / 1000),
-    expired: false,
-  };
+  return { days: Math.floor(diff / 86400000), hours: Math.floor((diff % 86400000) / 3600000), minutes: Math.floor((diff % 3600000) / 60000), seconds: Math.floor((diff % 60000) / 1000), expired: false };
 }
 
 export function generateToken(): string {

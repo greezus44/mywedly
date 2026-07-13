@@ -78,15 +78,12 @@ export function Toast({ message, type = "success", onClose }: { message: string;
   const colors = { success: "bg-green-600", error: "bg-red-600", info: "bg-gray-900" };
   return (
     <div className={cn("fixed bottom-6 right-6 z-50 px-4 py-3 rounded-lg text-white text-sm font-medium shadow-lg animate-slide-up", colors[type])}>
-      {message}
-      <button onClick={onClose} className="ml-3 opacity-70 hover:opacity-100">✕</button>
+      {message}<button onClick={onClose} className="ml-3 opacity-70 hover:opacity-100">✕</button>
     </div>
   );
 }
 
-export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("skeleton rounded-lg", className)} />;
-}
+export function Skeleton({ className }: { className?: string }) { return <div className={cn("skeleton rounded-lg", className)} />; }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
@@ -105,13 +102,7 @@ export function ImageUpload({ value, onChange, label }: { value: string; onChang
       {label && <label className="block text-sm font-medium text-gray-700">{label}</label>}
       {value && <img src={value} alt="Preview" className="w-full h-32 object-cover rounded-lg border border-gray-200" />}
       <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Paste image URL" className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm" />
-      <input type="file" accept="image/*" onChange={async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => onChange(reader.result as string);
-        reader.readAsDataURL(file);
-      }} className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200" />
+      <input type="file" accept="image/*" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => onChange(reader.result as string); reader.readAsDataURL(file); }} className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200" />
     </div>
   );
 }

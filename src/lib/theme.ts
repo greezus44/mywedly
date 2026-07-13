@@ -1,107 +1,47 @@
-import type { ThemeConfig, CoverConfig, LoginConfig, LogoConfig, WeddingContent, SharingConfig } from "./supabase";
+import type { ThemeConfig, CoverConfig, LoginConfig, LogoConfig, EventContent, SharingConfig } from "./supabase";
 
 export const DEFAULT_THEME: ThemeConfig = {
-  bgColor: "#faf8f5",
-  textColor: "#2a2a2a",
-  primaryColor: "#b8a589",
-  accentColor: "#8b7355",
-  headingFont: "Playfair Display",
-  bodyFont: "Montserrat",
-  scriptFont: "Great Vibes",
-  headingColor: "#2a2a2a",
-  bodyColor: "#4a4a4a",
-  buttonBgColor: "#b8a589",
-  buttonTextColor: "#ffffff",
-  buttonRadius: 4,
-  sectionPadding: 64,
-  maxWidth: 800,
-  preset: "classic",
+  bgColor: "#faf8f5", textColor: "#2a2a2a", primaryColor: "#b8a589", accentColor: "#8b7355",
+  headingFont: "Playfair Display", bodyFont: "Montserrat", scriptFont: "Great Vibes",
+  headingColor: "#2a2a2a", bodyColor: "#4a4a4a", buttonBgColor: "#b8a589", buttonTextColor: "#ffffff",
+  buttonRadius: 4, sectionPadding: 64, maxWidth: 800, preset: "classic",
 };
 
 export const DEFAULT_LOGO_CONFIG: LogoConfig = {
-  enabled: false,
-  text: "W&M",
-  image: "",
-  fontSize: 28,
-  color: "#b8a589",
-  fontFamily: "Great Vibes",
-  fontWeight: "400",
+  enabled: false, text: "E", image: "", fontSize: 28, color: "#b8a589", fontFamily: "Great Vibes", fontWeight: "400",
 };
 
 export const DEFAULT_COVER_CONFIG: CoverConfig = {
-  bgColor: "#1a1a1a",
-  textColor: "#ffffff",
-  overlayColor: "#000000",
-  overlayOpacity: 0.4,
-  bgImage: "",
-  font: "Playfair Display",
-  scriptFont: "Great Vibes",
-  showDate: true,
-  showCountdown: true,
-  customText: "",
-  buttonText: "Open Invitation",
-  buttonColor: "#b8a589",
+  bgColor: "#1a1a1a", textColor: "#ffffff", overlayColor: "#000000", overlayOpacity: 0.4,
+  bgImage: "", font: "Playfair Display", scriptFont: "Great Vibes",
+  showDate: true, showCountdown: true, customText: "", buttonText: "Open Invitation", buttonColor: "#b8a589",
 };
 
 export const DEFAULT_LOGIN_CONFIG: LoginConfig = {
-  bgColor: "#faf8f5",
-  cardBgColor: "#ffffff",
-  textColor: "#2a2a2a",
-  accentColor: "#b8a589",
-  font: "Montserrat",
-  headingFont: "Playfair Display",
-  title: "Enter Invitation",
-  subtitle: "Please enter your name to continue",
-  welcomeMessage: "Welcome to our wedding",
-  buttonText: "Continue",
-  inputPlaceholder: "Your full name",
-  showLogo: true,
-  logoSize: 32,
-  bgImage: "",
-  overlayOpacity: 0.3,
-  inputBgColor: "#ffffff",
-  buttonColor: "#b8a589",
-  borderColor: "#e5e7eb",
-  headingFontSize: 28,
-  bodyFontSize: 14,
-  headingWeight: "600",
-  bodyWeight: "400",
+  bgColor: "#faf8f5", cardBgColor: "#ffffff", textColor: "#2a2a2a", accentColor: "#b8a589",
+  font: "Montserrat", headingFont: "Playfair Display",
+  title: "Enter Invitation", subtitle: "Please enter your name to continue",
+  welcomeMessage: "Welcome to our event", buttonText: "Continue", inputPlaceholder: "Your full name",
+  showLogo: true, logoSize: 32, bgImage: "", overlayOpacity: 0.3,
+  inputBgColor: "#ffffff", buttonColor: "#b8a589", borderColor: "#e5e7eb",
+  headingFontSize: 28, bodyFontSize: 14, headingWeight: "600", bodyWeight: "400",
 };
 
-export const DEFAULT_CONTENT: WeddingContent = {
-  story: "",
-  story_image: "",
-  gallery: [],
-  gallery_titles: [],
-  extra_pages: [],
-  rsvp_title: "RSVP",
-  rsvp_description: "Please let us know if you can make it",
-  rsvp_fields: [],
-  rsvp_questions: [],
-  doa_title: "Doa & Wishes",
-  doa_description: "Share your wishes and prayers for the happy couple",
-  doa_enabled: true,
-  message_enabled: true,
-  contact_enabled: true,
-  contact_phone: "",
-  contact_email: "",
-  contact_address: "",
-  navigation: [],
-  footer_text: "Made with love",
-  footer_enabled: true,
+export const DEFAULT_CONTENT: EventContent = {
+  story: "", story_image: "", gallery: [], gallery_titles: [], extra_pages: [],
+  rsvp_title: "RSVP", rsvp_description: "Please let us know if you can make it",
+  rsvp_fields: [], rsvp_questions: [],
+  doa_title: "Wishes", doa_description: "Share your wishes for the event",
+  doa_enabled: true, message_enabled: true, contact_enabled: true,
+  contact_phone: "", contact_email: "", contact_address: "",
+  navigation: [], footer_text: "Made with love", footer_enabled: true,
 };
 
 export const DEFAULT_SHARING_CONFIG: SharingConfig = {
-  enabled: true,
-  message: "You're invited to our wedding!",
-  whatsappText: "You're invited to our wedding! Click here to view the invitation",
-  facebookText: "We're getting married! View our invitation",
-  instagramText: "We're getting married! Link in bio",
-  emailSubject: "You're invited to our wedding",
-  emailBody: "We would be delighted to have you at our wedding. Please view our invitation",
-  customUrl: "",
-  qrColor: "#000000",
-  qrBgColor: "#ffffff",
+  enabled: true, message: "You're invited!", whatsappText: "You're invited! Click here to view the invitation",
+  facebookText: "We're having an event! View the invitation", instagramText: "We're having an event! Link in bio",
+  emailSubject: "You're invited", emailBody: "We would be delighted to have you. Please view our invitation",
+  customUrl: "", qrColor: "#000000", qrBgColor: "#ffffff",
 };
 
 export const THEME_PRESETS: { id: string; name: string; config: Partial<ThemeConfig> }[] = [
@@ -133,53 +73,36 @@ export const FONT_WEIGHTS = [
 
 export function themeToCssVars(theme: ThemeConfig): Record<string, string> {
   return {
-    "--wed-bg": theme.bgColor,
-    "--wed-text": theme.textColor,
-    "--wed-primary": theme.primaryColor,
-    "--wed-accent": theme.accentColor,
-    "--wed-heading-font": `"${theme.headingFont}", serif`,
-    "--wed-body-font": `"${theme.bodyFont}", sans-serif`,
-    "--wed-script-font": `"${theme.scriptFont}", cursive`,
-    "--wed-heading-color": theme.headingColor,
-    "--wed-body-color": theme.bodyColor,
-    "--wed-button-bg": theme.buttonBgColor,
-    "--wed-button-text": theme.buttonTextColor,
-    "--wed-button-radius": `${theme.buttonRadius}px`,
-    "--wed-section-padding": `${theme.sectionPadding}px`,
+    "--wed-bg": theme.bgColor, "--wed-text": theme.textColor, "--wed-primary": theme.primaryColor,
+    "--wed-accent": theme.accentColor, "--wed-heading-font": `"${theme.headingFont}", serif`,
+    "--wed-body-font": `"${theme.bodyFont}", sans-serif`, "--wed-script-font": `"${theme.scriptFont}", cursive`,
+    "--wed-heading-color": theme.headingColor, "--wed-body-color": theme.bodyColor,
+    "--wed-button-bg": theme.buttonBgColor, "--wed-button-text": theme.buttonTextColor,
+    "--wed-button-radius": `${theme.buttonRadius}px`, "--wed-section-padding": `${theme.sectionPadding}px`,
     "--wed-max-width": `${theme.maxWidth}px`,
   };
 }
 
 export function coverToCssVars(cover: CoverConfig): Record<string, string> {
   return {
-    "--wed-cover-bg": cover.bgColor,
-    "--wed-cover-text": cover.textColor,
+    "--wed-cover-bg": cover.bgColor, "--wed-cover-text": cover.textColor,
     "--wed-cover-overlay": String(cover.overlayOpacity),
     "--wed-cover-image": cover.bgImage ? `url(${cover.bgImage})` : "none",
-    "--wed-cover-font": `"${cover.font}", serif`,
-    "--wed-cover-script-font": `"${cover.scriptFont}", cursive`,
+    "--wed-cover-font": `"${cover.font}", serif`, "--wed-cover-script-font": `"${cover.scriptFont}", cursive`,
   };
 }
 
 export function loginToCssVars(login: LoginConfig): Record<string, string> {
   return {
-    "--wed-login-bg": login.bgColor,
-    "--wed-login-card-bg": login.cardBgColor,
-    "--wed-login-text": login.textColor,
-    "--wed-login-accent": login.accentColor,
-    "--wed-login-font": `"${login.font}", sans-serif`,
-    "--wed-login-heading-font": `"${login.headingFont}", serif`,
+    "--wed-login-bg": login.bgColor, "--wed-login-card-bg": login.cardBgColor,
+    "--wed-login-text": login.textColor, "--wed-login-accent": login.accentColor,
+    "--wed-login-font": `"${login.font}", sans-serif`, "--wed-login-heading-font": `"${login.headingFont}", serif`,
   };
 }
 
 export function getLogoStyle(logo: LogoConfig): React.CSSProperties {
   if (logo.image) return {};
-  return {
-    fontSize: `${logo.fontSize}px`,
-    color: logo.color,
-    fontFamily: `"${logo.fontFamily}", cursive`,
-    fontWeight: logo.fontWeight,
-  };
+  return { fontSize: `${logo.fontSize}px`, color: logo.color, fontFamily: `"${logo.fontFamily}", cursive`, fontWeight: logo.fontWeight };
 }
 
 export function shouldShowLogo(logo: LogoConfig): boolean {

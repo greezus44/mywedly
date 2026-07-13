@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Mail, Lock, User, ArrowLeft, Check } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, ArrowLeft } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -36,15 +36,14 @@ export default function AuthPage() {
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    setSuccess("");
+    setError(""); setSuccess("");
     if (mode === "signup" && !agreeTerms) { setError("Please accept the terms to continue"); return; }
     setLoading(true);
     try {
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate("/admin");
+        navigate("/dashboard");
       } else if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
         if (error) throw error;
@@ -64,40 +63,35 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      {/* Premium header */}
       <header className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
         <button onClick={() => navigate("/")} className="flex items-center gap-2.5 group">
           <div className="w-8 h-8 rounded-lg bg-gray-900 flex items-center justify-center transition-transform group-hover:scale-105">
-            <span className="text-white text-sm font-bold tracking-tight">W</span>
+            <span className="text-white text-sm font-bold tracking-tight">E</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-semibold text-gray-900 leading-tight">Wedding Studio</span>
-            <span className="text-[11px] text-gray-400 leading-tight">Create beautiful wedding websites</span>
+            <span className="text-sm font-semibold text-gray-900 leading-tight">Event Studio</span>
+            <span className="text-[11px] text-gray-400 leading-tight">Create beautiful event websites</span>
           </div>
         </button>
         <button onClick={() => navigate("/")} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition-colors">
-          <ArrowLeft className="w-4 h-4" />
-          <span className="hidden sm:inline">Back to site</span>
+          <ArrowLeft className="w-4 h-4" /><span className="hidden sm:inline">Back to site</span>
         </button>
       </header>
 
-      {/* Main content */}
       <div className="flex-1 flex items-center justify-center px-4 py-8">
         <div className="w-full max-w-[400px]">
-          {/* Brand area */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gray-900 mb-4 shadow-sm">
-              <span className="text-white text-xl font-bold tracking-tight">W</span>
+              <span className="text-white text-xl font-bold tracking-tight">E</span>
             </div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
               {mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your account" : "Reset password"}
             </h1>
             <p className="text-sm text-gray-500 mt-1.5">
-              {mode === "signin" ? "Sign in to your Wedding Creator dashboard" : mode === "signup" ? "Start building your wedding website" : "We'll send you a reset link"}
+              {mode === "signin" ? "Sign in to your dashboard" : mode === "signup" ? "Start building event websites" : "We'll send you a reset link"}
             </p>
           </div>
 
-          {/* Login card */}
           <div className="bg-gray-50 rounded-2xl border border-gray-100 p-6 shadow-sm">
             {error && <div className="mb-4 px-3.5 py-2.5 rounded-lg bg-red-50 border border-red-100 text-sm text-red-600">{error}</div>}
             {success && <div className="mb-4 px-3.5 py-2.5 rounded-lg bg-green-50 border border-green-100 text-sm text-green-600">{success}</div>}
@@ -112,7 +106,6 @@ export default function AuthPage() {
                   </div>
                 </div>
               )}
-
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">Email</label>
                 <div className="relative">
@@ -120,7 +113,6 @@ export default function AuthPage() {
                   <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required className="pl-9 bg-white" />
                 </div>
               </div>
-
               {mode !== "forgot" && (
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1.5">Password</label>
@@ -133,15 +125,12 @@ export default function AuthPage() {
                   </div>
                   {mode === "signup" && password && (
                     <div className="mt-2">
-                      <div className="flex gap-1">
-                        {[0, 1, 2, 3, 4].map(i => <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i < strength.score ? strength.color : "bg-gray-200"}`} />)}
-                      </div>
+                      <div className="flex gap-1">{[0,1,2,3,4].map(i => <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${i < strength.score ? strength.color : "bg-gray-200"}`} />)}</div>
                       <p className="text-xs text-gray-500 mt-1">{strength.label}</p>
                     </div>
                   )}
                 </div>
               )}
-
               {mode === "signin" && (
                 <div className="flex items-center justify-between">
                   <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
@@ -151,21 +140,18 @@ export default function AuthPage() {
                   <button type="button" onClick={() => setMode("forgot")} className="text-sm text-gray-500 hover:text-gray-900 transition-colors">Forgot password?</button>
                 </div>
               )}
-
               {mode === "signup" && (
                 <label className="flex items-start gap-2 text-sm text-gray-600 cursor-pointer">
                   <input type="checkbox" checked={agreeTerms} onChange={(e) => setAgreeTerms(e.target.checked)} className="mt-0.5 rounded border-gray-300 text-gray-900 focus:ring-gray-900" />
                   <span>I agree to the Terms of Service and Privacy Policy</span>
                 </label>
               )}
-
               <Button type="submit" className="w-full" loading={loading} size="lg">
                 {mode === "signin" ? "Sign In" : mode === "signup" ? "Create Account" : "Send Reset Link"}
               </Button>
             </form>
           </div>
 
-          {/* Switch mode */}
           <div className="mt-6 text-center text-sm text-gray-500">
             {mode === "signin" ? (
               <>Don't have an account? <button onClick={() => setMode("signup")} className="text-gray-900 font-medium hover:underline transition-colors">Sign Up</button></>

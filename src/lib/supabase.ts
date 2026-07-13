@@ -7,34 +7,26 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 });
 
-export interface Wedding {
+export interface UserEvent {
   id: string;
   creator_id: string;
-  title: string;
-  groom_name: string;
-  bride_name: string;
-  groom_parents: string;
-  bride_parents: string;
-  wedding_date: string | null;
-  wedding_time: string | null;
+  name: string;
+  event_type: string;
+  event_date: string | null;
+  event_time: string | null;
   venue: string;
   address: string;
-  map_lat: number | null;
-  map_lng: number | null;
   cover_image: string | null;
   cover_config: CoverConfig;
   login_config: LoginConfig;
   theme: ThemeConfig;
   logo_config: LogoConfig;
-  content: WeddingContent;
+  content: EventContent;
   sharing_config: SharingConfig;
-  draft_title: string | null;
-  draft_groom_name: string | null;
-  draft_bride_name: string | null;
-  draft_groom_parents: string | null;
-  draft_bride_parents: string | null;
-  draft_wedding_date: string | null;
-  draft_wedding_time: string | null;
+  draft_name: string | null;
+  draft_event_type: string | null;
+  draft_event_date: string | null;
+  draft_event_time: string | null;
   draft_venue: string | null;
   draft_address: string | null;
   draft_cover_image: string | null;
@@ -42,9 +34,10 @@ export interface Wedding {
   draft_login_config: LoginConfig | null;
   draft_theme: ThemeConfig | null;
   draft_logo_config: LogoConfig | null;
-  draft_content: WeddingContent | null;
+  draft_content: EventContent | null;
   draft_sharing_config: SharingConfig | null;
   is_published: boolean;
+  is_archived: boolean;
   published_at: string | null;
   created_at: string;
   updated_at: string;
@@ -118,7 +111,7 @@ export interface LogoConfig {
   fontWeight: string;
 }
 
-export interface WeddingContent {
+export interface EventContent {
   story: string;
   story_image: string;
   gallery: string[];
@@ -141,27 +134,9 @@ export interface WeddingContent {
   footer_enabled: boolean;
 }
 
-export interface ExtraPage {
-  id: string;
-  title: string;
-  content: string;
-  slug: string;
-}
-
-export interface NavItem {
-  id: string;
-  label: string;
-  url: string;
-  enabled: boolean;
-}
-
-export interface RsvpQuestion {
-  id: string;
-  text: string;
-  type: "text" | "radio" | "checkbox" | "select";
-  options: string[];
-  required: boolean;
-}
+export interface ExtraPage { id: string; title: string; content: string; slug: string; }
+export interface NavItem { id: string; label: string; url: string; enabled: boolean; }
+export interface RsvpQuestion { id: string; text: string; type: "text" | "radio" | "checkbox" | "select"; options: string[]; required: boolean; }
 
 export interface SharingConfig {
   enabled: boolean;
@@ -176,27 +151,9 @@ export interface SharingConfig {
   qrBgColor: string;
 }
 
-export interface WeddingEvent {
+export interface EventGuest {
   id: string;
-  wedding_id: string;
-  title: string;
-  description: string;
-  event_date: string;
-  end_date: string | null;
-  start_time: string;
-  end_time: string;
-  venue: string;
-  address: string;
-  dress_code: string;
-  category: string;
-  cover_image: string;
-  order_index: number;
-  created_at: string;
-}
-
-export interface Guest {
-  id: string;
-  wedding_id: string;
+  event_id: string;
   name: string;
   email: string;
   phone: string;
@@ -206,16 +163,15 @@ export interface Guest {
   rsvp_status: "pending" | "attending" | "not_attending" | "maybe";
   rsvp_submitted_at: string | null;
   plus_ones: number;
-  actual_attendance: number;
   dietary: string;
   message: string;
   created_at: string;
 }
 
-export interface Rsvp {
+export interface EventRsvp {
   id: string;
-  wedding_id: string;
-  guest_id: string;
+  event_id: string;
+  guest_id: string | null;
   guest_name: string;
   status: "attending" | "not_attending" | "maybe";
   plus_ones: number;
@@ -225,35 +181,57 @@ export interface Rsvp {
   submitted_at: string;
 }
 
-export interface GuestbookEntry {
+export interface ScheduleItem {
   id: string;
-  wedding_id: string;
+  event_id: string;
+  title: string;
+  description: string;
+  schedule_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  venue: string;
+  address: string;
+  dress_code: string;
+  category: string;
+  cover_image: string;
+  order_index: number;
+  created_at: string;
+}
+
+export interface EventMessage {
+  id: string;
+  event_id: string;
   guest_name: string;
   message: string;
   created_at: string;
 }
 
-export interface GuestToken {
-  token: string;
-  guest_id: string;
-  wedding_id: string;
-  guest_name: string;
-  expires_at: string;
-}
+export const EVENT_TYPES = [
+  { id: "wedding", label: "Wedding" },
+  { id: "engagement", label: "Engagement" },
+  { id: "reception", label: "Reception" },
+  { id: "birthday", label: "Birthday" },
+  { id: "anniversary", label: "Anniversary" },
+  { id: "baby_shower", label: "Baby Shower" },
+  { id: "graduation", label: "Graduation" },
+  { id: "corporate", label: "Corporate" },
+  { id: "conference", label: "Conference" },
+  { id: "party", label: "Party" },
+  { id: "other", label: "Other" },
+];
 
-export interface SharingEvent {
-  id: string;
-  wedding_id: string;
-  platform: string;
-  guest_id: string;
-  guest_name: string;
-  created_at: string;
-}
-
-export interface SavedTheme {
-  id: string;
-  wedding_id: string;
-  name: string;
-  config: ThemeConfig;
-  created_at: string;
-}
+export const EVENT_TEMPLATES = [
+  { id: "wedding", label: "Wedding", type: "wedding" },
+  { id: "birthday", label: "Birthday", type: "birthday" },
+  { id: "corporate", label: "Corporate", type: "corporate" },
+  { id: "conference", label: "Conference", type: "conference" },
+  { id: "engagement", label: "Engagement", type: "engagement" },
+  { id: "reception", label: "Reception", type: "reception" },
+  { id: "baby_shower", label: "Baby Shower", type: "baby_shower" },
+  { id: "anniversary", label: "Anniversary", type: "anniversary" },
+  { id: "minimal", label: "Minimal", type: "other" },
+  { id: "luxury", label: "Luxury", type: "other" },
+  { id: "modern", label: "Modern", type: "other" },
+  { id: "floral", label: "Floral", type: "other" },
+  { id: "blank", label: "Blank", type: "other" },
+];
