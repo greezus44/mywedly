@@ -1,32 +1,252 @@
-import type { UserEvent, CoverConfig, LoginConfig, EventContent } from "../../lib/supabase";
-import { DEFAULT_THEME, themeToEventCssVars } from "../../lib/theme";
-import { formatDate, getCountdown } from "../../lib/utils";
+import { type CSSProperties } from "react";
+import type { UserEvent, CoverConfig, LoginConfig, ThemeConfig, EventContent } from "../../lib/supabase";
+import { themeToEventCssVars } from "../../lib/theme";
 import { RichTextContent } from "../../lib/sanitize";
+import { formatTime } from "../../lib/utils";
+
+function resolve<T>(draft: T | null | undefined, published: T | null | undefined): T | null {
+  return draft ?? published ?? null;
+}
+
+function themedDiv(theme: ThemeConfig | null, extra?: CSSProperties) {
+  return { style: { ...(themeToEventCssVars(theme) as CSSProperties), ...extra } };
+}
+
+/* ------------------------------------------------------------------ */
+/* CoverPreview                                                        */
+/* ------------------------------------------------------------------ */
+
 export function CoverPreview({ event }: { event: UserEvent }) {
-  const config = (event.draft_cover_config || event.cover_config || {}) as CoverConfig;
-  const theme = event.draft_theme || event.theme || DEFAULT_THEME;
-  const vars = themeToEventCssVars(theme) as React.CSSProperties;
-  const bg = config.bgImage ? { backgroundImage: `url(${config.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundColor: config.bgColor || theme.bgColor };
-  const dateStr = event.draft_event_date || event.event_date;
-  const countdown = getCountdown(dateStr);
-  return <div className="event-themed" style={{ ...vars, ...bg, minHeight: "100vh" }}>{config.bgImage && <div className="absolute inset-0" style={{ backgroundColor: config.overlayColor || "#000", opacity: config.overlayOpacity ?? 0.4 }} />}<div className="relative flex flex-col items-center justify-center text-center p-8" style={{ color: config.textColor || theme.textColor, minHeight: "100vh" }}>{config.logo && <img src={config.logo} alt="Logo" style={{ width: config.logoWidth ? `${config.logoWidth}px` : "120px" }} className="mb-6 object-contain" />}{config.customText && <p className="font-script italic text-lg mb-4 opacity-80">{config.customText}</p>}<h1 className="font-heading text-5xl md:text-6xl mb-2">{event.draft_name || event.name}</h1>{config.showDate && dateStr && <p className="text-sm uppercase tracking-widest mt-4 opacity-70">{formatDate(dateStr)}</p>}{config.showCountdown && !countdown.isPast && <div className="flex gap-6 mt-8 justify-center">{["days", "hours", "minutes", "seconds"].map((u) => <div key={u}><div className="text-3xl font-heading">{(countdown as any)[u]}</div><div className="text-xs uppercase tracking-wider mt-1 opacity-60">{u}</div></div>)}</div>}<button className="mt-8 px-8 py-3 text-sm uppercase tracking-wider" style={{ backgroundColor: config.buttonColor || theme.primaryColor, color: "#fff", borderRadius: "var(--event-radius)" }}>{config.buttonText || "Enter"}</button></div></div>;
+  const cfg = resolve<CoverConfig>(event.draft_cover_config, event.cover_config);
+  const name = event.draft_name ?? event.name;
+  const date = event.draft_event_date ?? event.event_date;
+  const theme = resolve<ThemeConfig>(event.draft_theme, event.theme);
+
+  const bg = cfg?.bgImage
+    ? { backgroundImage: `url(${cfg.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" }
+    : { backgroundColor: cfg?.bgColor || "#1a1a1a" };
+
+  const overlay = cfg?.overlayColor
+    ? { backgroundColor: cfg.overlayColor, opacity: cfg.overlayOpacity ?? 0.4 }
+    : {};
+
+  return (
+    <div className="event-themed" {...themedDiv(theme)}>
+      <div className="relative flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center" style={bg as CSSProperties}>
+        <div className="absolute inset-0" style={overlay as CSSProperties} />
+        <div className="relative z-10 flex flex-col items-center gap-3">
+          {cfg?.logo && (
+            <img
+              src={cfg.logo}
+              alt="logo"
+              style={{ width: cfg.logoWidth ? `${cfg.logoWidth}px` : undefined }}
+              className="mb-2"
+            />
+          )}
+          {cfg?.customText && (
+            <p
+              style={{ color: cfg.textColor || "#fff", fontFamily: cfg.scriptFont ? `"${cfg.scriptFont}", serif` : undefined }}
+              className="text-sm italic"
+            >
+              {cfg.customText}
+            </p>
+          )}
+          <h1
+            style={{ color: cfg?.textColor || "#fff", fontFamily: cfg?.scriptFont ? `"${cfg.scriptFont}", serif` : undefined }}
+            className="text-3xl font-semibold"
+          >
+            {name || "Your Event Name"}
+          </h1>
+          {cfg?.showDate && date && (
+            <p style={{ color: cfg?.textColor || "#fff" }} className="text-sm">
+              {new Date(date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            </p>
+          )}
+          {cfg?.buttonText && (
+            <button
+              type="button"
+              style={{ backgroundColor: cfg?.buttonColor || "#fff", color: cfg?.textColor === "#fff" ? "#1a1a1a" : "#fff" }}
+              className="mt-4 rounded px-6 py-2 text-sm font-medium"
+            >
+              {cfg.buttonText}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
+
+/* ------------------------------------------------------------------ */
+/* LoginPreview                                                        */
+/* ------------------------------------------------------------------ */
+
 export function LoginPreview({ event }: { event: UserEvent }) {
-  const config = (event.draft_login_config || event.login_config || {}) as LoginConfig;
-  const theme = event.draft_theme || event.theme || DEFAULT_THEME;
-  const vars = themeToEventCssVars(theme) as React.CSSProperties;
-  const bg = config.bgImage ? { backgroundImage: `url(${config.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundColor: config.bgColor || theme.surfaceColor };
-  return <div className="event-themed" style={{ ...vars, ...bg, minHeight: "100vh" }}><div className="flex flex-col items-center justify-center p-8" style={{ color: config.textColor || theme.textColor, minHeight: "100vh" }}><div className="w-full max-w-sm text-center">{config.logo && <img src={config.logo} alt="Logo" style={{ width: config.logoWidth ? `${config.logoWidth}px` : "100px" }} className="mb-6 mx-auto object-contain" />}<h2 className="font-heading text-3xl mb-2">{config.heading || "Welcome"}</h2>{config.subheading && <p className="text-sm opacity-70 mb-6">{config.subheading}</p>}<input type="text" placeholder={config.inputPlaceholder || "Your name"} className="w-full px-4 py-2.5 text-sm border bg-white/80 mb-3 rounded" style={{ borderColor: "var(--event-border)" }} /><button className="w-full px-6 py-2.5 text-sm uppercase tracking-wider" style={{ backgroundColor: config.buttonColor || theme.primaryColor, color: "#fff", borderRadius: "var(--event-radius)" }}>{config.buttonText || "Continue"}</button></div></div></div>;
+  const cfg = resolve<LoginConfig>(event.draft_login_config, event.login_config);
+  const theme = resolve<ThemeConfig>(event.draft_theme, event.theme);
+
+  const bg = cfg?.bgImage
+    ? { backgroundImage: `url(${cfg.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" }
+    : { backgroundColor: cfg?.bgColor || "#fafafa" };
+
+  const overlay = cfg?.overlayColor
+    ? { backgroundColor: cfg.overlayColor, opacity: cfg.overlayOpacity ?? 0.3 }
+    : {};
+
+  return (
+    <div className="event-themed" {...themedDiv(theme)}>
+      <div className="relative flex min-h-[260px] flex-col items-center justify-center px-6 py-10 text-center" style={bg as CSSProperties}>
+        <div className="absolute inset-0" style={overlay as CSSProperties} />
+        <div className="relative z-10 flex w-full max-w-xs flex-col items-center gap-3">
+          {cfg?.logo && (
+            <img
+              src={cfg.logo}
+              alt="logo"
+              style={{ width: cfg.logoWidth ? `${cfg.logoWidth}px` : undefined }}
+              className="mb-2"
+            />
+          )}
+          {cfg?.heading && (
+            <h2 style={{ color: cfg?.textColor || "#1a1a1a" }} className="text-xl font-semibold">
+              {cfg.heading}
+            </h2>
+          )}
+          {cfg?.subheading && (
+            <p style={{ color: cfg?.textColor || "#6b6b6b" }} className="text-sm">
+              {cfg.subheading}
+            </p>
+          )}
+          <input
+            type="text"
+            placeholder={cfg?.inputPlaceholder || "Your name"}
+            disabled
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-400"
+          />
+          <button
+            type="button"
+            style={{ backgroundColor: cfg?.buttonColor || "#1a1a1a", color: "#fff" }}
+            className="w-full rounded-md px-4 py-2 text-sm font-medium"
+          >
+            {cfg?.buttonText || "Continue"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
+
+/* ------------------------------------------------------------------ */
+/* HomePreview                                                         */
+/* ------------------------------------------------------------------ */
+
 export function HomePreview({ event }: { event: UserEvent }) {
-  const theme = event.draft_theme || event.theme || DEFAULT_THEME;
-  const vars = themeToEventCssVars(theme) as React.CSSProperties;
-  const content = (event.draft_content || event.content || {}) as EventContent;
-  const dateStr = event.draft_event_date || event.event_date;
-  return <div className="event-themed" style={vars}><div className="min-h-screen" style={{ backgroundColor: "var(--event-bg)", color: "var(--event-text)" }}><div className="max-w-4xl mx-auto px-6 py-16 text-center"><p className="text-xs uppercase tracking-widest opacity-50 mb-3">{event.draft_event_type || event.event_type}</p>{content.rich_title ? <RichTextContent html={content.rich_title} className="mb-4" /> : <h1 className="font-heading text-4xl md:text-5xl mb-4">{event.draft_name || event.name}</h1>}{content.rich_subtitle && <div className="mb-6"><RichTextContent html={content.rich_subtitle} /></div>}{dateStr && <p className="text-sm uppercase tracking-wider opacity-70 mb-2">{formatDate(dateStr)}</p>}{event.draft_venue && <p className="text-sm opacity-70">{event.draft_venue}</p>}{content.rich_body && <div className="max-w-2xl mx-auto mt-8"><RichTextContent html={content.rich_body} /></div>}</div></div></div>;
+  const content = resolve<EventContent>(event.draft_content, event.content);
+  const theme = resolve<ThemeConfig>(event.draft_theme, event.theme);
+  const name = event.draft_name ?? event.name;
+  const date = event.draft_event_date ?? event.event_date;
+  const time = event.draft_event_time ?? event.event_time;
+  const venue = event.draft_venue ?? event.venue;
+
+  return (
+    <div className="event-themed" {...themedDiv(theme)}>
+      <div className="flex flex-col items-center gap-6 px-6 py-10" style={{ backgroundColor: "var(--event-bg)", color: "var(--event-text)" }}>
+        {content?.rich_title ? (
+          <RichTextContent html={content.rich_title} />
+        ) : (
+          <h1 className="text-3xl font-semibold" style={{ fontFamily: "var(--event-font-heading)" }}>
+            {name || "Your Event Name"}
+          </h1>
+        )}
+
+        {content?.rich_subtitle ? (
+          <RichTextContent html={content.rich_subtitle} />
+        ) : null}
+
+        {(date || time || venue) && (
+          <div className="flex flex-col items-center gap-1 text-sm" style={{ color: "var(--event-text-muted)" }}>
+            {date && <span>{new Date(date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</span>}
+            {time && <span>{formatTime(time)}</span>}
+            {venue && <span>{venue}</span>}
+          </div>
+        )}
+
+        {content?.rich_body ? (
+          <RichTextContent html={content.rich_body} />
+        ) : content?.story ? (
+          <p className="max-w-prose text-center text-sm" style={{ color: "var(--event-text-muted)" }}>
+            {content.story}
+          </p>
+        ) : null}
+
+        {content?.rsvp_button_text && (
+          <button
+            type="button"
+            style={{ backgroundColor: "var(--event-primary)", color: "#fff", borderRadius: "var(--event-radius)" }}
+            className="px-6 py-2 text-sm font-medium"
+          >
+            {content.rsvp_button_text}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
+
+/* ------------------------------------------------------------------ */
+/* RsvpPreview                                                         */
+/* ------------------------------------------------------------------ */
+
 export function RsvpPreview({ event }: { event: UserEvent }) {
-  const theme = event.draft_theme || event.theme || DEFAULT_THEME;
-  const vars = themeToEventCssVars(theme) as React.CSSProperties;
-  return <div className="event-themed" style={vars}><div className="min-h-screen flex flex-col items-center justify-center p-8" style={{ backgroundColor: "var(--event-bg)", color: "var(--event-text)" }}><div className="w-full max-w-md text-center"><p className="font-script italic text-2xl mb-2 opacity-80">RSVP</p><h2 className="font-heading text-3xl mb-6">Will you attend?</h2><div className="flex gap-3 justify-center"><button className="px-8 py-3 text-sm uppercase tracking-wider" style={{ backgroundColor: "var(--event-primary)", color: "var(--event-bg)", borderRadius: "var(--event-radius)" }}>Joyfully Accepts</button><button className="px-8 py-3 text-sm uppercase tracking-wider border" style={{ borderColor: "var(--event-border)", color: "var(--event-text)", borderRadius: "var(--event-radius)" }}>Regretfully Declines</button></div></div></div></div>;
+  const content = resolve<EventContent>(event.draft_content, event.content);
+  const theme = resolve<ThemeConfig>(event.draft_theme, event.theme);
+  const deadline = event.draft_rsvp_deadline ?? event.rsvp_deadline;
+
+  return (
+    <div className="event-themed" {...themedDiv(theme)}>
+      <div className="flex flex-col items-center gap-4 px-6 py-10" style={{ backgroundColor: "var(--event-bg)", color: "var(--event-text)" }}>
+        <h2 className="text-xl font-semibold" style={{ fontFamily: "var(--event-font-heading)" }}>
+          {content?.invitation_title || "RSVP"}
+        </h2>
+        {content?.invitation_subtitle && (
+          <p className="text-sm" style={{ color: "var(--event-text-muted)" }}>
+            {content.invitation_subtitle}
+          </p>
+        )}
+        {content?.invitation_body && (
+          <p className="max-w-prose text-center text-sm" style={{ color: "var(--event-text-muted)" }}>
+            {content.invitation_body}
+          </p>
+        )}
+        <div className="flex w-full max-w-xs flex-col gap-2">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              style={{ backgroundColor: "var(--event-primary)", color: "#fff", borderRadius: "var(--event-radius)" }}
+              className="flex-1 px-4 py-2 text-sm font-medium"
+            >
+              Attending
+            </button>
+            <button
+              type="button"
+              style={{ backgroundColor: "var(--event-surface)", color: "var(--event-text)", border: "1px solid var(--event-border)", borderRadius: "var(--event-radius)" }}
+              className="flex-1 px-4 py-2 text-sm font-medium"
+            >
+              Decline
+            </button>
+          </div>
+          <textarea
+            placeholder="Leave a message (optional)"
+            disabled
+            className="min-h-[60px] w-full rounded-md border px-3 py-2 text-sm"
+            style={{ backgroundColor: "var(--event-surface)", color: "var(--event-text-muted)", borderColor: "var(--event-border)" }}
+          />
+          {deadline && (
+            <p className="text-center text-xs" style={{ color: "var(--event-text-muted)" }}>
+              RSVP by {new Date(deadline).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

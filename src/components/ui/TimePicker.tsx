@@ -1,18 +1,118 @@
-import { useState, useRef, useEffect } from "react";
-import { Clock } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "../../lib/utils";
-interface TimePickerProps { value: string | null; onChange: (value: string | null) => void; label?: string; placeholder?: string; }
-export function TimePicker({ value, onChange, label, placeholder = "Select time" }: TimePickerProps) {
-  const [open, setOpen] = useState(false); const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => { const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }; document.addEventListener("mousedown", handler); return () => document.removeEventListener("mousedown", handler); }, []);
-  const hours = Array.from({ length: 12 }, (_, i) => i + 1); const minutes = [0, 15, 30, 45];
-  const formatTime = (h: number, m: number, ampm: string) => { const hour24 = ampm === "PM" ? (h === 12 ? 12 : h + 12) : (h === 12 ? 0 : h); return `${String(hour24).padStart(2, "0")}:${String(m).padStart(2, "0")}`; };
-  const displayValue = value ? (() => { const [h, m] = value.split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; })() : "";
+
+export interface TimePickerProps {
+  value: string | null;
+  onChange: (time: string | null) => void;
+  placeholder?: string;
+}
+
+function to24Hour(hour: number, ampm: "AM" | "PM"): number {
+  if (ampm === "AM") return hour === 12 ? 0 : hour;
+  return hour === 12 ? 12 : hour + 12;
+}
+
+function to12Hour(h24: number): { hour: number; ampm: "AM" | "PM" } {
+  const ampm = h24 >= 12 ? "PM" : "AM";
+  const hour = h24 % 12 || 12;
+  return { hour, ampm };
+}
+
+function parseTime(raw: string | null): { hour: number; minute: number; ampm: "AM" | "PM" } | null {
+  if (!raw) return null;
+  const match = /^(\d{1,2}):(\d{2})$/.exec(raw);
+  if (!match) return null;
+  const h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  const { hour, ampm } = to12Hour(h);
+  return { hour, minute: m, ampm };
+}
+
+export function TimePicker({ value, onChange, placeholder = "Select time" }: TimePickerProps) {
+  const parsed = useMemo(() => parseTime(value), [value]);
+  const [hour, setHour] = useState<string>(parsed ? String(parsed.hour) : "");
+  const [minute, setMinute] = useState<string>(parsed ? String(parsed.minute).padStart(2, "0") : "");
+  const [ampm, setAmpm] = useState<"AM" | "PM">(parsed ? parsed.ampm : "AM");
+
+  useEffect(() => {
+    const p = parseTime(value);
+    if (p) {
+      setHour(String(p.hour));
+      setMinute(String(p.minute).padStart(2, "0"));
+      setAmpm(p.ampm);
+    } else if (!value) {
+      setHour("");
+      setMinute("");
+    }
+  }, [value]);
+
+  const commit = (h: string, m: string, am: "AM" | "PM") => {
+    const hi = parseInt(h, 10);
+    const mi = parseInt(m, 10);
+    if (!h || !m || isNaN(hi) || isNaN(mi)) {
+      onChange(null);
+      return;
+    }
+    const h24 = to24Hour(hi, am);
+    if (h24 < 0 || h24 > 23 || mi < 0 || mi > 59) {
+      onChange(null);
+      return;
+    }
+    onChange(`${String(h24).padStart(2, "0")}:${String(mi).padStart(2, "0")}`);
+  };
+
   return (
-    <div className="relative" ref={ref}>
-      {label && <label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">{label}</label>}
-      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm bg-white border border-gray-200 text-gray-900 hover:border-gray-900 transition-colors rounded-md"><Clock className="w-4 h-4 text-gray-400" /><span className={cn(!displayValue && "text-gray-400")}>{displayValue || placeholder}</span></button>
-      {open && <div className="absolute z-50 mt-1 bg-white border border-gray-200 shadow-lg p-3 w-64 rounded-md"><div className="grid grid-cols-2 gap-2"><div><div className="text-xs text-gray-500 mb-1">Hour</div><div className="grid grid-cols-4 gap-1">{hours.map((h) => <button key={h} type="button" onClick={() => { const m = value ? parseInt(value.split(":")[1]) : 0; const ampm = value ? (parseInt(value.split(":")[0]) >= 12 ? "PM" : "AM") : "AM"; onChange(formatTime(h, m, ampm)); }} className="px-2 py-1 text-xs hover:bg-gray-100 border border-gray-200 rounded">{h}</button>)}</div></div><div><div className="text-xs text-gray-500 mb-1">Minute</div><div className="grid grid-cols-4 gap-1">{minutes.map((m) => <button key={m} type="button" onClick={() => { const h = value ? parseInt(value.split(":")[0]) % 12 || 12 : 12; const ampm = value ? (parseInt(value.split(":")[0]) >= 12 ? "PM" : "AM") : "AM"; onChange(formatTime(h, m, ampm)); }} className="px-2 py-1 text-xs hover:bg-gray-100 border border-gray-200 rounded">{String(m).padStart(2, "0")}</button>)}</div></div></div><div className="flex gap-2 mt-2">{["AM", "PM"].map((ampm) => <button key={ampm} type="button" onClick={() => { if (!value) onChange(formatTime(12, 0, ampm)); else { const h = parseInt(value.split(":")[0]) % 12 || 12; const m = parseInt(value.split(":")[1]); onChange(formatTime(h, m, ampm)); } }} className="flex-1 px-2 py-1 text-xs border border-gray-200 hover:bg-gray-100 rounded">{ampm}</button>)}</div></div>}
+    <div className="flex items-center gap-2">
+      <input
+        type="number"
+        min={1}
+        max={12}
+        value={hour}
+        placeholder="HH"
+        onChange={(e) => {
+          setHour(e.target.value);
+          commit(e.target.value, minute, ampm);
+        }}
+        className={cn(
+          "h-10 w-16 rounded-md border border-gray-300 bg-white px-2 text-center text-sm shadow-sm",
+          "focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900",
+        )}
+      />
+      <span className="text-gray-500">:</span>
+      <input
+        type="number"
+        min={0}
+        max={59}
+        value={minute}
+        placeholder="MM"
+        onChange={(e) => {
+          setMinute(e.target.value);
+          commit(hour, e.target.value, ampm);
+        }}
+        className={cn(
+          "h-10 w-16 rounded-md border border-gray-300 bg-white px-2 text-center text-sm shadow-sm",
+          "focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900",
+        )}
+      />
+      <select
+        value={ampm}
+        onChange={(e) => {
+          const next = e.target.value as "AM" | "PM";
+          setAmpm(next);
+          commit(hour, minute, next);
+        }}
+        className={cn(
+          "h-10 w-20 rounded-md border border-gray-300 bg-white px-2 text-center text-sm shadow-sm",
+          "focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900",
+        )}
+      >
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
+      {!value && (
+        <span className="text-xs text-gray-400">{placeholder}</span>
+      )}
     </div>
   );
 }

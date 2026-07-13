@@ -1,26 +1,106 @@
-import { useParams, useOutletContext, useNavigate } from "react-router-dom";
-import { type UserEvent } from "../../lib/supabase";
-import { useEffect } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import { type UserEvent, type CoverConfig } from "../../lib/supabase";
+import { getCountdown } from "../../lib/utils";
 
-type Ctx = { event: UserEvent };
 export default function GuestCoverPage() {
-  const { event } = useOutletContext<Ctx>();
+  const { event } = useOutletContext<{ event: UserEvent }>();
   const navigate = useNavigate();
-  const { slug } = useParams();
-  const config = event.cover_config || {};
+  const cfg: CoverConfig = event.cover_config ?? {};
+  const date = event.event_date;
 
-  useEffect(() => { const t = setTimeout(() => navigate(`/e/${slug}/login`), 5000); return () => clearTimeout(t); }, []);
+  const [countdown, setCountdown] = useState(getCountdown(date));
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      navigate("login");
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!date) return;
+    const interval = setInterval(() => {
+      setCountdown(getCountdown(date));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [date]);
+
+  const bg: CSSProperties = cfg.bgImage
+    ? { backgroundImage: `url(${cfg.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" }
+    : { backgroundColor: cfg.bgColor || "#1a1a1a" };
+
+  const overlay: CSSProperties = cfg.overlayColor
+    ? { backgroundColor: cfg.overlayColor, opacity: cfg.overlayOpacity ?? 0.4 }
+    : {};
+
+  const textColor = cfg.textColor || "#ffffff";
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center overflow-hidden" style={{ background: config.bgColor || "#1a1a1a" }}>
-      {config.bgImage && <img src={config.bgImage} alt="" className="absolute inset-0 w-full h-full object-cover opacity-40" />}
-      <div className="relative z-10 text-center px-6 max-w-2xl animate-fade-in-up">
-        {config.logo && <img src={config.logo} alt="Logo" style={{ width: config.logoWidth ? `${config.logoWidth}px` : "120px" }} className="mx-auto mb-6 object-contain" />}
-        {config.customText && <p className="text-sm italic mb-4 opacity-80 font-script">{config.customText}</p>}
-        <h1 className="font-heading text-5xl md:text-7xl leading-tight" style={{ color: config.textColor || "#fff" }}>{event.name}</h1>
-        {config.showDate && event.event_date && <p className="text-sm uppercase tracking-[0.3em] mt-6" style={{ color: config.textColor || "#fff", opacity: 0.7 }}>{new Date(event.event_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>}
-        {event.venue && <p className="mt-6 text-sm" style={{ color: config.textColor || "#fff", opacity: 0.6 }}>{event.venue}</p>}
-        <button onClick={() => navigate(`/e/${slug}/login`)} className="mt-10 px-8 py-3 border text-sm font-medium hover:bg-white/10 transition-all rounded-full animate-fade-in" style={{ borderColor: config.textColor || "#fff", color: config.textColor || "#fff" }}>{config.buttonText || "Enter"}</button>
+    <div className="relative flex min-h-screen flex-col items-center justify-center px-6 py-12 text-center" style={bg}>
+      <div className="absolute inset-0" style={overlay} />
+      <div className="relative z-10 flex flex-col items-center gap-4">
+        {cfg.logo && (
+          <img
+            src={cfg.logo}
+            alt="logo"
+            style={{ width: cfg.logoWidth ? `${cfg.logoWidth}px` : undefined }}
+            className="mb-2"
+          />
+        )}
+        {cfg.customText && (
+          <p
+            style={{ color: textColor, fontFamily: cfg.scriptFont ? `"${cfg.scriptFont}", serif` : undefined }}
+            className="text-sm italic"
+          >
+            {cfg.customText}
+          </p>
+        )}
+        <h1
+          style={{ color: textColor, fontFamily: cfg.scriptFont ? `"${cfg.scriptFont}", serif` : undefined }}
+          className="text-4xl font-semibold sm:text-5xl"
+        >
+          {event.name || "Your Event"}
+        </h1>
+        {cfg.showDate && date && (
+          <p style={{ color: textColor }} className="text-base">
+            {new Date(date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+          </p>
+        )}
+        {event.venue && (
+          <p style={{ color: textColor }} className="text-sm opacity-90">
+            {event.venue}
+          </p>
+        )}
+        {cfg.showCountdown && !countdown.isPast && (
+          <div className="mt-4 flex gap-4">
+            {[
+              { label: "Days", value: countdown.days },
+              { label: "Hours", value: countdown.hours },
+              { label: "Min", value: countdown.minutes },
+              { label: "Sec", value: countdown.seconds },
+            ].map((u) => (
+              <div key={u.label} className="flex flex-col items-center">
+                <span className="text-2xl font-bold" style={{ color: textColor }}>
+                  {u.value}
+                </span>
+                <span className="text-xs uppercase opacity-75" style={{ color: textColor }}>
+                  {u.label}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {cfg.buttonText && (
+          <button
+            type="button"
+            onClick={() => navigate("login")}
+            style={{ backgroundColor: cfg.buttonColor || "#fff", color: textColor === "#fff" ? "#1a1a1a" : "#fff" }}
+            className="mt-6 rounded px-8 py-3 text-sm font-medium transition-transform hover:scale-105"
+          >
+            {cfg.buttonText}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -1,51 +1,149 @@
-import { useParams, useOutletContext, useNavigate } from "react-router-dom";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { supabase, type UserEvent, type SubEvent } from "../../lib/supabase";
-import { Button } from "../../components/ui/Button";
-import { Card, Toast } from "../../components/ui";
-import { useGuestAuth } from "../../lib/guest-auth";
 import { useState } from "react";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import { Loader2, Check, X } from "lucide-react";
+import { supabase, type UserEvent } from "../../lib/supabase";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { useToast } from "../../components/ui";
+import { Button } from "../../components/ui/Button";
 
-type Ctx = { event: UserEvent };
 export default function GuestRsvpPage() {
-  const { event } = useOutletContext<Ctx>();
-  const { slug } = useParams();
+  const { event } = useOutletContext<{ event: UserEvent }>();
   const navigate = useNavigate();
   const { guestName } = useGuestAuth();
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast } = useToast();
   const [status, setStatus] = useState<"attending" | "declined" | null>(null);
   const [plusOnes, setPlusOnes] = useState(0);
+  const [dietary, setDietary] = useState("");
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const { data: subEvents } = useQuery({
-    queryKey: ["public-sub-events", event.id],
-    queryFn: async () => { const { data, error } = await supabase.from("sub_events").select("*").eq("parent_eventId", event.id).order("order_index"); if (error) throw error; return data as SubEvent[]; },
-  });
+  if (!guestName) {
+    navigate("login");
+  }
 
-  const submitMutation = useMutation({
-    mutationFn: async () => {
-      const { data: guest } = await supabase.from("event_guests").select("id").eq("event_id", event.id).eq("name", guestName).maybeSingle();
-      const guestId = guest?.id || null;
-      const { error } = await supabase.from("event_rsvps").insert({ event_id: event.id, guest_id: guestId, guest_name: guestName, status, plus_ones: plusOnes, message: message || null });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!status || !guestName) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.from("event_rsvps").insert({
+        event_id: event.id,
+        guest_name: guestName,
+        status,
+        plus_ones: status === "attending" ? plusOnes : 0,
+        dietary: dietary || null,
+        message: message || null,
+      });
       if (error) throw error;
-    },
-    onSuccess: () => { setToast("RSVP submitted. Thank you!"); setTimeout(() => navigate(`/e/${slug}/home`), 2000); },
-    onError: (e: Error) => setToast(`Failed: ${e.message}`),
-  });
+      toast("RSVP submitted! Thank you.", "success");
+      navigate("home");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to submit RSVP", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen pb-20">
-      <div className="max-w-lg mx-auto px-6 py-16">
-        <h1 className="font-heading text-3xl text-center mb-2">RSVP</h1>
-        <p className="text-sm text-center opacity-60 mb-8">Welcome, {guestName || "Guest"}</p>
-        <Card className="space-y-6 p-6">
-          <div><p className="text-sm font-medium mb-3">Will you attend?</p><div className="grid grid-cols-2 gap-3"><button onClick={() => setStatus("attending")} className={`py-3 border rounded-lg text-sm font-medium transition-all ${status === "attending" ? "bg-current text-inverted border-current" : "border-current/20 hover:border-current/40"}`}>Joyfully Accept</button><button onClick={() => setStatus("declined")} className={`py-3 border rounded-lg text-sm font-medium transition-all ${status === "declined" ? "bg-current text-inverted border-current" : "border-current/20 hover:border-current/40"}`}>Regretfully Decline</button></div></div>
-          {status === "attending" && <div><p className="text-sm font-medium mb-3">Number of guests (including you)</p><div className="flex items-center gap-4"><button onClick={() => setPlusOnes(Math.max(0, plusOnes - 1))} className="w-10 h-10 border rounded-full">-</button><span className="text-xl font-heading">{plusOnes + 1}</span><button onClick={() => setPlusOnes(plusOnes + 1)} className="w-10 h-10 border rounded-full">+</button></div></div>}
-          <div><p className="text-sm font-medium mb-2">Message (optional)</p><textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} className="w-full p-3 border rounded-lg text-sm bg-transparent border-current/20" placeholder="Send your love..." /></div>
-          <Button onClick={() => submitMutation.mutate()} loading={submitMutation.isPending} disabled={!status} className="w-full">Submit RSVP</Button>
-        </Card>
-      </div>
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+    <div className="flex min-h-screen flex-col items-center gap-6 px-6 py-10" style={{ backgroundColor: "var(--event-bg)", color: "var(--event-text)" }}>
+      <h1 className="text-3xl font-semibold" style={{ fontFamily: "var(--event-font-heading)" }}>
+        RSVP
+      </h1>
+      <p style={{ color: "var(--event-text-muted)" }} className="text-sm">
+        Hi {guestName}, will you be attending?
+      </p>
+
+      <form onSubmit={handleSubmit} className="flex w-full max-w-md flex-col gap-4">
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => setStatus("attending")}
+            style={{
+              backgroundColor: status === "attending" ? "var(--event-primary)" : "var(--event-surface)",
+              color: status === "attending" ? "#fff" : "var(--event-text)",
+              border: "1px solid var(--event-border)",
+              borderRadius: "var(--event-radius)",
+            }}
+            className="flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-medium"
+          >
+            <Check className="h-4 w-4" />
+            Attending
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatus("declined")}
+            style={{
+              backgroundColor: status === "declined" ? "var(--event-primary)" : "var(--event-surface)",
+              color: status === "declined" ? "#fff" : "var(--event-text)",
+              border: "1px solid var(--event-border)",
+              borderRadius: "var(--event-radius)",
+            }}
+            className="flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-medium"
+          >
+            <X className="h-4 w-4" />
+            Decline
+          </button>
+        </div>
+
+        {status === "attending" && (
+          <>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
+                Plus ones: {plusOnes}
+              </label>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPlusOnes((n) => Math.max(0, n - 1))}
+                  className="h-9 w-9 rounded-md border text-lg"
+                  style={{ borderColor: "var(--event-border)", color: "var(--event-text)" }}
+                >
+                  −
+                </button>
+                <span className="text-lg font-semibold">{plusOnes}</span>
+                <button
+                  type="button"
+                  onClick={() => setPlusOnes((n) => Math.min(10, n + 1))}
+                  className="h-9 w-9 rounded-md border text-lg"
+                  style={{ borderColor: "var(--event-border)", color: "var(--event-text)" }}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
+                Dietary requirements
+              </label>
+              <input
+                type="text"
+                value={dietary}
+                onChange={(e) => setDietary(e.target.value)}
+                placeholder="Vegetarian, allergies, etc."
+                className="h-10 w-full rounded-md border px-3 text-sm"
+                style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)", color: "var(--event-text)" }}
+              />
+            </div>
+          </>
+        )}
+
+        <div className="flex flex-col gap-1">
+          <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
+            Message (optional)
+          </label>
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Leave a message for the host..."
+            className="min-h-[80px] w-full rounded-md border px-3 py-2 text-sm"
+            style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)", color: "var(--event-text)" }}
+          />
+        </div>
+
+        <Button type="submit" loading={loading} disabled={!status} className="w-full">
+          Submit RSVP
+        </Button>
+      </form>
     </div>
   );
 }

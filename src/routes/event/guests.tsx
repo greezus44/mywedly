@@ -1,70 +1,223 @@
-import { useParams } from "react-router-dom";
+import { useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type EventGuest } from "../../lib/supabase";
+import { Plus, Trash2, Search, Loader2, Users } from "lucide-react";
+import { supabase, type UserEvent, type EventGuest } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
-import { Card, EmptyState, Skeleton, Modal, Toast, Badge, FormField } from "../../components/ui";
-import { Plus, Trash2, Users, Search } from "lucide-react";
-import { useState } from "react";
+import { Card, Badge, EmptyState, FormField, Modal, useToast } from "../../components/ui";
+
+const rsvpVariants: Record<string, "success" | "error" | "warning" | "default"> = {
+  attending: "success",
+  declined: "error",
+  pending: "warning",
+};
 
 export default function GuestsPage() {
-  const { eventId } = useParams();
+  const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const [toast, setToast] = useState<string | null>(null);
-  const [showAdd, setShowAdd] = useState(false);
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const [newGuest, setNewGuest] = useState({ name: "", email: "", phone: "", group_name: "" });
+  const [addOpen, setAddOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", phone: "", group_name: "", side: "" });
 
   const { data: guests, isLoading } = useQuery({
-    queryKey: ["event-guests", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId).order("name", { ascending: true }); if (error) throw error; return data as EventGuest[]; },
+    queryKey: ["event-guests", event.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_guests")
+        .select("*")
+        .eq("event_id", event.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as EventGuest[];
+    },
   });
 
   const createMutation = useMutation({
-    mutationFn: async () => { const { error } = await supabase.from("event_guests").insert({ event_id: eventId, name: newGuest.name, email: newGuest.email || null, phone: newGuest.phone || null, group_name: newGuest.group_name || null, rsvp_status: "pending" }); if (error) throw error; },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }); setShowAdd(false); setNewGuest({ name: "", email: "", phone: "", group_name: "" }); setToast("Guest added"); },
-    onError: (e: Error) => setToast(`Failed: ${e.message}`),
+    mutationFn: async () => {
+      const { error } = await supabase.from("event_guests").insert({
+        event_id: event.id,
+        name: form.name,
+        email: form.email || null,
+        phone: form.phone || null,
+        group_name: form.group_name || null,
+        side: form.side || null,
+        rsvp_status: "pending",
+        plus_ones: 0,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event-guests", event.id] });
+      toast("Guest added", "success");
+      setAddOpen(false);
+      setForm({ name: "", email: "", phone: "", group_name: "", side: "" });
+    },
+    onError: (err: Error) => toast(err.message, "error"),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("event_guests").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }); setToast("Guest removed"); },
-    onError: (e: Error) => setToast(`Failed: ${e.message}`),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("event_guests").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event-guests", event.id] });
+      toast("Guest removed", "success");
+    },
+    onError: (err: Error) => toast(err.message, "error"),
   });
 
-  const filtered = guests?.filter((g) => g.name.toLowerCase().includes(search.toLowerCase()) || g.email?.toLowerCase().includes(search.toLowerCase())) || [];
+  const filtered = (guests ?? []).filter(
+    (g) =>
+      !search ||
+      g.name.toLowerCase().includes(search.toLowerCase()) ||
+      (g.email || "").toLowerCase().includes(search.toLowerCase()),
+  );
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div><h2 className="font-heading text-2xl text-gray-900">Guests</h2><p className="text-sm text-gray-500 mt-1">{guests?.length || 0} total guests</p></div>
-        <Button onClick={() => setShowAdd(true)}><Plus className="w-4 h-4" /> Add Guest</Button>
-      </div>
-      <div className="mb-4 relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search guests..." className="pl-10" /></div>
-      {isLoading ? <Skeleton className="h-64" /> : filtered.length === 0 ? <EmptyState icon={<Users className="w-12 h-12" />} title="No guests found" description="Add guests manually or import via CSV." action={<Button onClick={() => setShowAdd(true)}><Plus className="w-4 h-4" /> Add Guest</Button>} /> : (
-        <div className="space-y-2">{filtered.map((g) => (
-          <Card key={g.id} className="flex items-center justify-between py-3 px-5">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-sm font-medium text-gray-600">{g.name.charAt(0).toUpperCase()}</div>
-              <div><p className="font-medium text-gray-900">{g.name}</p><p className="text-xs text-gray-500">{g.email || g.phone || "No contact"}</p></div>
-            </div>
-            <div className="flex items-center gap-2">
-              {g.rsvp_status && g.rsvp_status !== "pending" && <Badge variant={g.rsvp_status === "attending" ? "success" : "error"}>{g.rsvp_status}</Badge>}
-              <button onClick={() => deleteMutation.mutate(g.id)} className="p-2 text-gray-400 hover:text-red-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
-            </div>
-          </Card>
-        ))}</div>
-      )}
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Guest">
-        <div className="space-y-4">
-          <FormField label="Name"><Input value={newGuest.name} onChange={(e) => setNewGuest({ ...newGuest, name: e.target.value })} /></FormField>
-          <FormField label="Email"><Input type="email" value={newGuest.email} onChange={(e) => setNewGuest({ ...newGuest, email: e.target.value })} /></FormField>
-          <FormField label="Phone"><Input value={newGuest.phone} onChange={(e) => setNewGuest({ ...newGuest, phone: e.target.value })} /></FormField>
-          <FormField label="Group"><Input value={newGuest.group_name} onChange={(e) => setNewGuest({ ...newGuest, group_name: e.target.value })} placeholder="Bride's Family" /></FormField>
-          <div className="flex gap-3"><Button onClick={() => createMutation.mutate()} loading={createMutation.isPending} disabled={!newGuest.name}>Add</Button><Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button></div>
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Guests</h2>
+          <p className="text-sm text-gray-500">{guests?.length ?? 0} total guests</p>
         </div>
+        <Button size="sm" onClick={() => setAddOpen(true)}>
+          <Plus className="h-4 w-4" />
+          Add guest
+        </Button>
+      </div>
+
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search guests..."
+          className="pl-9"
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={Users}
+            title={search ? "No guests found" : "No guests yet"}
+            description={search ? "Try a different search." : "Add your first guest to get started."}
+            action={
+              !search ? (
+                <Button size="sm" onClick={() => setAddOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  Add guest
+                </Button>
+              ) : undefined
+            }
+          />
+        </Card>
+      ) : (
+        <Card className="overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="border-b border-gray-100 bg-gray-50 text-left text-xs uppercase text-gray-500">
+              <tr>
+                <th className="px-4 py-2 font-medium">Name</th>
+                <th className="px-4 py-2 font-medium">Contact</th>
+                <th className="px-4 py-2 font-medium">Group</th>
+                <th className="px-4 py-2 font-medium">RSVP</th>
+                <th className="px-4 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((g) => (
+                <tr key={g.id} className="border-b border-gray-50 last:border-0">
+                  <td className="px-4 py-2 font-medium text-gray-900">{g.name}</td>
+                  <td className="px-4 py-2 text-gray-600">
+                    {g.email && <div>{g.email}</div>}
+                    {g.phone && <div className="text-xs text-gray-400">{g.phone}</div>}
+                  </td>
+                  <td className="px-4 py-2 text-gray-600">{g.group_name || "—"}</td>
+                  <td className="px-4 py-2">
+                    <Badge variant={rsvpVariants[g.rsvp_status]}>{g.rsvp_status}</Badge>
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        if (confirm(`Remove ${g.name}?`)) deleteMutation.mutate(g.id);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add guest">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            createMutation.mutate();
+          }}
+          className="flex flex-col gap-3"
+        >
+          <FormField label="Name" required>
+            <Input
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="Jane Doe"
+              required
+            />
+          </FormField>
+          <FormField label="Email">
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              placeholder="jane@example.com"
+            />
+          </FormField>
+          <FormField label="Phone">
+            <Input
+              value={form.phone}
+              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+              placeholder="+1 555 000 0000"
+            />
+          </FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Group">
+              <Input
+                value={form.group_name}
+                onChange={(e) => setForm((f) => ({ ...f, group_name: e.target.value }))}
+                placeholder="Family"
+              />
+            </FormField>
+            <FormField label="Side">
+              <Input
+                value={form.side}
+                onChange={(e) => setForm((f) => ({ ...f, side: e.target.value }))}
+                placeholder="Bride / Groom"
+              />
+            </FormField>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={createMutation.isPending}>
+              Add
+            </Button>
+          </div>
+        </form>
       </Modal>
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
   );
 }

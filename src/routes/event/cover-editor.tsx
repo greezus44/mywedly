@@ -1,110 +1,186 @@
-import { useParams, useOutletContext } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { supabase, type UserEvent, type CoverConfig } from "../../lib/supabase";
-import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
-import { Card, FormField, Toggle, Toast } from "../../components/ui";
+import { Input } from "../../components/ui/Input";
+import { FormField, Toggle, useToast } from "../../components/ui";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
-import { uploadImage, removeImage, extractPathFromUrl } from "../../lib/upload";
-import { useState } from "react";
-import { Loader2 } from "lucide-react";
 
-type Ctx = { event: UserEvent };
 export default function CoverEditorPage() {
-  const { event } = useOutletContext<Ctx>();
-  const { eventId } = useParams();
+  const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const [toast, setToast] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const config: CoverConfig = event.draft_cover_config || { bgColor: "#1a1a1a", textColor: "#ffffff", buttonText: "Enter", showDate: true };
+  const { toast } = useToast();
 
-  const update = (patch: Partial<CoverConfig>) => {
-    const next = { ...config, ...patch };
-    saveMutation.mutate({ draft_cover_config: next });
-  };
+  const [cfg, setCfg] = useState<CoverConfig>(event.draft_cover_config ?? event.cover_config ?? {});
+  const [name, setName] = useState(event.draft_name ?? event.name ?? "");
+  const [date, setDate] = useState(event.draft_event_date ?? event.event_date ?? "");
+  const [time, setTime] = useState(event.draft_event_time ?? event.event_time ?? "");
+  const [venue, setVenue] = useState(event.draft_venue ?? event.venue ?? "");
+  const [address, setAddress] = useState(event.draft_address ?? event.address ?? "");
+
+  useEffect(() => {
+    setCfg(event.draft_cover_config ?? event.cover_config ?? {});
+    setName(event.draft_name ?? event.name ?? "");
+    setDate(event.draft_event_date ?? event.event_date ?? "");
+    setTime(event.draft_event_time ?? event.event_time ?? "");
+    setVenue(event.draft_venue ?? event.venue ?? "");
+    setAddress(event.draft_address ?? event.address ?? "");
+  }, [event]);
 
   const saveMutation = useMutation({
-    mutationFn: async (patch: Record<string, unknown>) => { const { error } = await supabase.from("user_events").update(patch).eq("id", eventId); if (error) throw error; },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", eventId] }),
-    onError: (e: Error) => setToast(`Save failed: ${e.message}`),
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("user_events")
+        .update({
+          draft_cover_config: cfg,
+          draft_name: name,
+          draft_event_date: date || null,
+          draft_event_time: time || null,
+          draft_venue: venue || null,
+          draft_address: address || null,
+        })
+        .eq("id", event.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
+      toast("Cover saved", "success");
+    },
+    onError: (err: Error) => toast(err.message, "error"),
   });
 
-  const imageMutation = useMutation({
-    mutationFn: async (file: File) => {
-      setUploading(true);
-      const oldUrl = config.bgImage;
-      if (oldUrl) { const oldPath = extractPathFromUrl(oldUrl); if (oldPath) await removeImage(oldPath).catch(() => {}); }
-      const { url } = await uploadImage(file, eventId!);
-      const next = { ...config, bgImage: url };
-      const { error } = await supabase.from("user_events").update({ draft_cover_config: next }).eq("id", eventId);
-      if (error) throw error;
-      return url;
-    },
-    onSuccess: () => { setUploading(false); queryClient.invalidateQueries({ queryKey: ["event", eventId] }); },
-    onError: (e: Error) => { setUploading(false); setToast(`Upload failed: ${e.message}`); },
-  });
+  // Auto-save on changes (debounced via effect)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveMutation.mutate();
+    }, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg, name, date, time, venue, address]);
 
-  const logoMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const { url } = await uploadImage(file, eventId!);
-      const next = { ...config, logo: url };
-      const { error } = await supabase.from("user_events").update({ draft_cover_config: next }).eq("id", eventId);
-      if (error) throw error;
-      return url;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", eventId] }),
-    onError: (e: Error) => setToast(`Upload failed: ${e.message}`),
-  });
+  const previewEvent = {
+    ...event,
+    draft_cover_config: cfg,
+    draft_name: name,
+    draft_event_date: date,
+    draft_event_time: time,
+    draft_venue: venue,
+    draft_address: address,
+  } as UserEvent;
 
   return (
-    <div className="p-6">
-      <div className="grid lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
-          <h2 className="font-heading text-2xl text-gray-900">Cover Page</h2>
-          <Card className="space-y-4">
-            <FormField label="Custom Text"><Input value={config.customText || ""} onChange={(e) => update({ customText: e.target.value })} placeholder="Together with their families" /></FormField>
-            <FormField label="Button Text"><Input value={config.buttonText || ""} onChange={(e) => update({ buttonText: e.target.value })} /></FormField>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField label="Background Color"><input type="color" value={config.bgColor || "#1a1a1a"} onChange={(e) => update({ bgColor: e.target.value })} className="w-12 h-9 rounded border border-gray-200" /></FormField>
-              <FormField label="Text Color"><input type="color" value={config.textColor || "#ffffff"} onChange={(e) => update({ textColor: e.target.value })} className="w-12 h-9 rounded border border-gray-200" /></FormField>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField label="Button Color"><input type="color" value={config.buttonColor || "#1a1a1a"} onChange={(e) => update({ buttonColor: e.target.value })} className="w-12 h-9 rounded border border-gray-200" /></FormField>
-              <FormField label="Overlay Color"><input type="color" value={config.overlayColor || "#000000"} onChange={(e) => update({ overlayColor: e.target.value })} className="w-12 h-9 rounded border border-gray-200" /></FormField>
-            </div>
-            <div className="flex gap-6"><Toggle checked={config.showDate ?? true} onChange={(v) => update({ showDate: v })} label="Show Date" /><Toggle checked={config.showCountdown ?? false} onChange={(v) => update({ showCountdown: v })} label="Show Countdown" /></div>
-          </Card>
-          <Card className="space-y-3">
-            <FormField label="Background Image"><ImageUpload value={config.bgImage || ""} onChange={(url) => update({ bgImage: url })} eventId={eventId} /></FormField>
-            {uploading && <p className="text-xs text-gray-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Uploading...</p>}
-          </Card>
-          <Card className="space-y-3">
-            <FormField label="Logo"><ImageUpload value={config.logo || ""} onChange={(url) => update({ logo: url })} eventId={eventId} /></FormField>
-          </Card>
-          <Card className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-700">Event Details</h3>
-            <FormField label="Event Name"><Input defaultValue={event.draft_name || event.name || ""} onBlur={(e) => saveMutation.mutate({ draft_name: e.target.value })} /></FormField>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField label="Date"><Input type="date" defaultValue={event.draft_event_date || event.event_date || ""} onBlur={(e) => saveMutation.mutate({ draft_event_date: e.target.value })} /></FormField>
-              <FormField label="Time"><Input type="time" defaultValue={event.draft_event_time || event.event_time || ""} onBlur={(e) => saveMutation.mutate({ draft_event_time: e.target.value })} /></FormField>
-            </div>
-            <FormField label="Venue"><Input defaultValue={event.draft_venue || event.venue || ""} onBlur={(e) => saveMutation.mutate({ draft_venue: e.target.value })} /></FormField>
-            <FormField label="Address"><Textarea defaultValue={event.draft_address || event.address || ""} onBlur={(e) => saveMutation.mutate({ draft_address: e.target.value })} rows={2} /></FormField>
-          </Card>
-        </div>
-        <div className="lg:sticky lg:top-32 self-start">
-          <SplitEditor preview={<CoverPreview event={event} />}>
-            <div className="space-y-4">
-              <p className="text-xs uppercase tracking-wider text-gray-400">Cover Preview</p>
-              <div className="border border-gray-200 rounded-lg overflow-hidden"><CoverPreview event={event} /></div>
-            </div>
-          </SplitEditor>
+    <SplitEditor preview={<CoverPreview event={previewEvent} />}>
+      <FormField label="Event name">
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Event name" />
+      </FormField>
+      <div className="grid grid-cols-2 gap-3">
+        <FormField label="Date">
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </FormField>
+        <FormField label="Time">
+          <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+        </FormField>
+      </div>
+      <FormField label="Venue">
+        <Input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue name" />
+      </FormField>
+      <FormField label="Address">
+        <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Address" />
+      </FormField>
+
+      <div className="border-t border-gray-100 pt-4">
+        <h3 className="mb-3 text-sm font-semibold text-gray-900">Cover design</h3>
+        <div className="flex flex-col gap-4">
+          <FormField label="Background image">
+            <ImageUpload
+              value={cfg.bgImage || ""}
+              onChange={(url) => setCfg((c) => ({ ...c, bgImage: url }))}
+              eventId={event.id}
+              aspectRatio="16 / 9"
+            />
+          </FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Background color">
+              <Input
+                type="color"
+                value={cfg.bgColor || "#1a1a1a"}
+                onChange={(e) => setCfg((c) => ({ ...c, bgColor: e.target.value }))}
+                className="h-10"
+              />
+            </FormField>
+            <FormField label="Text color">
+              <Input
+                type="color"
+                value={cfg.textColor || "#ffffff"}
+                onChange={(e) => setCfg((c) => ({ ...c, textColor: e.target.value }))}
+                className="h-10"
+              />
+            </FormField>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Button color">
+              <Input
+                type="color"
+                value={cfg.buttonColor || "#ffffff"}
+                onChange={(e) => setCfg((c) => ({ ...c, buttonColor: e.target.value }))}
+                className="h-10"
+              />
+            </FormField>
+            <FormField label="Button text">
+              <Input
+                value={cfg.buttonText || ""}
+                onChange={(e) => setCfg((c) => ({ ...c, buttonText: e.target.value }))}
+                placeholder="Enter"
+              />
+            </FormField>
+          </div>
+          <FormField label="Custom text (above title)">
+            <Input
+              value={cfg.customText || ""}
+              onChange={(e) => setCfg((c) => ({ ...c, customText: e.target.value }))}
+              placeholder="Together with their families..."
+            />
+          </FormField>
+          <FormField label="Logo">
+            <ImageUpload
+              value={cfg.logo || ""}
+              onChange={(url) => setCfg((c) => ({ ...c, logo: url }))}
+              eventId={event.id}
+              aspectRatio="4 / 1"
+            />
+          </FormField>
+          <FormField label="Logo width (px)">
+            <Input
+              type="number"
+              value={cfg.logoWidth ?? ""}
+              onChange={(e) => setCfg((c) => ({ ...c, logoWidth: e.target.value ? Number(e.target.value) : undefined }))}
+              placeholder="120"
+            />
+          </FormField>
+          <div className="flex flex-col gap-2">
+            <Toggle
+              checked={cfg.showDate ?? true}
+              onChange={(v) => setCfg((c) => ({ ...c, showDate: v }))}
+              label="Show date"
+            />
+            <Toggle
+              checked={cfg.showCountdown ?? false}
+              onChange={(v) => setCfg((c) => ({ ...c, showCountdown: v }))}
+              label="Show countdown"
+            />
+          </div>
         </div>
       </div>
-      {saveMutation.isPending && <div className="fixed bottom-4 right-4 bg-white border border-gray-200 shadow-lg rounded-lg px-4 py-2 text-sm text-gray-600 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Saving...</div>}
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
-    </div>
+
+      {saveMutation.isPending && (
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Saving...
+        </div>
+      )}
+    </SplitEditor>
   );
 }

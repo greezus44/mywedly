@@ -1,4 +1,5 @@
 import type { ThemeConfig } from "./supabase";
+
 export const DEFAULT_THEME: ThemeConfig = { preset: "classic", primaryColor: "#1a1a1a", secondaryColor: "#2a2a2a", accentColor: "#1a1a1a", bgColor: "#ffffff", surfaceColor: "#ffffff", textColor: "#1a1a1a", textMutedColor: "#6b6b6b", borderColor: "#e2e2e2", headingFont: "Cormorant Garamond", bodyFont: "Inter", scriptFont: "Cormorant Garamond", buttonRadius: 2, shadowStyle: "none" };
 export const RUSTY_THEME: ThemeConfig = { preset: "rusty", primaryColor: "#B8962E", secondaryColor: "#C4A44A", accentColor: "#A07820", bgColor: "#F5ECD7", surfaceColor: "#FAF3E0", textColor: "#3D3528", textMutedColor: "#8B7355", borderColor: "#D4C695", headingFont: "Cormorant Garamond", bodyFont: "Inter", scriptFont: "Cormorant Garamond", buttonRadius: 2, shadowStyle: "none" };
 export const RUSTY_COVER_CONFIG = { bgColor: "#F5ECD7", textColor: "#3D3528", buttonColor: "#B8962E", buttonText: "Enter", scriptFont: "Cormorant Garamond", customText: "Together with their families", showDate: true, showCountdown: false };

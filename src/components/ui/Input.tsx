@@ -1,8 +1,46 @@
-import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
+import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cn } from "../../lib/utils";
-export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(({ className, ...props }, ref) => <input ref={ref} className={cn("w-full px-4 py-2.5 text-sm bg-white border border-gray-200 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-gray-900 transition-colors rounded-md", className)} {...props} />);
+
+const baseField =
+  "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition-colors focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100";
+
+export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {}
+
+export const Input = forwardRef<HTMLInputElement, InputProps>(
+  ({ className, ...props }, ref) => {
+    return <input ref={ref} className={cn(baseField, "h-10", className)} {...props} />;
+  },
+);
 Input.displayName = "Input";
-export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(({ className, ...props }, ref) => <textarea ref={ref} className={cn("w-full px-4 py-2.5 text-sm bg-white border border-gray-200 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-gray-900 transition-colors resize-y min-h-[80px] rounded-md", className)} {...props} />);
+
+export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {}
+
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ className, ...props }, ref) => {
+    return (
+      <textarea
+        ref={ref}
+        className={cn(baseField, "min-h-[80px] resize-y", className)}
+        {...props}
+      />
+    );
+  },
+);
 Textarea.displayName = "Textarea";
-export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(({ className, children, ...props }, ref) => <select ref={ref} className={cn("w-full px-4 py-2.5 text-sm bg-white border border-gray-200 text-gray-900 focus:outline-none focus:border-gray-900 transition-colors rounded-md", className)} {...props}>{children}</select>);
+
+export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {}
+
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(
+  ({ className, children, ...props }, ref) => {
+    return (
+      <select
+        ref={ref}
+        className={cn(baseField, "h-10 pr-8", className)}
+        {...props}
+      >
+        {children}
+      </select>
+    );
+  },
+);
 Select.displayName = "Select";

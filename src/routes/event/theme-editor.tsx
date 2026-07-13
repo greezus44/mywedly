@@ -1,87 +1,188 @@
-import { useParams, useOutletContext } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import { supabase, type UserEvent, type ThemeConfig } from "../../lib/supabase";
-import { Card, FormField, Toast, ColorInput, RangeInput } from "../../components/ui";
+import { DEFAULT_THEME, THEME_PRESETS, RICH_FONT_OPTIONS } from "../../lib/theme";
 import { Select } from "../../components/ui/Input";
+import { ColorInput, RangeInput, FormField, useToast } from "../../components/ui";
 import { SplitEditor } from "../../components/preview/SplitEditor";
-import { CoverPreview } from "../../components/preview/PreviewRenderers";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { THEME_PRESETS, RICH_FONT_OPTIONS, DEFAULT_THEME } from "../../lib/theme";
-import { useState } from "react";
+import { CoverPreview } from "../../components/preview/PreviewRenderers";
 
-type Ctx = { event: UserEvent };
+const PRESET_NAMES = Object.keys(THEME_PRESETS);
+
 export default function ThemeEditorPage() {
-  const { event } = useOutletContext<Ctx>();
-  const { eventId } = useParams();
+  const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const [toast, setToast] = useState<string | null>(null);
-  const theme: ThemeConfig = event.draft_theme || DEFAULT_THEME;
+  const { toast } = useToast();
 
-  const update = (patch: Partial<ThemeConfig>) => { const next = { ...theme, ...patch }; saveMutation.mutate({ draft_theme: next }); };
+  const [theme, setTheme] = useState<ThemeConfig>(event.draft_theme ?? event.theme ?? DEFAULT_THEME);
+
+  useEffect(() => {
+    setTheme(event.draft_theme ?? event.theme ?? DEFAULT_THEME);
+  }, [event]);
+
   const saveMutation = useMutation({
-    mutationFn: async (patch: Record<string, unknown>) => { const { error } = await supabase.from("user_events").update(patch).eq("id", eventId); if (error) throw error; },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", eventId] }),
-    onError: (e: Error) => setToast(`Save failed: ${e.message}`),
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("user_events")
+        .update({ draft_theme: theme })
+        .eq("id", event.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
+      toast("Theme saved", "success");
+    },
+    onError: (err: Error) => toast(err.message, "error"),
   });
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveMutation.mutate();
+    }, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme]);
+
+  const previewEvent = {
+    ...event,
+    draft_theme: theme,
+  } as UserEvent;
+
   return (
-    <div className="p-6">
-      <div className="grid lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
-          <h2 className="font-heading text-2xl text-gray-900">Theme</h2>
-          <Card className="space-y-3">
-            <label className="block text-xs font-medium uppercase tracking-wider text-gray-500">Presets</label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {Object.entries(THEME_PRESETS).map(([key, preset]) => (
-                <button key={key} onClick={() => update(preset)} className="p-3 border border-gray-200 rounded-lg hover:border-gray-400 transition-colors text-left">
-                  <div className="flex gap-1 mb-2">{[preset.primaryColor, preset.secondaryColor, preset.accentColor, preset.bgColor].map((c, i) => <div key={i} className="w-6 h-6 rounded" style={{ background: c }} />)}</div>
-                  <span className="text-xs font-medium text-gray-700 capitalize">{key}</span>
-                </button>
-              ))}
-            </div>
-          </Card>
-          <Card className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-700">Colors</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField label="Primary"><ColorInput value={theme.primaryColor || "#1a1a1a"} onChange={(v) => update({ primaryColor: v })} /></FormField>
-              <FormField label="Secondary"><ColorInput value={theme.secondaryColor || "#2a2a2a"} onChange={(v) => update({ secondaryColor: v })} /></FormField>
-              <FormField label="Accent"><ColorInput value={theme.accentColor || "#1a1a1a"} onChange={(v) => update({ accentColor: v })} /></FormField>
-              <FormField label="Background"><ColorInput value={theme.bgColor || "#ffffff"} onChange={(v) => update({ bgColor: v })} /></FormField>
-              <FormField label="Surface"><ColorInput value={theme.surfaceColor || "#ffffff"} onChange={(v) => update({ surfaceColor: v })} /></FormField>
-              <FormField label="Text"><ColorInput value={theme.textColor || "#1a1a1a"} onChange={(v) => update({ textColor: v })} /></FormField>
-              <FormField label="Text Muted"><ColorInput value={theme.textMutedColor || "#6b6b6b"} onChange={(v) => update({ textMutedColor: v })} /></FormField>
-              <FormField label="Border"><ColorInput value={theme.borderColor || "#e2e2e2"} onChange={(v) => update({ borderColor: v })} /></FormField>
-            </div>
-          </Card>
-          <Card className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-700">Typography</h3>
-            <FormField label="Heading Font"><Select value={theme.headingFont || "Cormorant Garamond"} onChange={(e) => update({ headingFont: e.target.value })}>{RICH_FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}</Select></FormField>
-            <FormField label="Body Font"><Select value={theme.bodyFont || "Inter"} onChange={(e) => update({ bodyFont: e.target.value })}>{RICH_FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}</Select></FormField>
-            <FormField label="Script Font"><Select value={theme.scriptFont || "Cormorant Garamond"} onChange={(e) => update({ scriptFont: e.target.value })}>{RICH_FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}</Select></FormField>
-          </Card>
-          <Card className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-700">Layout</h3>
-            <RangeInput label="Button Radius" min={0} max={24} value={theme.buttonRadius ?? 2} onChange={(v) => update({ buttonRadius: v })} />
-          </Card>
-        </div>
-        <div className="lg:sticky lg:top-32 self-start">
-          <SplitEditor preview={
-            <EventThemeProvider initialTheme={theme}>
-              <CoverPreview event={event} />
-            </EventThemeProvider>
-          }>
-            <div className="space-y-4">
-              <p className="text-xs uppercase tracking-wider text-gray-400">Theme Preview</p>
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <EventThemeProvider initialTheme={theme}>
-                  <CoverPreview event={event} />
-                </EventThemeProvider>
-              </div>
-            </div>
-          </SplitEditor>
+    <SplitEditor
+      preview={
+        <EventThemeProvider initialTheme={theme}>
+          <CoverPreview event={previewEvent} />
+        </EventThemeProvider>
+      }
+    >
+      <h3 className="text-sm font-semibold text-gray-900">Theme</h3>
+
+      <FormField label="Preset">
+        <Select
+          value={theme.preset || "classic"}
+          onChange={(e) => {
+            const preset = THEME_PRESETS[e.target.value];
+            if (preset) setTheme(preset);
+          }}
+        >
+          {PRESET_NAMES.map((p) => (
+            <option key={p} value={p}>
+              {p.charAt(0).toUpperCase() + p.slice(1)}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+
+      <div className="border-t border-gray-100 pt-4">
+        <h4 className="mb-3 text-sm font-semibold text-gray-900">Colors</h4>
+        <div className="flex flex-col gap-3">
+          <ColorInput
+            label="Primary"
+            value={theme.primaryColor || ""}
+            onChange={(v) => setTheme((t) => ({ ...t, primaryColor: v }))}
+          />
+          <ColorInput
+            label="Secondary"
+            value={theme.secondaryColor || ""}
+            onChange={(v) => setTheme((t) => ({ ...t, secondaryColor: v }))}
+          />
+          <ColorInput
+            label="Accent"
+            value={theme.accentColor || ""}
+            onChange={(v) => setTheme((t) => ({ ...t, accentColor: v }))}
+          />
+          <ColorInput
+            label="Background"
+            value={theme.bgColor || ""}
+            onChange={(v) => setTheme((t) => ({ ...t, bgColor: v }))}
+          />
+          <ColorInput
+            label="Surface"
+            value={theme.surfaceColor || ""}
+            onChange={(v) => setTheme((t) => ({ ...t, surfaceColor: v }))}
+          />
+          <ColorInput
+            label="Text"
+            value={theme.textColor || ""}
+            onChange={(v) => setTheme((t) => ({ ...t, textColor: v }))}
+          />
+          <ColorInput
+            label="Text muted"
+            value={theme.textMutedColor || ""}
+            onChange={(v) => setTheme((t) => ({ ...t, textMutedColor: v }))}
+          />
+          <ColorInput
+            label="Border"
+            value={theme.borderColor || ""}
+            onChange={(v) => setTheme((t) => ({ ...t, borderColor: v }))}
+          />
         </div>
       </div>
-      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
-    </div>
+
+      <div className="border-t border-gray-100 pt-4">
+        <h4 className="mb-3 text-sm font-semibold text-gray-900">Typography</h4>
+        <div className="flex flex-col gap-3">
+          <FormField label="Heading font">
+            <Select
+              value={theme.headingFont || "Cormorant Garamond"}
+              onChange={(e) => setTheme((t) => ({ ...t, headingFont: e.target.value }))}
+            >
+              {RICH_FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField label="Body font">
+            <Select
+              value={theme.bodyFont || "Inter"}
+              onChange={(e) => setTheme((t) => ({ ...t, bodyFont: e.target.value }))}
+            >
+              {RICH_FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField label="Script font">
+            <Select
+              value={theme.scriptFont || "Cormorant Garamond"}
+              onChange={(e) => setTheme((t) => ({ ...t, scriptFont: e.target.value }))}
+            >
+              {RICH_FONT_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 pt-4">
+        <h4 className="mb-3 text-sm font-semibold text-gray-900">Layout</h4>
+        <RangeInput
+          label="Button radius (px)"
+          value={theme.buttonRadius ?? 2}
+          min={0}
+          max={24}
+          step={1}
+          onChange={(v) => setTheme((t) => ({ ...t, buttonRadius: v }))}
+        />
+      </div>
+
+      {saveMutation.isPending && (
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Saving...
+        </div>
+      )}
+    </SplitEditor>
   );
 }

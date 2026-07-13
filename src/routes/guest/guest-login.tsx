@@ -1,38 +1,83 @@
-import { useParams, useOutletContext, useNavigate } from "react-router-dom";
-import { type UserEvent } from "../../lib/supabase";
-import { Input } from "../../components/ui/Input";
-import { Button } from "../../components/ui/Button";
+import { useState, type CSSProperties } from "react";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import { Loader2 } from "lucide-react";
+import { type UserEvent, type LoginConfig } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { useState } from "react";
 
-type Ctx = { event: UserEvent };
 export default function GuestLoginPage() {
-  const { event } = useOutletContext<Ctx>();
-  const { slug } = useParams();
+  const { event } = useOutletContext<{ event: UserEvent }>();
   const navigate = useNavigate();
-  const { signIn } = useGuestAuth();
+  const { signIn, guestName, eventId } = useGuestAuth();
   const [name, setName] = useState("");
-  const config = event.login_config || {};
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const cfg: LoginConfig = event.login_config ?? {};
+
+  // If already signed in to this event, go home
+  if (guestName && eventId === event.id) {
+    navigate("home");
+  }
+
+  const bg: CSSProperties = cfg.bgImage
+    ? { backgroundImage: `url(${cfg.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" }
+    : { backgroundColor: cfg.bgColor || "#fafafa" };
+
+  const overlay: CSSProperties = cfg.overlayColor
+    ? { backgroundColor: cfg.overlayColor, opacity: cfg.overlayOpacity ?? 0.3 }
+    : {};
+
+  const textColor = cfg.textColor || "#1a1a1a";
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) { setError("Please enter your name"); return; }
+    if (!name.trim()) return;
+    setLoading(true);
     signIn(name.trim(), event.id);
-    navigate(`/e/${slug}/home`);
+    setTimeout(() => {
+      navigate("home");
+    }, 100);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: config.bgColor || "#1a1a1a" }}>
-      <div className="w-full max-w-sm text-center">
-        {config.bgImage && <img src={config.bgImage} alt="" className="w-full h-48 object-cover rounded-lg mb-8 opacity-80" />}
-        {config.logo && <img src={config.logo} alt="Logo" style={{ width: config.logoWidth ? `${config.logoWidth}px` : "100px" }} className="mx-auto mb-6 object-contain" />}
-        <h1 className="font-heading text-3xl mb-2" style={{ color: config.textColor || "#fff" }}>{config.heading || "Welcome"}</h1>
-        <p className="text-sm mb-8" style={{ color: config.textColor || "#fff", opacity: 0.7 }}>{config.subheading || "Please enter your name to continue"}</p>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input value={name} onChange={(e) => { setName(e.target.value); setError(null); }} placeholder={config.inputPlaceholder || "Your name"} className="text-center" style={{ background: "rgba(255,255,255,0.1)", borderColor: "rgba(255,255,255,0.2)", color: config.textColor || "#fff" }} />
-          {error && <p className="text-sm text-red-400">{error}</p>}
-          <Button type="submit" className="w-full">{config.buttonText || "Continue"}</Button>
+    <div className="relative flex min-h-screen flex-col items-center justify-center px-6 py-10 text-center" style={bg}>
+      <div className="absolute inset-0" style={overlay} />
+      <div className="relative z-10 flex w-full max-w-xs flex-col items-center gap-3">
+        {cfg.logo && (
+          <img
+            src={cfg.logo}
+            alt="logo"
+            style={{ width: cfg.logoWidth ? `${cfg.logoWidth}px` : undefined }}
+            className="mb-2"
+          />
+        )}
+        {cfg.heading && (
+          <h2 style={{ color: textColor }} className="text-2xl font-semibold">
+            {cfg.heading}
+          </h2>
+        )}
+        {cfg.subheading && (
+          <p style={{ color: textColor, opacity: 0.8 }} className="text-sm">
+            {cfg.subheading}
+          </p>
+        )}
+        <form onSubmit={handleSubmit} className="mt-4 flex w-full flex-col gap-3">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={cfg.inputPlaceholder || "Your full name"}
+            required
+            autoFocus
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
+          />
+          <button
+            type="submit"
+            disabled={loading || !name.trim()}
+            style={{ backgroundColor: cfg.buttonColor || "#1a1a1a", color: "#fff" }}
+            className="w-full rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : cfg.buttonText || "Continue"}
+          </button>
         </form>
       </div>
     </div>

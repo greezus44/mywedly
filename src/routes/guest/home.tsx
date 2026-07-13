@@ -1,40 +1,90 @@
-import { useParams, useOutletContext, Link } from "react-router-dom";
-import { type UserEvent } from "../../lib/supabase";
+import { useEffect, useState } from "react";
+import { Link, useOutletContext } from "react-router-dom";
+import { type UserEvent, type EventContent } from "../../lib/supabase";
 import { RichTextContent } from "../../lib/sanitize";
-import { getCountdown, formatDate } from "../../lib/utils";
-import { Calendar, MapPin, Clock } from "lucide-react";
+import { getCountdown, formatTime } from "../../lib/utils";
 
-type Ctx = { event: UserEvent };
 export default function GuestHomePage() {
-  const { event } = useOutletContext<Ctx>();
-  const { slug } = useParams();
-  const content = event.content || {};
-  const countdown = event.event_date ? getCountdown(event.event_date) : null;
+  const { event } = useOutletContext<{ event: UserEvent }>();
+  const content: EventContent = event.content ?? {};
+  const [countdown, setCountdown] = useState(getCountdown(event.event_date));
+
+  useEffect(() => {
+    if (!event.event_date) return;
+    const interval = setInterval(() => {
+      setCountdown(getCountdown(event.event_date));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [event.event_date]);
 
   return (
-    <div className="min-h-screen pb-20">
-      <div className="max-w-2xl mx-auto px-6 py-16 text-center">
-        {content.rich_title ? <RichTextContent html={content.rich_title} className="font-heading text-4xl md:text-5xl mb-4" /> : <h1 className="font-heading text-4xl md:text-5xl mb-4">{event.name}</h1>}
-        {content.rich_subtitle && <RichTextContent html={content.rich_subtitle} className="text-lg mb-8 opacity-80" />}
-        {countdown && !countdown.isPast && (
-          <div className="grid grid-cols-4 gap-4 my-12">
-            {[{ label: "Days", value: countdown.days }, { label: "Hours", value: countdown.hours }, { label: "Minutes", value: countdown.minutes }, { label: "Seconds", value: countdown.seconds }].map((t) => (
-              <div key={t.label} className="text-center"><p className="font-heading text-3xl">{t.value}</p><p className="text-xs uppercase tracking-wider opacity-60 mt-1">{t.label}</p></div>
-            ))}
-          </div>
-        )}
-        {content.rich_body && <RichTextContent html={content.rich_body} className="prose prose-sm max-w-none mt-8 text-left" />}
-        {event.event_date && (
-          <div className="mt-12 space-y-2 text-sm">
-            <div className="flex items-center justify-center gap-2"><Calendar className="w-4 h-4 opacity-60" />{formatDate(event.event_date)}</div>
-            {event.event_time && <div className="flex items-center justify-center gap-2"><Clock className="w-4 h-4 opacity-60" />{event.event_time}</div>}
-            {event.venue && <div className="flex items-center justify-center gap-2"><MapPin className="w-4 h-4 opacity-60" />{event.venue}</div>}
-          </div>
-        )}
-        <div className="mt-12 flex flex-wrap gap-4 justify-center">
-          <Link to={`/e/${slug}/rsvp`} className="px-8 py-3 bg-current text-inverted rounded-full text-sm font-medium hover:opacity-90 transition-opacity">RSVP Now</Link>
-          <Link to={`/e/${slug}/wishes`} className="px-8 py-3 border border-current rounded-full text-sm font-medium hover:opacity-80 transition-opacity">Leave a Wish</Link>
+    <div className="flex min-h-screen flex-col items-center gap-6 px-6 py-10" style={{ backgroundColor: "var(--event-bg)", color: "var(--event-text)" }}>
+      {content.rich_title ? (
+        <RichTextContent html={content.rich_title} />
+      ) : (
+        <h1 className="text-3xl font-semibold" style={{ fontFamily: "var(--event-font-heading)" }}>
+          {event.name || "Your Event"}
+        </h1>
+      )}
+
+      {content.rich_subtitle && <RichTextContent html={content.rich_subtitle} />}
+
+      {(event.event_date || event.event_time || event.venue) && (
+        <div className="flex flex-col items-center gap-1 text-sm" style={{ color: "var(--event-text-muted)" }}>
+          {event.event_date && (
+            <span>
+              {new Date(event.event_date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+            </span>
+          )}
+          {event.event_time && <span>{formatTime(event.event_time)}</span>}
+          {event.venue && <span>{event.venue}</span>}
         </div>
+      )}
+
+      {!countdown.isPast && event.event_date && (
+        <div className="flex gap-4">
+          {[
+            { label: "Days", value: countdown.days },
+            { label: "Hours", value: countdown.hours },
+            { label: "Min", value: countdown.minutes },
+            { label: "Sec", value: countdown.seconds },
+          ].map((u) => (
+            <div key={u.label} className="flex flex-col items-center">
+              <span className="text-2xl font-bold" style={{ color: "var(--event-primary)" }}>
+                {u.value}
+              </span>
+              <span className="text-xs uppercase" style={{ color: "var(--event-text-muted)" }}>
+                {u.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {content.rich_body && <RichTextContent html={content.rich_body} />}
+
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <Link
+          to="rsvp"
+          style={{ backgroundColor: "var(--event-primary)", color: "#fff", borderRadius: "var(--event-radius)" }}
+          className="px-6 py-2 text-sm font-medium"
+        >
+          {content.rsvp_button_text || "RSVP"}
+        </Link>
+        <Link
+          to="wishes"
+          style={{ backgroundColor: "var(--event-surface)", color: "var(--event-text)", border: "1px solid var(--event-border)", borderRadius: "var(--event-radius)" }}
+          className="px-6 py-2 text-sm font-medium"
+        >
+          Leave a wish
+        </Link>
+        <Link
+          to="contact"
+          style={{ color: "var(--event-text-muted)" }}
+          className="px-2 py-2 text-sm font-medium underline"
+        >
+          Contact info
+        </Link>
       </div>
     </div>
   );

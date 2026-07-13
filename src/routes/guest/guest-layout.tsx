@@ -1,27 +1,58 @@
-import { useParams, Outlet, Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { Outlet, useParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { supabase, type UserEvent } from "../../lib/supabase";
+import { GuestAuthProvider } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { DEFAULT_THEME } from "../../lib/theme";
-import { Skeleton } from "../../components/ui";
-import { GuestAuthProvider } from "../../lib/guest-auth";
 
 export default function GuestLayoutPage() {
-  const { slug } = useParams();
-  const { data: event, isLoading } = useQuery({
-    queryKey: ["public-event", slug],
-    queryFn: async () => { const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle(); if (error) throw error; return data as UserEvent | null; },
-  });
+  const { slug } = useParams<{ slug: string }>();
+  const [event, setEvent] = useState<UserEvent | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><Skeleton className="w-32 h-8" /></div>;
-  if (!event) return <div className="min-h-screen flex items-center justify-center"><div className="text-center"><p className="text-sm text-gray-500 mb-4">Event not found</p><Link to="/" className="text-sm underline">Go home</Link></div></div>;
+  useEffect(() => {
+    if (!slug) return;
+    setLoading(true);
+    supabase
+      .from("user_events")
+      .select("*")
+      .eq("slug", slug)
+      .eq("is_published", true)
+      .single()
+      .then(({ data, error }) => {
+        if (error || !data) {
+          setError("Event not found");
+          setEvent(null);
+        } else {
+          setEvent(data as UserEvent);
+        }
+        setLoading(false);
+      });
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      </div>
+    );
+  }
+
+  if (error || !event) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 gap-2">
+        <h1 className="text-xl font-semibold text-gray-900">Event not found</h1>
+        <p className="text-sm text-gray-500">The event you're looking for doesn't exist or isn't published.</p>
+      </div>
+    );
+  }
 
   return (
     <GuestAuthProvider>
-      <EventThemeProvider initialTheme={event.theme || DEFAULT_THEME}>
-        <div className="event-themed min-h-screen">
-          <Outlet context={{ event }} />
-        </div>
+      <EventThemeProvider initialTheme={event.theme ?? DEFAULT_THEME}>
+        <Outlet context={{ event }} />
       </EventThemeProvider>
     </GuestAuthProvider>
   );

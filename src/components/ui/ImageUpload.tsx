@@ -1,20 +1,138 @@
-import { useState, useRef, useCallback } from "react";
-import { Upload, X, Loader2 } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { ImagePlus, Loader2, Trash2, Upload } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { uploadImage, removeImage, extractPathFromUrl } from "../../lib/upload";
-interface ImageUploadProps { value: string; onChange: (url: string) => void; eventId?: string; label?: string; aspectRatio?: string; }
-export function ImageUpload({ value, onChange, eventId, label, aspectRatio = "16/9" }: ImageUploadProps) {
-  const [uploading, setUploading] = useState(false); const [progress, setProgress] = useState(0); const [dragOver, setDragOver] = useState(false); const [error, setError] = useState<string | null>(null); const inputRef = useRef<HTMLInputElement>(null);
-  const handleFile = useCallback(async (file: File) => { if (!eventId) { setError("Event must be saved before uploading images"); return; } if (!file.type.startsWith("image/")) { setError("Please select an image file"); return; } setUploading(true); setError(null); setProgress(0); try { const result = await uploadImage(file, eventId, setProgress); if (value) { const oldPath = extractPathFromUrl(value); if (oldPath) { try { await removeImage(oldPath); } catch { /* ignore */ } } } onChange(result.url); } catch (err) { setError(err instanceof Error ? err.message : "Upload failed"); } finally { setUploading(false); setProgress(0); } }, [eventId, value, onChange]);
-  const handleRemove = useCallback(async () => { if (value) { const path = extractPathFromUrl(value); if (path) { try { await removeImage(path); } catch { /* ignore */ } } } onChange(""); }, [value, onChange]);
+
+export interface ImageUploadProps {
+  value: string;
+  onChange: (url: string) => void;
+  eventId?: string;
+  label?: string;
+  aspectRatio?: string;
+}
+
+export function ImageUpload({
+  value,
+  onChange,
+  eventId,
+  label,
+  aspectRatio = "16 / 9",
+}: ImageUploadProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  const handleFile = useCallback(
+    async (file: File) => {
+      setError(null);
+      if (!file.type.startsWith("image/")) {
+        setError("Please select an image file.");
+        return;
+      }
+      if (!eventId) {
+        setError("An event ID is required to upload images.");
+        return;
+      }
+      setLoading(true);
+      try {
+        const { url } = await uploadImage(file, eventId, (p) => {
+          // progress is reported but we only show a spinner here
+          void p;
+        });
+        if (value) {
+          const oldPath = extractPathFromUrl(value);
+          if (oldPath) await removeImage(oldPath).catch(() => {});
+        }
+        onChange(url);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Upload failed");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [eventId, onChange, value],
+  );
+
+  const handleRemove = useCallback(async () => {
+    if (value) {
+      const path = extractPathFromUrl(value);
+      if (path) await removeImage(path).catch(() => {});
+    }
+    onChange("");
+  }, [onChange, value]);
+
   return (
-    <div>
-      {label && <label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">{label}</label>}
-      {value && !uploading ? <div className="relative group overflow-hidden border border-gray-200 rounded-lg" style={{ aspectRatio }}><img src={value} alt="Preview" className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100"><button type="button" onClick={handleRemove} className="p-2 bg-white/90 hover:bg-white rounded"><X className="w-4 h-4" /></button></div></div>
-      : uploading ? <div className="flex flex-col items-center justify-center border border-dashed border-gray-200 bg-gray-50 p-8 rounded-lg" style={{ aspectRatio }}><Loader2 className="w-6 h-6 text-gray-400 animate-spin mb-2" /><span className="text-sm text-gray-500">Uploading... {progress}%</span><div className="w-full max-w-xs mt-3 h-1 bg-gray-200 rounded"><div className="h-full bg-gray-900 transition-all rounded" style={{ width: `${progress}%` }} /></div></div>
-      : <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }} onClick={() => inputRef.current?.click()} className={cn("flex flex-col items-center justify-center border border-dashed cursor-pointer transition-colors p-8 rounded-lg", dragOver ? "border-gray-900 bg-gray-50" : "border-gray-200 hover:border-gray-400 hover:bg-gray-50")} style={{ aspectRatio }}><Upload className="w-6 h-6 text-gray-400 mb-2" /><span className="text-sm text-gray-500">Click or drag to upload</span><span className="text-xs text-gray-400 mt-1">PNG, SVG, JPG, WebP</span></div>}
-      {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}
-      <input ref={inputRef} type="file" accept="image/png,image/svg+xml,image/jpeg,image/webp" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+    <div className="flex flex-col gap-2">
+      {label && <span className="text-sm font-medium text-gray-700">{label}</span>}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          const file = e.dataTransfer.files?.[0];
+          if (file) handleFile(file);
+        }}
+        className={cn(
+          "relative flex items-center justify-center overflow-hidden rounded-lg border-2 border-dashed transition-colors",
+          dragging ? "border-gray-900 bg-gray-50" : "border-gray-300 bg-gray-50",
+        )}
+        style={{ aspectRatio }}
+      >
+        {value ? (
+          <>
+            <img src={value} alt="Preview" className="h-full w-full object-cover" />
+            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity hover:opacity-100">
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                className="rounded-md bg-white/90 px-3 py-1.5 text-sm font-medium text-gray-900 hover:bg-white"
+              >
+                Replace
+              </button>
+              <button
+                type="button"
+                onClick={handleRemove}
+                className="rounded-md bg-white/90 p-1.5 text-gray-900 hover:bg-white"
+                aria-label="Remove image"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="flex flex-col items-center gap-2 text-gray-500"
+          >
+            {loading ? (
+              <Loader2 className="h-8 w-8 animate-spin" />
+            ) : (
+              <ImagePlus className="h-8 w-8" />
+            )}
+            <span className="text-sm">
+              {loading ? "Uploading..." : "Click or drag to upload"}
+            </span>
+          </button>
+        )}
+      </div>
+      {error && <p className="text-xs text-red-500">{error}</p>}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+          e.target.value = "";
+        }}
+      />
     </div>
   );
 }
