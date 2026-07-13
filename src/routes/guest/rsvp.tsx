@@ -1,287 +1,345 @@
 import { useState, useEffect, useCallback } from "react";
-import { useLang } from "../../lib/lang-context";
-import { useGuestAuth } from "../../lib/guest-auth";
+import { useParams } from "react-router-dom";
+import { CalendarDays, Clock, MapPin, Check, X, Loader2 } from "lucide-react";
 import { supabase, type WeddingEvent, type Rsvp } from "../../lib/supabase";
-import { themeToCssVars, getTheme, getCoverContent } from "../../lib/theme";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { useLang } from "../../lib/lang-context";
+import { getTheme, themeToCssVars } from "../../lib/theme";
 import { formatDate, formatTime, cn } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { Check, Calendar, Clock, MapPin, Home as HomeIcon, Shirt, ScrollText } from "lucide-react";
 
 interface EventWithRsvp extends WeddingEvent {
-  rsvp?: Rsvp | null;
+  rsvpStatus: Rsvp["status"] | "pending";
+  rsvpId: string | null;
+  submitting: boolean;
 }
 
 export function Rsvp() {
-  const { lang, t } = useLang();
+  const { slug } = useParams<{ slug: string }>();
   const { session } = useGuestAuth();
-  const guest = session?.guest;
-  const wedding = session?.wedding;
+  const { lang, t } = useLang();
   const [events, setEvents] = useState<EventWithRsvp[]>([]);
   const [loading, setLoading] = useState(true);
-  const [rsvpStatus, setRsvpStatus] = useState<Record<string, "accepted" | "declined" | null>>({});
-  const [successEvent, setSuccessEvent] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadEvents = useCallback(async () => {
-    if (!guest || !wedding) return;
-    setLoading(true);
+  const fetchEvents = useCallback(async () => {
+    if (!session) return;
+    const { guest, wedding } = session;
 
-    // Fetch all event IDs the guest is invited to via three sources, deduped
-    const [guestInvites, groupInvites, publicEvents] = await Promise.all([
-      supabase.from("guest_event_invites").select("event_id").eq("guest_id", guest.id),
-      guest.group_id
-        ? supabase.from("group_event_invites").select("event_id").eq("group_id", guest.group_id)
-        : Promise.resolve({ data: [], error: null }),
-      supabase.from("events").select("id").eq("wedding_id", wedding.id).eq("visibility", "public"),
-    ]);
+    try {
+      // 1. Fetch public events
+      const { data: publicEvents, error: pubErr } = await supabase
+        .from("events")
+        .select("*")
+        .eq("wedding_id", wedding.id)
+        .eq("visibility", "public")
+        .order("sort_order", { ascending: true });
 
-    const eventIds = new Set<string>();
-    (guestInvites.data || []).forEach((r) => eventIds.add(r.event_id));
-    (groupInvites.data || []).forEach((r) => eventIds.add(r.event_id));
-    (publicEvents.data || []).forEach((r) => eventIds.add(r.id));
+      if (pubErr) throw pubErr;
 
-    if (eventIds.size === 0) {
-      setEvents([]);
+      // 2. Fetch events invited via guest_event_invites
+      const { data: guestInvites } = await supabase
+        .from("guest_event_invites")
+        .select("event_id")
+        .eq("guest_id", guest.id);
+
+      let invitedEvents: WeddingEvent[] = [];
+      if (guestInvites && guestInvites.length > 0) {
+        const eventIds = guestInvites.map((gi) => gi.event_id);
+        const { data: eventsByGuest, error: ebgErr } = await supabase
+          .from("events")
+          .select("*")
+          .in("id", eventIds)
+          .eq("wedding_id", wedding.id);
+        if (ebgErr) throw ebgErr;
+        invitedEvents = (eventsByGuest || []) as WeddingEvent[];
+      }
+
+      // 3. Fetch events invited via group_event_invites
+      let groupEvents: WeddingEvent[] = [];
+      if (guest.group_id) {
+        const { data: groupInvites } = await supabase
+          .from("group_event_invites")
+          .select("event_id")
+          .eq("group_id", guest.group_id);
+
+        if (groupInvites && groupInvites.length > 0) {
+          const groupEventIds = groupInvites.map((gi) => gi.event_id);
+          const { data: eventsByGroup, error: ebg2Err } = await supabase
+            .from("events")
+            .select("*")
+            .in("id", groupEventIds)
+            .eq("wedding_id", wedding.id);
+          if (ebg2Err) throw ebg2Err;
+          groupEvents = (eventsByGroup || []) as WeddingEvent[];
+        }
+      }
+
+      // Merge & deduplicate
+      const allEventsMap = new Map<string, WeddingEvent>();
+      [...(publicEvents || []), ...invitedEvents, ...groupEvents].forEach((e) => {
+        allEventsMap.set(e.id, e as WeddingEvent);
+      });
+      const allEvents = Array.from(allEventsMap.values()).sort(
+        (a, b) => (a.sort_order || 0) - (b.sort_order || 0)
+      );
+
+      // 4. Fetch existing RSVPs for this guest
+      const { data: existingRsvps } = await supabase
+        .from("rsvps")
+        .select("*")
+        .eq("guest_id", guest.id)
+        .eq("wedding_id", wedding.id);
+
+      const rsvpMap = new Map<string, { id: string; status: Rsvp["status"] }>();
+      (existingRsvps || []).forEach((r) => {
+        if (r.event_id) {
+          rsvpMap.set(r.event_id, { id: r.id, status: (r as Rsvp).status });
+        }
+      });
+
+      const eventsWithRsvp: EventWithRsvp[] = allEvents.map((e) => {
+        const existing = rsvpMap.get(e.id);
+        return {
+          ...e,
+          rsvpStatus: existing?.status || "pending",
+          rsvpId: existing?.id || null,
+          submitting: false,
+        };
+      });
+
+      setEvents(eventsWithRsvp);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load events");
+    } finally {
       setLoading(false);
-      return;
     }
+  }, [session]);
 
-    const { data: eventRows } = await supabase
-      .from("events")
-      .select("*")
-      .in("id", Array.from(eventIds))
-      .order("sort_order", { ascending: true })
-      .order("starts_at", { ascending: true });
-
-    // Fetch existing RSVPs for this guest
-    const { data: rsvpRows } = await supabase
-      .from("rsvps")
-      .select("*")
-      .eq("guest_id", guest.id)
-      .eq("wedding_id", wedding.id);
-
-    const rsvpByEvent: Record<string, Rsvp> = {};
-    (rsvpRows || []).forEach((r) => {
-      if (r.event_id) rsvpByEvent[r.event_id] = r as Rsvp;
-    });
-
-    const merged: EventWithRsvp[] = (eventRows || []).map((e) => {
-      const ev = e as WeddingEvent;
-      const rsvp = rsvpByEvent[ev.id] || null;
-      return { ...ev, rsvp };
-    });
-
-    setEvents(merged);
-    setLoading(false);
-  }, [guest, wedding]);
-
-  useEffect(() => { loadEvents(); }, [loadEvents]);
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
 
   const handleRsvp = async (eventId: string, status: "accepted" | "declined") => {
-    if (!guest || !wedding) return;
-    setRsvpStatus((s) => ({ ...s, [eventId]: status }));
-    const existing = events.find((e) => e.id === eventId)?.rsvp;
+    if (!session) return;
+    const { guest, wedding } = session;
+    const eventIndex = events.findIndex((e) => e.id === eventId);
+    if (eventIndex === -1) return;
 
-    if (existing) {
-      await supabase
-        .from("rsvps")
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq("id", existing.id);
-    } else {
-      await supabase.from("rsvps").insert({
-        wedding_id: wedding.id,
-        guest_id: guest.id,
-        guest_name: guest.full_name,
-        guest_email: guest.email,
-        status,
-        event_id: eventId,
-      });
+    setEvents((prev) =>
+      prev.map((e, i) => (i === eventIndex ? { ...e, submitting: true } : e))
+    );
+
+    try {
+      const existing = events[eventIndex];
+      if (existing.rsvpId) {
+        // Update existing RSVP
+        const { error: updateErr } = await supabase
+          .from("rsvps")
+          .update({ status, updated_at: new Date().toISOString() })
+          .eq("id", existing.rsvpId);
+        if (updateErr) throw updateErr;
+      } else {
+        // Insert new RSVP
+        const { data: newRsvp, error: insertErr } = await supabase
+          .from("rsvps")
+          .insert({
+            wedding_id: wedding.id,
+            guest_id: guest.id,
+            guest_name: guest.full_name,
+            guest_email: guest.email,
+            event_id: eventId,
+            status,
+          })
+          .select("id")
+          .maybeSingle();
+        if (insertErr) throw insertErr;
+        existing.rsvpId = newRsvp?.id || null;
+      }
+
+      setEvents((prev) =>
+        prev.map((e, i) =>
+          i === eventIndex
+            ? { ...e, rsvpStatus: status, submitting: false }
+            : e
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "RSVP failed");
+      setEvents((prev) =>
+        prev.map((e, i) => (i === eventIndex ? { ...e, submitting: false } : e))
+      );
     }
-
-    setSuccessEvent(eventId);
-    setTimeout(() => setSuccessEvent(null), 2500);
-    await loadEvents();
-    setRsvpStatus((s) => ({ ...s, [eventId]: null }));
   };
 
-  if (!wedding || !guest) return null;
+  if (!session) return null;
 
-  const theme = getTheme(wedding);
-  const content = getCoverContent(wedding);
-  const intro = content.rsvp_intro || "";
-  const closing = content.rsvp_closing || "";
+  const theme = getTheme(session.wedding);
+  const content = (session.wedding.content || {}) as Record<string, unknown>;
+  const draftContent = (session.wedding.draft_content || {}) as Record<string, never>;
+  const c = { ...content, ...draftContent };
+  const rsvpIntro = (c.rsvp_intro as string) || "";
+  const rsvpClosing = (c.rsvp_closing as string) || "";
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]" style={themeToCssVars(theme) as React.CSSProperties}>
-      <div className="max-w-2xl mx-auto px-6 py-20 md:py-28">
+    <div
+      className="min-h-screen flex flex-col items-center px-6 py-16"
+      style={themeToCssVars(theme) as React.CSSProperties}
+    >
+      <div className="max-w-2xl w-full">
         {/* Header */}
         <div className="text-center mb-12">
-          <p className="font-ui text-xs uppercase tracking-luxe text-[var(--color-primary)] mb-4 opacity-0-init animate-fade-in">
+          <p className="font-ui text-xs uppercase tracking-luxe text-[var(--color-text-muted)] mb-4 opacity-0-init animate-fade-in">
             {t("invitation")}
           </p>
-          <h1 className="font-script text-4xl md:text-5xl text-[var(--color-text)] mb-4 opacity-0-init animate-fade-in-up delay-100">
+          <h1 className="font-script text-4xl md:text-5xl text-[var(--color-text)] mb-4 opacity-0-init animate-fade-in-up">
             {t("rsvp")}
           </h1>
-          <div className="flex items-center justify-center gap-2 mb-6 opacity-0-init animate-fade-in delay-200">
-            <span className="h-px w-12 bg-[var(--color-border)]/40" />
-            <span className="font-ui text-[10px] uppercase tracking-luxe text-[var(--color-primary)]">♡</span>
-            <span className="h-px w-12 bg-[var(--color-border)]/40" />
+          <div className="flex items-center justify-center gap-4 opacity-0-init animate-fade-in-up delay-100">
+            <span className="h-px w-12 bg-[var(--color-primary)]/30" />
+            <span className="text-[var(--color-primary)] text-xs">✦</span>
+            <span className="h-px w-12 bg-[var(--color-primary)]/30" />
           </div>
-          {intro && (
-            <p className="font-body text-lg text-[var(--color-text-muted)] max-w-md mx-auto opacity-0-init animate-fade-in-up delay-300">
-              {intro}
+          {rsvpIntro && (
+            <p className="font-body text-lg text-[var(--color-text)] leading-relaxed mt-6 opacity-0-init animate-fade-in-up delay-200">
+              {rsvpIntro}
             </p>
           )}
         </div>
 
-        {loading ? (
-          <div className="text-center font-ui text-sm uppercase tracking-wider-luxe text-[var(--color-text-muted)] py-20">
-            {t("loading")}
-          </div>
-        ) : events.length === 0 ? (
-          <div className="text-center font-body text-lg text-[var(--color-text-muted)] py-20">
-            {t("noEvents")}
-          </div>
-        ) : (
-          <div className="space-y-8">
-            {events.map((event, idx) => {
-              const currentStatus = event.rsvp?.status;
-              const isAccepted = currentStatus === "accepted";
-              const isDeclined = currentStatus === "declined";
-              const showSuccess = successEvent === event.id;
-              const delayClasses = ["delay-300", "delay-400", "delay-500", "delay-700", "delay-1000"];
-              const delayClass = delayClasses[idx % delayClasses.length];
-
-              return (
-                <div
-                  key={event.id}
-                  className={cn(
-                    "bg-[var(--color-surface)] border border-[var(--color-border)]/20 rounded-xl shadow-[0_2px_8px_rgba(184,151,58,0.08)] p-7 md:p-9 opacity-0-init animate-fade-in-up",
-                    delayClass
-                  )}
-                  style={{ borderRadius: "var(--button-radius, 8px)" }}
-                >
-                  {/* Event name */}
-                  <h2 className="font-heading text-2xl md:text-3xl text-[var(--color-text)] text-center mb-6">
-                    {event.name}
-                  </h2>
-
-                  <div className="flex items-center justify-center gap-2 mb-6">
-                    <span className="h-px w-10 bg-[var(--color-border)]/30" />
-                    <span className="font-ui text-[10px] uppercase tracking-luxe text-[var(--color-primary)]">♡</span>
-                    <span className="h-px w-10 bg-[var(--color-border)]/30" />
-                  </div>
-
-                  {/* Event details */}
-                  <div className="space-y-3 mb-8">
-                    {event.starts_at && (
-                      <div className="flex items-start gap-3">
-                        <Calendar size={16} className="text-[var(--color-primary)] mt-0.5 shrink-0" />
-                        <div>
-                          <p className="font-ui text-[10px] uppercase tracking-wider-luxe text-[var(--color-text-muted)]">{t("date")}</p>
-                          <p className="font-body text-base text-[var(--color-text)]">{formatDate(event.starts_at, lang)}</p>
-                        </div>
-                      </div>
-                    )}
-                    {event.starts_at && (
-                      <div className="flex items-start gap-3">
-                        <Clock size={16} className="text-[var(--color-primary)] mt-0.5 shrink-0" />
-                        <div>
-                          <p className="font-ui text-[10px] uppercase tracking-wider-luxe text-[var(--color-text-muted)]">{t("time")}</p>
-                          <p className="font-body text-base text-[var(--color-text)]">{formatTime(event.starts_at, lang)}</p>
-                        </div>
-                      </div>
-                    )}
-                    {event.venue_name && (
-                      <div className="flex items-start gap-3">
-                        <MapPin size={16} className="text-[var(--color-primary)] mt-0.5 shrink-0" />
-                        <div>
-                          <p className="font-ui text-[10px] uppercase tracking-wider-luxe text-[var(--color-text-muted)]">{t("venue")}</p>
-                          <p className="font-body text-base text-[var(--color-text)]">{event.venue_name}</p>
-                        </div>
-                      </div>
-                    )}
-                    {event.venue_address && (
-                      <div className="flex items-start gap-3">
-                        <HomeIcon size={16} className="text-[var(--color-primary)] mt-0.5 shrink-0" />
-                        <div>
-                          <p className="font-ui text-[10px] uppercase tracking-wider-luxe text-[var(--color-text-muted)]">{t("address")}</p>
-                          <p className="font-body text-base text-[var(--color-text)]">{event.venue_address}</p>
-                        </div>
-                      </div>
-                    )}
-                    {event.dress_code && (
-                      <div className="flex items-start gap-3">
-                        <Shirt size={16} className="text-[var(--color-primary)] mt-0.5 shrink-0" />
-                        <div>
-                          <p className="font-ui text-[10px] uppercase tracking-wider-luxe text-[var(--color-text-muted)]">{t("dressCode")}</p>
-                          <p className="font-body text-base text-[var(--color-text)]">{event.dress_code}</p>
-                        </div>
-                      </div>
-                    )}
-                    {event.programme && (
-                      <div className="flex items-start gap-3">
-                        <ScrollText size={16} className="text-[var(--color-primary)] mt-0.5 shrink-0" />
-                        <div>
-                          <p className="font-ui text-[10px] uppercase tracking-wider-luxe text-[var(--color-text-muted)]">{t("programme")}</p>
-                          <p className="font-body text-base text-[var(--color-text)] whitespace-pre-line">{event.programme}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* RSVP status */}
-                  <div className="text-center mb-5">
-                    <p className="font-ui text-[10px] uppercase tracking-luxe text-[var(--color-text-muted)] mb-1">
-                      {t("rsvp")}
-                    </p>
-                    <p className={cn(
-                      "font-heading text-lg",
-                      isAccepted ? "text-[var(--color-success)]" : isDeclined ? "text-[var(--color-error)]" : "text-[var(--color-text-muted)]"
-                    )}>
-                      {isAccepted ? t("accepted") : isDeclined ? t("declined") : t("pending")}
-                    </p>
-                  </div>
-
-                  {/* Buttons */}
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <Button
-                      variant={isAccepted ? "primary" : "outline"}
-                      size="md"
-                      disabled={!!rsvpStatus[event.id]}
-                      onClick={() => handleRsvp(event.id, "accepted")}
-                      className="flex-1"
-                    >
-                      {rsvpStatus[event.id] === "accepted" ? t("loading") : t("accept")}
-                    </Button>
-                    <Button
-                      variant={isDeclined ? "danger" : "outline"}
-                      size="md"
-                      disabled={!!rsvpStatus[event.id]}
-                      onClick={() => handleRsvp(event.id, "declined")}
-                      className="flex-1"
-                    >
-                      {rsvpStatus[event.id] === "declined" ? t("loading") : t("decline")}
-                    </Button>
-                  </div>
-
-                  {/* Success animation */}
-                  {showSuccess && (
-                    <div className="flex items-center justify-center gap-2 mt-5 text-[var(--color-success)] animate-success-pop">
-                      <Check size={18} />
-                      <span className="font-ui text-xs uppercase tracking-wider-luxe">
-                        {event.rsvp?.status === "accepted" ? t("accepted") : t("declined")}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+        {/* Loading */}
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 size={24} className="text-[var(--color-primary)] animate-spin" />
           </div>
         )}
 
-        {closing && !loading && events.length > 0 && (
-          <p className="font-body text-lg text-[var(--color-text-muted)] text-center mt-16 max-w-md mx-auto opacity-0-init animate-fade-in-up delay-500">
-            {closing}
+        {/* Error */}
+        {error && !loading && (
+          <p className="font-ui text-sm text-[var(--color-error)] text-center mb-6">{error}</p>
+        )}
+
+        {/* No events */}
+        {!loading && !error && events.length === 0 && (
+          <p className="font-body text-lg text-[var(--color-text-muted)] text-center py-12">
+            {t("noEvents")}
+          </p>
+        )}
+
+        {/* Event cards */}
+        {!loading && events.length > 0 && (
+          <div className="space-y-6">
+            {events.map((event, idx) => (
+              <div
+                key={event.id}
+                className={cn(
+                  "bg-[var(--color-surface)] border border-[var(--color-primary)]/15 p-6 md:p-8 opacity-0-init animate-fade-in-up",
+                  `delay-${Math.min(idx + 1, 5) * 100}`
+                )}
+                style={{ borderRadius: "8px" }}
+              >
+                {/* Event name */}
+                <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">
+                  {event.name}
+                </h2>
+                <p className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-primary)] mb-4">
+                  {event.kind}
+                </p>
+
+                {/* Event details */}
+                <div className="space-y-2 mb-6">
+                  {event.starts_at && (
+                    <>
+                      <div className="flex items-center gap-2 text-[var(--color-text)]">
+                        <CalendarDays size={14} className="text-[var(--color-primary)]" />
+                        <span className="font-body text-sm">
+                          {formatDate(event.starts_at, lang)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[var(--color-text-muted)]">
+                        <Clock size={14} className="text-[var(--color-primary)]" />
+                        <span className="font-ui text-sm">
+                          {formatTime(event.starts_at, lang)}
+                        </span>
+                      </div>
+                    </>
+                  )}
+                  {event.venue_name && (
+                    <div className="flex items-start gap-2 text-[var(--color-text)]">
+                      <MapPin size={14} className="text-[var(--color-primary)] mt-0.5" />
+                      <span className="font-body text-sm">
+                        {event.venue_name}
+                        {event.venue_address && `, ${event.venue_address}`}
+                      </span>
+                    </div>
+                  )}
+                  {event.dress_code && (
+                    <p className="font-ui text-xs text-[var(--color-text-muted)] pl-6">
+                      {t("dressCode")}: {event.dress_code}
+                    </p>
+                  )}
+                </div>
+
+                {/* Description */}
+                {event.description && (
+                  <p className="font-body text-sm text-[var(--color-text-muted)] leading-relaxed mb-6">
+                    {event.description}
+                  </p>
+                )}
+
+                {/* RSVP buttons */}
+                <div className="flex gap-3">
+                  <Button
+                    variant={event.rsvpStatus === "accepted" ? "primary" : "outline"}
+                    size="md"
+                    disabled={event.submitting}
+                    onClick={() => handleRsvp(event.id, "accepted")}
+                    className="flex-1"
+                  >
+                    {event.submitting ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : event.rsvpStatus === "accepted" ? (
+                      <>
+                        <Check size={14} className="mr-1.5" />
+                        {t("accepted")}
+                      </>
+                    ) : (
+                      t("accept")
+                    )}
+                  </Button>
+                  <Button
+                    variant={event.rsvpStatus === "declined" ? "danger" : "outline"}
+                    size="md"
+                    disabled={event.submitting}
+                    onClick={() => handleRsvp(event.id, "declined")}
+                    className="flex-1"
+                  >
+                    {event.rsvpStatus === "declined" ? (
+                      <>
+                        <X size={14} className="mr-1.5" />
+                        {t("declined")}
+                      </>
+                    ) : (
+                      t("decline")
+                    )}
+                  </Button>
+                </div>
+
+                {/* Pending indicator */}
+                {event.rsvpStatus === "pending" && !event.submitting && (
+                  <p className="font-ui text-xs text-[var(--color-text-muted)] text-center mt-3">
+                    {t("pending")}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Closing */}
+        {rsvpClosing && !loading && events.length > 0 && (
+          <p className="font-body text-lg text-[var(--color-text)] leading-relaxed italic text-center mt-10 opacity-0-init animate-fade-in-up delay-500">
+            {rsvpClosing}
           </p>
         )}
       </div>

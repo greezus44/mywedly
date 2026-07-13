@@ -1,21 +1,22 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save, Globe } from "lucide-react";
 import { supabase, type Wedding, type WeddingContent } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { DoaPreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
-import { Toast } from "../../components/ui/index";
+import { Input, Textarea, Label } from "../../components/ui/Input";
+import { Card, Toast } from "../../components/ui/index";
 import { ImageUpload, FormField } from "../../components/ui/ImageUpload";
+import { Save, Eye } from "lucide-react";
 
 export function ContentDoaPage() {
   const queryClient = useQueryClient();
   const [content, setContent] = useState<WeddingContent>({});
+  const [previewWedding, setPreviewWedding] = useState<Wedding | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const { data: wedding, isLoading } = useQuery({
+  const { data: wedding, isLoading, error } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -34,104 +35,116 @@ export function ContentDoaPage() {
     }
   }, [wedding]);
 
-  const saveDraftMutation = useMutation({
-    mutationFn: async (newContent: WeddingContent) => {
-      if (!wedding) throw new Error("No wedding");
-      const { error } = await supabase.from("weddings").update({ draft_content: newContent }).eq("id", wedding.id);
+  useEffect(() => {
+    if (wedding) {
+      setPreviewWedding({
+        ...wedding,
+        draft_content: content,
+        theme_config: wedding.draft_theme_config || wedding.theme_config,
+      } as Wedding);
+    }
+  }, [wedding, content]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: WeddingContent) => {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error("Not authenticated");
+      const { error } = await supabase
+        .from("weddings")
+        .update({ draft_content: data, updated_at: new Date().toISOString() })
+        .eq("created_by", user.user.id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wedding"] });
-      setToast({ message: "Draft saved", type: "success" });
+      setToast({ message: "Doa content saved to draft", type: "success" });
     },
-    onError: () => setToast({ message: "Failed to save draft", type: "error" }),
+    onError: (err) => setToast({ message: err.message || "Failed to save", type: "error" }),
   });
 
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      if (!wedding) throw new Error("No wedding");
-      const draftContent = { ...(wedding.content || {}), ...content } as WeddingContent;
-      const { error } = await supabase.from("weddings").update({ content: draftContent, draft_content: draftContent }).eq("id", wedding.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["wedding"] });
-      setToast({ message: "Doa content published", type: "success" });
-    },
-    onError: () => setToast({ message: "Failed to publish", type: "error" }),
-  });
-
-  const update = (key: keyof WeddingContent, value: string | boolean | null) => {
-    setContent((prev) => ({ ...prev, [key]: value }));
-  };
+  const handleSave = () => saveMutation.mutate(content);
+  const update = (key: keyof WeddingContent, value: unknown) => setContent((prev) => ({ ...prev, [key]: value }));
 
   if (isLoading) {
     return (
       <AdminLayout>
-        <div className="flex-1 flex items-center justify-center">
-          <p className="font-ui text-sm text-[var(--color-text-muted)]">Loading...</p>
+        <div className="flex items-center justify-center h-full p-8">
+          <div className="font-ui text-sm text-gray-400">Loading doa editor...</div>
         </div>
       </AdminLayout>
     );
   }
 
-  if (!wedding) {
+  if (error || !wedding) {
     return (
       <AdminLayout>
-        <div className="flex-1 flex items-center justify-center">
-          <p className="font-ui text-sm text-[var(--color-text-muted)]">Wedding not found</p>
+        <div className="flex items-center justify-center h-full p-8">
+          <p className="font-ui text-sm text-red-500">Unable to load wedding data</p>
         </div>
       </AdminLayout>
     );
   }
-
-  const previewWedding = { ...wedding, draft_content: content } as Wedding;
 
   return (
     <AdminLayout>
-      <SplitEditor title="Doa Content Editor" preview={<DoaPreview wedding={previewWedding} />}>
-        <div className="space-y-6">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-6 py-3 bg-white border-b border-gray-100 flex items-center justify-between">
           <div>
-            <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Doa / Prayer</h2>
-            <p className="font-ui text-xs text-[var(--color-text-muted)] mb-6">A prayer or blessing section for your guests</p>
+            <h1 className="font-heading text-xl text-[var(--color-text)]">Doa / Prayer</h1>
+            <p className="font-ui text-xs text-[var(--color-text-muted)]">Edit the prayer or blessing section</p>
           </div>
-
-          <FormField label="Doa Title" hint="Section heading">
-            <Input value={content.doa_title || ""} onChange={(e) => update("doa_title", e.target.value)} placeholder="Doa Restu" />
-          </FormField>
-
-          <FormField label="Doa Body" hint="The prayer or blessing text">
-            <Textarea value={content.doa_body || ""} onChange={(e) => update("doa_body", e.target.value)} placeholder="Write your prayer or blessing..." className="min-h-[200px]" />
-          </FormField>
-
-          <FormField label="Doa Image" hint="An optional image to accompany the prayer">
-            <ImageUpload value={content.doa_image_url || null} onChange={(url) => update("doa_image_url", url)} label="Upload doa image" />
-          </FormField>
-
-          <div className="pt-4 border-t border-[var(--color-border)]/15 space-y-3">
-            <Button
-              variant="outline"
-              size="md"
-              className="w-full"
-              onClick={() => saveDraftMutation.mutate(content)}
-              disabled={saveDraftMutation.isPending}
-            >
-              <Save size={14} className="mr-2" />
-              {saveDraftMutation.isPending ? "Saving..." : "Save Draft"}
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              className="w-full"
-              onClick={() => publishMutation.mutate()}
-              disabled={publishMutation.isPending}
-            >
-              <Globe size={14} className="mr-2" />
-              {publishMutation.isPending ? "Publishing..." : "Publish Doa"}
-            </Button>
-          </div>
+          <Button variant="primary" size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
+            <Save size={14} className="mr-1.5" />
+            {saveMutation.isPending ? "Saving..." : "Save Draft"}
+          </Button>
         </div>
-      </SplitEditor>
+        <div className="flex-1 overflow-hidden">
+          <SplitEditor
+            title="Doa Content"
+            preview={previewWedding ? <DoaPreview wedding={previewWedding} /> : <div />}
+          >
+            <div className="space-y-6">
+              <FormField label="Section Title" hint="Heading for the prayer section">
+                <Input
+                  value={content.doa_title || ""}
+                  onChange={(e) => update("doa_title", e.target.value)}
+                  placeholder="Doa & Blessings"
+                />
+              </FormField>
+
+              <FormField label="Prayer Body" hint="The main prayer or blessing text">
+                <Textarea
+                  value={content.doa_body || ""}
+                  onChange={(e) => update("doa_body", e.target.value)}
+                  placeholder="Enter the prayer or blessing text..."
+                  rows={10}
+                />
+              </FormField>
+
+              <div className="border-t border-gray-100 pt-6">
+                <h3 className="font-heading text-base text-[var(--color-text)] mb-4">Prayer Image</h3>
+                <ImageUpload
+                  value={content.doa_image_url || null}
+                  onChange={(v) => update("doa_image_url", v)}
+                  label="Doa Image"
+                />
+              </div>
+
+              <Card className="p-4 bg-[var(--color-bg-light)] border-[var(--color-primary)]/20">
+                <div className="flex items-start gap-3">
+                  <Eye size={16} className="text-[var(--color-primary)] mt-0.5" />
+                  <div>
+                    <p className="font-ui text-xs text-[var(--color-text)] font-medium mb-1">Live Preview</p>
+                    <p className="font-ui text-xs text-[var(--color-text-muted)]">
+                      The doa section displays a title, optional image, and prayer text on the guest site.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </SplitEditor>
+        </div>
+      </div>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AdminLayout>
   );

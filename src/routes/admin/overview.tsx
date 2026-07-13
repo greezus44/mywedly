@@ -1,14 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { Users, MailCheck, Check, X, MessageSquare, Calendar, TrendingUp, Clock } from "lucide-react";
-import { supabase, type Wedding, type Guest, type Rsvp, type GuestbookEntry, type WeddingEvent } from "../../lib/supabase";
+import { supabase, type Wedding } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
-import { Card, Badge, EmptyState, SectionTitle } from "../../components/ui/index";
-import { Button } from "../../components/ui/Button";
+import { Card, Badge } from "../../components/ui/index";
 import { formatDate } from "../../lib/utils";
-import { cn } from "../../lib/utils";
+import { Calendar, Users, Mail, CheckCircle2, MessageSquare, Heart, TrendingUp, Clock } from "lucide-react";
 
 export function OverviewPage() {
-  const { data: wedding, isLoading: wLoading } = useQuery({
+  const { data: wedding, isLoading: weddingLoading, error: weddingError } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -19,180 +17,162 @@ export function OverviewPage() {
     },
   });
 
-  const { data: stats, isLoading: sLoading } = useQuery({
+  const { data: stats } = useQuery({
     queryKey: ["overview-stats", wedding?.id],
     queryFn: async () => {
       if (!wedding) return null;
-      const [guests, rsvps, messages, events] = await Promise.all([
-        supabase.from("guests").select("*").eq("wedding_id", wedding.id),
-        supabase.from("rsvps").select("*").eq("wedding_id", wedding.id),
-        supabase.from("guestbook_entries").select("*").eq("wedding_id", wedding.id),
-        supabase.from("events").select("*").eq("wedding_id", wedding.id),
+      const [guestsRes, eventsRes, messagesRes, rsvpsRes] = await Promise.all([
+        supabase.from("guests").select("*", { count: "exact", head: true }).eq("wedding_id", wedding.id),
+        supabase.from("events").select("*", { count: "exact", head: true }).eq("wedding_id", wedding.id),
+        supabase.from("guestbook_entries").select("*", { count: "exact", head: true }).eq("wedding_id", wedding.id),
+        supabase.from("rsvps").select("*", { count: "exact", head: true }).eq("wedding_id", wedding.id),
       ]);
-      const guestList = (guests.data || []) as Guest[];
-      const rsvpList = (rsvps.data || []) as Rsvp[];
-      const msgList = (messages.data || []) as GuestbookEntry[];
-      const eventList = (events.data || []) as WeddingEvent[];
+      const [acceptedRes, pendingRes] = await Promise.all([
+        supabase.from("rsvps").select("*", { count: "exact", head: true }).eq("wedding_id", wedding.id).eq("status", "accepted"),
+        supabase.from("rsvps").select("*", { count: "exact", head: true }).eq("wedding_id", wedding.id).eq("status", "pending"),
+      ]);
       return {
-        totalGuests: guestList.length,
-        pendingRsvps: rsvpList.filter((r) => r.status === "pending").length,
-        accepted: rsvpList.filter((r) => r.status === "accepted").length,
-        declined: rsvpList.filter((r) => r.status === "declined").length,
-        messages: msgList.length,
-        approvedMessages: msgList.filter((m) => m.is_approved).length,
-        pendingMessages: msgList.filter((m) => !m.is_approved).length,
-        events: eventList.length,
+        guests: guestsRes.count || 0,
+        events: eventsRes.count || 0,
+        messages: messagesRes.count || 0,
+        rsvps: rsvpsRes.count || 0,
+        accepted: acceptedRes.count || 0,
+        pending: pendingRes.count || 0,
       };
     },
     enabled: !!wedding,
   });
 
-  const { data: recentActivity } = useQuery({
-    queryKey: ["recent-activity", wedding?.id],
-    queryFn: async () => {
-      if (!wedding) return [];
-      const [rsvps, messages, guests] = await Promise.all([
-        supabase.from("rsvps").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false }).limit(5),
-        supabase.from("guestbook_entries").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false }).limit(5),
-        supabase.from("guests").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false }).limit(5),
-      ]);
-      const activities: { type: string; label: string; time: string }[] = [];
-      (rsvps.data || []).forEach((r: Rsvp) => activities.push({ type: "rsvp", label: `${r.guest_name || "Guest"} ${r.status} RSVP`, time: r.created_at }));
-      (messages.data || []).forEach((m: GuestbookEntry) => activities.push({ type: "message", label: `${m.author_name} sent a message`, time: m.created_at }));
-      (guests.data || []).forEach((g: Guest) => activities.push({ type: "guest", label: `${g.full_name} was added`, time: g.created_at }));
-      return activities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 8);
-    },
-    enabled: !!wedding,
-  });
+  if (weddingLoading) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-full p-8">
+          <div className="font-ui text-sm text-gray-400">Loading dashboard...</div>
+        </div>
+      </AdminLayout>
+    );
+  }
 
-  const loading = wLoading || sLoading;
+  if (weddingError || !wedding) {
+    return (
+      <AdminLayout>
+        <div className="flex items-center justify-center h-full p-8">
+          <div className="text-center">
+            <p className="font-ui text-sm text-red-500 mb-2">Unable to load wedding data</p>
+            <p className="font-ui text-xs text-gray-400">{(weddingError as Error)?.message || "Please try again"}</p>
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  const countdown = wedding.wedding_date ? Math.max(0, Math.ceil((new Date(wedding.wedding_date).getTime() - Date.now()) / 86400000)) : null;
+  const rsvpRate = stats && stats.guests > 0 ? Math.round((stats.rsvps / stats.guests) * 100) : 0;
 
   const statCards = [
-    { label: "Total Guests", value: stats?.totalGuests ?? 0, icon: Users, color: "text-[var(--color-primary)]" },
-    { label: "Pending RSVPs", value: stats?.pendingRsvps ?? 0, icon: Clock, color: "text-[var(--color-warning)]" },
-    { label: "Accepted", value: stats?.accepted ?? 0, icon: Check, color: "text-[var(--color-success)]" },
-    { label: "Declined", value: stats?.declined ?? 0, icon: X, color: "text-[var(--color-error)]" },
-    { label: "Messages", value: stats?.messages ?? 0, icon: MessageSquare, color: "text-[var(--color-primary)]" },
-    { label: "Events", value: stats?.events ?? 0, icon: Calendar, color: "text-[var(--color-primary)]" },
+    { label: "Total Guests", value: stats?.guests ?? 0, icon: Users, accent: "text-[var(--color-primary)]" },
+    { label: "Events", value: stats?.events ?? 0, icon: Calendar, accent: "text-[var(--color-primary)]" },
+    { label: "RSVPs Received", value: stats?.rsvps ?? 0, icon: CheckCircle2, accent: "text-[var(--color-success)]" },
+    { label: "Accepted", value: stats?.accepted ?? 0, icon: TrendingUp, accent: "text-[var(--color-success)]" },
+    { label: "Messages", value: stats?.messages ?? 0, icon: MessageSquare, accent: "text-[var(--color-primary)]" },
+    { label: "Days to Wedding", value: countdown ?? "—", icon: Clock, accent: "text-[var(--color-primary)]" },
   ];
 
   return (
     <AdminLayout>
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-4 md:px-6 py-8">
+        <div className="max-w-6xl mx-auto p-6 md:p-8">
+          {/* Header */}
           <div className="mb-8">
-            <h1 className="font-heading text-3xl text-[var(--color-text)] mb-1">Dashboard</h1>
+            <div className="flex items-center gap-2 mb-2">
+              <Heart size={16} className="text-[var(--color-primary)]" />
+              <span className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">Dashboard</span>
+            </div>
+            <h1 className="font-heading text-3xl md:text-4xl text-[var(--color-text)] mb-1">
+              {wedding.couple_name_one} & {wedding.couple_name_two}
+            </h1>
             <p className="font-ui text-sm text-[var(--color-text-muted)]">
-              {wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "Welcome back"}
+              {wedding.wedding_date ? formatDate(wedding.wedding_date) : "Date not set"}
+              {wedding.location && ` · ${wedding.location}`}
             </p>
           </div>
 
-          {loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Card key={i} className="p-6 animate-pulse">
-                  <div className="h-12 w-12 rounded-full bg-gray-100 mb-4" />
-                  <div className="h-8 w-16 bg-gray-100 rounded mb-2" />
-                  <div className="h-4 w-24 bg-gray-100 rounded" />
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-              {statCards.map((stat) => {
-                const Icon = stat.icon;
-                return (
-                  <Card key={stat.label} className="p-6 hover:shadow-md transition-shadow">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className={cn("p-3 rounded-full bg-[var(--color-primary)]/8", stat.color)}>
-                        <Icon size={20} />
-                      </div>
-                      {wedding?.is_published && stat.label === "Total Guests" && (
-                        <Badge variant="success">Live</Badge>
-                      )}
-                    </div>
-                    <p className="font-heading text-3xl text-[var(--color-text)] mb-1">{stat.value}</p>
-                    <p className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">{stat.label}</p>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <Card className="p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp size={18} className="text-[var(--color-primary)]" />
-                <h3 className="font-heading text-lg text-[var(--color-text)]">Recent Activity</h3>
-              </div>
-              {recentActivity && recentActivity.length > 0 ? (
-                <div className="space-y-3">
-                  {recentActivity.map((activity, i) => (
-                    <div key={i} className="flex items-center gap-3 py-2 border-b border-[var(--color-border)]/10 last:border-0">
-                      <div className="w-2 h-2 rounded-full bg-[var(--color-primary)]" />
-                      <div className="flex-1">
-                        <p className="font-ui text-sm text-[var(--color-text)]">{activity.label}</p>
-                        <p className="font-ui text-xs text-[var(--color-text-muted)]">
-                          {new Date(activity.time).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState icon={<MessageSquare size={32} />} title="No activity yet" description="Recent activity will appear here" />
-              )}
-            </Card>
-
-            <Card className="p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Calendar size={18} className="text-[var(--color-primary)]" />
-                <h3 className="font-heading text-lg text-[var(--color-text)]">Wedding Details</h3>
-              </div>
-              {wedding ? (
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]/10">
-                    <span className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">Date</span>
-                    <span className="font-ui text-sm text-[var(--color-text)]">{formatDate(wedding.wedding_date) || "Not set"}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]/10">
-                    <span className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">Location</span>
-                    <span className="font-ui text-sm text-[var(--color-text)]">{wedding.location || "Not set"}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]/10">
-                    <span className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">Hashtag</span>
-                    <span className="font-ui text-sm text-[var(--color-text)]">{wedding.hashtag || "—"}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]/10">
-                    <span className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">RSVP Deadline</span>
-                    <span className="font-ui text-sm text-[var(--color-text)]">{formatDate(wedding.rsvp_deadline) || "Not set"}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">Status</span>
-                    <Badge variant={wedding.is_published ? "success" : "default"}>
-                      {wedding.is_published ? "Published" : "Draft"}
-                    </Badge>
-                  </div>
-                </div>
-              ) : (
-                <p className="font-ui text-sm text-[var(--color-text-muted)]">Loading wedding details...</p>
-              )}
-            </Card>
+          {/* Status bar */}
+          <div className="flex items-center gap-3 mb-8 flex-wrap">
+            <Badge variant={wedding.is_published ? "success" : "warning"}>
+              {wedding.is_published ? "Published" : "Draft"}
+            </Badge>
+            {countdown !== null && countdown > 0 && (
+              <Badge variant="default">{countdown} days to go</Badge>
+            )}
+            {stats && stats.pending > 0 && (
+              <Badge variant="warning">{stats.pending} pending RSVPs</Badge>
+            )}
           </div>
 
-          {stats && stats.pendingMessages > 0 && (
-            <Card className="p-6 mt-6 border-[var(--color-warning)]/30">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-heading text-lg text-[var(--color-text)] mb-1">{stats.pendingMessages} messages awaiting approval</h3>
-                  <p className="font-ui text-sm text-[var(--color-text-muted)]">Review and approve guest messages from your guestbook</p>
+          {/* Stat cards */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+            {statCards.map((stat) => {
+              const Icon = stat.icon;
+              return (
+                <Card key={stat.label} className="p-6">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="p-2 bg-[var(--color-primary)]/8 rounded-lg">
+                      <Icon size={20} className={stat.accent} />
+                    </div>
+                  </div>
+                  <div className="font-heading text-3xl text-[var(--color-text)] mb-1">{stat.value}</div>
+                  <div className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">{stat.label}</div>
+                </Card>
+              );
+            })}
+          </div>
+
+          {/* Quick info */}
+          <div className="grid md:grid-cols-2 gap-4">
+            <Card className="p-6">
+              <h3 className="font-heading text-lg text-[var(--color-text)] mb-4">Wedding Details</h3>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Calendar size={16} className="text-[var(--color-primary)]" />
+                  <span className="font-ui text-sm text-[var(--color-text)]">
+                    {wedding.wedding_date ? formatDate(wedding.wedding_date) : "Not set"}
+                  </span>
                 </div>
-                <Button variant="primary" size="sm" onClick={() => (window.location.href = "/admin/messages")}>
-                  Review Messages
-                </Button>
+                <div className="flex items-center gap-3">
+                  <Mail size={16} className="text-[var(--color-primary)]" />
+                  <span className="font-ui text-sm text-[var(--color-text)]">{wedding.location || "Location not set"}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Heart size={16} className="text-[var(--color-primary)]" />
+                  <span className="font-ui text-sm text-[var(--color-text)]">
+                    {wedding.hashtag || `#${wedding.couple_name_one}${wedding.couple_name_two}`}
+                  </span>
+                </div>
               </div>
             </Card>
-          )}
+
+            <Card className="p-6">
+              <h3 className="font-heading text-lg text-[var(--color-text)] mb-4">RSVP Summary</h3>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-ui text-sm text-[var(--color-text-muted)]">Response Rate</span>
+                  <span className="font-heading text-xl text-[var(--color-primary)]">{rsvpRate}%</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                  <div className="bg-[var(--color-primary)] h-full rounded-full transition-all" style={{ width: `${rsvpRate}%` }} />
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <span className="font-ui text-sm text-[var(--color-text-muted)]">Accepted</span>
+                  <span className="font-ui text-sm text-[var(--color-success)] font-medium">{stats?.accepted ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-ui text-sm text-[var(--color-text-muted)]">Pending</span>
+                  <span className="font-ui text-sm text-[var(--color-warning)] font-medium">{stats?.pending ?? 0}</span>
+                </div>
+              </div>
+            </Card>
+          </div>
         </div>
       </div>
     </AdminLayout>

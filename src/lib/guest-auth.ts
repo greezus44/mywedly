@@ -1,22 +1,73 @@
-import { supabase } from "./supabase";
+import { createContext, useContext, useState, useEffect, createElement, type ReactNode } from "react";
 import type { GuestSession } from "./supabase";
+import { supabase } from "./supabase";
 
-const KEY = "guest_session";
-
-export function saveGuestSession(s: GuestSession) { sessionStorage.setItem(KEY, JSON.stringify(s)); }
-export function getGuestSession(): GuestSession | null {
-  const raw = sessionStorage.getItem(KEY);
-  if (!raw) return null;
-  try { return JSON.parse(raw) as GuestSession; } catch { return null; }
+interface GuestAuthContextValue {
+  session: GuestSession | null;
+  loading: boolean;
+  signIn: (username: string, slug: string) => Promise<{ error: string | null }>;
+  signOut: () => void;
 }
-export function clearGuestSession() { sessionStorage.removeItem(KEY); }
 
-export async function guestSignin(weddingId: string, username: string, weddingSlug: string) {
-  const { data, error } = await supabase.rpc("guest_signin", { p_wedding_id: weddingId, p_username: username });
-  if (error) return { error: error.message, session: null };
-  if (!data || data.length === 0) return { error: "Guest not found. Please check your username.", session: null };
-  const row = data[0];
-  const session: GuestSession = { guestId: row.guest_id, weddingId: row.wedding_id, fullName: row.out_full_name, weddingSlug };
-  saveGuestSession(session);
-  return { error: null, session };
+const GuestAuthContext = createContext<GuestAuthContextValue | null>(null);
+
+export function GuestAuthProvider({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<GuestSession | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem("guest-session");
+    if (stored) {
+      try {
+        setSession(JSON.parse(stored));
+      } catch {
+        sessionStorage.removeItem("guest-session");
+      }
+    }
+    setLoading(false);
+  }, []);
+
+  const signIn = async (username: string, slug: string) => {
+    try {
+      const { data: wedding, error: wErr } = await supabase
+        .from("weddings")
+        .select("*")
+        .eq("slug", slug)
+        .eq("is_published", true)
+        .single();
+      if (wErr || !wedding) return { error: "Wedding not found" };
+
+      const { data: guest, error: gErr } = await supabase
+        .from("guests")
+        .select("*")
+        .eq("wedding_id", wedding.id)
+        .eq("username", username.trim())
+        .maybeSingle();
+      if (gErr || !guest) return { error: "Invalid username. Please check your invitation." };
+
+      const newSession: GuestSession = { guest, wedding };
+      setSession(newSession);
+      sessionStorage.setItem("guest-session", JSON.stringify(newSession));
+      return { error: null };
+    } catch {
+      return { error: "Sign in failed. Please try again." };
+    }
+  };
+
+  const signOut = () => {
+    setSession(null);
+    sessionStorage.removeItem("guest-session");
+  };
+
+  return createElement(
+    GuestAuthContext.Provider,
+    { value: { session, loading, signIn, signOut } },
+    children
+  );
+}
+
+export function useGuestAuth() {
+  const ctx = useContext(GuestAuthContext);
+  if (!ctx) throw new Error("useGuestAuth must be used within GuestAuthProvider");
+  return ctx;
 }

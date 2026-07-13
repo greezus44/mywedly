@@ -1,21 +1,22 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save, Globe } from "lucide-react";
 import { supabase, type Wedding, type WeddingContent } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { SendMessagePreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Textarea } from "../../components/ui/Input";
-import { Toast } from "../../components/ui/index";
+import { Input, Textarea, Label, Toggle } from "../../components/ui/Input";
+import { Card, Toast } from "../../components/ui/index";
 import { FormField } from "../../components/ui/ImageUpload";
+import { Save, Eye, MessageSquare } from "lucide-react";
 
 export function ContentMessagePage() {
   const queryClient = useQueryClient();
   const [content, setContent] = useState<WeddingContent>({});
+  const [previewWedding, setPreviewWedding] = useState<Wedding | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const { data: wedding, isLoading } = useQuery({
+  const { data: wedding, isLoading, error } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -34,100 +35,134 @@ export function ContentMessagePage() {
     }
   }, [wedding]);
 
-  const saveDraftMutation = useMutation({
-    mutationFn: async (newContent: WeddingContent) => {
-      if (!wedding) throw new Error("No wedding");
-      const { error } = await supabase.from("weddings").update({ draft_content: newContent }).eq("id", wedding.id);
+  useEffect(() => {
+    if (wedding) {
+      setPreviewWedding({
+        ...wedding,
+        draft_content: content,
+        theme_config: wedding.draft_theme_config || wedding.theme_config,
+      } as Wedding);
+    }
+  }, [wedding, content]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: WeddingContent) => {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error("Not authenticated");
+      const { error } = await supabase
+        .from("weddings")
+        .update({ draft_content: data, updated_at: new Date().toISOString() })
+        .eq("created_by", user.user.id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["wedding"] });
-      setToast({ message: "Draft saved", type: "success" });
+      setToast({ message: "Message settings saved to draft", type: "success" });
     },
-    onError: () => setToast({ message: "Failed to save draft", type: "error" }),
+    onError: (err) => setToast({ message: err.message || "Failed to save", type: "error" }),
   });
 
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      if (!wedding) throw new Error("No wedding");
-      const draftContent = { ...(wedding.content || {}), ...content } as WeddingContent;
-      const { error } = await supabase.from("weddings").update({ content: draftContent, draft_content: draftContent }).eq("id", wedding.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["wedding"] });
-      setToast({ message: "Message content published", type: "success" });
-    },
-    onError: () => setToast({ message: "Failed to publish", type: "error" }),
-  });
-
-  const update = (key: keyof WeddingContent, value: string | boolean | null) => {
-    setContent((prev) => ({ ...prev, [key]: value }));
-  };
+  const handleSave = () => saveMutation.mutate(content);
+  const update = (key: keyof WeddingContent, value: unknown) => setContent((prev) => ({ ...prev, [key]: value }));
 
   if (isLoading) {
     return (
       <AdminLayout>
-        <div className="flex-1 flex items-center justify-center">
-          <p className="font-ui text-sm text-[var(--color-text-muted)]">Loading...</p>
+        <div className="flex items-center justify-center h-full p-8">
+          <div className="font-ui text-sm text-gray-400">Loading message editor...</div>
         </div>
       </AdminLayout>
     );
   }
 
-  if (!wedding) {
+  if (error || !wedding) {
     return (
       <AdminLayout>
-        <div className="flex-1 flex items-center justify-center">
-          <p className="font-ui text-sm text-[var(--color-text-muted)]">Wedding not found</p>
+        <div className="flex items-center justify-center h-full p-8">
+          <p className="font-ui text-sm text-red-500">Unable to load wedding data</p>
         </div>
       </AdminLayout>
     );
   }
-
-  const previewWedding = { ...wedding, draft_content: content } as Wedding;
 
   return (
     <AdminLayout>
-      <SplitEditor title="Message Content Editor" preview={<SendMessagePreview wedding={previewWedding} />}>
-        <div className="space-y-6">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-6 py-3 bg-white border-b border-gray-100 flex items-center justify-between">
           <div>
-            <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Send Message</h2>
-            <p className="font-ui text-xs text-[var(--color-text-muted)] mb-6">Intro text shown on the guest message page</p>
+            <h1 className="font-heading text-xl text-[var(--color-text)]">Message Settings</h1>
+            <p className="font-ui text-xs text-[var(--color-text-muted)]">Configure the guest message section</p>
           </div>
-
-          <FormField label="Message Intro" hint="A short introduction shown above the message form">
-            <Textarea
-              value={content.message_intro || ""}
-              onChange={(e) => update("message_intro", e.target.value)}
-              placeholder="Share your well wishes and blessings with the happy couple..."
-            />
-          </FormField>
-
-          <div className="pt-4 border-t border-[var(--color-border)]/15 space-y-3">
-            <Button
-              variant="outline"
-              size="md"
-              className="w-full"
-              onClick={() => saveDraftMutation.mutate(content)}
-              disabled={saveDraftMutation.isPending}
-            >
-              <Save size={14} className="mr-2" />
-              {saveDraftMutation.isPending ? "Saving..." : "Save Draft"}
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              className="w-full"
-              onClick={() => publishMutation.mutate()}
-              disabled={publishMutation.isPending}
-            >
-              <Globe size={14} className="mr-2" />
-              {publishMutation.isPending ? "Publishing..." : "Publish Message"}
-            </Button>
-          </div>
+          <Button variant="primary" size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
+            <Save size={14} className="mr-1.5" />
+            {saveMutation.isPending ? "Saving..." : "Save Draft"}
+          </Button>
         </div>
-      </SplitEditor>
+        <div className="flex-1 overflow-hidden">
+          <SplitEditor
+            title="Message Content"
+            preview={previewWedding ? <SendMessagePreview wedding={previewWedding} /> : <div />}
+          >
+            <div className="space-y-6">
+              <FormField label="Message Intro" hint="Text shown above the message form">
+                <Textarea
+                  value={content.message_intro || ""}
+                  onChange={(e) => update("message_intro", e.target.value)}
+                  placeholder="Share your well wishes with the happy couple..."
+                  rows={3}
+                />
+              </FormField>
+
+              <div className="border-t border-gray-100 pt-6">
+                <h3 className="font-heading text-base text-[var(--color-text)] mb-4">RSVP Settings</h3>
+                <div className="space-y-4">
+                  <FormField label="RSVP Intro" hint="Text shown on the RSVP page">
+                    <Textarea
+                      value={content.rsvp_intro || ""}
+                      onChange={(e) => update("rsvp_intro", e.target.value)}
+                      placeholder="We hope you can join us! Please RSVP below."
+                      rows={3}
+                    />
+                  </FormField>
+
+                  <FormField label="RSVP Closing" hint="Thank-you text after RSVP submission">
+                    <Textarea
+                      value={content.rsvp_closing || ""}
+                      onChange={(e) => update("rsvp_closing", e.target.value)}
+                      placeholder="Thank you for your response!"
+                      rows={2}
+                    />
+                  </FormField>
+                </div>
+              </div>
+
+              <Card className="p-4 bg-[var(--color-bg-light)] border-[var(--color-primary)]/20">
+                <div className="flex items-start gap-3">
+                  <MessageSquare size={16} className="text-[var(--color-primary)] mt-0.5" />
+                  <div>
+                    <p className="font-ui text-xs text-[var(--color-text)] font-medium mb-1">Guest Messages</p>
+                    <p className="font-ui text-xs text-[var(--color-text-muted)]">
+                      Messages submitted by guests appear in the Messages tab for approval before publishing.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-4 bg-[var(--color-bg-light)]">
+                <div className="flex items-start gap-3">
+                  <Eye size={16} className="text-[var(--color-primary)] mt-0.5" />
+                  <div>
+                    <p className="font-ui text-xs text-[var(--color-text)] font-medium mb-1">Live Preview</p>
+                    <p className="font-ui text-xs text-[var(--color-text-muted)]">
+                      The preview shows how the message form will appear to your guests.
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </SplitEditor>
+        </div>
+      </div>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AdminLayout>
   );
