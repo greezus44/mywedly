@@ -1,246 +1,203 @@
-import { useState } from "react";
-import { Link, Outlet, useParams, useNavigate } from "react-router-dom";
+import { useParams, Link, Outlet, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Image as ImageIcon,
-  LogIn,
-  Home,
-  Palette,
-  Sparkles,
-  Users,
-  CalendarCheck,
-  Clock,
-  Share2,
-  BarChart3,
-  Settings,
-  Eye,
-  Loader2,
-  ExternalLink,
-} from "lucide-react";
 import { supabase, type UserEvent } from "../../lib/supabase";
-import { cn } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { Toast } from "../../components/ui";
+import { Badge, Skeleton, Toast } from "../../components/ui";
+import { ThemeProvider } from "../../lib/theme-context";
+import { DEFAULT_THEME } from "../../lib/theme";
+import {
+  Image, LogIn, Home, Palette, Layers, Users, CalendarCheck,
+  Clock, Share2, BarChart3, Settings, ChevronLeft, Menu, X, Eye
+} from "lucide-react";
+import { useState } from "react";
+import { cn } from "../../lib/utils";
 
-async function fetchEvent(eventId: string): Promise<UserEvent | null> {
-  const { data, error } = await supabase
-    .from("user_events")
-    .select("*")
-    .eq("id", eventId)
-    .maybeSingle();
-  if (error) throw error;
-  return (data as UserEvent | null) ?? null;
-}
-
-async function updateEventPublished(
-  eventId: string,
-  isPublished: boolean
-): Promise<UserEvent> {
-  const { data, error } = await supabase
-    .from("user_events")
-    .update({ is_published: isPublished, published_at: isPublished ? new Date().toISOString() : null })
-    .eq("id", eventId)
-    .select()
-    .single();
-  if (error) throw error;
-  return data as UserEvent;
-}
-
-interface TabConfig {
-  to: string;
-  label: string;
-  icon: typeof ImageIcon;
-}
-
-const TABS: TabConfig[] = [
-  { to: "cover", label: "Cover", icon: ImageIcon },
-  { to: "login", label: "Login", icon: LogIn },
-  { to: "home", label: "Home", icon: Home },
-  { to: "theme", label: "Theme", icon: Palette },
-  { to: "branding", label: "Branding", icon: Sparkles },
-  { to: "guests", label: "Guests", icon: Users },
-  { to: "rsvp", label: "RSVP", icon: CalendarCheck },
-  { to: "timeline", label: "Timeline", icon: Clock },
-  { to: "sharing", label: "Sharing", icon: Share2 },
-  { to: "analytics", label: "Analytics", icon: BarChart3 },
-  { to: "settings", label: "Settings", icon: Settings },
+const tabs = [
+  { key: "cover", label: "Cover", icon: Image },
+  { key: "login", label: "Login", icon: LogIn },
+  { key: "home", label: "Home", icon: Home },
+  { key: "theme", label: "Theme", icon: Palette },
+  { key: "branding", label: "Branding", icon: Layers },
+  { key: "events", label: "Events", icon: CalendarCheck },
+  { key: "guests", label: "Guests", icon: Users },
+  { key: "groups", label: "Groups", icon: Users },
+  { key: "rsvp", label: "RSVP", icon: CalendarCheck },
+  { key: "timeline", label: "Timeline", icon: Clock },
+  { key: "sharing", label: "Sharing", icon: Share2 },
+  { key: "analytics", label: "Analytics", icon: BarChart3 },
+  { key: "settings", label: "Settings", icon: Settings },
 ];
 
 export default function EventLayoutPage() {
-  const { eventId } = useParams<{ eventId: string }>();
+  const { eventId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const {
-    data: event,
-    isLoading,
-    isError,
-  } = useQuery({
+  const { data: event, isLoading } = useQuery({
     queryKey: ["event", eventId],
-    queryFn: () => fetchEvent(eventId!),
-    enabled: !!eventId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId).maybeSingle();
+      if (error) throw error;
+      return data as UserEvent | null;
+    },
   });
 
   const publishMutation = useMutation({
-    mutationFn: (isPublished: boolean) => updateEventPublished(eventId!, isPublished),
-    onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["user-events"] });
-      setToast({
-        message: updated.is_published ? "Event published." : "Event unpublished.",
-        type: "success",
-      });
+    mutationFn: async () => {
+      if (!event) return;
+      const newPublished = !event.is_published;
+      const updates: Record<string, unknown> = {
+        is_published: newPublished,
+        updated_at: new Date().toISOString(),
+      };
+      if (newPublished) {
+        updates.published_at = new Date().toISOString();
+        if (event.draft_name) updates.name = event.draft_name;
+        if (event.draft_event_type) updates.event_type = event.draft_event_type;
+        if (event.draft_event_date !== undefined) updates.event_date = event.draft_event_date;
+        if (event.draft_event_time !== undefined) updates.event_time = event.draft_event_time;
+        if (event.draft_venue !== undefined) updates.venue = event.draft_venue;
+        if (event.draft_address !== undefined) updates.address = event.draft_address;
+        if (event.draft_cover_image !== undefined) updates.cover_image = event.draft_cover_image;
+        if (event.draft_cover_config !== undefined) updates.cover_config = event.draft_cover_config;
+        if (event.draft_login_config !== undefined) updates.login_config = event.draft_login_config;
+        if (event.draft_theme !== undefined) updates.theme = event.draft_theme;
+        if (event.draft_logo_config !== undefined) updates.logo_config = event.draft_logo_config;
+        if (event.draft_content !== undefined) updates.content = event.draft_content;
+        if (event.draft_slug !== undefined) updates.slug = event.draft_slug;
+        if (event.draft_rsvp_deadline !== undefined) updates.rsvp_deadline = event.draft_rsvp_deadline;
+      }
+      const { error } = await supabase.from("user_events").update(updates).eq("id", event.id);
+      if (error) throw error;
     },
-    onError: (err) => {
-      const message =
-        err instanceof Error ? err.message : "Failed to update event.";
-      setToast({ message, type: "error" });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setToast(event?.is_published ? "Event unpublished" : "Event published");
     },
   });
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-cream">
-        <Loader2 className="w-8 h-8 animate-spin text-onyx/40" />
+      <div className="min-h-screen bg-gray-50">
+        <div className="h-16 border-b border-gray-200 bg-white" />
+        <div className="p-8"><Skeleton className="h-64" /></div>
       </div>
     );
   }
 
-  if (isError || !event) {
+  if (!event) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-cream px-6 text-center">
-        <p className="font-heading text-3xl text-onyx">Event Not Found</p>
-        <p className="text-sm text-onyx/50 max-w-sm">
-          We could not locate this event. It may have been removed or the link is
-          incorrect.
-        </p>
-        <Button variant="secondary" onClick={() => navigate("/dashboard")} className="mt-4">
-          Back to Dashboard
-        </Button>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-sm text-gray-500 mb-4">Event not found</p>
+          <Link to="/dashboard"><Button>Back to Dashboard</Button></Link>
+        </div>
       </div>
     );
   }
 
-  const livePath = event.slug ? `/${event.slug}` : `/${event.id}`;
+  const theme = event.draft_theme || event.theme || DEFAULT_THEME;
 
   return (
-    <div className="min-h-screen bg-cream flex flex-col">
-      {/* Top bar */}
-      <header className="sticky top-0 z-30 bg-white border-b border-onyx/10">
-        <div className="px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 min-w-0">
-            <Link
-              to="/dashboard"
-              className="text-xs uppercase tracking-wider text-onyx/40 hover:text-onyx transition-colors flex-shrink-0"
-            >
-              ← Dashboard
-            </Link>
-            <div className="hidden sm:block w-px h-6 bg-onyx/10" />
-            <div className="min-w-0">
-              <h1 className="font-heading text-xl text-onyx leading-tight truncate">
-                {event.name}
-              </h1>
+    <ThemeProvider initialTheme={theme}>
+      <div className="min-h-screen bg-gray-50">
+        {/* Top Bar */}
+        <div className="sticky top-0 z-40 bg-white border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6">
+            <div className="h-14 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Link to="/dashboard" className="p-1.5 hover:bg-gray-100 transition-colors" style={{ borderRadius: "var(--radius)" }}>
+                  <ChevronLeft className="w-5 h-5 text-gray-600" />
+                </Link>
+                <div className="min-w-0">
+                  <h1 className="font-heading text-lg truncate">{event.draft_name || event.name}</h1>
+                </div>
+                <Badge variant={event.is_published ? "success" : "default"}>
+                  {event.is_published ? "Published" : "Draft"}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                {event.is_published && event.slug && (
+                  <Link to={`/e/${event.slug}`} target="_blank">
+                    <Button size="sm" variant="ghost"><Eye className="w-3.5 h-3.5" /> View Live</Button>
+                  </Link>
+                )}
+                <Button
+                  size="sm"
+                  variant={event.is_published ? "secondary" : "primary"}
+                  loading={publishMutation.isPending}
+                  onClick={() => publishMutation.mutate()}
+                >
+                  {event.is_published ? "Unpublish" : "Publish"}
+                </Button>
+                <button
+                  className="lg:hidden p-2 hover:bg-gray-100"
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                >
+                  {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                </button>
+              </div>
             </div>
-            {event.is_published ? (
-              <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-green-700 bg-green-50 px-2 py-0.5">
-                <span className="w-1.5 h-1.5 bg-green-600" /> Live
-              </span>
-            ) : (
-              <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-onyx/40 bg-onyx/5 px-2 py-0.5">
-                Draft
-              </span>
-            )}
-          </div>
 
-          <div className="flex items-center gap-2">
-            <Link to={livePath} target="_blank" rel="noreferrer">
-              <Button variant="ghost" size="sm">
-                <ExternalLink className="w-3.5 h-3.5" /> View Live
-              </Button>
-            </Link>
-            <Button
-              variant={event.is_published ? "secondary" : "primary"}
-              size="sm"
-              onClick={() => publishMutation.mutate(!event.is_published)}
-              disabled={publishMutation.isPending}
-            >
-              {publishMutation.isPending ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : event.is_published ? (
-                "Unpublish"
-              ) : (
-                "Publish"
-              )}
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* Body: sidebar + content */}
-      <div className="flex-1 flex">
-        {/* Sidebar */}
-        <aside className="w-56 flex-shrink-0 bg-white border-r border-onyx/10 sticky top-16 self-start h-[calc(100vh-4rem)] overflow-y-auto hidden md:block">
-          <nav className="py-4">
-            <p className="px-6 mb-2 text-[10px] uppercase tracking-widest text-onyx/30">
-              Editor
-            </p>
-            <ul>
-              {TABS.map((tab) => {
-                const fullPath = `/event/${eventId}/${tab.to}`;
+            {/* Top Navigation Tabs — Desktop */}
+            <nav className="hidden lg:flex items-center gap-1 overflow-x-auto pb-px">
+              {tabs.map((tab) => {
+                const isActive = location.pathname.endsWith(`/${tab.key}`);
                 return (
-                  <li key={tab.to}>
-                    <Link
-                      to={fullPath}
-                      className={cn(
-                        "flex items-center gap-3 px-6 py-2.5 text-sm transition-colors border-l-2",
-                        "text-onyx/60 hover:text-onyx hover:bg-onyx/[0.03] border-transparent"
-                      )}
-                    >
-                      <tab.icon className="w-4 h-4 flex-shrink-0" strokeWidth={1.5} />
-                      <span className="uppercase tracking-wider text-xs">
-                        {tab.label}
-                      </span>
-                    </Link>
-                  </li>
+                  <Link
+                    key={tab.key}
+                    to={`/event/${eventId}/${tab.key}`}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-2.5 text-sm whitespace-nowrap transition-colors border-b-2",
+                      isActive
+                        ? "border-black text-black font-medium"
+                        : "border-transparent text-gray-500 hover:text-black"
+                    )}
+                  >
+                    <tab.icon className="w-4 h-4" />
+                    {tab.label}
+                  </Link>
                 );
               })}
-            </ul>
-          </nav>
-        </aside>
-
-        {/* Mobile tab scroller */}
-        <div className="md:hidden border-b border-onyx/10 bg-white overflow-x-auto">
-          <div className="flex">
-            {TABS.map((tab) => {
-              const fullPath = `/event/${eventId}/${tab.to}`;
-              return (
-                <Link
-                  key={tab.to}
-                  to={fullPath}
-                  className="flex items-center gap-2 px-4 py-3 text-xs uppercase tracking-wider text-onyx/60 hover:text-onyx whitespace-nowrap border-b-2 border-transparent"
-                >
-                  <tab.icon className="w-3.5 h-3.5" strokeWidth={1.5} />
-                  {tab.label}
-                </Link>
-              );
-            })}
+            </nav>
           </div>
+
+          {/* Mobile Menu */}
+          {mobileMenuOpen && (
+            <nav className="lg:hidden border-t border-gray-200 bg-white overflow-x-auto">
+              <div className="flex gap-1 p-2 overflow-x-auto">
+                {tabs.map((tab) => {
+                  const isActive = location.pathname.endsWith(`/${tab.key}`);
+                  return (
+                    <Link
+                      key={tab.key}
+                      to={`/event/${eventId}/${tab.key}`}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 text-sm whitespace-nowrap transition-colors",
+                        isActive ? "bg-black text-white" : "text-gray-500 hover:bg-gray-100"
+                      )}
+                      style={{ borderRadius: "var(--radius)" }}
+                    >
+                      <tab.icon className="w-4 h-4" />
+                      {tab.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </nav>
+          )}
         </div>
 
-        {/* Main content */}
-        <main className="flex-1 min-w-0 bg-cream">
+        {/* Content */}
+        <div className="max-w-7xl mx-auto">
           <Outlet context={{ event }} />
-        </main>
-      </div>
+        </div>
 
-      {toast && (
-        <Toast
-          message={toast.message}
-          type={toast.type}
-          onClose={() => setToast(null)}
-        />
-      )}
-    </div>
+        {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+      </div>
+    </ThemeProvider>
   );
 }

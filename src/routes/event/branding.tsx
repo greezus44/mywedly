@@ -1,175 +1,147 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save, Image as ImageIcon } from "lucide-react";
+import { useParams, useOutletContext } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type LogoConfig } from "../../lib/supabase";
+import { debounce } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { Card, FormField, Toggle, ColorInput, RangeInput, Skeleton, ErrorState, Toast } from "../../components/ui";
+import { Card, FormField, Toggle, ColorInput, RangeInput, Toast } from "../../components/ui";
 import { Input } from "../../components/ui/Input";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
+import { Save } from "lucide-react";
 
-function BrandingPage() {
-  const { eventId } = useParams<{ eventId: string }>();
+export default function BrandingPage() {
+  const { eventId } = useParams();
+  const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const [config, setConfig] = useState<LogoConfig>({ enabled: false });
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const { data: event, isLoading, isError, refetch } = useQuery<UserEvent>({
-    queryKey: ["event", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!eventId,
+  const initialConfig: LogoConfig =
+    (event.draft_logo_config || event.logo_config || {}) as LogoConfig;
+
+  const [config, setConfig] = useState<LogoConfig>({
+    enabled: initialConfig.enabled ?? false,
+    image: initialConfig.image || "",
+    text: initialConfig.text || "",
+    fontSize: initialConfig.fontSize ?? 24,
+    color: initialConfig.color || "#1a1a1a",
   });
-
-  useEffect(() => {
-    if (event) {
-      setConfig(event.draft_logo_config || event.logo_config || { enabled: false });
-    }
-  }, [event]);
 
   const updateMutation = useMutation({
     mutationFn: async (newConfig: LogoConfig) => {
-      const { data, error } = await supabase
+      if (!eventId) return;
+      const { error } = await supabase
         .from("user_events")
         .update({ draft_logo_config: newConfig, updated_at: new Date().toISOString() })
-        .eq("id", eventId!)
-        .select()
-        .single();
+        .eq("id", eventId);
       if (error) throw error;
-      return data;
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["event", eventId], data);
-      setToast({ message: "Branding saved", type: "success" });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setToast("Branding saved");
     },
-    onError: () => setToast({ message: "Failed to save branding", type: "error" }),
   });
 
-  const updateField = useCallback(
-    <K extends keyof LogoConfig>(field: K, value: LogoConfig[K]) => {
-      setConfig((prev) => {
-        const next = { ...prev, [field]: value };
-        updateMutation.mutate(next);
-        return next;
-      });
-    },
-    [updateMutation],
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const debouncedSave = useCallback(
+    debounce((newConfig: LogoConfig) => updateMutation.mutate(newConfig), 600),
+    [updateMutation]
   );
 
-  if (isLoading) {
-    return (
-      <div className="p-8">
-        <Skeleton className="h-8 w-48 mb-6" />
-        <div className="grid lg:grid-cols-2 gap-6">
-          <Skeleton className="h-96" />
-          <Skeleton className="h-96" />
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    debouncedSave(config);
+  }, [config, debouncedSave]);
 
-  if (isError || !event) {
-    return <ErrorState message="Failed to load event" onRetry={refetch} />;
-  }
+  const update = <K extends keyof LogoConfig>(key: K, value: LogoConfig[K]) => {
+    setConfig((prev) => ({ ...prev, [key]: value }));
+  };
 
-  const previewEvent: UserEvent = { ...event, draft_logo_config: config };
+  const previewEvent: UserEvent = {
+    ...event,
+    draft_logo_config: config,
+  };
 
   return (
-    <div>
-      <div className="px-6 lg:px-8 py-6 border-b border-onyx/10">
-        <h1 className="font-heading text-3xl text-onyx">Branding</h1>
-        <p className="mt-1 text-sm text-onyx/50">Add a logo or brand mark to your event pages</p>
-      </div>
-
+    <>
       <SplitEditor preview={<CoverPreview event={previewEvent} />}>
-        <div className="space-y-6">
-          {updateMutation.isPending && (
-            <div className="flex items-center gap-2 text-xs text-onyx/50 uppercase tracking-wider">
-              <Save className="w-3.5 h-3.5 animate-pulse" /> Saving...
-            </div>
-          )}
+        <div className="max-w-xl mx-auto space-y-6">
+          <div>
+            <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Branding</h2>
+            <p className="text-sm text-[var(--color-text-muted)]">
+              Add a logo or brand text to your event invitation.
+            </p>
+          </div>
 
-          <Card className="p-5">
-            <div className="flex items-center justify-between">
+          <Card className="p-5 space-y-5">
+            <div className="flex items-center justify-between py-2">
               <div>
-                <h2 className="font-heading text-xl text-onyx">Logo Enabled</h2>
-                <p className="text-sm text-onyx/40 mt-1">Toggle to show or hide the logo across pages</p>
+                <p className="text-sm text-[var(--color-text)] font-medium">Enable Logo</p>
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  Display a logo or brand text on your event pages
+                </p>
               </div>
               <Toggle
                 checked={config.enabled}
-                onChange={(v) => updateField("enabled", v)}
+                onChange={(v) => update("enabled", v)}
               />
             </div>
-          </Card>
 
-          {config.enabled && (
-            <>
-              <Card className="p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <ImageIcon className="w-5 h-5 text-onyx/50" />
-                  <h2 className="font-heading text-xl text-onyx">Logo Image</h2>
-                </div>
-                <FormField label="Upload Logo">
-                  <ImageUpload
-                    value={config.image || ""}
-                    onChange={(url) => updateField("image", url)}
-                    eventId={eventId}
-                    label="Logo"
-                    aspectRatio="3/1"
-                  />
-                </FormField>
-              </Card>
+            {config.enabled && (
+              <>
+                <div className="border-t border-[var(--color-border)] pt-5 space-y-5">
+                  <FormField label="Logo Image" hint="Upload a logo image (PNG with transparency recommended)">
+                    <ImageUpload
+                      value={config.image || ""}
+                      onChange={(url) => update("image", url)}
+                      eventId={eventId}
+                      label="Logo image"
+                      aspectRatio="4/1"
+                    />
+                  </FormField>
 
-              <Card className="p-5">
-                <h2 className="font-heading text-xl text-onyx mb-4">Text &amp; Style</h2>
-                <div className="space-y-4">
-                  <FormField label="Logo Text" hint="Displayed alongside or instead of the image">
+                  <FormField label="Logo Text" hint="Displayed alongside or instead of an image">
                     <Input
                       value={config.text || ""}
-                      onChange={(e) => updateField("text", e.target.value)}
+                      onChange={(e) => update("text", e.target.value)}
                       placeholder="Brand Name"
                     />
                   </FormField>
-                  <FormField label="Font Size">
+
+                  <FormField label="Font Size (px)">
                     <RangeInput
                       value={config.fontSize ?? 24}
-                      onChange={(v) => updateField("fontSize", v)}
+                      onChange={(v) => update("fontSize", v)}
                       min={12}
                       max={48}
                       step={1}
+                      label="Font Size"
                     />
                   </FormField>
-                  <FormField label="Color">
+
+                  <FormField label="Text Color">
                     <ColorInput
                       value={config.color || "#1a1a1a"}
-                      onChange={(v) => updateField("color", v)}
+                      onChange={(v) => update("color", v)}
                     />
                   </FormField>
                 </div>
-              </Card>
-            </>
-          )}
+              </>
+            )}
+          </Card>
 
-          {!config.enabled && (
-            <Card className="p-8">
-              <div className="text-center">
-                <p className="text-sm text-onyx/40">
-                  Enable the logo toggle to upload a brand image and customize its appearance.
-                </p>
-              </div>
-            </Card>
-          )}
+          <div className="flex justify-end">
+            <Button
+              onClick={() => updateMutation.mutate(config)}
+              loading={updateMutation.isPending}
+            >
+              <Save className="w-4 h-4" /> Save Changes
+            </Button>
+          </div>
         </div>
       </SplitEditor>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+    </>
   );
 }
-
-export default BrandingPage;

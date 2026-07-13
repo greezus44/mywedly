@@ -1,279 +1,236 @@
-import { useState, type FormEvent } from "react";
-import { useParams, useNavigate, useOutletContext, Link } from "react-router-dom";
+import { useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Send, ArrowLeft, Heart, MessageSquare } from "lucide-react";
-import { supabase, type UserEvent, type EventMessage } from "../../lib/supabase";
-import { cn } from "../../lib/utils";
+import { supabase, type UserEvent, type SubEvent, type ScheduleItem, type EventMessage } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { RUSTY_THEME } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
 import { Input, Textarea } from "../../components/ui/Input";
+import { Heart, Send, MessageSquare } from "lucide-react";
 
 export type Lang = "en" | "id";
 
-async function fetchMessages(eventId: string): Promise<EventMessage[]> {
-  const { data, error } = await supabase
-    .from("event_messages")
-    .select("*")
-    .eq("event_id", eventId)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data as EventMessage[]) || [];
-}
-
-async function submitMessage(
-  payload: { event_id: string; guest_name: string; message: string },
-): Promise<EventMessage> {
-  const { data, error } = await supabase
-    .from("event_messages")
-    .insert({
-      event_id: payload.event_id,
-      guest_name: payload.guest_name,
-      message: payload.message,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return data as EventMessage;
-}
-
-function timeAgo(dateStr: string): string {
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return "";
-  const diff = Date.now() - date.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-export default function RustyWishes() {
-  const { slug } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
-  const { event } = useOutletContext<{ event: UserEvent }>();
-  const { guestName } = useGuestAuth();
-  const queryClient = useQueryClient();
-
-  const eventSlug = slug || event.slug || event.id;
-
-  const { data: messages = [], isLoading } = useQuery({
-    queryKey: ["rusty-messages", event.id],
-    queryFn: () => fetchMessages(event.id),
-  });
-
-  const [name, setName] = useState(guestName || "");
-  const [message, setMessage] = useState("");
-  const [localError, setLocalError] = useState<string | null>(null);
-
-  const mutation = useMutation({
-    mutationFn: submitMessage,
-    onSuccess: () => {
-      setMessage("");
-      queryClient.invalidateQueries({ queryKey: ["rusty-messages", event.id] });
-    },
-  });
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    const trimmedName = name.trim();
-    const trimmedMsg = message.trim();
-    if (!trimmedName) {
-      setLocalError("Please enter your name.");
-      return;
-    }
-    if (!trimmedMsg) {
-      setLocalError("Please write a message.");
-      return;
-    }
-    setLocalError(null);
-    mutation.mutate({
-      event_id: event.id,
-      guest_name: trimmedName,
-      message: trimmedMsg,
-    });
-  };
-
-  return (
-    <div className="min-h-screen bg-[#F5ECD7] text-[#3D3528] font-sans">
-      {/* Nav */}
-      <nav className="sticky top-0 z-20 bg-[#F5ECD7]/95 backdrop-blur-sm border-b border-[#D4C695]">
-        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link
-            to={`/${eventSlug}/home`}
-            className="font-heading text-xl tracking-wide"
-            style={{ color: "#B8962E" }}
-          >
-            {event?.name || "Our Wedding"}
-          </Link>
-          <Link
-            to={`/${eventSlug}/home`}
-            className="flex items-center gap-1 text-xs uppercase tracking-[0.15em] hover:opacity-70"
-            style={{ color: "#3D3528" }}
-          >
-            <ArrowLeft className="w-3 h-3" /> Back
-          </Link>
-        </div>
-      </nav>
-
-      {/* Header */}
-      <section className="max-w-2xl mx-auto px-6 pt-16 pb-8 text-center animate-fade-in-up">
-        <MessageSquare className="w-10 h-10 mx-auto mb-4" style={{ color: "#B8962E" }} />
-        <p
-          className="font-heading italic text-sm uppercase tracking-[0.3em] mb-2"
-          style={{ color: "#B8962E" }}
-        >
-          From the Heart
-        </p>
-        <h1 className="font-heading text-4xl sm:text-5xl tracking-wide mb-3">
-          Guest Wishes
-        </h1>
-        <GoldDivider />
-        <p className="text-base max-w-md mx-auto" style={{ color: "#8B7355" }}>
-          Share your love, advice, and well wishes with us on our special day.
-        </p>
-      </section>
-
-      {/* Form */}
-      <section className="max-w-2xl mx-auto px-6 pb-12">
-        <div
-          className="px-8 py-8"
-          style={{ border: "1px solid #D4C695", backgroundColor: "#FAF3E0" }}
-        >
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-            <div>
-              <label
-                className="block text-xs uppercase tracking-[0.2em] mb-2"
-                style={{ color: "#B8962E" }}
-              >
-                Your Name
-              </label>
-              <Input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your name"
-                style={{
-                  backgroundColor: "#F5ECD7",
-                  borderColor: "#D4C695",
-                  color: "#3D3528",
-                  borderRadius: 0,
-                }}
-              />
-            </div>
-            <div>
-              <label
-                className="block text-xs uppercase tracking-[0.2em] mb-2"
-                style={{ color: "#B8962E" }}
-              >
-                Your Wish
-              </label>
-              <Textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Write your message..."
-                rows={4}
-                style={{
-                  backgroundColor: "#F5ECD7",
-                  borderColor: "#D4C695",
-                  color: "#3D3528",
-                  borderRadius: 0,
-                }}
-              />
-            </div>
-
-            {localError && (
-              <p className="text-xs" style={{ color: "#A07820" }}>
-                {localError}
-              </p>
-            )}
-            {mutation.isError && (
-              <p className="text-xs" style={{ color: "#A07820" }}>
-                Failed to send. Please try again.
-              </p>
-            )}
-            {mutation.isSuccess && !mutation.isError && (
-              <p className="text-xs flex items-center gap-1" style={{ color: "#B8962E" }}>
-                <Heart className="w-3 h-3" /> Thank you! Your wish has been sent.
-              </p>
-            )}
-
-            <Button
-              type="submit"
-              size="lg"
-              loading={mutation.isPending}
-              disabled={mutation.isPending}
-              className={cn("w-full uppercase tracking-[0.25em]")}
-              style={{ backgroundColor: "#B8962E", color: "#FAF3E0", borderRadius: 0 }}
-            >
-              <Send className="w-4 h-4" />
-              Send Wish
-            </Button>
-          </form>
-        </div>
-      </section>
-
-      {/* Messages list */}
-      <section className="max-w-2xl mx-auto px-6 pb-20">
-        <div className="text-center mb-8">
-          <p
-            className="font-heading italic text-sm uppercase tracking-[0.3em]"
-            style={{ color: "#B8962E" }}
-          >
-            {messages.length} {messages.length === 1 ? "Wish" : "Wishes"}
-          </p>
-        </div>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#B8962E" }} />
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="text-center py-16">
-            <Heart className="w-10 h-10 mx-auto mb-4" style={{ color: "#D4C695" }} />
-            <p className="text-base" style={{ color: "#8B7355" }}>
-              No wishes yet. Be the first to share your love!
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-5">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className="px-6 py-5 animate-fade-in-up"
-                style={{ border: "1px solid #D4C695", backgroundColor: "#FAF3E0" }}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <span
-                    className="font-heading text-lg tracking-wide"
-                    style={{ color: "#B8962E" }}
-                  >
-                    {msg.guest_name}
-                  </span>
-                  <span className="text-xs" style={{ color: "#8B7355" }}>
-                    {timeAgo(msg.created_at)}
-                  </span>
-                </div>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {msg.message}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
+interface OutletContext {
+  event: UserEvent;
+  subEvents: SubEvent[];
+  schedule: ScheduleItem[];
+  lang: Lang;
+  setLang: (lang: Lang) => void;
 }
 
 function GoldDivider() {
   return (
-    <div className="flex items-center justify-center gap-3 my-6" aria-hidden>
-      <span className="block h-px w-16" style={{ backgroundColor: "#B8962E" }} />
-      <span className="text-lg" style={{ color: "#B8962E" }}>❦</span>
-      <span className="block h-px w-16" style={{ backgroundColor: "#B8962E" }} />
+    <div className="flex items-center justify-center gap-4 my-6">
+      <div className="w-24 h-px" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
+      <div className="w-2 h-2 rotate-45" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
+      <div className="w-24 h-px" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
+    </div>
+  );
+}
+
+export default function RustyWishes() {
+  const { event } = useOutletContext<OutletContext>();
+  const { guestName } = useGuestAuth();
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(guestName || "");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: messages = [], isLoading } = useQuery({
+    queryKey: ["rusty-guest-messages", event.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_messages")
+        .select("*")
+        .eq("event_id", event.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data as EventMessage[]) || [];
+    },
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: async () => {
+      const trimmedName = name.trim();
+      const trimmedMessage = message.trim();
+      if (!trimmedName) throw new Error("Please enter your name.");
+      if (!trimmedMessage) throw new Error("Please write a message.");
+
+      const { error } = await supabase.from("event_messages").insert({
+        event_id: event.id,
+        guest_name: trimmedName,
+        message: trimmedMessage,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      setMessage("");
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ["rusty-guest-messages", event.id] });
+    },
+    onError: (err: Error) => {
+      setError(err.message);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    submitMutation.mutate();
+  };
+
+  return (
+    <div
+      className="min-h-screen"
+      style={{
+        backgroundColor: RUSTY_THEME.bgColor || "#F5ECD7",
+        color: RUSTY_THEME.textColor || "#3D3528",
+      }}
+    >
+      <div className="max-w-2xl mx-auto px-6 py-16">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <Heart className="w-8 h-8 mx-auto mb-4" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }} />
+          <p className="text-xs uppercase tracking-[0.3em] opacity-60 mb-2">Guestbook</p>
+          <h1
+            className="font-heading text-4xl md:text-5xl tracking-tight"
+            style={{ fontFamily: '"Cormorant Garamond", serif' }}
+          >
+            Send Your Wishes
+          </h1>
+          <p className="mt-4 text-sm italic opacity-70" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
+            Share a message with {event.name}
+          </p>
+        </div>
+
+        <GoldDivider />
+
+        {/* Submit form */}
+        <form
+          onSubmit={handleSubmit}
+          className="mb-12 space-y-4 p-8 border"
+          style={{
+            borderColor: RUSTY_THEME.borderColor || "#D4C695",
+            borderRadius: 2,
+            backgroundColor: RUSTY_THEME.bgSubtleColor || "#FAF3E0",
+          }}
+        >
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-[0.2em] opacity-60 mb-2">
+              Your Name
+            </label>
+            <Input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your full name"
+              required
+              style={{
+                backgroundColor: RUSTY_THEME.bgColor || "#F5ECD7",
+                borderColor: RUSTY_THEME.borderColor || "#D4C695",
+                borderRadius: 2,
+              }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium uppercase tracking-[0.2em] opacity-60 mb-2">
+              Your Message
+            </label>
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Write your wishes, congratulations, or a fond memory..."
+              rows={4}
+              required
+              style={{
+                backgroundColor: RUSTY_THEME.bgColor || "#F5ECD7",
+                borderColor: RUSTY_THEME.borderColor || "#D4C695",
+                borderRadius: 2,
+              }}
+            />
+          </div>
+          {error && <p className="text-sm" style={{ color: "#9c2a2a" }}>{error}</p>}
+          {submitMutation.isSuccess && (
+            <p className="text-sm flex items-center gap-1.5 italic" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }}>
+              <Heart className="w-4 h-4" /> Your wish has been sent!
+            </p>
+          )}
+          <Button
+            type="submit"
+            loading={submitMutation.isPending}
+            size="lg"
+            className="w-full justify-center uppercase tracking-[0.2em]"
+            style={{
+              backgroundColor: RUSTY_THEME.primaryColor || "#B8962E",
+              color: RUSTY_THEME.bgColor || "#F5ECD7",
+              borderRadius: 2,
+            }}
+          >
+            <Send className="w-4 h-4" /> Send Wish
+          </Button>
+        </form>
+
+        <GoldDivider />
+
+        {/* Messages list */}
+        <div>
+          <div className="flex items-center gap-2 mb-6 justify-center">
+            <MessageSquare className="w-5 h-5 opacity-60" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }} />
+            <h2 className="font-heading text-xl" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
+              {messages.length} {messages.length === 1 ? "Wish" : "Wishes"}
+            </h2>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="p-6 border animate-pulse"
+                  style={{ borderColor: RUSTY_THEME.borderColor || "#D4C695", borderRadius: 2 }}
+                >
+                  <div className="h-4 w-1/3 mb-3" style={{ backgroundColor: RUSTY_THEME.borderColor || "#D4C695" }} />
+                  <div className="h-3 w-full mb-2" style={{ backgroundColor: RUSTY_THEME.borderColor || "#D4C695" }} />
+                  <div className="h-3 w-2/3" style={{ backgroundColor: RUSTY_THEME.borderColor || "#D4C695" }} />
+                </div>
+              ))}
+            </div>
+          ) : messages.length === 0 ? (
+            <div
+              className="text-center py-16 border"
+              style={{ borderColor: RUSTY_THEME.borderColor || "#D4C695", borderRadius: 2 }}
+            >
+              <MessageSquare className="w-10 h-10 mx-auto mb-4 opacity-30" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }} />
+              <p className="text-sm opacity-60 italic">No wishes yet. Be the first to share!</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className="p-6 border"
+                  style={{
+                    borderColor: RUSTY_THEME.borderColor || "#D4C695",
+                    borderRadius: 2,
+                    backgroundColor: RUSTY_THEME.bgSubtleColor || "#FAF3E0",
+                  }}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="font-heading text-base" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
+                      {msg.guest_name}
+                    </p>
+                    <p className="text-xs opacity-50">
+                      {new Date(msg.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </p>
+                  </div>
+                  <p className="text-sm leading-relaxed italic opacity-80 whitespace-pre-line" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
+                    {msg.message}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

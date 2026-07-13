@@ -1,259 +1,252 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save } from "lucide-react";
+import { useParams, useOutletContext } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventContent } from "../../lib/supabase";
+import { debounce } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { Card, FormField, Skeleton, ErrorState, Toast } from "../../components/ui";
+import { Card, FormField, Toast } from "../../components/ui";
 import { Input, Textarea } from "../../components/ui/Input";
 import { DatePicker } from "../../components/ui/DatePicker";
 import { TimePicker } from "../../components/ui/TimePicker";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
+import { Save } from "lucide-react";
 
-function HomeEditorPage() {
-  const { eventId } = useParams<{ eventId: string }>();
+export default function HomeEditorPage() {
+  const { eventId } = useParams();
+  const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const [content, setContent] = useState<EventContent>({});
-  const [draftName, setDraftName] = useState("");
-  const [draftDate, setDraftDate] = useState<string | null>(null);
-  const [draftTime, setDraftTime] = useState<string | null>(null);
-  const [draftVenue, setDraftVenue] = useState("");
-  const [draftAddress, setDraftAddress] = useState("");
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const { data: event, isLoading, isError, refetch } = useQuery<UserEvent>({
-    queryKey: ["event", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!eventId,
+  const initialContent: EventContent =
+    (event.draft_content || event.content || {}) as EventContent;
+
+  const [content, setContent] = useState<EventContent>({
+    story: initialContent.story || "",
+    story_image: initialContent.story_image || "",
+    invitation_title: initialContent.invitation_title || "You're Invited",
+    invitation_subtitle: initialContent.invitation_subtitle || "",
+    invitation_body: initialContent.invitation_body || "",
+    rsvp_button_text: initialContent.rsvp_button_text || "RSVP",
   });
 
-  useEffect(() => {
-    if (event) {
-      setContent(event.draft_content || event.content || {});
-      setDraftName(event.draft_name || event.name || "");
-      setDraftDate(event.draft_event_date || event.event_date || null);
-      setDraftTime(event.draft_event_time || event.event_time || null);
-      setDraftVenue(event.draft_venue || event.venue || "");
-      setDraftAddress(event.draft_address || event.address || "");
-    }
-  }, [event]);
+  const [name, setName] = useState(event.draft_name || event.name || "");
+  const [eventDate, setEventDate] = useState<string | null>(event.draft_event_date || event.event_date);
+  const [eventTime, setEventTime] = useState<string | null>(event.draft_event_time || event.event_time);
+  const [venue, setVenue] = useState(event.draft_venue || event.venue || "");
+  const [address, setAddress] = useState(event.draft_address || event.address || "");
 
   const contentMutation = useMutation({
     mutationFn: async (newContent: EventContent) => {
-      const { data, error } = await supabase
+      if (!eventId) return;
+      const { error } = await supabase
         .from("user_events")
         .update({ draft_content: newContent, updated_at: new Date().toISOString() })
-        .eq("id", eventId!)
-        .select()
-        .single();
+        .eq("id", eventId);
       if (error) throw error;
-      return data;
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["event", eventId], data);
-      setToast({ message: "Content saved", type: "success" });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
     },
-    onError: () => setToast({ message: "Failed to save content", type: "error" }),
   });
 
-  const eventFieldMutation = useMutation({
-    mutationFn: async (updates: Partial<UserEvent>) => {
-      const { data, error } = await supabase
+  const detailsMutation = useMutation({
+    mutationFn: async (details: {
+      draft_name: string;
+      draft_event_date: string | null;
+      draft_event_time: string | null;
+      draft_venue: string;
+      draft_address: string;
+    }) => {
+      if (!eventId) return;
+      const { error } = await supabase
         .from("user_events")
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq("id", eventId!)
-        .select()
-        .single();
+        .update({ ...details, updated_at: new Date().toISOString() })
+        .eq("id", eventId);
       if (error) throw error;
-      return data;
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["event", eventId], data);
-      setToast({ message: "Saved", type: "success" });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setToast("Content saved");
     },
-    onError: () => setToast({ message: "Failed to save", type: "error" }),
   });
 
-  const updateContentField = useCallback(
-    <K extends keyof EventContent>(field: K, value: EventContent[K]) => {
-      setContent((prev) => {
-        const next = { ...prev, [field]: value };
-        contentMutation.mutate(next);
-        return next;
-      });
-    },
-    [contentMutation],
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const debouncedContentSave = useCallback(
+    debounce((newContent: EventContent) => contentMutation.mutate(newContent), 600),
+    [contentMutation]
   );
 
-  const updateEventField = useCallback(
-    (field: string, value: string | null) => {
-      eventFieldMutation.mutate({ [field]: value } as Partial<UserEvent>);
-    },
-    [eventFieldMutation],
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const debouncedDetailsSave = useCallback(
+    debounce(
+      (details: {
+        draft_name: string;
+        draft_event_date: string | null;
+        draft_event_time: string | null;
+        draft_venue: string;
+        draft_address: string;
+      }) => detailsMutation.mutate(details),
+      600
+    ),
+    [detailsMutation]
   );
 
-  if (isLoading) {
-    return (
-      <div className="p-8">
-        <Skeleton className="h-8 w-48 mb-6" />
-        <div className="grid lg:grid-cols-2 gap-6">
-          <Skeleton className="h-96" />
-          <Skeleton className="h-96" />
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    debouncedContentSave(content);
+  }, [content, debouncedContentSave]);
 
-  if (isError || !event) {
-    return <ErrorState message="Failed to load event" onRetry={refetch} />;
-  }
+  useEffect(() => {
+    debouncedDetailsSave({ draft_name: name, draft_event_date: eventDate, draft_event_time: eventTime, draft_venue: venue, draft_address: address });
+  }, [name, eventDate, eventTime, venue, address, debouncedDetailsSave]);
+
+  const updateContent = <K extends keyof EventContent>(key: K, value: EventContent[K]) => {
+    setContent((prev) => ({ ...prev, [key]: value }));
+  };
 
   const previewEvent: UserEvent = {
     ...event,
     draft_content: content,
-    draft_name: draftName,
-    draft_event_date: draftDate,
-    draft_event_time: draftTime,
-    draft_venue: draftVenue,
-    draft_address: draftAddress,
+    draft_name: name,
+    draft_event_date: eventDate,
+    draft_event_time: eventTime,
+    draft_venue: venue,
+    draft_address: address,
   };
 
-  const saving = contentMutation.isPending || eventFieldMutation.isPending;
-
   return (
-    <div>
-      <div className="px-6 lg:px-8 py-6 border-b border-onyx/10">
-        <h1 className="font-heading text-3xl text-onyx">Home &amp; Content</h1>
-        <p className="mt-1 text-sm text-onyx/50">Edit the main event details and story content</p>
-      </div>
-
+    <>
       <SplitEditor preview={<HomePreview event={previewEvent} />}>
-        <div className="space-y-6">
-          {saving && (
-            <div className="flex items-center gap-2 text-xs text-onyx/50 uppercase tracking-wider">
-              <Save className="w-3.5 h-3.5 animate-pulse" /> Saving...
-            </div>
-          )}
+        <div className="max-w-xl mx-auto space-y-6">
+          <div>
+            <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Home & Content</h2>
+            <p className="text-sm text-[var(--color-text-muted)]">
+              Edit the main content of your event invitation.
+            </p>
+          </div>
 
-          <Card className="p-5">
-            <h2 className="font-heading text-xl text-onyx mb-4">Event Details</h2>
-            <div className="space-y-4">
-              <FormField label="Event Name">
-                <Input
-                  value={draftName}
-                  onChange={(e) => setDraftName(e.target.value)}
-                  onBlur={() => updateEventField("draft_name", draftName)}
-                  placeholder="Our Wedding"
-                />
+          {/* Event Details */}
+          <Card className="p-5 space-y-5">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+              Event Details
+            </h3>
+
+            <FormField label="Event Name">
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Our Wedding"
+              />
+            </FormField>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField label="Event Date">
+                <DatePicker value={eventDate} onChange={setEventDate} />
               </FormField>
-              <div className="grid grid-cols-2 gap-4">
-                <FormField label="Date">
-                  <DatePicker
-                    value={draftDate}
-                    onChange={(v) => {
-                      setDraftDate(v);
-                      updateEventField("draft_event_date", v);
-                    }}
-                  />
-                </FormField>
-                <FormField label="Time">
-                  <TimePicker
-                    value={draftTime}
-                    onChange={(v) => {
-                      setDraftTime(v);
-                      updateEventField("draft_event_time", v);
-                    }}
-                  />
-                </FormField>
-              </div>
-              <FormField label="Venue">
-                <Input
-                  value={draftVenue}
-                  onChange={(e) => setDraftVenue(e.target.value)}
-                  onBlur={() => updateEventField("draft_venue", draftVenue)}
-                  placeholder="The Grand Ballroom"
-                />
-              </FormField>
-              <FormField label="Address">
-                <Input
-                  value={draftAddress}
-                  onChange={(e) => setDraftAddress(e.target.value)}
-                  onBlur={() => updateEventField("draft_address", draftAddress)}
-                  placeholder="123 Main Street, City"
-                />
+              <FormField label="Event Time">
+                <TimePicker value={eventTime} onChange={setEventTime} />
               </FormField>
             </div>
+
+            <FormField label="Venue">
+              <Input
+                value={venue}
+                onChange={(e) => setVenue(e.target.value)}
+                placeholder="The Grand Ballroom"
+              />
+            </FormField>
+
+            <FormField label="Address">
+              <Input
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="123 Main Street, City"
+              />
+            </FormField>
           </Card>
 
-          <Card className="p-5">
-            <h2 className="font-heading text-xl text-onyx mb-4">Our Story</h2>
-            <div className="space-y-4">
-              <FormField label="Story Image">
-                <ImageUpload
-                  value={content.story_image || ""}
-                  onChange={(url) => updateContentField("story_image", url)}
-                  eventId={eventId}
-                  label="Story Image"
-                  aspectRatio="4/3"
-                />
-              </FormField>
-              <FormField label="Story Text">
-                <Textarea
-                  value={content.story || ""}
-                  onChange={(e) => updateContentField("story", e.target.value)}
-                  placeholder="Share the story of your journey together..."
-                  rows={5}
-                />
-              </FormField>
-            </div>
+          {/* Story Section */}
+          <Card className="p-5 space-y-5">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+              Our Story
+            </h3>
+
+            <FormField label="Story">
+              <Textarea
+                value={content.story || ""}
+                onChange={(e) => updateContent("story", e.target.value)}
+                placeholder="Tell your guests about your journey…"
+                rows={5}
+              />
+            </FormField>
+
+            <FormField label="Story Image">
+              <ImageUpload
+                value={content.story_image || ""}
+                onChange={(url) => updateContent("story_image", url)}
+                eventId={eventId}
+                label="Story image"
+                aspectRatio="4/3"
+              />
+            </FormField>
           </Card>
 
-          <Card className="p-5">
-            <h2 className="font-heading text-xl text-onyx mb-4">Invitation</h2>
-            <div className="space-y-4">
-              <FormField label="Invitation Title">
-                <Input
-                  value={content.invitation_title || ""}
-                  onChange={(e) => updateContentField("invitation_title", e.target.value)}
-                  placeholder="You're Invited"
-                />
-              </FormField>
-              <FormField label="Invitation Subtitle">
-                <Input
-                  value={content.invitation_subtitle || ""}
-                  onChange={(e) => updateContentField("invitation_subtitle", e.target.value)}
-                  placeholder="We would be honoured by your presence"
-                />
-              </FormField>
-              <FormField label="Invitation Body">
-                <Textarea
-                  value={content.invitation_body || ""}
-                  onChange={(e) => updateContentField("invitation_body", e.target.value)}
-                  placeholder="As we celebrate this special occasion..."
-                  rows={4}
-                />
-              </FormField>
-              <FormField label="RSVP Button Text">
-                <Input
-                  value={content.rsvp_button_text || ""}
-                  onChange={(e) => updateContentField("rsvp_button_text", e.target.value)}
-                  placeholder="RSVP"
-                />
-              </FormField>
-            </div>
+          {/* Invitation Section */}
+          <Card className="p-5 space-y-5">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-[var(--color-text-muted)]">
+              Invitation
+            </h3>
+
+            <FormField label="Invitation Title">
+              <Input
+                value={content.invitation_title || ""}
+                onChange={(e) => updateContent("invitation_title", e.target.value)}
+                placeholder="You're Invited"
+              />
+            </FormField>
+
+            <FormField label="Invitation Subtitle">
+              <Input
+                value={content.invitation_subtitle || ""}
+                onChange={(e) => updateContent("invitation_subtitle", e.target.value)}
+                placeholder="We would be honoured by your presence"
+              />
+            </FormField>
+
+            <FormField label="Invitation Body">
+              <Textarea
+                value={content.invitation_body || ""}
+                onChange={(e) => updateContent("invitation_body", e.target.value)}
+                placeholder="As we celebrate this special occasion…"
+                rows={4}
+              />
+            </FormField>
+
+            <FormField label="RSVP Button Text">
+              <Input
+                value={content.rsvp_button_text || ""}
+                onChange={(e) => updateContent("rsvp_button_text", e.target.value)}
+                placeholder="RSVP"
+              />
+            </FormField>
           </Card>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={() => {
+                contentMutation.mutate(content);
+                detailsMutation.mutate({ draft_name: name, draft_event_date: eventDate, draft_event_time: eventTime, draft_venue: venue, draft_address: address });
+              }}
+              loading={contentMutation.isPending || detailsMutation.isPending}
+            >
+              <Save className="w-4 h-4" /> Save Changes
+            </Button>
+          </div>
         </div>
       </SplitEditor>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+    </>
   );
 }
-
-export default HomeEditorPage;

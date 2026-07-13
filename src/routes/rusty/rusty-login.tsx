@@ -1,184 +1,125 @@
-import { useState, type FormEvent } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { Loader2, User } from "lucide-react";
-import { supabase, type UserEvent } from "../../lib/supabase";
-import { cn } from "../../lib/utils";
-import { RUSTY_LOGIN_CONFIG } from "../../lib/theme";
+import { useState } from "react";
+import { useNavigate, useOutletContext } from "react-router-dom";
+import { type UserEvent, type SubEvent, type ScheduleItem } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { RUSTY_LOGIN_CONFIG, RUSTY_THEME } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
+import { ArrowRight, User } from "lucide-react";
 
 export type Lang = "en" | "id";
 
-async function fetchEventBySlug(slug: string): Promise<UserEvent | null> {
-  const { data, error } = await supabase
-    .from("events")
-    .select("*")
-    .or(`slug.eq.${slug},draft_slug.eq.${slug}`)
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return (data as UserEvent | null) ?? null;
+interface OutletContext {
+  event: UserEvent;
+  subEvents: SubEvent[];
+  schedule: ScheduleItem[];
+  lang: Lang;
+  setLang: (lang: Lang) => void;
 }
 
 export default function RustyLogin() {
-  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { signIn, eventId, guestName } = useGuestAuth();
-
-  const { data: event, isLoading } = useQuery({
-    queryKey: ["rusty-event", slug],
-    queryFn: () => fetchEventBySlug(slug || ""),
-    enabled: !!slug,
-  });
-
-  const [name, setName] = useState(guestName || "");
+  const { event } = useOutletContext<OutletContext>();
+  const { signIn } = useGuestAuth();
+  const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const login = { ...RUSTY_LOGIN_CONFIG, ...(event?.login_config || {}) };
+  const config = { ...RUSTY_LOGIN_CONFIG, ...(event.login_config || {}) };
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Please enter your name.");
+      setError("Please enter your name to continue.");
       return;
     }
-    if (!event) {
-      setError("Event not loaded yet. Please try again.");
-      return;
-    }
-
-    setError(null);
     setSubmitting(true);
-
+    setError(null);
     try {
-      // If guest is already authenticated for this event, skip re-signing.
-      if (eventId === event.id && guestName === trimmed) {
-        navigate(`/${slug || event.slug || event.id}/home`);
-        return;
-      }
       signIn(trimmed, event.id);
-      navigate(`/${slug || event.slug || event.id}/home`);
-    } catch {
+      navigate(`./home`);
+    } catch (err) {
       setError("Something went wrong. Please try again.");
+      console.error(err);
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F5ECD7]">
-        <Loader2 className="w-8 h-8 animate-spin text-[#B8962E]" />
-      </div>
-    );
-  }
-
   return (
     <div
-      className="relative min-h-screen w-full flex items-center justify-center overflow-hidden px-6 py-16"
+      className="min-h-screen flex items-center justify-center px-6"
       style={{
-        backgroundColor: login.bgColor || "#FAF3E0",
-        color: login.textColor || "#3D3528",
+        backgroundColor: config.bgColor || RUSTY_THEME.bgSubtleColor || "#FAF3E0",
+        color: config.textColor || RUSTY_THEME.textColor || "#3D3528",
       }}
     >
-      {/* Background image with overlay */}
-      {login.bgImage && (
-        <>
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url(${login.bgImage})` }}
-            aria-hidden
-          />
-          <div
-            className="absolute inset-0"
-            style={{
-              backgroundColor: login.overlayColor || "#3D3528",
-              opacity: login.overlayOpacity ?? 0.4,
-            }}
-            aria-hidden
-          />
-        </>
-      )}
-
-      {/* Card */}
-      <div
-        className="relative z-10 w-full max-w-md flex flex-col items-center text-center px-8 py-12 animate-fade-in-up"
-        style={{
-          backgroundColor: login.bgImage
-            ? "rgba(250, 243, 224, 0.92)"
-            : "rgba(250, 243, 224, 0.6)",
-          border: "1px solid #D4C695",
-        }}
-      >
+      <div className="w-full max-w-md">
         {/* Ornamental divider */}
-        <div className="flex items-center gap-3 mb-6" aria-hidden>
-          <span className="block h-px w-10" style={{ backgroundColor: "#B8962E" }} />
-          <span className="text-lg" style={{ color: "#B8962E" }}>❦</span>
-          <span className="block h-px w-10" style={{ backgroundColor: "#B8962E" }} />
+        <div className="flex items-center justify-center gap-4 mb-10">
+          <div className="w-20 h-px" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
+          <div className="w-2.5 h-2.5 rotate-45" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
+          <div className="w-20 h-px" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
         </div>
 
-        <h1
-          className="font-heading text-4xl sm:text-5xl tracking-wide mb-3"
-          style={{ color: login.textColor || "#3D3528" }}
-        >
-          {login.heading || "Welcome"}
-        </h1>
+        <div className="text-center mb-10">
+          <h1
+            className="font-heading text-4xl md:text-5xl tracking-tight"
+            style={{ fontFamily: '"Cormorant Garamond", serif' }}
+          >
+            {config.heading || "Welcome"}
+          </h1>
+          <p className="mt-4 text-sm italic opacity-70" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
+            {config.subheading || "Please enter your name to continue"}
+          </p>
+        </div>
 
-        <p
-          className="text-sm sm:text-base mb-8 max-w-xs"
-          style={{ color: login.textColor || "#3D3528", opacity: 0.8 }}
-        >
-          {login.subheading || "Please enter your name to continue"}
-        </p>
-
-        <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
-          <div className="relative w-full">
-            <User
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
-              style={{ color: "#B8962E" }}
-            />
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
             <Input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={login.inputPlaceholder || "Your full name"}
+              placeholder={config.inputPlaceholder || "Your full name"}
               autoFocus
-              autoComplete="name"
-              className={cn("pl-10")}
+              className="pl-11 py-3 text-base"
               style={{
-                backgroundColor: "#FAF3E0",
-                borderColor: "#D4C695",
-                color: "#3D3528",
-                borderRadius: 0,
+                backgroundColor: RUSTY_THEME.bgColor || "#F5ECD7",
+                borderColor: RUSTY_THEME.borderColor || "#D4C695",
+                borderRadius: 2,
               }}
             />
           </div>
 
-          {error && (
-            <p className="text-xs text-left" style={{ color: "#A07820" }}>
-              {error}
-            </p>
-          )}
+          {error && <p className="text-sm" style={{ color: "#9c2a2a" }}>{error}</p>}
 
           <Button
             type="submit"
             size="lg"
             loading={submitting}
-            disabled={submitting}
-            className={cn("mt-2 w-full uppercase tracking-[0.25em]")}
+            className="w-full justify-center uppercase tracking-[0.2em]"
             style={{
-              backgroundColor: login.buttonColor || "#B8962E",
-              color: "#FAF3E0",
-              borderRadius: 0,
+              backgroundColor: config.buttonColor || RUSTY_THEME.primaryColor || "#B8962E",
+              color: RUSTY_THEME.bgColor || "#F5ECD7",
+              borderRadius: 2,
             }}
           >
-            {login.buttonText || "Continue"}
+            {config.buttonText || "Continue"} <ArrowRight className="w-4 h-4" />
           </Button>
         </form>
+
+        <p className="mt-10 text-center text-xs uppercase tracking-[0.2em] opacity-50">
+          {event.name}
+        </p>
+
+        {/* Bottom divider */}
+        <div className="flex items-center justify-center gap-4 mt-10">
+          <div className="w-20 h-px" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
+          <div className="w-2.5 h-2.5 rotate-45" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
+          <div className="w-20 h-px" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
+        </div>
       </div>
     </div>
   );

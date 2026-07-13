@@ -1,486 +1,468 @@
-import { useState, useMemo, type FormEvent } from "react";
-import { useParams, useNavigate, useOutletContext, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Check,
-  X,
-  CalendarClock,
-  Loader2,
-  PartyPopper,
-  Heart,
-  ArrowLeft,
-} from "lucide-react";
-import { supabase, type UserEvent, type EventRsvp } from "../../lib/supabase";
-import { cn, isRsvpClosed, formatDeadline } from "../../lib/utils";
+import { supabase, type UserEvent, type SubEvent, type ScheduleItem, type EventRsvp, type GuestEventInvite, type GroupEventInvite, type GuestGroupMember } from "../../lib/supabase";
+import { formatDate, formatTime, isRsvpClosed } from "../../lib/utils";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { RUSTY_THEME } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
 import { Input, Textarea } from "../../components/ui/Input";
+import { Check, X, Lock, Clock, CalendarDays, MapPin } from "lucide-react";
 
 export type Lang = "en" | "id";
 
-async function fetchExistingRsvp(
-  eventId: string,
-  guestName: string,
-): Promise<EventRsvp | null> {
-  const { data, error } = await supabase
-    .from("event_rsvps")
-    .select("*")
-    .eq("event_id", eventId)
-    .eq("guest_name", guestName)
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return (data as EventRsvp | null) ?? null;
+interface OutletContext {
+  event: UserEvent;
+  subEvents: SubEvent[];
+  schedule: ScheduleItem[];
+  lang: Lang;
+  setLang: (lang: Lang) => void;
 }
 
-async function submitRsvp(
-  payload: Omit<EventRsvp, "id" | "submitted_at">,
-): Promise<EventRsvp> {
-  const { data, error } = await supabase
-    .from("event_rsvps")
-    .insert({
-      event_id: payload.event_id,
-      guest_name: payload.guest_name,
-      status: payload.status,
-      plus_ones: payload.plus_ones,
-      dietary: payload.dietary,
-      message: payload.message,
-      answers: payload.answers,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return data as EventRsvp;
+interface RsvpFormState {
+  status: "attending" | "declined" | "pending";
+  plus_ones: number;
+  dietary: string;
+  message: string;
+}
+
+const emptyForm: RsvpFormState = {
+  status: "pending",
+  plus_ones: 0,
+  dietary: "",
+  message: "",
+};
+
+function GoldDivider() {
+  return (
+    <div className="flex items-center justify-center gap-4 my-6">
+      <div className="w-24 h-px" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
+      <div className="w-2 h-2 rotate-45" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
+      <div className="w-24 h-px" style={{ backgroundColor: RUSTY_THEME.primaryColor || "#B8962E" }} />
+    </div>
+  );
 }
 
 export default function RustyRsvp() {
-  const { slug } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
-  const { event } = useOutletContext<{ event: UserEvent }>();
+  const { event, subEvents } = useOutletContext<OutletContext>();
   const { guestName } = useGuestAuth();
   const queryClient = useQueryClient();
 
-  const eventSlug = slug || event.slug || event.id;
-  const closed = isRsvpClosed(event.rsvp_deadline);
+  // Determine visible sub-events
+  const { data: visibleSubEvents } = useQuery({
+    queryKey: ["rusty-rsvp-visible-sub-events", event.id, guestName],
+    queryFn: async () => {
+      if (subEvents.length === 0) return [] as SubEvent[];
 
-  const { data: existingRsvp, isLoading: loadingExisting } = useQuery({
-    queryKey: ["rusty-rsvp", event.id, guestName],
-    queryFn: () => fetchExistingRsvp(event.id, guestName || ""),
+      const { data: guestRow } = await supabase
+        .from("event_guests")
+        .select("id")
+        .ilike("name", guestName || "")
+        .eq("event_id", event.id)
+        .maybeSingle();
+
+      let allowedIds: Set<string> | null = null;
+
+      if (guestRow) {
+        const { data: guestInvites } = await supabase
+          .from("guest_event_invites")
+          .select("*")
+          .eq("guest_id", guestRow.id)
+          .eq("event_id", event.id);
+        if (guestInvites && guestInvites.length > 0) {
+          allowedIds = new Set<string>();
+          const hasNull = guestInvites.some((i: GuestEventInvite) => i.sub_event_id === null);
+          if (hasNull) return subEvents;
+          guestInvites.forEach((i: GuestEventInvite) => {
+            if (i.sub_event_id) allowedIds!.add(i.sub_event_id);
+          });
+        }
+
+        const { data: memberships } = await supabase
+          .from("guest_group_members")
+          .select("group_id")
+          .eq("guest_id", guestRow.id);
+        if (memberships && memberships.length > 0) {
+          const groupIds = memberships.map((m) => m.group_id);
+          const { data: groupInvites } = await supabase
+            .from("group_event_invites")
+            .select("*")
+            .in("group_id", groupIds)
+            .eq("event_id", event.id);
+          if (groupInvites && groupInvites.length > 0) {
+            if (!allowedIds) allowedIds = new Set<string>();
+            const hasNull = groupInvites.some((i: GroupEventInvite) => i.sub_event_id === null);
+            if (hasNull) return subEvents;
+            groupInvites.forEach((i: GroupEventInvite) => {
+              if (i.sub_event_id) allowedIds!.add(i.sub_event_id);
+            });
+          }
+        }
+      }
+
+      if (!allowedIds || allowedIds.size === 0) return subEvents;
+      return subEvents.filter((s) => allowedIds!.has(s.id));
+    },
+    enabled: subEvents.length > 0,
+    initialData: subEvents,
+  });
+
+  const subEventsToRsvp = visibleSubEvents || subEvents;
+  const hasSubEvents = subEventsToRsvp.length > 0;
+
+  const { data: existingRsvps = [] } = useQuery({
+    queryKey: ["rusty-guest-rsvps", event.id, guestName],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_rsvps")
+        .select("*")
+        .eq("event_id", event.id)
+        .ilike("guest_name", guestName || "")
+        .order("submitted_at", { ascending: false });
+      if (error) throw error;
+      return (data as EventRsvp[]) || [];
+    },
     enabled: !!guestName,
   });
 
-  const [status, setStatus] = useState<"attending" | "declined" | "pending">(
-    existingRsvp?.status || "pending",
-  );
-  const [plusOnes, setPlusOnes] = useState<number>(existingRsvp?.plus_ones || 0);
-  const [dietary, setDietary] = useState<string>(existingRsvp?.dietary || "");
-  const [message, setMessage] = useState<string>(existingRsvp?.message || "");
-  const [submitted, setSubmitted] = useState(false);
+  const [forms, setForms] = useState<Record<string, RsvpFormState>>({});
 
-  // Sync existing RSVP into form state once loaded
-  useMemo(() => {
-    if (existingRsvp) {
-      setStatus(existingRsvp.status);
-      setPlusOnes(existingRsvp.plus_ones);
-      setDietary(existingRsvp.dietary);
-      setMessage(existingRsvp.message);
-    }
-  }, [existingRsvp]);
+  useEffect(() => {
+    const newForms: Record<string, RsvpFormState> = {};
+    const keys = hasSubEvents ? subEventsToRsvp.map((s) => s.id) : ["main"];
+    keys.forEach((key) => {
+      const existing = existingRsvps.find((r) => {
+        if (key === "main") return r.sub_event_id === null;
+        return r.sub_event_id === key;
+      });
+      newForms[key] = existing
+        ? {
+            status: existing.status,
+            plus_ones: existing.plus_ones,
+            dietary: existing.dietary || "",
+            message: existing.message || "",
+          }
+        : { ...emptyForm };
+    });
+    setForms(newForms);
+  }, [existingRsvps, hasSubEvents, subEventsToRsvp]);
 
-  const mutation = useMutation({
-    mutationFn: submitRsvp,
+  const submitMutation = useMutation({
+    mutationFn: async (subEventId: string | null) => {
+      const key = subEventId || "main";
+      const form = forms[key];
+      if (!form || form.status === "pending") throw new Error("Please choose Attending or Declined.");
+
+      const payload = {
+        event_id: event.id,
+        sub_event_id: subEventId,
+        guest_name: guestName || "Anonymous",
+        status: form.status,
+        plus_ones: form.plus_ones,
+        dietary: form.dietary,
+        message: form.message,
+        submitted_at: new Date().toISOString(),
+      };
+
+      const { data: existing } = await supabase
+        .from("event_rsvps")
+        .select("id")
+        .eq("event_id", event.id)
+        .ilike("guest_name", guestName || "")
+        .is("sub_event_id", subEventId)
+        .maybeSingle();
+
+      if (existing) {
+        const { error } = await supabase.from("event_rsvps").update(payload).eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("event_rsvps").insert(payload);
+        if (error) throw error;
+      }
+    },
     onSuccess: () => {
-      setSubmitted(true);
-      queryClient.invalidateQueries({ queryKey: ["rusty-rsvp", event.id, guestName] });
+      queryClient.invalidateQueries({ queryKey: ["rusty-guest-rsvps", event.id, guestName] });
     },
   });
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (status === "pending") return;
-    if (!guestName) {
-      navigate(`/${eventSlug}/login`);
-      return;
-    }
-    mutation.mutate({
-      event_id: event.id,
-      guest_id: null,
-      guest_name: guestName,
-      status,
-      plus_ones: status === "attending" ? plusOnes : 0,
-      dietary: status === "attending" ? dietary : "",
-      message,
-      answers: null,
-    });
+  const updateForm = (key: string, patch: Partial<RsvpFormState>) => {
+    setForms((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   };
 
-  // RSVP closed state
-  if (closed) {
+  const eventClosed = isRsvpClosed(event.rsvp_deadline);
+
+  const renderRsvpForm = (subEvent: SubEvent | null, key: string) => {
+    const form = forms[key];
+    if (!form) return null;
+
+    const deadline = subEvent?.rsvp_deadline || event.rsvp_deadline;
+    const closed = isRsvpClosed(deadline);
+    const alreadySubmitted = existingRsvps.some((r) => {
+      if (key === "main") return r.sub_event_id === null;
+      return r.sub_event_id === key;
+    });
+
     return (
-      <Shell eventSlug={eventSlug} eventName={event.name}>
-        <div className="text-center py-16 px-6 max-w-lg mx-auto animate-fade-in-up">
-          <CalendarClock className="w-12 h-12 mx-auto mb-6" style={{ color: "#B8962E" }} />
-          <h1 className="font-heading text-4xl tracking-wide mb-4">
-            RSVP Closed
-          </h1>
-          <GoldDivider />
-          <p className="text-base mb-2" style={{ color: "#8B7355" }}>
-            We're sorry, the RSVP deadline has passed.
-          </p>
-          {event.rsvp_deadline && (
-            <p className="text-sm mb-8" style={{ color: "#8B7355" }}>
-              The deadline was {formatDeadline(event.rsvp_deadline)}.
-            </p>
-          )}
-          <p className="text-base mb-8">
-            If you have any questions, please reach out to us directly.
-          </p>
-          <Button
-            onClick={() => navigate(`/${eventSlug}/contact`)}
-            size="lg"
-            className={cn("px-10 uppercase tracking-[0.25em]")}
-            style={{ backgroundColor: "#B8962E", color: "#FAF3E0", borderRadius: 0 }}
-          >
-            Contact Us
-          </Button>
-        </div>
-      </Shell>
-    );
-  }
-
-  // Success state
-  if (submitted && !mutation.isError) {
-    return (
-      <Shell eventSlug={eventSlug} eventName={event.name}>
-        <div className="text-center py-16 px-6 max-w-lg mx-auto animate-scale-in">
-          {status === "attending" ? (
-            <PartyPopper className="w-12 h-12 mx-auto mb-6" style={{ color: "#B8962E" }} />
-          ) : (
-            <Heart className="w-12 h-12 mx-auto mb-6" style={{ color: "#B8962E" }} />
-          )}
-          <h1 className="font-heading text-4xl tracking-wide mb-4">
-            {status === "attending" ? "Thank You!" : "We'll Miss You"}
-          </h1>
-          <GoldDivider />
-          <p className="text-base mb-8" style={{ color: "#8B7355" }}>
-            {status === "attending"
-              ? "We can't wait to celebrate with you. See you soon!"
-              : "Thank you for letting us know. You'll be missed."}
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Button
-              onClick={() => navigate(`/${eventSlug}/home`)}
-              size="lg"
-              className={cn("px-10 uppercase tracking-[0.25em]")}
-              style={{ backgroundColor: "#B8962E", color: "#FAF3E0", borderRadius: 0 }}
-            >
-              Back to Home
-            </Button>
-            <Button
-              onClick={() => navigate(`/${eventSlug}/wishes`)}
-              variant="ghost"
-              size="lg"
-              className={cn("px-10 uppercase tracking-[0.25em]")}
-              style={{ color: "#B8962E", borderRadius: 0 }}
-            >
-              Leave a Wish
-            </Button>
-          </div>
-        </div>
-      </Shell>
-    );
-  }
-
-  // Not logged in
-  if (!guestName) {
-    return (
-      <Shell eventSlug={eventSlug} eventName={event.name}>
-        <div className="text-center py-16 px-6 max-w-lg mx-auto animate-fade-in-up">
-          <Heart className="w-12 h-12 mx-auto mb-6" style={{ color: "#B8962E" }} />
-          <h1 className="font-heading text-4xl tracking-wide mb-4">
-            Please Sign In
-          </h1>
-          <GoldDivider />
-          <p className="text-base mb-8" style={{ color: "#8B7355" }}>
-            Please enter your name so we know who is responding.
-          </p>
-          <Button
-            onClick={() => navigate(`/${eventSlug}/login`)}
-            size="lg"
-            className={cn("px-10 uppercase tracking-[0.25em]")}
-            style={{ backgroundColor: "#B8962E", color: "#FAF3E0", borderRadius: 0 }}
-          >
-            Sign In
-          </Button>
-        </div>
-      </Shell>
-    );
-  }
-
-  return (
-    <Shell eventSlug={eventSlug} eventName={event.name}>
-      <div className="max-w-xl mx-auto px-6 py-12 animate-fade-in-up">
-        <div className="text-center mb-8">
-          <p
-            className="font-heading italic text-sm uppercase tracking-[0.3em] mb-2"
-            style={{ color: "#B8962E" }}
-          >
-            Kindly Respond
-          </p>
-          <h1 className="font-heading text-4xl sm:text-5xl tracking-wide mb-3">
-            RSVP
-          </h1>
-          {event.rsvp_deadline && (
-            <p className="text-xs" style={{ color: "#8B7355" }}>
-              Please respond by {formatDeadline(event.rsvp_deadline)}
-            </p>
-          )}
-        </div>
-
-        <GoldDivider />
-
-        {existingRsvp && !submitted && (
-          <div
-            className="text-center text-sm px-4 py-3 mb-6"
-            style={{ border: "1px solid #D4C695", backgroundColor: "#FAF3E0", color: "#8B7355" }}
-          >
-            You previously submitted a response. Submitting again will update it.
+      <div
+        key={key}
+        className="p-8 border"
+        style={{
+          borderColor: RUSTY_THEME.borderColor || "#D4C695",
+          borderRadius: 2,
+          backgroundColor: RUSTY_THEME.bgSubtleColor || "#FAF3E0",
+        }}
+      >
+        {subEvent && (
+          <div className="mb-6 text-center">
+            <h3 className="font-heading text-2xl mb-3" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
+              {subEvent.name}
+            </h3>
+            {subEvent.date && (
+              <p className="text-sm opacity-70 flex items-center justify-center gap-2">
+                <CalendarDays className="w-3.5 h-3.5" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }} />
+                {formatDate(subEvent.date)}
+                {subEvent.time && <> · {formatTime(subEvent.time)}</>}
+              </p>
+            )}
+            {subEvent.venue && (
+              <p className="text-sm opacity-70 flex items-center justify-center gap-2">
+                <MapPin className="w-3.5 h-3.5" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }} /> {subEvent.venue}
+              </p>
+            )}
+            {subEvent.description && (
+              <p className="text-sm opacity-70 mt-2 italic">{subEvent.description}</p>
+            )}
           </div>
         )}
 
-        {loadingExisting ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#B8962E" }} />
+        {!subEvent && (
+          <h3 className="font-heading text-2xl mb-6 text-center" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
+            RSVP
+          </h3>
+        )}
+
+        {closed ? (
+          <div className="text-center py-8">
+            <Lock className="w-8 h-8 mx-auto mb-3 opacity-50" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }} />
+            <p className="font-heading text-lg mb-1" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
+              RSVP Closed
+            </p>
+            <p className="text-sm opacity-60 italic">
+              The deadline to respond has passed.
+            </p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-8">
-            {/* Guest name (read-only) */}
+          <div className="space-y-6">
             <div>
-              <label
-                className="block text-xs uppercase tracking-[0.2em] mb-2"
-                style={{ color: "#B8962E" }}
-              >
-                Name
-              </label>
-              <Input
-                value={guestName}
-                readOnly
-                className="cursor-not-allowed"
-                style={{
-                  backgroundColor: "#FAF3E0",
-                  borderColor: "#D4C695",
-                  color: "#8B7355",
-                  borderRadius: 0,
-                }}
-              />
-            </div>
-
-            {/* Attending / Declined */}
-            <div>
-              <label
-                className="block text-xs uppercase tracking-[0.2em] mb-3"
-                style={{ color: "#B8962E" }}
-              >
-                Will You Attend?
+              <label className="block text-xs font-medium uppercase tracking-[0.2em] opacity-60 mb-3">
+                Will you attend?
               </label>
               <div className="grid grid-cols-2 gap-3">
-                <ChoiceCard
-                  selected={status === "attending"}
-                  onClick={() => setStatus("attending")}
-                  icon={<Check className="w-5 h-5" />}
-                  label="Joyfully Accepts"
-                />
-                <ChoiceCard
-                  selected={status === "declined"}
-                  onClick={() => setStatus("declined")}
-                  icon={<X className="w-5 h-5" />}
-                  label="Regretfully Declines"
-                />
+                <button
+                  type="button"
+                  onClick={() => updateForm(key, { status: "attending" })}
+                  className="flex items-center justify-center gap-2 px-4 py-3 border-2 transition-all text-sm font-medium uppercase tracking-wider"
+                  style={{
+                    borderColor: form.status === "attending"
+                      ? RUSTY_THEME.primaryColor || "#B8962E"
+                      : RUSTY_THEME.borderColor || "#D4C695",
+                    backgroundColor: form.status === "attending"
+                      ? RUSTY_THEME.primaryColor || "#B8962E"
+                      : "transparent",
+                    color: form.status === "attending"
+                      ? RUSTY_THEME.bgColor || "#F5ECD7"
+                      : RUSTY_THEME.textColor || "#3D3528",
+                    borderRadius: 2,
+                  }}
+                >
+                  <Check className="w-4 h-4" /> Attending
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateForm(key, { status: "declined" })}
+                  className="flex items-center justify-center gap-2 px-4 py-3 border-2 transition-all text-sm font-medium uppercase tracking-wider"
+                  style={{
+                    borderColor: form.status === "declined"
+                      ? RUSTY_THEME.primaryColor || "#B8962E"
+                      : RUSTY_THEME.borderColor || "#D4C695",
+                    backgroundColor: form.status === "declined"
+                      ? RUSTY_THEME.primaryColor || "#B8962E"
+                      : "transparent",
+                    color: form.status === "declined"
+                      ? RUSTY_THEME.bgColor || "#F5ECD7"
+                      : RUSTY_THEME.textColor || "#3D3528",
+                    borderRadius: 2,
+                  }}
+                >
+                  <X className="w-4 h-4" /> Decline
+                </button>
               </div>
             </div>
 
-            {/* Plus ones (only if attending) */}
-            {status === "attending" && (
-              <div className="animate-fade-in">
-                <label
-                  className="block text-xs uppercase tracking-[0.2em] mb-2"
-                  style={{ color: "#B8962E" }}
-                >
-                  Number of Guests (Including You)
-                </label>
-                <div className="flex items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setPlusOnes((n) => Math.max(0, n - 1))}
-                    className="px-4"
-                    style={{ borderColor: "#D4C695", borderRadius: 0, color: "#3D3528" }}
-                  >
-                    −
-                  </Button>
-                  <span
-                    className="font-heading text-2xl min-w-[40px] text-center"
-                    style={{ color: "#3D3528" }}
-                  >
-                    {plusOnes + 1}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setPlusOnes((n) => Math.min(10, n + 1))}
-                    className="px-4"
-                    style={{ borderColor: "#D4C695", borderRadius: 0, color: "#3D3528" }}
-                  >
-                    +
-                  </Button>
+            {form.status === "attending" && (
+              <>
+                <div>
+                  <label className="block text-xs font-medium uppercase tracking-[0.2em] opacity-60 mb-2">
+                    Number of guests (including you)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => updateForm(key, { plus_ones: Math.max(0, form.plus_ones - 1) })}
+                      className="w-10 h-10 border flex items-center justify-center transition-colors hover:opacity-70"
+                      style={{
+                        borderColor: RUSTY_THEME.borderColor || "#D4C695",
+                        color: RUSTY_THEME.primaryColor || "#B8962E",
+                        borderRadius: 2,
+                      }}
+                    >
+                      −
+                    </button>
+                    <span
+                      className="font-heading text-2xl w-12 text-center tabular-nums"
+                      style={{ fontFamily: '"Cormorant Garamond", serif', color: RUSTY_THEME.primaryColor || "#B8962E" }}
+                    >
+                      {form.plus_ones + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => updateForm(key, { plus_ones: form.plus_ones + 1 })}
+                      className="w-10 h-10 border flex items-center justify-center transition-colors hover:opacity-70"
+                      style={{
+                        borderColor: RUSTY_THEME.borderColor || "#D4C695",
+                        color: RUSTY_THEME.primaryColor || "#B8962E",
+                        borderRadius: 2,
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
-                <p className="text-xs mt-2" style={{ color: "#8B7355" }}>
-                  {plusOnes} additional guest{plusOnes !== 1 ? "s" : ""} joining you.
-                </p>
-              </div>
+
+                <div>
+                  <label className="block text-xs font-medium uppercase tracking-[0.2em] opacity-60 mb-2">
+                    Dietary requirements
+                  </label>
+                  <Input
+                    type="text"
+                    value={form.dietary}
+                    onChange={(e) => updateForm(key, { dietary: e.target.value })}
+                    placeholder="e.g. Vegetarian, gluten-free, allergies..."
+                    style={{
+                      backgroundColor: RUSTY_THEME.bgColor || "#F5ECD7",
+                      borderColor: RUSTY_THEME.borderColor || "#D4C695",
+                      borderRadius: 2,
+                    }}
+                  />
+                </div>
+              </>
             )}
 
-            {/* Dietary (only if attending) */}
-            {status === "attending" && (
-              <div className="animate-fade-in">
-                <label
-                  className="block text-xs uppercase tracking-[0.2em] mb-2"
-                  style={{ color: "#B8962E" }}
-                >
-                  Dietary Requirements
-                </label>
-                <Textarea
-                  value={dietary}
-                  onChange={(e) => setDietary(e.target.value)}
-                  placeholder="Any allergies or dietary preferences?"
-                  rows={3}
-                  style={{
-                    backgroundColor: "#FAF3E0",
-                    borderColor: "#D4C695",
-                    color: "#3D3528",
-                    borderRadius: 0,
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Message */}
             <div>
-              <label
-                className="block text-xs uppercase tracking-[0.2em] mb-2"
-                style={{ color: "#B8962E" }}
-              >
-                Message to the Couple
+              <label className="block text-xs font-medium uppercase tracking-[0.2em] opacity-60 mb-2">
+                Message to host {subEvent ? `(for ${subEvent.name})` : ""}
               </label>
               <Textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Share a note or well wishes..."
-                rows={4}
+                value={form.message}
+                onChange={(e) => updateForm(key, { message: e.target.value })}
+                placeholder="Share your wishes or notes..."
+                rows={3}
                 style={{
-                  backgroundColor: "#FAF3E0",
-                  borderColor: "#D4C695",
-                  color: "#3D3528",
-                  borderRadius: 0,
+                  backgroundColor: RUSTY_THEME.bgColor || "#F5ECD7",
+                  borderColor: RUSTY_THEME.borderColor || "#D4C695",
+                  borderRadius: 2,
                 }}
               />
             </div>
 
-            {mutation.isError && (
-              <p className="text-sm text-left" style={{ color: "#A07820" }}>
-                Something went wrong. Please try again.
+            {alreadySubmitted && (
+              <p className="text-xs opacity-60 flex items-center gap-1.5 italic">
+                <Check className="w-3.5 h-3.5" /> You've already responded. Submitting will update your RSVP.
               </p>
             )}
 
             <Button
-              type="submit"
+              onClick={() => submitMutation.mutate(subEvent?.id || null)}
+              loading={submitMutation.isPending}
+              disabled={form.status === "pending"}
               size="lg"
-              loading={mutation.isPending}
-              disabled={status === "pending" || mutation.isPending}
-              className={cn("w-full uppercase tracking-[0.25em]")}
-              style={{ backgroundColor: "#B8962E", color: "#FAF3E0", borderRadius: 0 }}
+              className="w-full justify-center uppercase tracking-[0.2em]"
+              style={{
+                backgroundColor: RUSTY_THEME.primaryColor || "#B8962E",
+                color: RUSTY_THEME.bgColor || "#F5ECD7",
+                borderRadius: 2,
+              }}
             >
-              {status === "declined" ? "Send Response" : "Confirm Attendance"}
+              {alreadySubmitted ? "Update RSVP" : "Submit RSVP"}
             </Button>
-          </form>
+
+            {submitMutation.isError && (
+              <p className="text-sm" style={{ color: "#9c2a2a" }}>
+                {submitMutation.error instanceof Error ? submitMutation.error.message : "Failed to submit. Please try again."}
+              </p>
+            )}
+            {submitMutation.isSuccess && (
+              <p className="text-sm flex items-center gap-1.5 italic" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }}>
+                <Check className="w-4 h-4" /> RSVP submitted. Thank you!
+              </p>
+            )}
+          </div>
         )}
       </div>
-    </Shell>
-  );
-}
+    );
+  };
 
-function Shell({
-  eventSlug,
-  eventName,
-  children,
-}: {
-  eventSlug: string;
-  eventName: string;
-  children: React.ReactNode;
-}) {
   return (
-    <div className="min-h-screen bg-[#F5ECD7] text-[#3D3528] font-sans">
-      <nav className="sticky top-0 z-20 bg-[#F5ECD7]/95 backdrop-blur-sm border-b border-[#D4C695]">
-        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
-          <Link
-            to={`/${eventSlug}/home`}
-            className="font-heading text-xl tracking-wide"
-            style={{ color: "#B8962E" }}
-          >
-            {eventName || "Our Wedding"}
-          </Link>
-          <Link
-            to={`/${eventSlug}/home`}
-            className="flex items-center gap-1 text-xs uppercase tracking-[0.15em] hover:opacity-70"
-            style={{ color: "#3D3528" }}
-          >
-            <ArrowLeft className="w-3 h-3" /> Back
-          </Link>
-        </div>
-      </nav>
-      {children}
-    </div>
-  );
-}
-
-function GoldDivider() {
-  return (
-    <div className="flex items-center justify-center gap-3 my-6" aria-hidden>
-      <span className="block h-px w-16" style={{ backgroundColor: "#B8962E" }} />
-      <span className="text-lg" style={{ color: "#B8962E" }}>❦</span>
-      <span className="block h-px w-16" style={{ backgroundColor: "#B8962E" }} />
-    </div>
-  );
-}
-
-function ChoiceCard({
-  selected,
-  onClick,
-  icon,
-  label,
-}: {
-  selected: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex flex-col items-center gap-2 px-4 py-6 transition-all",
-      )}
+    <div
+      className="min-h-screen"
       style={{
-        border: selected ? "2px solid #B8962E" : "1px solid #D4C695",
-        backgroundColor: selected ? "#FAF3E0" : "transparent",
-        color: selected ? "#B8962E" : "#3D3528",
+        backgroundColor: RUSTY_THEME.bgColor || "#F5ECD7",
+        color: RUSTY_THEME.textColor || "#3D3528",
       }}
     >
-      {icon}
-      <span className="text-xs uppercase tracking-[0.15em]">{label}</span>
-    </button>
+      <div className="max-w-2xl mx-auto px-6 py-16">
+        <div className="text-center mb-10">
+          <GoldDivider />
+          <p className="text-xs uppercase tracking-[0.3em] opacity-60 mb-2">RSVP</p>
+          <h1
+            className="font-heading text-4xl md:text-5xl tracking-tight"
+            style={{ fontFamily: '"Cormorant Garamond", serif' }}
+          >
+            {hasSubEvents ? "RSVP for Each Event" : "Will you join us?"}
+          </h1>
+          {guestName && (
+            <p className="mt-4 text-sm italic opacity-70" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
+              Responding as: {guestName}
+            </p>
+          )}
+          {event.rsvp_deadline && !eventClosed && (
+            <p className="mt-2 text-xs opacity-60 flex items-center justify-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" /> Deadline: {formatDate(event.rsvp_deadline)}
+            </p>
+          )}
+        </div>
+
+        {eventClosed && !hasSubEvents && (
+          <div
+            className="text-center py-12 border"
+            style={{ borderColor: RUSTY_THEME.borderColor || "#D4C695", borderRadius: 2 }}
+          >
+            <Lock className="w-10 h-10 mx-auto mb-4 opacity-50" style={{ color: RUSTY_THEME.primaryColor || "#B8962E" }} />
+            <p className="font-heading text-xl mb-2" style={{ fontFamily: '"Cormorant Garamond", serif' }}>
+              RSVP Closed
+            </p>
+            <p className="text-sm opacity-60 italic">The deadline to respond has passed.</p>
+          </div>
+        )}
+
+        {!eventClosed && (
+          <div className="space-y-6">
+            {hasSubEvents
+              ? subEventsToRsvp.map((sub) => renderRsvpForm(sub, sub.id))
+              : renderRsvpForm(null, "main")}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

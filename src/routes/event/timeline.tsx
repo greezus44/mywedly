@@ -1,423 +1,440 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Plus,
-  Trash2,
-  Pencil,
-  GripVertical,
-  Calendar,
-  Clock,
-  MapPin,
-  Shirt,
-  Tag,
-  ArrowUp,
-  ArrowDown,
-} from "lucide-react";
-import { supabase, type UserEvent, type ScheduleItem } from "../../lib/supabase";
-import { cn, formatDate, formatTime } from "../../lib/utils";
+import { supabase, type ScheduleItem } from "../../lib/supabase";
+import { formatDate, formatTime } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { Card, Badge, EmptyState, FormField, Skeleton, ErrorState, Toast, Modal } from "../../components/ui";
+import {
+  Card,
+  Badge,
+  EmptyState,
+  FormField,
+  Modal,
+  Toast,
+  ErrorState,
+  Skeleton,
+} from "../../components/ui";
 import { Input, Textarea, Select } from "../../components/ui/Input";
 import { DatePicker } from "../../components/ui/DatePicker";
 import { TimePicker } from "../../components/ui/TimePicker";
+import {
+  Clock,
+  Plus,
+  Trash2,
+  Pencil,
+  ArrowUp,
+  ArrowDown,
+  MapPin,
+  Calendar,
+} from "lucide-react";
 
-const CATEGORIES = ["Ceremony", "Reception", "Dinner", "Party", "Other"] as const;
+interface EditItem {
+  id?: string;
+  title: string;
+  schedule_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  venue: string;
+  address: string;
+  dress_code: string;
+  category: string;
+  description: string;
+  order_index: number;
+}
 
-function TimelinePage() {
-  const { eventId } = useParams<{ eventId: string }>();
+const emptyItem: EditItem = {
+  title: "",
+  schedule_date: null,
+  start_time: null,
+  end_time: null,
+  venue: "",
+  address: "",
+  dress_code: "",
+  category: "",
+  description: "",
+  order_index: 0,
+};
+
+const CATEGORIES = ["Ceremony", "Reception", "Dinner", "Party", "Other"];
+
+export default function TimelinePage() {
+  const { eventId } = useParams();
   const queryClient = useQueryClient();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    schedule_date: null as string | null,
-    start_time: null as string | null,
-    end_time: null as string | null,
-    venue: "",
-    address: "",
-    dress_code: "",
-    category: "Ceremony",
-  });
+  const [showModal, setShowModal] = useState(false);
+  const [editItem, setEditItem] = useState<EditItem>(emptyItem);
+  const [isEditing, setIsEditing] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [toastError, setToastError] = useState<string | null>(null);
 
-  const { data: event } = useQuery<UserEvent>({
-    queryKey: ["event", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!eventId,
-  });
-
-  const { data: items, isLoading, isError, refetch } = useQuery<ScheduleItem[]>({
+  const { data: items, isLoading, error } = useQuery({
     queryKey: ["schedule", eventId],
     queryFn: async () => {
+      if (!eventId) return [];
       const { data, error } = await supabase
-        .from("schedule_items")
+        .from("event_schedule")
         .select("*")
-        .eq("event_id", eventId!)
+        .eq("event_id", eventId)
         .order("order_index", { ascending: true });
       if (error) throw error;
-      return data;
+      return (data || []) as ScheduleItem[];
     },
     enabled: !!eventId,
   });
 
   const createMutation = useMutation({
-    mutationFn: async (item: typeof form) => {
-      const maxOrder = items?.length ? Math.max(...items.map((i) => i.order_index)) : 0;
-      const { data, error } = await supabase
-        .from("schedule_items")
-        .insert({
-          event_id: eventId,
-          title: item.title,
-          description: item.description || null,
-          schedule_date: item.schedule_date,
-          start_time: item.start_time,
-          end_time: item.end_time,
-          venue: item.venue || null,
-          address: item.address || null,
-          dress_code: item.dress_code || null,
-          category: item.category,
-          order_index: maxOrder + 1,
-        })
-        .select()
-        .single();
+    mutationFn: async (item: EditItem) => {
+      if (!eventId) return;
+      const { error } = await supabase.from("event_schedule").insert({
+        event_id: eventId,
+        title: item.title,
+        schedule_date: item.schedule_date,
+        start_time: item.start_time,
+        end_time: item.end_time,
+        venue: item.venue || null,
+        address: item.address || null,
+        dress_code: item.dress_code || null,
+        category: item.category || null,
+        description: item.description || null,
+        order_index: item.order_index,
+      });
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["schedule", eventId] });
-      setModalOpen(false);
-      resetForm();
-      setToast({ message: "Schedule item added", type: "success" });
+      setShowModal(false);
+      setEditItem(emptyItem);
+      setIsEditing(false);
+      setToast("Schedule item added");
     },
-    onError: () => setToast({ message: "Failed to add item", type: "error" }),
+    onError: (err: Error) => setToastError(err.message),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, item }: { id: string; item: typeof form }) => {
-      const { data, error } = await supabase
-        .from("schedule_items")
+    mutationFn: async (item: EditItem) => {
+      if (!item.id) return;
+      const { error } = await supabase
+        .from("event_schedule")
         .update({
           title: item.title,
-          description: item.description || null,
           schedule_date: item.schedule_date,
           start_time: item.start_time,
           end_time: item.end_time,
           venue: item.venue || null,
           address: item.address || null,
           dress_code: item.dress_code || null,
-          category: item.category,
+          category: item.category || null,
+          description: item.description || null,
+          order_index: item.order_index,
         })
-        .eq("id", id)
-        .select()
-        .single();
+        .eq("id", item.id);
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["schedule", eventId] });
-      setModalOpen(false);
-      resetForm();
-      setToast({ message: "Schedule item updated", type: "success" });
+      setShowModal(false);
+      setEditItem(emptyItem);
+      setIsEditing(false);
+      setToast("Schedule item updated");
     },
-    onError: () => setToast({ message: "Failed to update item", type: "error" }),
+    onError: (err: Error) => setToastError(err.message),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("schedule_items").delete().eq("id", id);
+    mutationFn: async (itemId: string) => {
+      const { error } = await supabase
+        .from("event_schedule")
+        .delete()
+        .eq("id", itemId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["schedule", eventId] });
-      setToast({ message: "Item removed", type: "success" });
+      setToast("Item removed");
     },
-    onError: () => setToast({ message: "Failed to remove item", type: "error" }),
+    onError: (err: Error) => setToastError(err.message),
   });
 
   const reorderMutation = useMutation({
-    mutationFn: async (reordered: ScheduleItem[]) => {
-      const updates = reordered.map((item, index) => ({
-        id: item.id,
-        order_index: index + 1,
-      }));
-      for (const u of updates) {
-        const { error } = await supabase.from("schedule_items").update({ order_index: u.order_index }).eq("id", u.id);
-        if (error) throw error;
-      }
+    mutationFn: async (reordered: { id: string; order_index: number }[]) => {
+      const updates = reordered.map((r) =>
+        supabase.from("event_schedule").update({ order_index: r.order_index }).eq("id", r.id)
+      );
+      await Promise.all(updates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["schedule", eventId] });
     },
-    onError: () => setToast({ message: "Failed to reorder", type: "error" }),
   });
 
-  const resetForm = () => {
-    setForm({
-      title: "",
-      description: "",
-      schedule_date: null,
-      start_time: null,
-      end_time: null,
-      venue: "",
-      address: "",
-      dress_code: "",
-      category: "Ceremony",
-    });
-    setEditingItem(null);
+  const handleAdd = () => {
+    setEditItem({ ...emptyItem, order_index: (items?.length || 0) });
+    setIsEditing(false);
+    setShowModal(true);
   };
 
-  const openAddModal = () => {
-    resetForm();
-    setModalOpen(true);
-  };
-
-  const openEditModal = (item: ScheduleItem) => {
-    setEditingItem(item);
-    setForm({
+  const handleEdit = (item: ScheduleItem) => {
+    setEditItem({
+      id: item.id,
       title: item.title,
-      description: item.description || "",
       schedule_date: item.schedule_date,
       start_time: item.start_time,
       end_time: item.end_time,
       venue: item.venue || "",
       address: item.address || "",
       dress_code: item.dress_code || "",
-      category: item.category || "Ceremony",
+      category: item.category || "",
+      description: item.description || "",
+      order_index: item.order_index,
     });
-    setModalOpen(true);
+    setIsEditing(true);
+    setShowModal(true);
+  };
+
+  const handleMove = (index: number, direction: "up" | "down") => {
+    if (!items) return;
+    const newItems = [...items];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newItems.length) return;
+    [newItems[index], newItems[targetIndex]] = [newItems[targetIndex], newItems[index]];
+    reorderMutation.mutate(
+      newItems.map((item, i) => ({ id: item.id, order_index: i }))
+    );
   };
 
   const handleSave = () => {
-    if (!form.title.trim()) {
-      setToast({ message: "Title is required", type: "error" });
-      return;
-    }
-    if (editingItem) {
-      updateMutation.mutate({ id: editingItem.id, item: form });
+    if (isEditing) {
+      updateMutation.mutate(editItem);
     } else {
-      createMutation.mutate(form);
+      createMutation.mutate(editItem);
     }
   };
 
-  const moveItem = useCallback(
-    (index: number, direction: "up" | "down") => {
-      if (!items) return;
-      const reordered = [...items];
-      const swapIndex = direction === "up" ? index - 1 : index + 1;
-      if (swapIndex < 0 || swapIndex >= reordered.length) return;
-      [reordered[index], reordered[swapIndex]] = [reordered[swapIndex], reordered[index]];
-      reorderMutation.mutate(reordered);
-    },
-    [items, reorderMutation],
-  );
-
   if (isLoading) {
     return (
-      <div className="p-8">
-        <Skeleton className="h-8 w-48 mb-6" />
-        <Skeleton className="h-32 w-full mb-4" />
-        <Skeleton className="h-32 w-full mb-4" />
+      <div className="p-6 lg:p-8">
+        <Skeleton className="h-12 w-48 mb-4" />
+        <Skeleton className="h-64" />
       </div>
     );
   }
 
-  if (isError || !event) {
-    return <ErrorState message="Failed to load schedule" onRetry={refetch} />;
+  if (error) {
+    return (
+      <div className="p-6 lg:p-8">
+        <ErrorState message={error.message} onRetry={() => queryClient.invalidateQueries({ queryKey: ["schedule", eventId] })} />
+      </div>
+    );
   }
 
   return (
-    <div>
-      <div className="px-6 lg:px-8 py-6 border-b border-onyx/10 flex items-center justify-between">
+    <div className="p-6 lg:p-8 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="font-heading text-3xl text-onyx">Timeline</h1>
-          <p className="mt-1 text-sm text-onyx/50">Schedule of events and activities</p>
+          <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Timeline</h2>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            Create a schedule of events for your guests to follow.
+          </p>
         </div>
-        <Button onClick={openAddModal}>
-          <Plus className="w-4 h-4" /> Add Item
+        <Button size="sm" onClick={handleAdd}>
+          <Plus className="w-3.5 h-3.5" /> Add Item
         </Button>
       </div>
 
-      <div className="p-6 lg:p-8">
-        {items && items.length > 0 ? (
-          <div className="space-y-4">
-            {items.map((item, index) => (
-              <Card key={item.id} className="p-5">
-                <div className="flex items-start gap-4">
-                  <div className="flex flex-col items-center gap-1 pt-1">
-                    <button
-                      onClick={() => moveItem(index, "up")}
-                      disabled={index === 0}
-                      className="p-1 text-onyx/30 hover:text-onyx disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <ArrowUp className="w-4 h-4" />
-                    </button>
-                    <GripVertical className="w-4 h-4 text-onyx/20" />
-                    <button
-                      onClick={() => moveItem(index, "down")}
-                      disabled={index === items.length - 1}
-                      className="p-1 text-onyx/30 hover:text-onyx disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <ArrowDown className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="font-heading text-lg text-onyx">{item.title}</h3>
-                          {item.category && (
-                            <Badge variant="info">{item.category}</Badge>
-                          )}
-                        </div>
-                        {item.description && (
-                          <p className="text-sm text-onyx/60 mb-3">{item.description}</p>
-                        )}
-                        <div className="flex flex-wrap gap-x-6 gap-y-2">
-                          {item.schedule_date && (
-                            <div className="flex items-center gap-1.5 text-xs text-onyx/50">
-                              <Calendar className="w-3.5 h-3.5" /> {formatDate(item.schedule_date)}
-                            </div>
-                          )}
-                          {item.start_time && (
-                            <div className="flex items-center gap-1.5 text-xs text-onyx/50">
-                              <Clock className="w-3.5 h-3.5" />
-                              {formatTime(item.start_time)}
-                              {item.end_time && ` — ${formatTime(item.end_time)}`}
-                            </div>
-                          )}
-                          {item.venue && (
-                            <div className="flex items-center gap-1.5 text-xs text-onyx/50">
-                              <MapPin className="w-3.5 h-3.5" /> {item.venue}
-                            </div>
-                          )}
-                          {item.dress_code && (
-                            <div className="flex items-center gap-1.5 text-xs text-onyx/50">
-                              <Shirt className="w-3.5 h-3.5" /> {item.dress_code}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => openEditModal(item)}
-                          className="p-1.5 text-onyx/30 hover:text-onyx transition-colors"
-                          title="Edit"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => deleteMutation.mutate(item.id)}
-                          className="p-1.5 text-onyx/30 hover:text-red-600 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        ) : (
+      {/* Timeline List */}
+      {(items || []).length === 0 ? (
+        <Card>
           <EmptyState
-            icon={<Calendar className="w-12 h-12" />}
+            icon={<Clock className="w-12 h-12" />}
             title="No schedule items"
-            description="Add events like ceremony, reception, or dinner to build your timeline"
-            action={<Button onClick={openAddModal}><Plus className="w-4 h-4" /> Add Item</Button>}
+            description="Add events like ceremony, reception, or dinner to build your timeline."
+            action={
+              <Button onClick={handleAdd}>
+                <Plus className="w-4 h-4" /> Add First Item
+              </Button>
+            }
           />
-        )}
-      </div>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {items!.map((item, index) => (
+            <Card key={item.id} className="p-5">
+              <div className="flex items-start gap-4">
+                {/* Reorder controls */}
+                <div className="flex flex-col gap-1 mt-1">
+                  <button
+                    onClick={() => handleMove(index, "up")}
+                    disabled={index === 0}
+                    className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] disabled:opacity-30 transition-colors"
+                    title="Move up"
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleMove(index, "down")}
+                    disabled={index === (items?.length || 0) - 1}
+                    className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] disabled:opacity-30 transition-colors"
+                    title="Move down"
+                  >
+                    <ArrowDown className="w-4 h-4" />
+                  </button>
+                </div>
 
-      <Modal open={modalOpen} onClose={() => { setModalOpen(false); resetForm(); }} title={editingItem ? "Edit Schedule Item" : "Add Schedule Item"}>
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 flex-wrap mb-2">
+                    <h3 className="font-heading text-lg text-[var(--color-text)]">{item.title}</h3>
+                    {item.category && (
+                      <Badge variant="info">{item.category}</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 flex-wrap text-sm text-[var(--color-text-muted)]">
+                    {item.schedule_date && (
+                      <span className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5" />
+                        {formatDate(item.schedule_date)}
+                      </span>
+                    )}
+                    {item.start_time && (
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5" />
+                        {formatTime(item.start_time)}
+                        {item.end_time && ` — ${formatTime(item.end_time)}`}
+                      </span>
+                    )}
+                    {item.venue && (
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5" />
+                        {item.venue}
+                      </span>
+                    )}
+                  </div>
+                  {item.dress_code && (
+                    <p className="text-xs text-[var(--color-text-muted)] mt-2">
+                      Dress code: {item.dress_code}
+                    </p>
+                  )}
+                  {item.description && (
+                    <p className="text-sm text-[var(--color-text-muted)] mt-2">{item.description}</p>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleEdit(item)}
+                    className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-bg-subtle)] transition-colors"
+                    style={{ borderRadius: "var(--radius)" }}
+                    title="Edit"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => deleteMutation.mutate(item.id)}
+                    className="p-1.5 text-[var(--color-text-muted)] hover:text-red-600 hover:bg-red-50 transition-colors"
+                    style={{ borderRadius: "var(--radius)" }}
+                    title="Delete"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Add/Edit Modal */}
+      <Modal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={isEditing ? "Edit Schedule Item" : "Add Schedule Item"}
+      >
         <div className="space-y-4">
           <FormField label="Title">
             <Input
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              value={editItem.title}
+              onChange={(e) => setEditItem({ ...editItem, title: e.target.value })}
               placeholder="Ceremony"
             />
           </FormField>
-          <FormField label="Description">
-            <Textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Optional description..."
-              rows={2}
+          <FormField label="Category">
+            <Select
+              value={editItem.category}
+              onChange={(e) => setEditItem({ ...editItem, category: e.target.value })}
+            >
+              <option value="">—</option>
+              {CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </Select>
+          </FormField>
+          <FormField label="Date">
+            <DatePicker
+              value={editItem.schedule_date}
+              onChange={(v) => setEditItem({ ...editItem, schedule_date: v })}
             />
           </FormField>
           <div className="grid grid-cols-2 gap-4">
-            <FormField label="Date">
-              <DatePicker
-                value={form.schedule_date}
-                onChange={(v) => setForm({ ...form, schedule_date: v })}
-              />
-            </FormField>
-            <FormField label="Category">
-              <Select
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-              >
-                {CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </Select>
-            </FormField>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
             <FormField label="Start Time">
               <TimePicker
-                value={form.start_time}
-                onChange={(v) => setForm({ ...form, start_time: v })}
+                value={editItem.start_time}
+                onChange={(v) => setEditItem({ ...editItem, start_time: v })}
               />
             </FormField>
             <FormField label="End Time">
               <TimePicker
-                value={form.end_time}
-                onChange={(v) => setForm({ ...form, end_time: v })}
+                value={editItem.end_time}
+                onChange={(v) => setEditItem({ ...editItem, end_time: v })}
               />
             </FormField>
           </div>
           <FormField label="Venue">
             <Input
-              value={form.venue}
-              onChange={(e) => setForm({ ...form, venue: e.target.value })}
-              placeholder="St. Mary's Church"
+              value={editItem.venue}
+              onChange={(e) => setEditItem({ ...editItem, venue: e.target.value })}
+              placeholder="The Grand Ballroom"
             />
           </FormField>
           <FormField label="Address">
             <Input
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              value={editItem.address}
+              onChange={(e) => setEditItem({ ...editItem, address: e.target.value })}
               placeholder="123 Main Street"
             />
           </FormField>
           <FormField label="Dress Code">
             <Input
-              value={form.dress_code}
-              onChange={(e) => setForm({ ...form, dress_code: e.target.value })}
-              placeholder="Black Tie"
+              value={editItem.dress_code}
+              onChange={(e) => setEditItem({ ...editItem, dress_code: e.target.value })}
+              placeholder="Black Tie / Formal"
             />
           </FormField>
-          <div className="flex justify-end gap-3 pt-2">
-            <Button variant="ghost" onClick={() => { setModalOpen(false); resetForm(); }}>Cancel</Button>
-            <Button onClick={handleSave} loading={createMutation.isPending || updateMutation.isPending}>
-              {editingItem ? "Save Changes" : "Add Item"}
+          <FormField label="Description">
+            <Textarea
+              value={editItem.description}
+              onChange={(e) => setEditItem({ ...editItem, description: e.target.value })}
+              placeholder="Additional details for guests…"
+              rows={3}
+            />
+          </FormField>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => setShowModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              loading={createMutation.isPending || updateMutation.isPending}
+              disabled={!editItem.title.trim()}
+            >
+              {isEditing ? "Save Changes" : "Add Item"}
             </Button>
           </div>
         </div>
       </Modal>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+      {toastError && <Toast message={toastError} type="error" onClose={() => setToastError(null)} />}
     </div>
   );
 }
-
-export default TimelinePage;

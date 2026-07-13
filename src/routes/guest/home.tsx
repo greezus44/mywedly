@@ -1,243 +1,240 @@
-import { useMemo } from "react";
-import { useParams, useNavigate, useOutletContext, Link } from "react-router-dom";
+import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import {
-  CalendarDays,
-  Clock,
-  MapPin,
-  Heart,
-  ArrowRight,
-  CalendarCheck,
-  MessageSquare,
-  Phone,
-} from "lucide-react";
-import { supabase, type UserEvent, type ScheduleItem, type EventContent } from "../../lib/supabase";
-import { cn, formatDate, formatTime } from "../../lib/utils";
-import { DEFAULT_THEME } from "../../lib/theme";
+import { supabase, type UserEvent, type SubEvent, type ScheduleItem, type GuestEventInvite, type GroupEventInvite, type GuestGroupMember } from "../../lib/supabase";
+import { cn, formatDate, formatTime, getCountdown, getEventStatus } from "../../lib/utils";
+import { useGuestAuth } from "../../lib/guest-auth";
 import { Button } from "../../components/ui/Button";
+import { Calendar, Clock, MapPin, ArrowRight, CalendarCheck, Heart, ChevronRight } from "lucide-react";
 
-const DEFAULT_CONTENT: EventContent = {
-  invitation_title: "You're Invited",
-  invitation_subtitle: "We'd be delighted to have you join us",
-  invitation_body: "Please join us to celebrate this special occasion.",
-  rsvp_button_text: "RSVP",
-  story: "",
-};
-
-async function fetchSchedule(eventId: string): Promise<ScheduleItem[]> {
-  const { data, error } = await supabase
-    .from("schedule_items")
-    .select("*")
-    .eq("event_id", eventId)
-    .order("order_index", { ascending: true });
-  if (error) throw error;
-  return (data as ScheduleItem[]) || [];
+interface OutletContext {
+  event: UserEvent;
+  subEvents: SubEvent[];
+  schedule: ScheduleItem[];
 }
 
 export default function GuestHome() {
-  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { event } = useOutletContext<{ event: UserEvent }>();
+  const { event, subEvents, schedule } = useOutletContext<OutletContext>();
+  const { guestName } = useGuestAuth();
 
-  const content = useMemo<EventContent>(
-    () => ({ ...DEFAULT_CONTENT, ...(event?.content || {}) }),
-    [event],
-  );
+  const content = event.content || {};
+  const status = getEventStatus(event.event_date);
+  const countdown = getCountdown(event.event_date);
 
-  const { data: schedule = [] } = useQuery({
-    queryKey: ["guest-schedule", event?.id],
-    queryFn: () => fetchSchedule(event.id),
-    enabled: !!event?.id,
+  // Determine which sub-events this guest is invited to.
+  // For simplicity: if no invitation records exist at all, show all sub-events (backward compat).
+  const { data: visibleSubEvents } = useQuery({
+    queryKey: ["guest-visible-sub-events", event.id, guestName],
+    queryFn: async () => {
+      if (subEvents.length === 0) return [] as SubEvent[];
+
+      // Try to find a guest record by name (case-insensitive)
+      const { data: guestRow } = await supabase
+        .from("event_guests")
+        .select("id")
+        .ilike("name", guestName || "")
+        .eq("event_id", event.id)
+        .maybeSingle();
+
+      let allowedIds: Set<string> | null = null;
+
+      if (guestRow) {
+        // Direct guest invites
+        const { data: guestInvites } = await supabase
+          .from("guest_event_invites")
+          .select("*")
+          .eq("guest_id", guestRow.id)
+          .eq("event_id", event.id);
+        if (guestInvites && guestInvites.length > 0) {
+          allowedIds = new Set<string>();
+          // null sub_event_id means "all sub-events"
+          const hasNull = guestInvites.some((i: GuestEventInvite) => i.sub_event_id === null);
+          if (hasNull) return subEvents;
+          guestInvites.forEach((i: GuestEventInvite) => {
+            if (i.sub_event_id) allowedIds!.add(i.sub_event_id);
+          });
+        }
+
+        // Group-based invites
+        const { data: memberships } = await supabase
+          .from("guest_group_members")
+          .select("group_id")
+          .eq("guest_id", guestRow.id);
+        if (memberships && memberships.length > 0) {
+          const groupIds = memberships.map((m) => m.group_id);
+          const { data: groupInvites } = await supabase
+            .from("group_event_invites")
+            .select("*")
+            .in("group_id", groupIds)
+            .eq("event_id", event.id);
+          if (groupInvites && groupInvites.length > 0) {
+            if (!allowedIds) allowedIds = new Set<string>();
+            const hasNull = groupInvites.some((i: GroupEventInvite) => i.sub_event_id === null);
+            if (hasNull) return subEvents;
+            groupInvites.forEach((i: GroupEventInvite) => {
+              if (i.sub_event_id) allowedIds!.add(i.sub_event_id);
+            });
+          }
+        }
+      }
+
+      // Backward compatibility: if no invitation records found, show all sub-events
+      if (!allowedIds || allowedIds.size === 0) return subEvents;
+      return subEvents.filter((s) => allowedIds!.has(s.id));
+    },
+    enabled: subEvents.length > 0,
+    initialData: subEvents,
   });
 
-  const eventSlug = slug || event.slug || event.id;
+  const subEventsToShow = visibleSubEvents || subEvents;
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] font-sans">
-      {/* Top nav */}
-      <nav
-        className="sticky top-0 z-20 backdrop-blur-sm border-b"
-        style={{
-          backgroundColor: "color-mix(in srgb, var(--color-bg) 95%, transparent)",
-          borderColor: "var(--color-border)",
-        }}
-      >
-        <div
-          className="mx-auto px-6 py-4 flex items-center justify-between"
-          style={{ maxWidth: "var(--max-width)" }}
-        >
-          <Link
-            to={`/e/${eventSlug}/home`}
-            className="font-heading text-xl tracking-wide"
-            style={{ color: "var(--color-primary)" }}
-          >
-            {event?.name || "Our Event"}
-          </Link>
-          <div className="flex items-center gap-1 sm:gap-2">
-            <NavButton to={`/e/${eventSlug}/rsvp`} label="RSVP" />
-            <NavButton to={`/e/${eventSlug}/wishes`} label="Wishes" />
-            <NavButton to={`/e/${eventSlug}/contact`} label="Contact" />
-          </div>
-        </div>
-      </nav>
-
-      {/* Hero / Invitation */}
-      <section className="mx-auto px-6 pt-20 pb-12 text-center animate-fade-in-up" style={{ maxWidth: "var(--max-width)" }}>
-        {content.invitation_title && (
-          <p
-            className="font-heading italic text-lg tracking-wide mb-2"
-            style={{ color: "var(--color-accent)" }}
-          >
-            {content.invitation_title}
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]">
+      {/* Hero / Event Header */}
+      <section className="max-w-3xl mx-auto px-6 pt-16 pb-12 text-center">
+        {guestName && (
+          <p className="text-xs uppercase tracking-[0.25em] text-[var(--color-text-muted)] mb-4">
+            Welcome, {guestName}
           </p>
         )}
-        <h1
-          className="font-heading text-5xl sm:text-6xl tracking-wide leading-tight mb-4"
-          style={{ color: "var(--color-text)" }}
-        >
-          {event?.name || "Our Event"}
-        </h1>
+        <h1 className="font-heading text-4xl md:text-6xl tracking-tight">{event.name}</h1>
         {content.invitation_subtitle && (
-          <p
-            className="text-base mb-6"
-            style={{ color: "var(--color-text-muted)" }}
-          >
-            {content.invitation_subtitle}
-          </p>
+          <p className="mt-4 text-sm md:text-base text-[var(--color-text-muted)]">{content.invitation_subtitle}</p>
         )}
-        <Divider />
-        {content.invitation_body && (
-          <p className="text-base leading-relaxed max-w-xl mx-auto mb-8">
-            {content.invitation_body}
-          </p>
-        )}
-      </section>
 
-      {/* Event details */}
-      <section className="mx-auto px-6 py-12" style={{ maxWidth: "var(--max-width)" }}>
-        <div className="text-center mb-8">
-          <p
-            className="font-heading italic text-sm uppercase tracking-[0.3em] mb-2"
-            style={{ color: "var(--color-accent)" }}
-          >
-            When &amp; Where
-          </p>
-          <h2 className="font-heading text-3xl sm:text-4xl tracking-wide" style={{ color: "var(--color-text)" }}>
-            Event Details
-          </h2>
-        </div>
-
-        <div
-          className="flex flex-col items-center gap-6 px-8 py-10"
-          style={{
-            border: `1px solid var(--color-border)`,
-            backgroundColor: "var(--color-bg-subtle)",
-          }}
-        >
-          {event?.event_date && (
-            <div className="flex items-center gap-3 text-center">
-              <CalendarDays className="w-5 h-5" style={{ color: "var(--color-accent)" }} />
-              <span className="text-base">{formatDate(event.event_date)}</span>
-            </div>
-          )}
-          {event?.event_time && (
-            <div className="flex items-center gap-3 text-center">
-              <Clock className="w-5 h-5" style={{ color: "var(--color-accent)" }} />
-              <span className="text-base">{formatTime(event.event_time)}</span>
-            </div>
-          )}
-          {event?.venue && (
-            <div className="flex items-center gap-3 text-center">
-              <MapPin className="w-5 h-5" style={{ color: "var(--color-accent)" }} />
-              <span className="text-base">{event.venue}</span>
-            </div>
-          )}
-          {event?.address && (
-            <p className="text-sm text-center max-w-md" style={{ color: "var(--color-text-muted)" }}>
-              {event.address}
-            </p>
-          )}
-        </div>
-      </section>
-
-      {/* Story section */}
-      {content.story && (
-        <section className="mx-auto px-6 py-12" style={{ maxWidth: "var(--max-width)" }}>
-          <div className="text-center mb-8">
-            <p
-              className="font-heading italic text-sm uppercase tracking-[0.3em] mb-2"
-              style={{ color: "var(--color-accent)" }}
-            >
-              Our Story
-            </p>
-            <h2 className="font-heading text-3xl sm:text-4xl tracking-wide" style={{ color: "var(--color-text)" }}>
-              How It Began
-            </h2>
-          </div>
-          <Divider />
-          <div className="flex flex-col items-center gap-6">
-            {content.story_image && (
-              <img
-                src={content.story_image}
-                alt="Our story"
-                className="w-full max-w-md h-64 object-cover"
-                style={{ border: `1px solid var(--color-border)` }}
-              />
+        {event.event_date && (
+          <div className="mt-8 flex items-center justify-center gap-6 text-sm text-[var(--color-text-muted)]">
+            <span className="flex items-center gap-2">
+              <Calendar className="w-4 h-4" /> {formatDate(event.event_date)}
+            </span>
+            {event.event_time && (
+              <span className="flex items-center gap-2">
+                <Clock className="w-4 h-4" /> {formatTime(event.event_time)}
+              </span>
             )}
-            <p className="text-base leading-relaxed text-center max-w-xl">{content.story}</p>
+            {event.venue && (
+              <span className="flex items-center gap-2">
+                <MapPin className="w-4 h-4" /> {event.venue}
+              </span>
+            )}
           </div>
+        )}
+
+        {!countdown.isPast && status !== "completed" && (
+          <div className="mt-8 inline-flex items-center gap-4 px-6 py-3 border border-[var(--color-border)]" style={{ borderRadius: "var(--radius)" }}>
+            <span className="text-xs uppercase tracking-wider text-[var(--color-text-muted)]">Countdown</span>
+            <span className="font-heading text-2xl tabular-nums">
+              {countdown.days}d {countdown.hours}h {countdown.minutes}m
+            </span>
+          </div>
+        )}
+      </section>
+
+      {/* Invitation content */}
+      {(content.invitation_body || content.invitation_text) && (
+        <section className="max-w-2xl mx-auto px-6 py-12 text-center border-t border-[var(--color-border)]">
+          {content.invitation_title && (
+            <h2 className="font-heading text-2xl md:text-3xl mb-4">{content.invitation_title}</h2>
+          )}
+          <p className="text-base leading-relaxed text-[var(--color-text-muted)]">
+            {content.invitation_body || content.invitation_text}
+          </p>
+        </section>
+      )}
+
+      {/* Story */}
+      {content.story && (
+        <section className="max-w-2xl mx-auto px-6 py-12 text-center border-t border-[var(--color-border)]">
+          <Heart className="w-6 h-6 mx-auto mb-4 text-[var(--color-accent)]" />
+          <h2 className="font-heading text-2xl md:text-3xl mb-4">Our Story</h2>
+          <p className="text-base leading-relaxed text-[var(--color-text-muted)] whitespace-pre-line">{content.story}</p>
+          {content.story_image && (
+            <img src={content.story_image} alt="Our story" className="mt-8 w-full max-w-md mx-auto" style={{ borderRadius: "var(--radius)" }} />
+          )}
+        </section>
+      )}
+
+      {/* Sub-events */}
+      {subEventsToShow.length > 0 && (
+        <section className="max-w-2xl mx-auto px-6 py-12 border-t border-[var(--color-border)]">
+          <div className="text-center mb-8">
+            <p className="text-xs uppercase tracking-[0.25em] text-[var(--color-text-muted)] mb-2">Schedule of Events</p>
+            <h2 className="font-heading text-2xl md:text-3xl">Celebrate With Us</h2>
+          </div>
+          <div className="space-y-4">
+            {subEventsToShow.map((sub) => (
+              <Link
+                key={sub.id}
+                to={`../rsvp`}
+                className="block p-6 border border-[var(--color-border)] hover:border-[var(--color-primary)] transition-colors group"
+                style={{ borderRadius: "var(--radius)" }}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-heading text-xl mb-2">{sub.name}</h3>
+                    {sub.date && (
+                      <p className="text-sm text-[var(--color-text-muted)] flex items-center gap-2 mb-1">
+                        <Calendar className="w-3.5 h-3.5" /> {formatDate(sub.date)}
+                        {sub.time && <> · {formatTime(sub.time)}</>}
+                      </p>
+                    )}
+                    {sub.venue && (
+                      <p className="text-sm text-[var(--color-text-muted)] flex items-center gap-2 mb-1">
+                        <MapPin className="w-3.5 h-3.5" /> {sub.venue}
+                      </p>
+                    )}
+                    {sub.description && (
+                      <p className="text-sm text-[var(--color-text-muted)] mt-2">{sub.description}</p>
+                    )}
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-[var(--color-text-muted)] group-hover:text-[var(--color-primary)] transition-colors flex-shrink-0 mt-1" />
+                </div>
+              </Link>
+            ))}
+          </div>
+          <div className="mt-8 text-center">
+            <Button onClick={() => navigate(`../rsvp`)} size="lg">
+              <CalendarCheck className="w-4 h-4" /> RSVP Now
+            </Button>
+          </div>
+        </section>
+      )}
+
+      {/* Single RSVP button when no sub-events */}
+      {subEventsToShow.length === 0 && (
+        <section className="max-w-2xl mx-auto px-6 py-12 text-center border-t border-[var(--color-border)]">
+          <h2 className="font-heading text-2xl md:text-3xl mb-4">Will you join us?</h2>
+          <p className="text-sm text-[var(--color-text-muted)] mb-6">
+            Please let us know if you can make it.
+          </p>
+          <Button onClick={() => navigate(`../rsvp`)} size="lg">
+            <CalendarCheck className="w-4 h-4" /> {content.rsvp_button_text || "RSVP Now"}
+          </Button>
         </section>
       )}
 
       {/* Schedule preview */}
       {schedule.length > 0 && (
-        <section className="mx-auto px-6 py-12" style={{ maxWidth: "var(--max-width)" }}>
+        <section className="max-w-2xl mx-auto px-6 py-12 border-t border-[var(--color-border)]">
           <div className="text-center mb-8">
-            <p
-              className="font-heading italic text-sm uppercase tracking-[0.3em] mb-2"
-              style={{ color: "var(--color-accent)" }}
-            >
-              The Day
-            </p>
-            <h2 className="font-heading text-3xl sm:text-4xl tracking-wide" style={{ color: "var(--color-text)" }}>
-              Schedule
-            </h2>
+            <p className="text-xs uppercase tracking-[0.25em] text-[var(--color-text-muted)] mb-2">Timeline</p>
+            <h2 className="font-heading text-2xl md:text-3xl">Day-of Schedule</h2>
           </div>
-          <Divider />
-          <div className="flex flex-col gap-4">
-            {schedule.slice(0, 4).map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start gap-4 px-6 py-5"
-                style={{
-                  border: `1px solid var(--color-border)`,
-                  backgroundColor: "var(--color-bg-subtle)",
-                }}
-              >
-                <div className="flex flex-col items-center justify-center min-w-[60px]">
+          <div className="space-y-3">
+            {schedule.slice(0, 5).map((item) => (
+              <div key={item.id} className="flex items-start gap-4 p-4 border border-[var(--color-border)]" style={{ borderRadius: "var(--radius)" }}>
+                <div className="flex-shrink-0 text-right w-20">
                   {item.start_time && (
-                    <span
-                      className="font-heading text-xl"
-                      style={{ color: "var(--color-accent)" }}
-                    >
-                      {formatTime(item.start_time)}
-                    </span>
+                    <p className="text-sm font-medium">{formatTime(item.start_time)}</p>
+                  )}
+                  {item.end_time && (
+                    <p className="text-xs text-[var(--color-text-muted)]">{formatTime(item.end_time)}</p>
                   )}
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-heading text-lg tracking-wide mb-1" style={{ color: "var(--color-text)" }}>
-                    {item.title}
-                  </h3>
-                  {item.description && (
-                    <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
-                      {item.description}
-                    </p>
-                  )}
+                <div className="flex-1 min-w-0 border-l border-[var(--color-border)] pl-4">
+                  <h3 className="font-heading text-base">{item.title}</h3>
                   {item.venue && (
-                    <p
-                      className="text-xs mt-1 flex items-center gap-1"
-                      style={{ color: "var(--color-text-muted)" }}
-                    >
+                    <p className="text-xs text-[var(--color-text-muted)] flex items-center gap-1 mt-1">
                       <MapPin className="w-3 h-3" /> {item.venue}
                     </p>
                   )}
@@ -248,88 +245,16 @@ export default function GuestHome() {
         </section>
       )}
 
-      {/* RSVP CTA */}
-      <section className="mx-auto px-6 py-16 text-center" style={{ maxWidth: "var(--max-width)" }}>
-        <Divider />
-        <Heart className="w-8 h-8 mx-auto mb-4" style={{ color: "var(--color-accent)" }} />
-        <h2 className="font-heading text-3xl sm:text-4xl tracking-wide mb-4" style={{ color: "var(--color-text)" }}>
-          Will You Join Us?
-        </h2>
-        <p className="text-base mb-8 max-w-md mx-auto" style={{ color: "var(--color-text-muted)" }}>
-          Please let us know if you can make it.
-        </p>
-        <Button
-          onClick={() => navigate(`/e/${eventSlug}/rsvp`)}
-          size="lg"
-          className={cn("px-12 uppercase tracking-[0.25em]")}
-          style={{
-            backgroundColor: "var(--color-primary)",
-            color: "var(--color-bg)",
-            borderRadius: "var(--radius)",
-          }}
-        >
-          {content.rsvp_button_text || "RSVP"}
-          <ArrowRight className="w-4 h-4" />
-        </Button>
-      </section>
-
-      {/* Footer quick links */}
-      <footer
-        className="border-t"
-        style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-subtle)" }}
-      >
-        <div
-          className="mx-auto px-6 py-10 flex flex-col sm:flex-row items-center justify-center gap-6"
-          style={{ maxWidth: "var(--max-width)" }}
-        >
-          <FooterLink to={`/e/${eventSlug}/rsvp`} icon={<CalendarCheck className="w-4 h-4" />} label="RSVP" />
-          <FooterLink to={`/e/${eventSlug}/wishes`} icon={<MessageSquare className="w-4 h-4" />} label="Wishes" />
-          <FooterLink to={`/e/${eventSlug}/contact`} icon={<Phone className="w-4 h-4" />} label="Contact" />
+      {/* Footer nav */}
+      <footer className="max-w-2xl mx-auto px-6 py-12 border-t border-[var(--color-border)]">
+        <div className="flex flex-wrap items-center justify-center gap-4 text-sm">
+          <Link to="../rsvp" className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)] transition-colors">RSVP</Link>
+          <span className="text-[var(--color-border)]">·</span>
+          <Link to="../wishes" className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)] transition-colors">Wishes</Link>
+          <span className="text-[var(--color-border)]">·</span>
+          <Link to="../contact" className="text-[var(--color-text-muted)] hover:text-[var(--color-primary)] transition-colors">Contact</Link>
         </div>
       </footer>
     </div>
-  );
-}
-
-function Divider() {
-  return (
-    <div className="flex items-center justify-center gap-3 my-8" aria-hidden>
-      <span className="block h-px w-16" style={{ backgroundColor: "var(--color-accent)" }} />
-      <span className="text-lg" style={{ color: "var(--color-accent)" }}>✦</span>
-      <span className="block h-px w-16" style={{ backgroundColor: "var(--color-accent)" }} />
-    </div>
-  );
-}
-
-function NavButton({ to, label }: { to: string; label: string }) {
-  return (
-    <Link
-      to={to}
-      className="px-3 py-1.5 text-xs uppercase tracking-[0.15em] transition-colors hover:opacity-70"
-      style={{ color: "var(--color-text)" }}
-    >
-      {label}
-    </Link>
-  );
-}
-
-function FooterLink({
-  to,
-  icon,
-  label,
-}: {
-  to: string;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <Link
-      to={to}
-      className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] transition-colors hover:opacity-70"
-      style={{ color: "var(--color-accent)" }}
-    >
-      {icon}
-      {label}
-    </Link>
   );
 }

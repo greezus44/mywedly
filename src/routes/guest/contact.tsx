@@ -1,288 +1,194 @@
-import { useParams, useOutletContext, Link } from "react-router-dom";
-import {
-  MapPin,
-  Clock,
-  CalendarDays,
-  Phone,
-  Mail,
-  Navigation,
-  ArrowLeft,
-  ExternalLink,
-} from "lucide-react";
-import { type UserEvent } from "../../lib/supabase";
+import { useOutletContext } from "react-router-dom";
+import { type UserEvent, type SubEvent, type ScheduleItem } from "../../lib/supabase";
 import { formatDate, formatTime } from "../../lib/utils";
+import { MapPin, Clock, Calendar, Navigation, ExternalLink } from "lucide-react";
+
+interface OutletContext {
+  event: UserEvent;
+  subEvents: SubEvent[];
+  schedule: ScheduleItem[];
+}
 
 export default function GuestContact() {
-  const { slug } = useParams<{ slug: string }>();
-  const { event } = useOutletContext<{ event: UserEvent }>();
+  const { event, subEvents, schedule } = useOutletContext<OutletContext>();
 
-  const eventSlug = slug || event.slug || event.id;
-
-  // Build a maps query from venue + address
-  const mapQuery = [event.venue, event.address].filter(Boolean).join(", ");
-  const mapUrl = mapQuery
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`
+  const fullAddress = [event.venue, event.address].filter(Boolean).join(", ");
+  const mapUrl = fullAddress
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`
+    : null;
+  const mapEmbed = fullAddress
+    ? `https://www.google.com/maps?q=${encodeURIComponent(fullAddress)}&output=embed`
     : null;
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] font-sans">
-      {/* Nav */}
-      <nav
-        className="sticky top-0 z-20 backdrop-blur-sm border-b"
-        style={{
-          backgroundColor: "color-mix(in srgb, var(--color-bg) 95%, transparent)",
-          borderColor: "var(--color-border)",
-        }}
-      >
-        <div
-          className="mx-auto px-6 py-4 flex items-center justify-between"
-          style={{ maxWidth: "var(--max-width)" }}
-        >
-          <Link
-            to={`/e/${eventSlug}/home`}
-            className="font-heading text-xl tracking-wide"
-            style={{ color: "var(--color-primary)" }}
-          >
-            {event?.name || "Our Event"}
-          </Link>
-          <Link
-            to={`/e/${eventSlug}/home`}
-            className="flex items-center gap-1 text-xs uppercase tracking-[0.15em] hover:opacity-70"
-            style={{ color: "var(--color-text)" }}
-          >
-            <ArrowLeft className="w-3 h-3" /> Back
-          </Link>
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]">
+      <div className="max-w-2xl mx-auto px-6 py-16">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <MapPin className="w-8 h-8 mx-auto mb-4 text-[var(--color-accent)]" />
+          <p className="text-xs uppercase tracking-[0.25em] text-[var(--color-text-muted)] mb-2">Find Us</p>
+          <h1 className="font-heading text-4xl md:text-5xl tracking-tight">Venue & Contact</h1>
         </div>
-      </nav>
 
-      {/* Header */}
-      <section className="mx-auto px-6 pt-16 pb-8 text-center animate-fade-in-up" style={{ maxWidth: "var(--max-width)" }}>
-        <MapPin className="w-10 h-10 mx-auto mb-4" style={{ color: "var(--color-accent)" }} />
-        <p
-          className="font-heading italic text-sm uppercase tracking-[0.3em] mb-2"
-          style={{ color: "var(--color-accent)" }}
-        >
-          Find Us
-        </p>
-        <h1 className="font-heading text-4xl sm:text-5xl tracking-wide mb-3" style={{ color: "var(--color-text)" }}>
-          Venue &amp; Contact
-        </h1>
-        <Divider />
-      </section>
+        {/* Main event venue */}
+        <section className="mb-12">
+          <div className="p-6 md:p-8 border border-[var(--color-border)]" style={{ borderRadius: "var(--radius)" }}>
+            <h2 className="font-heading text-2xl mb-4">{event.name}</h2>
 
-      {/* Event summary */}
-      <section className="mx-auto px-6 pb-8" style={{ maxWidth: "var(--max-width)" }}>
-        <div className="max-w-2xl mx-auto">
-          <div
-            className="flex flex-col items-center gap-5 px-8 py-10 text-center"
-            style={{
-              border: `1px solid var(--color-border)`,
-              backgroundColor: "var(--color-bg-subtle)",
-            }}
-          >
             {event.event_date && (
-              <InfoRow
-                icon={<CalendarDays className="w-5 h-5" />}
-                label="Date"
-                value={formatDate(event.event_date)}
-              />
-            )}
-            {event.event_time && (
-              <InfoRow
-                icon={<Clock className="w-5 h-5" />}
-                label="Time"
-                value={formatTime(event.event_time)}
-              />
-            )}
-            {event.venue && (
-              <InfoRow
-                icon={<MapPin className="w-5 h-5" />}
-                label="Venue"
-                value={event.venue}
-              />
-            )}
-            {event.address && (
-              <InfoRow
-                icon={<Navigation className="w-5 h-5" />}
-                label="Address"
-                value={event.address}
-              />
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Map placeholder */}
-      {mapUrl && (
-        <section className="mx-auto px-6 pb-8" style={{ maxWidth: "var(--max-width)" }}>
-          <div className="max-w-2xl mx-auto">
-            <div
-              className="relative w-full h-64 flex items-center justify-center overflow-hidden"
-              style={{
-                border: `1px solid var(--color-border)`,
-                backgroundColor: "var(--color-bg-subtle)",
-              }}
-            >
-              {/* Stylized map placeholder */}
-              <div
-                className="absolute inset-0 opacity-30"
-                style={{
-                  backgroundImage:
-                    "linear-gradient(var(--color-border) 1px, transparent 1px), linear-gradient(90deg, var(--color-border) 1px, transparent 1px)",
-                  backgroundSize: "40px 40px",
-                }}
-                aria-hidden
-              />
-              <div className="relative z-10 flex flex-col items-center gap-3">
-                <div
-                  className="flex items-center justify-center w-14 h-14 rounded-full"
-                  style={{ backgroundColor: "var(--color-accent)" }}
-                >
-                  <MapPin className="w-7 h-7" style={{ color: "var(--color-bg)" }} />
+              <div className="flex items-start gap-3 mb-3">
+                <Calendar className="w-4 h-4 mt-0.5 text-[var(--color-text-muted)] flex-shrink-0" />
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-[var(--color-text-muted)]">Date</p>
+                  <p className="text-sm">{formatDate(event.event_date)}</p>
                 </div>
-                <p className="text-sm font-medium" style={{ color: "var(--color-text)" }}>
-                  {event.venue || "Venue Location"}
-                </p>
-                {event.address && (
-                  <p className="text-xs max-w-xs text-center" style={{ color: "var(--color-text-muted)" }}>
-                    {event.address}
-                  </p>
-                )}
               </div>
-            </div>
-            <a
-              href={mapUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 flex items-center justify-center gap-2 text-xs uppercase tracking-[0.2em] transition-colors hover:opacity-70"
-              style={{ color: "var(--color-accent)" }}
-            >
-              <ExternalLink className="w-3 h-3" />
-              Open in Google Maps
-            </a>
+            )}
+
+            {event.event_time && (
+              <div className="flex items-start gap-3 mb-3">
+                <Clock className="w-4 h-4 mt-0.5 text-[var(--color-text-muted)] flex-shrink-0" />
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-[var(--color-text-muted)]">Time</p>
+                  <p className="text-sm">{formatTime(event.event_time)}</p>
+                </div>
+              </div>
+            )}
+
+            {event.venue && (
+              <div className="flex items-start gap-3 mb-3">
+                <MapPin className="w-4 h-4 mt-0.5 text-[var(--color-text-muted)] flex-shrink-0" />
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-[var(--color-text-muted)]">Venue</p>
+                  <p className="text-sm">{event.venue}</p>
+                </div>
+              </div>
+            )}
+
+            {event.address && (
+              <div className="flex items-start gap-3 mb-6">
+                <Navigation className="w-4 h-4 mt-0.5 text-[var(--color-text-muted)] flex-shrink-0" />
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-[var(--color-text-muted)]">Address</p>
+                  <p className="text-sm">{event.address}</p>
+                </div>
+              </div>
+            )}
+
+            {mapUrl && (
+              <a
+                href={mapUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-[var(--color-accent)] hover:underline"
+              >
+              <ExternalLink className="w-4 h-4" /> Open in Google Maps
+              </a>
+            )}
           </div>
         </section>
-      )}
 
-      {/* Contact info */}
-      <section className="mx-auto px-6 pb-16" style={{ maxWidth: "var(--max-width)" }}>
-        <div className="max-w-2xl mx-auto">
-          <div className="text-center mb-8">
-            <p
-              className="font-heading italic text-sm uppercase tracking-[0.3em] mb-2"
-              style={{ color: "var(--color-accent)" }}
-            >
-              Get in Touch
-            </p>
-            <h2 className="font-heading text-3xl tracking-wide" style={{ color: "var(--color-text)" }}>
-              Contact
-            </h2>
-          </div>
-          <Divider />
-          <div
-            className="flex flex-col items-center gap-5 px-8 py-10 text-center"
-            style={{
-              border: `1px solid var(--color-border)`,
-              backgroundColor: "var(--color-bg-subtle)",
-            }}
-          >
-            <p className="text-sm max-w-md" style={{ color: "var(--color-text-muted)" }}>
-              Have questions about the event? Need directions or special arrangements?
-              We're here to help.
-            </p>
-            <div className="flex flex-col sm:flex-row items-center gap-4 mt-2">
-              <ContactPill
-                icon={<Phone className="w-4 h-4" />}
-                label="Call Us"
-                href="tel:+10000000000"
-              />
-              <ContactPill
-                icon={<Mail className="w-4 h-4" />}
-                label="Email Us"
-                href="mailto:hello@example.com"
+        {/* Map placeholder */}
+        {mapEmbed && (
+          <section className="mb-12">
+            <div className="border border-[var(--color-border)] overflow-hidden" style={{ borderRadius: "var(--radius)" }}>
+              <iframe
+                title="Venue map"
+                src={mapEmbed}
+                width="100%"
+                height="300"
+                style={{ border: 0 }}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
               />
             </div>
-          </div>
-        </div>
-      </section>
+          </section>
+        )}
 
-      {/* Footer */}
-      <footer
-        className="border-t"
-        style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-subtle)" }}
-      >
-        <div className="mx-auto px-6 py-8 text-center" style={{ maxWidth: "var(--max-width)" }}>
-          <p
-            className="font-heading text-lg tracking-wide mb-1"
-            style={{ color: "var(--color-primary)" }}
-          >
-            {event?.name || "Our Event"}
-          </p>
-          <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-            We can't wait to celebrate with you.
-          </p>
-        </div>
-      </footer>
-    </div>
-  );
-}
+        {/* Sub-event venues */}
+        {subEvents.length > 0 && (
+          <section className="mb-12">
+            <div className="text-center mb-6">
+              <p className="text-xs uppercase tracking-[0.25em] text-[var(--color-text-muted)] mb-2">Additional Venues</p>
+              <h2 className="font-heading text-2xl">Event Locations</h2>
+            </div>
+            <div className="space-y-4">
+              {subEvents.map((sub) => {
+                const subAddress = [sub.venue, sub.address].filter(Boolean).join(", ");
+                const subMapUrl = subAddress
+                  ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(subAddress)}`
+                  : null;
+                return (
+                  <div key={sub.id} className="p-5 border border-[var(--color-border)]" style={{ borderRadius: "var(--radius)" }}>
+                    <h3 className="font-heading text-lg mb-3">{sub.name}</h3>
+                    {sub.date && (
+                      <p className="text-sm text-[var(--color-text-muted)] flex items-center gap-2 mb-1">
+                        <Calendar className="w-3.5 h-3.5" /> {formatDate(sub.date)}
+                        {sub.time && <> · {formatTime(sub.time)}</>}
+                      </p>
+                    )}
+                    {sub.venue && (
+                      <p className="text-sm text-[var(--color-text-muted)] flex items-center gap-2 mb-1">
+                        <MapPin className="w-3.5 h-3.5" /> {sub.venue}
+                      </p>
+                    )}
+                    {sub.address && (
+                      <p className="text-sm text-[var(--color-text-muted)] flex items-center gap-2">
+                        <Navigation className="w-3.5 h-3.5" /> {sub.address}
+                      </p>
+                    )}
+                    {subMapUrl && (
+                      <a
+                        href={subMapUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-[var(--color-accent)] hover:underline mt-2"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" /> Directions
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
-function Divider() {
-  return (
-    <div className="flex items-center justify-center gap-3 my-6" aria-hidden>
-      <span className="block h-px w-16" style={{ backgroundColor: "var(--color-accent)" }} />
-      <span className="text-lg" style={{ color: "var(--color-accent)" }}>✦</span>
-      <span className="block h-px w-16" style={{ backgroundColor: "var(--color-accent)" }} />
-    </div>
-  );
-}
-
-function InfoRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <div
-        className="flex items-center gap-2 text-xs uppercase tracking-[0.2em]"
-        style={{ color: "var(--color-accent)" }}
-      >
-        {icon}
-        {label}
+        {/* Schedule with venues */}
+        {schedule.length > 0 && (
+          <section>
+            <div className="text-center mb-6">
+              <p className="text-xs uppercase tracking-[0.25em] text-[var(--color-text-muted)] mb-2">Day-of Timeline</p>
+              <h2 className="font-heading text-2xl">Schedule</h2>
+            </div>
+            <div className="space-y-3">
+              {schedule.map((item) => (
+                <div key={item.id} className="flex items-start gap-4 p-4 border border-[var(--color-border)]" style={{ borderRadius: "var(--radius)" }}>
+                  <div className="flex-shrink-0 text-right w-20">
+                    {item.start_time && (
+                      <p className="text-sm font-medium">{formatTime(item.start_time)}</p>
+                    )}
+                    {item.end_time && (
+                      <p className="text-xs text-[var(--color-text-muted)]">{formatTime(item.end_time)}</p>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 border-l border-[var(--color-border)] pl-4">
+                    <h3 className="font-heading text-base">{item.title}</h3>
+                    {item.venue && (
+                      <p className="text-xs text-[var(--color-text-muted)] flex items-center gap-1 mt-1">
+                        <MapPin className="w-3 h-3" /> {item.venue}
+                      </p>
+                    )}
+                    {item.description && (
+                      <p className="text-xs text-[var(--color-text-muted)] mt-1">{item.description}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
-      <p className="text-base text-center max-w-md" style={{ color: "var(--color-text)" }}>
-        {value}
-      </p>
     </div>
-  );
-}
-
-function ContactPill({
-  icon,
-  label,
-  href,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  href: string;
-}) {
-  return (
-    <a
-      href={href}
-      className="flex items-center gap-2 px-6 py-3 text-xs uppercase tracking-[0.2em] transition-all hover:opacity-80"
-      style={{
-        border: `1px solid var(--color-accent)`,
-        backgroundColor: "transparent",
-        color: "var(--color-accent)",
-      }}
-    >
-      {icon}
-      {label}
-    </a>
   );
 }
