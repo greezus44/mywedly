@@ -1,15 +1,18 @@
-import { Component, useEffect, useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
+import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
-  Navigate,
-  Route,
   Routes,
-  useNavigate,
+  Route,
+  Navigate,
+  Outlet,
+  useLocation,
 } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { supabase } from "./lib/supabase";
-import { ToastProvider } from "./components/ui";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
+// Route pages
 import LandingPage from "./routes/landing";
 import AuthPage from "./routes/auth";
 import DashboardPage from "./routes/dashboard";
@@ -34,76 +37,59 @@ import GuestRsvpPage from "./routes/guest/rsvp";
 import GuestWishesPage from "./routes/guest/wishes";
 import GuestContactPage from "./routes/guest/contact";
 import RustyLayoutPage from "./routes/rusty/rusty-layout";
+import RustyCoverPage from "./routes/rusty/rusty-cover";
+import RustyLoginPage from "./routes/rusty/rusty-login";
+import RustyHomePage from "./routes/rusty/rusty-home";
+import RustyRsvpPage from "./routes/rusty/rusty-rsvp";
+import RustyWishesPage from "./routes/rusty/rusty-wishes";
+import RustyContactPage from "./routes/rusty/rusty-contact";
+
+// ---------------------------------------------------------------------------
+// Query client
+// ---------------------------------------------------------------------------
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 30_000, refetchOnWindowFocus: false },
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      staleTime: 30 * 1000,
+    },
   },
 });
 
-/* ------------------------------------------------------------------ */
-/* ErrorBoundary                                                        */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// Auth guard
+// ---------------------------------------------------------------------------
 
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error?: Error;
-}
-
-class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
-  state: ErrorBoundaryState = { hasError: false };
-
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error) {
-    console.error("ErrorBoundary caught:", error);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-50 p-6 text-center">
-          <h1 className="text-xl font-semibold text-gray-900">Something went wrong</h1>
-          <p className="text-sm text-gray-500">
-            {this.state.error?.message || "An unexpected error occurred."}
-          </p>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-          >
-            Reload page
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* ProtectedRoute                                                       */
-/* ------------------------------------------------------------------ */
-
-function ProtectedRoute({ children }: { children: ReactNode }) {
-  const navigate = useNavigate();
-  const [checking, setChecking] = useState(true);
-  const [authed, setAuthed] = useState(false);
+function ProtectedRoute(): ReactNode {
+  const [authState, setAuthState] = useState<
+    "loading" | "authenticated" | "unauthenticated"
+  >("loading");
+  const location = useLocation();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
-        navigate("/auth", { replace: true });
-      } else {
-        setAuthed(true);
-      }
-      setChecking(false);
+    let mounted = true;
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setAuthState(session ? "authenticated" : "unauthenticated");
     });
-  }, [navigate]);
 
-  if (checking) {
+    // Also check current session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      setAuthState(session ? "authenticated" : "unauthenticated");
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  if (authState === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-gray-900" />
@@ -111,79 +97,86 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  return authed ? <>{children}</> : null;
+  if (authState === "unauthenticated") {
+    return <Navigate to="/auth" state={{ from: location }} replace />;
+  }
+
+  return <Outlet />;
 }
 
-/* ------------------------------------------------------------------ */
-/* App routes                                                           */
-/* ------------------------------------------------------------------ */
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
 
-function AppRoutes() {
-  return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/auth" element={<AuthPage />} />
-      <Route
-        path="/dashboard"
-        element={
-          <ProtectedRoute>
-            <DashboardPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/event/:eventId"
-        element={
-          <ProtectedRoute>
-            <EventLayoutPage />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<Navigate to="cover" replace />} />
-        <Route path="cover" element={<CoverEditorPage />} />
-        <Route path="login" element={<LoginEditorPage />} />
-        <Route path="home" element={<HomeEditorPage />} />
-        <Route path="theme" element={<ThemeEditorPage />} />
-        <Route path="events" element={<EventsPage />} />
-        <Route path="guests" element={<GuestsPage />} />
-        <Route path="groups" element={<GroupsPage />} />
-        <Route path="rsvp" element={<RsvpPage />} />
-        <Route path="timeline" element={<TimelinePage />} />
-        <Route path="sharing" element={<SharingPage />} />
-        <Route path="stats" element={<AnalyticsPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-      </Route>
-      <Route path="/e/:slug" element={<GuestLayoutPage />}>
-        <Route index element={<GuestCoverPage />} />
-        <Route path="login" element={<GuestLoginPage />} />
-        <Route path="home" element={<GuestHomePage />} />
-        <Route path="rsvp" element={<GuestRsvpPage />} />
-        <Route path="wishes" element={<GuestWishesPage />} />
-        <Route path="contact" element={<GuestContactPage />} />
-      </Route>
-      <Route path="/r/:slug" element={<RustyLayoutPage />}>
-        <Route index element={<GuestCoverPage />} />
-        <Route path="login" element={<GuestLoginPage />} />
-        <Route path="home" element={<GuestHomePage />} />
-        <Route path="rsvp" element={<GuestRsvpPage />} />
-        <Route path="wishes" element={<GuestWishesPage />} />
-        <Route path="contact" element={<GuestContactPage />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
-}
-
-export default function App() {
+function App(): ReactNode {
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <ToastProvider>
-            <AppRoutes />
-          </ToastProvider>
-        </BrowserRouter>
-      </QueryClientProvider>
+      <BrowserRouter>
+        <QueryClientProvider client={queryClient}>
+          <Routes>
+            {/* Public */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/auth" element={<AuthPage />} />
+
+            {/* Dashboard (protected) */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+            </Route>
+
+            {/* Event editor (protected) */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/event/:eventId" element={<EventLayoutPage />}>
+                <Route index element={<Navigate to="cover" replace />} />
+                <Route path="cover" element={<CoverEditorPage />} />
+                <Route path="login" element={<LoginEditorPage />} />
+                <Route path="home" element={<HomeEditorPage />} />
+                <Route path="theme" element={<ThemeEditorPage />} />
+                <Route path="events" element={<EventsPage />} />
+                <Route path="guests" element={<GuestsPage />} />
+                <Route path="groups" element={<GroupsPage />} />
+                <Route path="rsvp" element={<RsvpPage />} />
+                <Route path="timeline" element={<TimelinePage />} />
+                <Route path="sharing" element={<SharingPage />} />
+                <Route path="stats" element={<AnalyticsPage />} />
+                <Route path="settings" element={<SettingsPage />} />
+              </Route>
+            </Route>
+
+            {/* Guest view */}
+            <Route path="/e/:slug" element={<GuestLayoutPage />}>
+              <Route index element={<GuestCoverPage />} />
+              <Route path="login" element={<GuestLoginPage />} />
+              <Route path="home" element={<GuestHomePage />} />
+              <Route path="rsvp" element={<GuestRsvpPage />} />
+              <Route path="wishes" element={<GuestWishesPage />} />
+              <Route path="contact" element={<GuestContactPage />} />
+            </Route>
+
+            {/* Rusty view */}
+            <Route path="/r/:slug" element={<RustyLayoutPage />}>
+              <Route index element={<RustyCoverPage />} />
+              <Route path="login" element={<RustyLoginPage />} />
+              <Route path="home" element={<RustyHomePage />} />
+              <Route path="rsvp" element={<RustyRsvpPage />} />
+              <Route path="wishes" element={<RustyWishesPage />} />
+              <Route path="contact" element={<RustyContactPage />} />
+            </Route>
+
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </QueryClientProvider>
+      </BrowserRouter>
     </ErrorBoundary>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Mount
+// ---------------------------------------------------------------------------
+
+const rootEl = document.getElementById("root");
+if (!rootEl) {
+  throw new Error("Root element #root not found");
+}
+createRoot(rootEl).render(<App />);

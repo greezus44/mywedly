@@ -1,118 +1,127 @@
-import { useEffect, useMemo, useState } from "react";
-import { cn } from "../../lib/utils";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { ChevronUp, ChevronDown } from "lucide-react";
+import { cn, to12Hour, to24Hour, roundTo5Min } from "../../lib/utils";
 
-export interface TimePickerProps {
+interface TimePickerProps {
   value: string | null;
-  onChange: (time: string | null) => void;
-  placeholder?: string;
+  onChange: (time24: string) => void;
+  label?: string;
+  className?: string;
 }
 
-function to24Hour(hour: number, ampm: "AM" | "PM"): number {
-  if (ampm === "AM") return hour === 12 ? 0 : hour;
-  return hour === 12 ? 12 : hour + 12;
-}
+const HOURS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+const PERIODS: ("AM" | "PM")[] = ["AM", "PM"];
 
-function to12Hour(h24: number): { hour: number; ampm: "AM" | "PM" } {
-  const ampm = h24 >= 12 ? "PM" : "AM";
-  const hour = h24 % 12 || 12;
-  return { hour, ampm };
-}
-
-function parseTime(raw: string | null): { hour: number; minute: number; ampm: "AM" | "PM" } | null {
-  if (!raw) return null;
-  const match = /^(\d{1,2}):(\d{2})$/.exec(raw);
-  if (!match) return null;
-  const h = parseInt(match[1], 10);
-  const m = parseInt(match[2], 10);
-  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
-  const { hour, ampm } = to12Hour(h);
-  return { hour, minute: m, ampm };
-}
-
-export function TimePicker({ value, onChange, placeholder = "Select time" }: TimePickerProps) {
-  const parsed = useMemo(() => parseTime(value), [value]);
-  const [hour, setHour] = useState<string>(parsed ? String(parsed.hour) : "");
-  const [minute, setMinute] = useState<string>(parsed ? String(parsed.minute).padStart(2, "0") : "");
-  const [ampm, setAmpm] = useState<"AM" | "PM">(parsed ? parsed.ampm : "AM");
+export function TimePicker({ value, onChange, label, className }: TimePickerProps) {
+  const parsed = to12Hour(value);
+  const [hour, setHour] = useState<number>(parsed?.hour ?? 12);
+  const [minute, setMinute] = useState<number>(parsed ? roundTo5Min(parsed.minute) : 0);
+  const [period, setPeriod] = useState<"AM" | "PM">(parsed?.period ?? "AM");
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const p = parseTime(value);
-    if (p) {
-      setHour(String(p.hour));
-      setMinute(String(p.minute).padStart(2, "0"));
-      setAmpm(p.ampm);
-    } else if (!value) {
-      setHour("");
-      setMinute("");
+    if (parsed) {
+      setHour(parsed.hour);
+      setMinute(roundTo5Min(parsed.minute));
+      setPeriod(parsed.period);
     }
   }, [value]);
 
-  const commit = (h: string, m: string, am: "AM" | "PM") => {
-    const hi = parseInt(h, 10);
-    const mi = parseInt(m, 10);
-    if (!h || !m || isNaN(hi) || isNaN(mi)) {
-      onChange(null);
-      return;
-    }
-    const h24 = to24Hour(hi, am);
-    if (h24 < 0 || h24 > 23 || mi < 0 || mi > 59) {
-      onChange(null);
-      return;
-    }
-    onChange(`${String(h24).padStart(2, "0")}:${String(mi).padStart(2, "0")}`);
+  const emit = useCallback((h: number, m: number, p: "AM" | "PM") => {
+    onChange(to24Hour(h, m, p));
+  }, [onChange]);
+
+  const adjustHour = (dir: number) => {
+    const idx = HOURS.indexOf(hour);
+    const next = HOURS[(idx + dir + HOURS.length) % HOURS.length];
+    setHour(next);
+    emit(next, minute, period);
   };
 
+  const adjustMinute = (dir: number) => {
+    const idx = MINUTES.indexOf(minute);
+    const nextIdx = idx === -1 ? 0 : (idx + dir + MINUTES.length) % MINUTES.length;
+    const next = MINUTES[nextIdx];
+    setMinute(next);
+    emit(hour, next, period);
+  };
+
+  const togglePeriod = () => {
+    const next = period === "AM" ? "PM" : "AM";
+    setPeriod(next);
+    emit(hour, minute, next);
+  };
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    if (open) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const display = value ? formatTime12Display(value) : "Select time";
+
   return (
-    <div className="flex items-center gap-2">
-      <input
-        type="number"
-        min={1}
-        max={12}
-        value={hour}
-        placeholder="HH"
-        onChange={(e) => {
-          setHour(e.target.value);
-          commit(e.target.value, minute, ampm);
-        }}
-        className={cn(
-          "h-10 w-16 rounded-md border border-gray-300 bg-white px-2 text-center text-sm shadow-sm",
-          "focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900",
-        )}
-      />
-      <span className="text-gray-500">:</span>
-      <input
-        type="number"
-        min={0}
-        max={59}
-        value={minute}
-        placeholder="MM"
-        onChange={(e) => {
-          setMinute(e.target.value);
-          commit(hour, e.target.value, ampm);
-        }}
-        className={cn(
-          "h-10 w-16 rounded-md border border-gray-300 bg-white px-2 text-center text-sm shadow-sm",
-          "focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900",
-        )}
-      />
-      <select
-        value={ampm}
-        onChange={(e) => {
-          const next = e.target.value as "AM" | "PM";
-          setAmpm(next);
-          commit(hour, minute, next);
-        }}
-        className={cn(
-          "h-10 w-20 rounded-md border border-gray-300 bg-white px-2 text-center text-sm shadow-sm",
-          "focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900",
-        )}
+    <div className={cn("relative", className)} ref={containerRef}>
+      {label && <label className="block text-xs font-medium uppercase tracking-wider text-gray-500 mb-1.5">{label}</label>}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-gray-200 rounded-md bg-white hover:border-gray-400 transition-colors text-gray-900"
+        aria-haspopup="listbox"
+        aria-expanded={open}
       >
-        <option value="AM">AM</option>
-        <option value="PM">PM</option>
-      </select>
-      {!value && (
-        <span className="text-xs text-gray-400">{placeholder}</span>
+        <span className={value ? "" : "text-gray-400"}>{display}</span>
+        <ChevronDown className={cn("w-4 h-4 text-gray-400 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 animate-fade-in" style={{ minWidth: "240px" }}>
+          <div className="flex items-center gap-3">
+            {/* Hour */}
+            <div className="flex flex-col items-center">
+              <button type="button" onClick={() => adjustHour(1)} className="p-1 hover:bg-gray-100 rounded transition-colors" aria-label="Increment hour"><ChevronUp className="w-4 h-4 text-gray-600" /></button>
+              <div className="w-12 h-10 flex items-center justify-center text-xl font-heading font-semibold text-gray-900 tabular-nums">{hour}</div>
+              <button type="button" onClick={() => adjustHour(-1)} className="p-1 hover:bg-gray-100 rounded transition-colors" aria-label="Decrement hour"><ChevronDown className="w-4 h-4 text-gray-600" /></button>
+            </div>
+            <span className="text-xl font-heading text-gray-400 -mt-1">:</span>
+            {/* Minute */}
+            <div className="flex flex-col items-center">
+              <button type="button" onClick={() => adjustMinute(1)} className="p-1 hover:bg-gray-100 rounded transition-colors" aria-label="Increment minute"><ChevronUp className="w-4 h-4 text-gray-600" /></button>
+              <div className="w-12 h-10 flex items-center justify-center text-xl font-heading font-semibold text-gray-900 tabular-nums">{minute.toString().padStart(2, "0")}</div>
+              <button type="button" onClick={() => adjustMinute(-1)} className="p-1 hover:bg-gray-100 rounded transition-colors" aria-label="Decrement minute"><ChevronDown className="w-4 h-4 text-gray-600" /></button>
+            </div>
+            {/* AM/PM */}
+            <div className="flex flex-col gap-1 ml-1">
+              {PERIODS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => { setPeriod(p); emit(hour, minute, p); }}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-medium uppercase tracking-wider rounded transition-colors",
+                    period === p ? "bg-gray-900 text-white" : "text-gray-500 hover:bg-gray-100"
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-100 flex justify-end gap-2">
+            <button type="button" onClick={() => setOpen(false)} className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded transition-colors">Done</button>
+          </div>
+        </div>
       )}
     </div>
   );
+}
+
+function formatTime12Display(time24: string): string {
+  const t = to12Hour(time24);
+  if (!t) return "Select time";
+  return `${t.hour}:${t.minute.toString().padStart(2, "0")} ${t.period}`;
 }

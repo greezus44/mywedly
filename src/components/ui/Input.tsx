@@ -1,14 +1,20 @@
-import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
 import { cn } from "../../lib/utils";
 
-const baseField =
-  "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm transition-colors focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900 disabled:cursor-not-allowed disabled:bg-gray-100";
+const baseFieldClasses =
+  "w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 disabled:cursor-not-allowed disabled:bg-gray-50";
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {}
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ className, ...props }, ref) => {
-    return <input ref={ref} className={cn(baseField, "h-10", className)} {...props} />;
+    return (
+      <input
+        ref={ref}
+        className={cn(baseFieldClasses, className)}
+        {...props}
+      />
+    );
   },
 );
 Input.displayName = "Input";
@@ -20,7 +26,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     return (
       <textarea
         ref={ref}
-        className={cn(baseField, "min-h-[80px] resize-y", className)}
+        className={cn(baseFieldClasses, "min-h-[80px] resize-y", className)}
         {...props}
       />
     );
@@ -35,7 +41,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <select
         ref={ref}
-        className={cn(baseField, "h-10 pr-8", className)}
+        className={cn(baseFieldClasses, "cursor-pointer pr-8", className)}
         {...props}
       >
         {children}

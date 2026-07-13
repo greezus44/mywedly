@@ -1,21 +1,21 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
   Bold,
   Italic,
-  Link2,
+  Underline as UnderlineIcon,
+  Strikethrough,
   List,
   ListOrdered,
-  Redo2,
-  Strikethrough,
-  Underline,
-  Undo2,
+  Link as LinkIcon,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Undo,
+  Redo,
   Eraser,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { FONT_SIZE_OPTIONS, RICH_FONT_OPTIONS } from "../../lib/theme";
+import { RICH_FONT_OPTIONS, FONT_SIZE_OPTIONS } from "../../lib/theme";
 
 export interface RichTextEditorProps {
   value: string;
@@ -27,74 +27,75 @@ export interface RichTextEditorProps {
 export function RichTextEditor({
   value,
   onChange,
-  placeholder = "Start writing...",
-  minHeight = 160,
+  placeholder = "Start typing...",
+  minHeight = 200,
 }: RichTextEditorProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const isInternalChange = useRef(false);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
 
-  // Sync external value into the contentEditable when it changes externally.
+  // Initialize content on mount.
   useEffect(() => {
-    const el = ref.current;
-    if (!el || isInternalChange.current) {
-      isInternalChange.current = false;
-      return;
+    if (editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value;
     }
-    if (value !== el.innerHTML) {
-      el.innerHTML = value || "";
-    }
-  }, [value]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const emitChange = useCallback(() => {
-    const el = ref.current;
-    if (!el) return;
-    isInternalChange.current = true;
-    onChange(el.innerHTML);
+  // Sync external value when not focused (avoid cursor jumps).
+  useEffect(() => {
+    if (!isFocused && editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value;
+    }
+  }, [value, isFocused]);
+
+  const exec = useCallback((command: string, val?: string) => {
+    document.execCommand("styleWithCSS", false, "true");
+    document.execCommand(command, false, val);
+    editorRef.current?.focus();
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
   }, [onChange]);
 
-  const exec = useCallback(
-    (command: string, val?: string) => {
-      document.execCommand("styleWithCSS", false, "true");
-      document.execCommand(command, false, val);
-      ref.current?.focus();
-      emitChange();
-    },
-    [emitChange],
+  const handleInput = useCallback(() => {
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
+  }, [onChange]);
+
+  const handleLink = useCallback(() => {
+    const url = window.prompt("Enter URL:");
+    if (url) {
+      exec("createLink", url);
+    }
+  }, [exec]);
+
+  const handleClear = useCallback(() => {
+    if (editorRef.current) {
+      editorRef.current.innerHTML = "";
+      onChange("");
+    }
+  }, [onChange]);
+
+  const toolbarButton = (onClick: () => void, icon: React.ReactNode, label: string) => (
+    <button
+      type="button"
+      title={label}
+      onClick={onClick}
+      onMouseDown={(e) => e.preventDefault()}
+    >
+      {icon}
+    </button>
   );
 
-  const handleBlur = useCallback(() => {
-    emitChange();
-  }, [emitChange]);
-
-  const handleInput = useCallback(() => {
-    emitChange();
-  }, [emitChange]);
-
-  const applyFont = (font: string) => exec("fontName", font);
-  const applyFontSize = (size: string) => exec("fontSize", size);
-  const applyColor = (color: string) => exec("foreColor", color);
-  const applyBgColor = (color: string) => exec("hiliteColor", color);
-
-  const insertLink = () => {
-    const url = window.prompt("Enter URL:");
-    if (url) exec("createLink", url);
-  };
-
-  const clearFormatting = () => {
-    exec("removeFormat");
-    exec("delete");
-  };
-
   return (
-    <div className="flex flex-col rounded-lg border border-gray-300 bg-white">
-      <div className="flex flex-wrap items-center gap-1 border-b border-gray-200 p-2">
+    <div className="overflow-hidden rounded-md border border-gray-200">
+      {/* Toolbar */}
+      <div className="rte-toolbar">
         <select
-          onChange={(e) => {
-            applyFont(e.target.value);
-            e.target.selectedIndex = 0;
-          }}
-          className="h-8 rounded border border-gray-300 bg-white px-1 text-xs"
           title="Font family"
+          onChange={(e) => exec("fontName", e.target.value)}
+          onMouseDown={(e) => e.stopPropagation()}
           defaultValue=""
         >
           <option value="" disabled>
@@ -108,12 +109,9 @@ export function RichTextEditor({
         </select>
 
         <select
-          onChange={(e) => {
-            applyFontSize(e.target.value);
-            e.target.selectedIndex = 0;
-          }}
-          className="h-8 rounded border border-gray-300 bg-white px-1 text-xs"
           title="Font size"
+          onChange={(e) => exec("fontSize", e.target.value)}
+          onMouseDown={(e) => e.stopPropagation()}
           defaultValue=""
         >
           <option value="" disabled>
@@ -126,112 +124,47 @@ export function RichTextEditor({
           ))}
         </select>
 
-        <div className="mx-1 h-5 w-px bg-gray-200" />
+        <span className="rte-divider" />
 
-        <ToolbarButton onClick={() => exec("bold")} title="Bold">
-          <Bold className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton onClick={() => exec("italic")} title="Italic">
-          <Italic className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton onClick={() => exec("underline")} title="Underline">
-          <Underline className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton onClick={() => exec("strikeThrough")} title="Strikethrough">
-          <Strikethrough className="h-4 w-4" />
-        </ToolbarButton>
+        {toolbarButton(() => exec("bold"), <Bold className="h-4 w-4" />, "Bold")}
+        {toolbarButton(() => exec("italic"), <Italic className="h-4 w-4" />, "Italic")}
+        {toolbarButton(() => exec("underline"), <UnderlineIcon className="h-4 w-4" />, "Underline")}
+        {toolbarButton(() => exec("strikeThrough"), <Strikethrough className="h-4 w-4" />, "Strikethrough")}
 
-        <div className="mx-1 h-5 w-px bg-gray-200" />
+        <span className="rte-divider" />
 
-        <label className="flex h-8 items-center rounded border border-gray-300 px-1" title="Text color">
-          <span className="mr-1 text-xs text-gray-500">A</span>
-          <input
-            type="color"
-            onChange={(e) => applyColor(e.target.value)}
-            className="h-5 w-6 cursor-pointer border-0 p-0"
-          />
-        </label>
-        <label className="flex h-8 items-center rounded border border-gray-300 px-1" title="Highlight color">
-          <span className="mr-1 text-xs text-gray-500">H</span>
-          <input
-            type="color"
-            onChange={(e) => applyBgColor(e.target.value)}
-            className="h-5 w-6 cursor-pointer border-0 p-0"
-          />
-        </label>
+        {toolbarButton(() => exec("insertUnorderedList"), <List className="h-4 w-4" />, "Bullet list")}
+        {toolbarButton(() => exec("insertOrderedList"), <ListOrdered className="h-4 w-4" />, "Numbered list")}
 
-        <div className="mx-1 h-5 w-px bg-gray-200" />
+        <span className="rte-divider" />
 
-        <ToolbarButton onClick={() => exec("justifyLeft")} title="Align left">
-          <AlignLeft className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton onClick={() => exec("justifyCenter")} title="Align center">
-          <AlignCenter className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton onClick={() => exec("justifyRight")} title="Align right">
-          <AlignRight className="h-4 w-4" />
-        </ToolbarButton>
+        {toolbarButton(() => exec("justifyLeft"), <AlignLeft className="h-4 w-4" />, "Align left")}
+        {toolbarButton(() => exec("justifyCenter"), <AlignCenter className="h-4 w-4" />, "Align center")}
+        {toolbarButton(() => exec("justifyRight"), <AlignRight className="h-4 w-4" />, "Align right")}
 
-        <div className="mx-1 h-5 w-px bg-gray-200" />
+        <span className="rte-divider" />
 
-        <ToolbarButton onClick={() => exec("insertUnorderedList")} title="Bullet list">
-          <List className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton onClick={() => exec("insertOrderedList")} title="Numbered list">
-          <ListOrdered className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton onClick={insertLink} title="Insert link">
-          <Link2 className="h-4 w-4" />
-        </ToolbarButton>
+        {toolbarButton(handleLink, <LinkIcon className="h-4 w-4" />, "Insert link")}
 
-        <div className="mx-1 h-5 w-px bg-gray-200" />
+        <span className="rte-divider" />
 
-        <ToolbarButton onClick={() => exec("undo")} title="Undo">
-          <Undo2 className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton onClick={() => exec("redo")} title="Redo">
-          <Redo2 className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton onClick={clearFormatting} title="Clear formatting">
-          <Eraser className="h-4 w-4" />
-        </ToolbarButton>
+        {toolbarButton(() => exec("undo"), <Undo className="h-4 w-4" />, "Undo")}
+        {toolbarButton(() => exec("redo"), <Redo className="h-4 w-4" />, "Redo")}
+        {toolbarButton(handleClear, <Eraser className="h-4 w-4" />, "Clear formatting")}
       </div>
 
+      {/* Editor */}
       <div
-        ref={ref}
+        ref={editorRef}
         contentEditable
         suppressContentEditableWarning
-        onInput={handleInput}
-        onBlur={handleBlur}
         data-placeholder={placeholder}
-        className={cn(
-          "rich-text-editor w-full px-3 py-2 text-sm text-gray-900 focus:outline-none",
-          "empty:before:text-gray-400 empty:before:content-[attr(data-placeholder)]",
-        )}
+        onInput={handleInput}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        className={cn("rte-editor focus:outline-none")}
         style={{ minHeight }}
       />
     </div>
-  );
-}
-
-function ToolbarButton({
-  onClick,
-  title,
-  children,
-}: {
-  onClick: () => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      title={title}
-      className="rounded p-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-    >
-      {children}
-    </button>
   );
 }

@@ -1,91 +1,118 @@
-import { useEffect, useState } from "react";
-import { Link, useOutletContext } from "react-router-dom";
-import { type UserEvent, type EventContent } from "../../lib/supabase";
+import { useOutletContext, Link } from "react-router-dom";
+import type { UserEvent } from "../../lib/supabase";
+import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
+import { themeToEventCssVars } from "../../lib/theme";
 import { RichTextContent } from "../../lib/sanitize";
-import { getCountdown, formatTime } from "../../lib/utils";
 
 export default function GuestHomePage() {
   const { event } = useOutletContext<{ event: UserEvent }>();
-  const content: EventContent = event.content ?? {};
-  const [countdown, setCountdown] = useState(getCountdown(event.event_date));
-
-  useEffect(() => {
-    if (!event.event_date) return;
-    const interval = setInterval(() => {
-      setCountdown(getCountdown(event.event_date));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [event.event_date]);
+  const content = event.content ?? {};
+  const cssVars = themeToEventCssVars(event.theme);
+  const countdown = getCountdown(event.event_date);
 
   return (
-    <div className="flex min-h-screen flex-col items-center gap-6 px-6 py-10" style={{ backgroundColor: "var(--event-bg)", color: "var(--event-text)" }}>
-      {content.rich_title ? (
-        <RichTextContent html={content.rich_title} />
-      ) : (
-        <h1 className="text-3xl font-semibold" style={{ fontFamily: "var(--event-font-heading)" }}>
-          {event.name || "Your Event"}
-        </h1>
-      )}
+    <div className="event-themed min-h-screen" style={cssVars}>
+      {/* Hero / invitation */}
+      <section className="px-6 py-16 text-center">
+        {content.rich_title ? (
+          <RichTextContent
+            html={content.rich_title}
+            className="font-heading text-3xl md:text-5xl"
+          />
+        ) : (
+          <h1 className="font-heading text-3xl md:text-5xl">{event.name}</h1>
+        )}
+        {content.rich_subtitle && (
+          <RichTextContent
+            html={content.rich_subtitle}
+            className="font-script mt-4 text-xl"
+          />
+        )}
+        {event.event_date && (
+          <p className="font-body mt-4 text-sm uppercase tracking-widest text-muted">
+            {formatDate(event.event_date)}
+            {event.event_time && ` • ${formatTime12(event.event_time)}`}
+          </p>
+        )}
+        {event.venue && (
+          <p className="font-body mt-2 text-sm text-muted">{event.venue}</p>
+        )}
 
-      {content.rich_subtitle && <RichTextContent html={content.rich_subtitle} />}
-
-      {(event.event_date || event.event_time || event.venue) && (
-        <div className="flex flex-col items-center gap-1 text-sm" style={{ color: "var(--event-text-muted)" }}>
-          {event.event_date && (
-            <span>
-              {new Date(event.event_date).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
-            </span>
-          )}
-          {event.event_time && <span>{formatTime(event.event_time)}</span>}
-          {event.venue && <span>{event.venue}</span>}
-        </div>
-      )}
-
-      {!countdown.isPast && event.event_date && (
-        <div className="flex gap-4">
-          {[
-            { label: "Days", value: countdown.days },
-            { label: "Hours", value: countdown.hours },
-            { label: "Min", value: countdown.minutes },
-            { label: "Sec", value: countdown.seconds },
-          ].map((u) => (
-            <div key={u.label} className="flex flex-col items-center">
-              <span className="text-2xl font-bold" style={{ color: "var(--event-primary)" }}>
-                {u.value}
-              </span>
-              <span className="text-xs uppercase" style={{ color: "var(--event-text-muted)" }}>
-                {u.label}
-              </span>
+        {/* Countdown */}
+        {!countdown.isPast && event.event_date && (
+          <div className="mt-8 flex justify-center gap-6">
+            <div className="text-center">
+              <p className="text-3xl font-bold">{countdown.days}</p>
+              <p className="text-xs uppercase tracking-wider text-muted">Days</p>
             </div>
-          ))}
-        </div>
+            <div className="text-center">
+              <p className="text-3xl font-bold">{countdown.hours}</p>
+              <p className="text-xs uppercase tracking-wider text-muted">Hours</p>
+            </div>
+            <div className="text-center">
+              <p className="text-3xl font-bold">{countdown.minutes}</p>
+              <p className="text-xs uppercase tracking-wider text-muted">Min</p>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Story */}
+      {(content.story || content.story_image) && (
+        <section className="border-current px-6 py-12">
+          {content.story_image && (
+            <img
+              src={content.story_image}
+              alt="Story"
+              className="mx-auto mb-6 max-h-80 rounded-lg object-cover"
+            />
+          )}
+          {content.story && (
+            <p className="font-body mx-auto max-w-2xl text-base leading-relaxed text-current">
+              {content.story}
+            </p>
+          )}
+        </section>
       )}
 
-      {content.rich_body && <RichTextContent html={content.rich_body} />}
+      {/* Invitation body */}
+      {content.rich_body && (
+        <section className="border-current px-6 py-12">
+          <RichTextContent
+            html={content.rich_body}
+            className="font-body mx-auto max-w-2xl text-base leading-relaxed text-current"
+          />
+        </section>
+      )}
 
-      <div className="flex flex-wrap items-center justify-center gap-3">
-        <Link
-          to="rsvp"
-          style={{ backgroundColor: "var(--event-primary)", color: "#fff", borderRadius: "var(--event-radius)" }}
-          className="px-6 py-2 text-sm font-medium"
-        >
-          {content.rsvp_button_text || "RSVP"}
+      {/* Actions */}
+      <section className="flex flex-col items-center gap-4 px-6 py-12 text-center">
+        <Link to="rsvp">
+          <button
+            className="font-body rounded-md px-8 py-3 text-sm font-medium uppercase tracking-wider"
+            style={{
+              backgroundColor: "var(--event-primary)",
+              color: "var(--event-bg)",
+              borderRadius: "var(--event-button-radius)",
+            }}
+          >
+            {content.rsvp_button_text ?? "RSVP Now"}
+          </button>
         </Link>
-        <Link
-          to="wishes"
-          style={{ backgroundColor: "var(--event-surface)", color: "var(--event-text)", border: "1px solid var(--event-border)", borderRadius: "var(--event-radius)" }}
-          className="px-6 py-2 text-sm font-medium"
-        >
-          Leave a wish
+        <Link to="wishes">
+          <button
+            className="font-body rounded-md px-8 py-3 text-sm font-medium uppercase tracking-wider"
+            style={{
+              backgroundColor: "var(--event-surface)",
+              color: "var(--event-primary)",
+              border: "1px solid var(--event-border)",
+              borderRadius: "var(--event-button-radius)",
+            }}
+          >
+            Leave a Wish
+          </button>
         </Link>
-        <Link
-          to="contact"
-          style={{ color: "var(--event-text-muted)" }}
-          className="px-2 py-2 text-sm font-medium underline"
-        >
-          Contact info
-        </Link>
-      </div>
+      </section>
     </div>
   );
 }

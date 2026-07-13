@@ -1,5 +1,9 @@
 import { useMemo } from "react";
 
+// ---------------------------------------------------------------------------
+// HTML sanitizer
+// ---------------------------------------------------------------------------
+
 const ALLOWED_TAGS = new Set([
   "p",
   "br",
@@ -37,96 +41,112 @@ const ALLOWED_STYLE_PROPS = new Set([
   "padding",
 ]);
 
-function sanitizeStyle(style: string): string {
-  const declarations: string[] = [];
-  for (const part of style.split(";")) {
-    const decl = part.trim();
-    if (!decl) continue;
-    const colonIdx = decl.indexOf(":");
-    if (colonIdx < 0) continue;
-    const prop = decl.slice(0, colonIdx).trim().toLowerCase();
-    const value = decl.slice(colonIdx + 1).trim();
-    if (!prop || !value) continue;
-    if (ALLOWED_STYLE_PROPS.has(prop)) {
-      // Strip url(...) and expression(...) to prevent CSS-based attacks.
-      if (/url\s*\(/i.test(value) || /expression\s*\(/i.test(value)) continue;
-      declarations.push(`${prop}: ${value}`);
-    }
-  }
-  return declarations.join("; ");
-}
-
-function sanitizeNode(node: Node): Node | null {
-  if (node.nodeType === Node.TEXT_NODE) {
-    return node;
-  }
-  if (node.nodeType === Node.ELEMENT_NODE) {
-    const el = node as Element;
-    const tag = el.tagName.toLowerCase();
-    if (!ALLOWED_TAGS.has(tag)) {
-      // Replace disallowed element with its children (preserves text content).
-      const fragment = document.createDocumentFragment();
-      for (const child of Array.from(el.childNodes)) {
-        const sanitized = sanitizeNode(child);
-        if (sanitized) fragment.appendChild(sanitized);
-      }
-      return fragment;
-    }
-
-    const clean = document.createElement(tag);
-    for (const attr of Array.from(el.attributes)) {
-      const name = attr.name.toLowerCase();
-      if (!ALLOWED_ATTRS.has(name)) continue;
-      let value = attr.value;
-      if (name === "style") {
-        value = sanitizeStyle(value);
-        if (!value) continue;
-      }
-      if (name === "href" || name === "src") {
-        // Block javascript: and data: URLs (except data:image for img).
-        const trimmed = value.trim().toLowerCase();
-        if (trimmed.startsWith("javascript:")) continue;
-        if (trimmed.startsWith("data:") && !(tag === "img" && trimmed.startsWith("data:image"))) {
-          continue;
-        }
-      }
-      clean.setAttribute(name, value);
-    }
-    for (const child of Array.from(el.childNodes)) {
-      const sanitized = sanitizeNode(child);
-      if (sanitized) clean.appendChild(sanitized);
-    }
-    return clean;
-  }
-  // Drop comments, processing instructions, etc.
-  return null;
-}
-
+/**
+ * Sanitize an HTML string, allowing only a safe subset of tags, attributes,
+ * and inline style properties. Strips <script>, event handlers, javascript:
+ * URLs, and any disallowed styles.
+ */
 export function sanitizeHtml(html: string): string {
   if (!html) return "";
   const doc = new DOMParser().parseFromString(html, "text/html");
-  const fragment = document.createDocumentFragment();
-  for (const child of Array.from(doc.body.childNodes)) {
-    const sanitized = sanitizeNode(child);
-    if (sanitized) fragment.appendChild(sanitized);
-  }
-  const wrapper = document.createElement("div");
-  wrapper.appendChild(fragment);
-  return wrapper.innerHTML;
+  cleanNode(doc.body);
+  return doc.body.innerHTML;
 }
 
-export function RichTextContent({
-  html,
-  className,
-}: {
+function cleanNode(node: Node): void {
+  // Walk children first so we can safely remove nodes while iterating.
+  const children = Array.from(node.childNodes);
+  for (const child of children) {
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      cleanElement(child as Element);
+    } else if (child.nodeType === Node.COMMENT_NODE) {
+      node.removeChild(child);
+    }
+    // Text nodes are kept as-is.
+  }
+}
+
+function cleanElement(el: Element): void {
+  const tag = el.tagName.toLowerCase();
+
+  if (!ALLOWED_TAGS.has(tag)) {
+    // Replace disallowed element with its children (unwrap), or remove.
+    const parent = el.parentNode;
+    if (!parent) return;
+    if (tag === "script" || tag === "style" || tag === "iframe" || tag === "object") {
+      parent.removeChild(el);
+      return;
+    }
+    // Unwrap: move children up, then remove the element.
+    while (el.firstChild) {
+      parent.insertBefore(el.firstChild, el);
+    }
+    parent.removeChild(el);
+    return;
+  }
+
+  // Remove disallowed attributes.
+  const attrs = Array.from(el.attributes);
+  for (const attr of attrs) {
+    if (!ALLOWED_ATTRS.has(attr.name)) {
+      el.removeAttribute(attr.name);
+      continue;
+    }
+    // Sanitize href/src — block javascript: URLs.
+    if ((attr.name === "href" || attr.name === "src")) {
+      const val = attr.value.trim().toLowerCase();
+      if (val.startsWith("javascript:") || val.startsWith("data:text/html")) {
+        el.removeAttribute(attr.name);
+      }
+    }
+  }
+
+  // Sanitize inline style.
+  if (el.hasAttribute("style")) {
+    const style = el.getAttribute("style") ?? "";
+    el.setAttribute("style", sanitizeStyle(style));
+  }
+
+  // Recurse into children.
+  cleanNode(el);
+}
+
+function sanitizeStyle(style: string): string {
+  const declarations = style.split(";");
+  const kept: string[] = [];
+  for (const decl of declarations) {
+    const idx = decl.indexOf(":");
+    if (idx === -1) continue;
+    const prop = decl.slice(0, idx).trim().toLowerCase();
+    const value = decl.slice(idx + 1).trim();
+    if (!prop || !value) continue;
+    if (!ALLOWED_STYLE_PROPS.has(prop)) continue;
+    // Block url() in style values (prevents background-image: url(javascript:...) etc.)
+    if (value.toLowerCase().includes("url(")) continue;
+    if (value.toLowerCase().includes("expression(")) continue;
+    kept.push(`${prop}: ${value}`);
+  }
+  return kept.join("; ");
+}
+
+// ---------------------------------------------------------------------------
+// RichTextContent component
+// ---------------------------------------------------------------------------
+
+interface RichTextContentProps {
   html: string;
   className?: string;
-}) {
-  const sanitized = useMemo(() => sanitizeHtml(html), [html]);
+}
+
+/**
+ * Renders sanitized HTML content. The HTML is sanitized before being
+ * inserted via dangerouslySetInnerHTML to prevent XSS.
+ */
+export function RichTextContent({ html, className }: RichTextContentProps) {
+  const sanitized = useMemo(() => sanitizeHtml(html ?? ""), [html]);
   return (
     <div
       className={className}
-      // eslint-disable-next-line react/no-danger
       dangerouslySetInnerHTML={{ __html: sanitized }}
     />
   );

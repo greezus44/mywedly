@@ -1,60 +1,69 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Monitor, Tablet, Smartphone } from "lucide-react";
 import { cn } from "../../lib/utils";
+
+export type DeviceType = "desktop" | "tablet" | "mobile";
 
 export interface SplitEditorProps {
   preview: ReactNode;
   children: ReactNode;
 }
 
-type Device = "desktop" | "tablet" | "mobile";
-
-const deviceSizes: Record<Device, { width: string; maxWidth: string }> = {
-  desktop: { width: "100%", maxWidth: "100%" },
-  tablet: { width: "768px", maxWidth: "100%" },
-  mobile: { width: "375px", maxWidth: "100%" },
+const deviceWidths: Record<DeviceType, string> = {
+  desktop: "100%",
+  tablet: "768px",
+  mobile: "375px",
 };
 
 export function SplitEditor({ preview, children }: SplitEditorProps) {
-  const [device, setDevice] = useState<Device>("desktop");
+  const [device, setDevice] = useState<DeviceType>("desktop");
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <div className="rounded-lg border border-gray-200 bg-white p-4">
-        <div className="mb-3 text-xs font-medium uppercase tracking-wide text-gray-400">
-          Editor
-        </div>
-        <div className="flex flex-col gap-4">{children}</div>
+    <div className="grid h-full grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* Editor panel */}
+      <div className="overflow-y-auto rounded-lg border border-gray-200 bg-white">
+        {children}
       </div>
 
-      <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-400">
-            Preview
-          </span>
-          <div className="flex items-center gap-1 rounded-md border border-gray-200 bg-white p-0.5">
-            {(["desktop", "tablet", "mobile"] as Device[]).map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => setDevice(d)}
-                className={cn(
-                  "rounded px-2 py-1 text-xs font-medium capitalize transition-colors",
-                  device === d
-                    ? "bg-gray-900 text-white"
-                    : "text-gray-500 hover:text-gray-900",
-                )}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
+      {/* Preview panel */}
+      <div className="flex flex-col overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+        {/* Device toolbar */}
+        <div className="flex items-center justify-center gap-1 border-b border-gray-200 bg-white px-4 py-2">
+          {(
+            [
+              { type: "desktop", icon: Monitor, label: "Desktop" },
+              { type: "tablet", icon: Tablet, label: "Tablet" },
+              { type: "mobile", icon: Smartphone, label: "Mobile" },
+            ] as const
+          ).map(({ type, icon: Icon, label }) => (
+            <button
+              key={type}
+              onClick={() => setDevice(type)}
+              title={label}
+              className={cn(
+                "inline-flex items-center justify-center rounded-md p-2 transition-colors",
+                device === type
+                  ? "bg-gray-900 text-white"
+                  : "text-gray-500 hover:bg-gray-100",
+              )}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          ))}
         </div>
-        <div className="flex justify-center overflow-auto">
+
+        {/* Preview area */}
+        <div className="flex-1 overflow-y-auto p-4">
           <div
-            className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm"
-            style={deviceSizes[device] as CSSProperties}
+            className="mx-auto transition-all duration-300"
+            style={{
+              maxWidth: deviceWidths[device],
+              width: "100%",
+            }}
           >
-            {preview}
+            <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+              {preview}
+            </div>
           </div>
         </div>
       </div>

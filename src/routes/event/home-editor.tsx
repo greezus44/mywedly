@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { supabase, type UserEvent, type EventContent } from "../../lib/supabase";
-import { useToast } from "../../components/ui";
+import { Button } from "../../components/ui/Button";
+import { Card, Toast, type ToastType } from "../../components/ui";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
@@ -11,93 +12,130 @@ import { HomePreview } from "../../components/preview/PreviewRenderers";
 export default function HomeEditorPage() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
-  const [content, setContent] = useState<EventContent>(event.draft_content ?? event.content ?? {});
+  const content: EventContent = event.draft_content ?? event.content ?? {};
+  const [richTitle, setRichTitle] = useState<string>(content.rich_title ?? "");
+  const [richSubtitle, setRichSubtitle] = useState<string>(
+    content.rich_subtitle ?? "",
+  );
+  const [richBody, setRichBody] = useState<string>(content.rich_body ?? "");
 
-  useEffect(() => {
-    setContent(event.draft_content ?? event.content ?? {});
-  }, [event]);
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
+  const updateMutation = useMutation({
+    mutationFn: async (updates: Record<string, unknown>) => {
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_content: content })
+        .update(updates)
         .eq("id", event.id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", event.id] });
-      toast("Home content saved", "success");
+      setToast({ message: "Saved!", type: "success" });
     },
-    onError: (err: Error) => toast(err.message, "error"),
+    onError: (err: Error) => {
+      setToast({ message: err.message, type: "error" });
+    },
   });
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      saveMutation.mutate();
-    }, 2000);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content]);
+  const handleSave = () => {
+    const newContent: EventContent = {
+      ...content,
+      rich_title: richTitle,
+      rich_subtitle: richSubtitle,
+      rich_body: richBody,
+    };
+    updateMutation.mutate({ draft_content: newContent });
+  };
 
-  const previewEvent = {
+  const previewEvent: UserEvent = {
     ...event,
-    draft_content: content,
-  } as UserEvent;
+    draft_content: {
+      ...content,
+      rich_title: richTitle,
+      rich_subtitle: richSubtitle,
+      rich_body: richBody,
+    },
+  };
 
   return (
-    <SplitEditor preview={<HomePreview event={previewEvent} />}>
-      <h3 className="text-sm font-semibold text-gray-900">Home content</h3>
+    <div className="h-full overflow-y-auto p-4">
+      <SplitEditor preview={<HomePreview event={previewEvent} />}>
+        <div className="space-y-6 p-6">
+          <div className="flex items-center justify-between">
+            <h2 className="font-heading text-xl font-bold text-gray-900">
+              Home Page
+            </h2>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Saving...
+                </>
+              ) : (
+                "Save"
+              )}
+            </Button>
+          </div>
 
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">Title</label>
-        <RichTextEditor
-          value={content.rich_title || ""}
-          onChange={(html) => setContent((c) => ({ ...c, rich_title: html }))}
-          placeholder="Your event title..."
-          minHeight={100}
-        />
-      </div>
+          <Card className="space-y-2 p-4">
+            <label className="text-sm font-medium text-gray-700">
+              Title
+            </label>
+            <p className="text-xs text-gray-400">
+              The main heading displayed on your home page.
+            </p>
+            <RichTextEditor
+              value={richTitle}
+              onChange={setRichTitle}
+              placeholder="Enter your event title..."
+              minHeight={80}
+            />
+          </Card>
 
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">Subtitle</label>
-        <RichTextEditor
-          value={content.rich_subtitle || ""}
-          onChange={(html) => setContent((c) => ({ ...c, rich_subtitle: html }))}
-          placeholder="Your event subtitle..."
-          minHeight={80}
-        />
-      </div>
+          <Card className="space-y-2 p-4">
+            <label className="text-sm font-medium text-gray-700">
+              Subtitle
+            </label>
+            <p className="text-xs text-gray-400">
+              A subtitle or tagline shown below the title.
+            </p>
+            <RichTextEditor
+              value={richSubtitle}
+              onChange={setRichSubtitle}
+              placeholder="Enter a subtitle..."
+              minHeight={80}
+            />
+          </Card>
 
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">Body</label>
-        <RichTextEditor
-          value={content.rich_body || ""}
-          onChange={(html) => setContent((c) => ({ ...c, rich_body: html }))}
-          placeholder="Your event description, story, or details..."
-          minHeight={160}
-        />
-      </div>
-
-      <div className="flex flex-col gap-1">
-        <label className="text-sm font-medium text-gray-700">RSVP button text</label>
-        <input
-          type="text"
-          value={content.rsvp_button_text || ""}
-          onChange={(e) => setContent((c) => ({ ...c, rsvp_button_text: e.target.value }))}
-          placeholder="RSVP"
-          className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm shadow-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
-        />
-      </div>
-
-      {saveMutation.isPending && (
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          Saving...
+          <Card className="space-y-2 p-4">
+            <label className="text-sm font-medium text-gray-700">
+              Body
+            </label>
+            <p className="text-xs text-gray-400">
+              The main content of your home page — your story, invitation, or
+              any rich text you'd like to share.
+            </p>
+            <RichTextEditor
+              value={richBody}
+              onChange={setRichBody}
+              placeholder="Write your invitation or story..."
+              minHeight={200}
+            />
+          </Card>
         </div>
+      </SplitEditor>
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
-    </SplitEditor>
+    </div>
   );
 }

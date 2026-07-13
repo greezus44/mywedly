@@ -1,53 +1,146 @@
 import { Link } from "react-router-dom";
-import { Calendar, Palette, Share2, Users, QrCode, Sparkles, Check } from "lucide-react";
+import {
+  CalendarHeart,
+  Users,
+  Palette,
+  Share2,
+  QrCode,
+  Check,
+  ArrowRight,
+} from "lucide-react";
 import { SiteHeader } from "../components/site/SiteHeader";
 import { SiteFooter } from "../components/site/SiteFooter";
 import { Button } from "../components/ui/Button";
+import { Card } from "../components/ui";
 
 const FEATURES = [
-  { icon: Calendar, title: "Event Management", description: "Create and manage events of any type — weddings, birthdays, corporate, and more." },
-  { icon: Palette, title: "Custom Themes", description: "Fully customizable themes with colors, fonts, and presets to match your event's aesthetic." },
-  { icon: Users, title: "Guest Management", description: "Organize guests into groups, track RSVPs, and send personalized invitations." },
-  { icon: QrCode, title: "QR & Sharing", description: "Generate QR codes and shareable links to distribute your invitation effortlessly." },
-  { icon: Share2, title: "Live Preview", description: "See your changes in real-time with a split editor and device previews." },
-  { icon: Sparkles, title: "Rich Content", description: "Craft beautiful invitation pages with a rich text editor and custom content sections." },
+  {
+    icon: Palette,
+    title: "Beautiful Templates",
+    description:
+      "Choose from professionally designed themes and customize every detail to match your event.",
+  },
+  {
+    icon: Users,
+    title: "Guest Management",
+    description:
+      "Import guests, organize groups, track RSVPs, and send personalized invitations effortlessly.",
+  },
+  {
+    icon: CalendarHeart,
+    title: "Smart Scheduling",
+    description:
+      "Build a timeline for your event day with sub-events, venues, and dress codes all in one place.",
+  },
+  {
+    icon: Share2,
+    title: "Easy Sharing",
+    description:
+      "Generate QR codes and shareable links so guests can access your event site from anywhere.",
+  },
+  {
+    icon: QrCode,
+    title: "QR Code Invites",
+    description:
+      "Download QR codes as PNG or SVG to print on save-the-dates, invitations, or display at the venue.",
+  },
+  {
+    icon: Check,
+    title: "RSVP Tracking",
+    description:
+      "Collect RSVPs in real-time, track dietary requirements, and manage plus ones with ease.",
+  },
 ];
 
-const PRICING = [
-  { name: "Free", price: "$0", period: "forever", features: ["1 event", "Up to 50 guests", "Basic themes", "QR code sharing"], cta: "Get started", highlight: false },
-  { name: "Pro", price: "$19", period: "per month", features: ["Unlimited events", "Up to 500 guests", "All themes & presets", "Custom domains", "Analytics", "Priority support"], cta: "Start free trial", highlight: true },
-  { name: "Enterprise", price: "Custom", period: "", features: ["Everything in Pro", "Unlimited guests", "White-label branding", "Dedicated support", "Custom integrations"], cta: "Contact sales", highlight: false },
+const PLANS = [
+  {
+    name: "Free",
+    price: "$0",
+    period: "forever",
+    description: "Perfect for small gatherings and trying things out.",
+    features: [
+      "1 event website",
+      "Up to 50 guests",
+      "Basic templates",
+      "RSVP tracking",
+      "QR code sharing",
+    ],
+    cta: "Get started",
+    highlight: false,
+  },
+  {
+    name: "Premium",
+    price: "$19",
+    period: "per month",
+    description: "Everything you need for a memorable event.",
+    features: [
+      "Unlimited events",
+      "Up to 500 guests per event",
+      "All premium templates",
+      "Custom themes & fonts",
+      "Advanced analytics",
+      "Priority support",
+    ],
+    cta: "Start free trial",
+    highlight: true,
+  },
+  {
+    name: "Pro",
+    price: "$49",
+    period: "per month",
+    description: "For planners and large-scale celebrations.",
+    features: [
+      "Everything in Premium",
+      "Unlimited guests",
+      "Multiple sub-events",
+      "Custom domain",
+      "Team collaboration",
+      "White-label option",
+    ],
+    cta: "Contact us",
+    highlight: false,
+  },
 ];
 
 export default function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col bg-white">
-      <SiteHeader />
+      <SiteHeader
+        navLinks={[
+          { label: "Features", to: "/#features" },
+          { label: "Templates", to: "/#templates" },
+          { label: "Pricing", to: "/#pricing" },
+          { label: "Sign in", to: "/auth" },
+        ]}
+      >
+        <Link to="/auth">
+          <Button size="sm">Sign up</Button>
+        </Link>
+      </SiteHeader>
 
       <main className="flex-1">
         {/* Hero */}
-        <section className="relative overflow-hidden border-b border-gray-100">
-          <div className="mx-auto max-w-6xl px-4 py-20 text-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
-              <Sparkles className="h-3.5 w-3.5" />
-              Beautiful invitations in minutes
-            </span>
-            <h1 className="mt-6 text-5xl font-bold tracking-tight text-gray-900 sm:text-6xl">
-              Create stunning event
+        <section className="relative overflow-hidden px-4 py-24 sm:px-6">
+          <div className="mx-auto max-w-4xl text-center">
+            <h1 className="font-heading text-4xl font-bold text-gray-900 md:text-6xl">
+              Beautiful event websites
               <br />
-              invitations online
+              <span className="text-gray-500">for every occasion</span>
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-600">
-              Design, share, and manage your event — from weddings to corporate gatherings.
-              Custom themes, guest lists, RSVPs, and more, all in one place.
+              Create a stunning, personalized website for your wedding, birthday,
+              or corporate event. Manage guests, track RSVPs, and share your
+              special day — all in one place.
             </p>
-            <div className="mt-8 flex items-center justify-center gap-3">
+            <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link to="/auth">
-                <Button size="lg">Get started free</Button>
+                <Button size="lg">
+                  Create your event <ArrowRight className="h-4 w-4" />
+                </Button>
               </Link>
-              <Link to="/dashboard">
-                <Button size="lg" variant="secondary">
-                  View dashboard
+              <Link to="/#features">
+                <Button variant="secondary" size="lg">
+                  Explore features
                 </Button>
               </Link>
             </div>
@@ -55,73 +148,121 @@ export default function LandingPage() {
         </section>
 
         {/* Features */}
-        <section className="mx-auto max-w-6xl px-4 py-20">
-          <div className="text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900">
-              Everything you need
-            </h2>
-            <p className="mt-3 text-gray-600">
-              Powerful tools to create and manage memorable events.
-            </p>
+        <section id="features" className="border-t border-gray-100 px-4 py-20 sm:px-6">
+          <div className="mx-auto max-w-6xl">
+            <div className="mb-12 text-center">
+              <h2 className="font-heading text-3xl font-bold text-gray-900 md:text-4xl">
+                Everything you need
+              </h2>
+              <p className="mt-4 text-lg text-gray-600">
+                Powerful tools to plan, manage, and share your event.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {FEATURES.map((feature) => (
+                <Card key={feature.title} className="p-6">
+                  <div className="mb-4 inline-flex rounded-lg bg-gray-100 p-3">
+                    <feature.icon className="h-6 w-6 text-gray-700" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {feature.title}
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-600">
+                    {feature.description}
+                  </p>
+                </Card>
+              ))}
+            </div>
           </div>
-          <div className="mt-12 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {FEATURES.map((f) => (
-              <div key={f.title} className="flex flex-col gap-3 rounded-lg border border-gray-200 p-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-900 text-white">
-                  <f.icon className="h-5 w-5" />
+        </section>
+
+        {/* Templates */}
+        <section id="templates" className="border-t border-gray-100 bg-gray-50 px-4 py-20 sm:px-6">
+          <div className="mx-auto max-w-6xl text-center">
+            <h2 className="font-heading text-3xl font-bold text-gray-900 md:text-4xl">
+              Start with a template
+            </h2>
+            <p className="mt-4 text-lg text-gray-600">
+              Choose from our curated collection and make it your own.
+            </p>
+            <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <Card className="overflow-hidden">
+                <div className="h-48 bg-gradient-to-br from-gray-100 to-gray-200" />
+                <div className="p-6 text-left">
+                  <h3 className="text-lg font-semibold text-gray-900">Classic</h3>
+                  <p className="mt-1 text-sm text-gray-600">
+                    A clean, modern event template that works for any occasion.
+                  </p>
                 </div>
-                <h3 className="text-base font-semibold text-gray-900">{f.title}</h3>
-                <p className="text-sm text-gray-600">{f.description}</p>
-              </div>
-            ))}
+              </Card>
+              <Card className="overflow-hidden">
+                <div className="h-48 bg-gradient-to-br from-amber-50 to-amber-100" />
+                <div className="p-6 text-left">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Rusty's Template
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-600">
+                    Luxury wedding with cream &amp; gold aesthetic.
+                  </p>
+                </div>
+              </Card>
+            </div>
           </div>
         </section>
 
         {/* Pricing */}
-        <section className="border-t border-gray-100 bg-gray-50">
-          <div className="mx-auto max-w-6xl px-4 py-20">
-            <div className="text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900">
-                Simple, transparent pricing
+        <section id="pricing" className="border-t border-gray-100 px-4 py-20 sm:px-6">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-12 text-center">
+              <h2 className="font-heading text-3xl font-bold text-gray-900 md:text-4xl">
+                Simple pricing
               </h2>
-              <p className="mt-3 text-gray-600">
-                Choose the plan that works for you. No hidden fees.
+              <p className="mt-4 text-lg text-gray-600">
+                Choose the plan that fits your event.
               </p>
             </div>
-            <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
-              {PRICING.map((plan) => (
-                <div
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+              {PLANS.map((plan) => (
+                <Card
                   key={plan.name}
-                  className={`relative flex flex-col rounded-lg border p-6 ${
+                  className={
                     plan.highlight
-                      ? "border-gray-900 bg-white shadow-lg"
-                      : "border-gray-200 bg-white"
-                  }`}
+                      ? "border-gray-900 p-6 ring-2 ring-gray-900"
+                      : "p-6"
+                  }
                 >
-                  {plan.highlight && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white">
-                      Most popular
-                    </span>
-                  )}
-                  <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {plan.name}
+                  </h3>
                   <div className="mt-2 flex items-baseline gap-1">
-                    <span className="text-4xl font-bold text-gray-900">{plan.price}</span>
-                    {plan.period && <span className="text-sm text-gray-500">{plan.period}</span>}
+                    <span className="text-3xl font-bold text-gray-900">
+                      {plan.price}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      /{plan.period}
+                    </span>
                   </div>
-                  <ul className="mt-6 flex flex-1 flex-col gap-3">
-                    {plan.features.map((feat) => (
-                      <li key={feat} className="flex items-center gap-2 text-sm text-gray-600">
+                  <p className="mt-2 text-sm text-gray-600">{plan.description}</p>
+                  <ul className="mt-6 space-y-2">
+                    {plan.features.map((f) => (
+                      <li
+                        key={f}
+                        className="flex items-center gap-2 text-sm text-gray-700"
+                      >
                         <Check className="h-4 w-4 text-green-600" />
-                        {feat}
+                        {f}
                       </li>
                     ))}
                   </ul>
-                  <Link to="/auth" className="mt-6">
-                    <Button className="w-full" variant={plan.highlight ? "primary" : "secondary"}>
+                  <Link to="/auth" className="mt-8 block">
+                    <Button
+                      variant={plan.highlight ? "primary" : "secondary"}
+                      className="w-full"
+                    >
                       {plan.cta}
                     </Button>
                   </Link>
-                </div>
+                </Card>
               ))}
             </div>
           </div>

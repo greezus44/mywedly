@@ -1,85 +1,112 @@
-import { useState, type CSSProperties } from "react";
-import { useNavigate, useOutletContext } from "react-router-dom";
-import { Loader2 } from "lucide-react";
-import { type UserEvent, type LoginConfig } from "../../lib/supabase";
+import { useState } from "react";
+import { useOutletContext, useNavigate } from "react-router-dom";
+import type { UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { themeToEventCssVars } from "../../lib/theme";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
+import { Toast, type ToastType } from "../../components/ui";
 
 export default function GuestLoginPage() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const navigate = useNavigate();
-  const { signIn, guestName, eventId } = useGuestAuth();
+  const { signIn } = useGuestAuth();
   const [name, setName] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
-  const cfg: LoginConfig = event.login_config ?? {};
+  const config = event.login_config ?? {};
+  const cssVars = themeToEventCssVars(event.theme);
 
-  // If already signed in to this event, go home
-  if (guestName && eventId === event.id) {
-    navigate("home");
+  const bgStyle: React.CSSProperties = {};
+  if (config.bgImage) {
+    bgStyle.backgroundImage = `url(${config.bgImage})`;
+    bgStyle.backgroundSize = "cover";
+    bgStyle.backgroundPosition = "center";
+  } else if (config.bgColor) {
+    bgStyle.backgroundColor = config.bgColor;
   }
 
-  const bg: CSSProperties = cfg.bgImage
-    ? { backgroundImage: `url(${cfg.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" }
-    : { backgroundColor: cfg.bgColor || "#fafafa" };
-
-  const overlay: CSSProperties = cfg.overlayColor
-    ? { backgroundColor: cfg.overlayColor, opacity: cfg.overlayOpacity ?? 0.3 }
-    : {};
-
-  const textColor = cfg.textColor || "#1a1a1a";
+  const overlayStyle: React.CSSProperties = {};
+  if (config.overlayColor) {
+    overlayStyle.backgroundColor = config.overlayColor;
+    overlayStyle.opacity = config.overlayOpacity ?? 0.25;
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
-    setLoading(true);
+    if (!name.trim()) {
+      setToast({ message: "Please enter your name", type: "error" });
+      return;
+    }
     signIn(name.trim(), event.id);
-    setTimeout(() => {
-      navigate("home");
-    }, 100);
+    navigate("home");
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center px-6 py-10 text-center" style={bg}>
-      <div className="absolute inset-0" style={overlay} />
-      <div className="relative z-10 flex w-full max-w-xs flex-col items-center gap-3">
-        {cfg.logo && (
+    <div
+      className="event-themed relative flex min-h-screen flex-col items-center justify-center px-6 py-16 text-center"
+      style={cssVars}
+    >
+      <div className="absolute inset-0" style={bgStyle} />
+      <div className="absolute inset-0" style={overlayStyle} />
+
+      <div className="relative z-10 flex w-full max-w-xs flex-col items-center">
+        {config.logo && (
           <img
-            src={cfg.logo}
-            alt="logo"
-            style={{ width: cfg.logoWidth ? `${cfg.logoWidth}px` : undefined }}
-            className="mb-2"
+            src={config.logo}
+            alt="Logo"
+            style={{ width: config.logoWidth ?? 120 }}
+            className="mb-6"
           />
         )}
-        {cfg.heading && (
-          <h2 style={{ color: textColor }} className="text-2xl font-semibold">
-            {cfg.heading}
+
+        {config.heading && (
+          <h2
+            className="font-heading text-3xl md:text-4xl"
+            style={{ color: config.textColor ?? "inherit" }}
+          >
+            {config.heading}
           </h2>
         )}
-        {cfg.subheading && (
-          <p style={{ color: textColor, opacity: 0.8 }} className="text-sm">
-            {cfg.subheading}
+
+        {config.subheading && (
+          <p
+            className="font-body mt-2 text-sm"
+            style={{ color: config.textColor ?? "inherit" }}
+          >
+            {config.subheading}
           </p>
         )}
-        <form onSubmit={handleSubmit} className="mt-4 flex w-full flex-col gap-3">
-          <input
-            type="text"
+
+        <form onSubmit={handleSubmit} className="mt-6 w-full">
+          <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder={cfg.inputPlaceholder || "Your full name"}
-            required
+            placeholder={config.inputPlaceholder ?? "Enter your name"}
+            className="bg-white/90"
             autoFocus
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-gray-900 focus:outline-none focus:ring-1 focus:ring-gray-900"
           />
-          <button
+          <Button
             type="submit"
-            disabled={loading || !name.trim()}
-            style={{ backgroundColor: cfg.buttonColor || "#1a1a1a", color: "#fff" }}
-            className="w-full rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+            className="mt-4 w-full"
+            style={{
+              backgroundColor: config.buttonColor ?? "var(--event-primary)",
+              color: "#ffffff",
+              borderRadius: "var(--event-button-radius)",
+            }}
           >
-            {loading ? <Loader2 className="mx-auto h-4 w-4 animate-spin" /> : cfg.buttonText || "Continue"}
-          </button>
+            {config.buttonText ?? "Enter"}
+          </Button>
         </form>
       </div>
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

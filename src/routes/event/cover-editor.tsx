@@ -1,186 +1,267 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { supabase, type UserEvent, type CoverConfig } from "../../lib/supabase";
-import { Input } from "../../components/ui/Input";
-import { FormField, Toggle, useToast } from "../../components/ui";
+import { Button } from "../../components/ui/Button";
+import { Input, Textarea } from "../../components/ui/Input";
+import {
+  Card,
+  FormField,
+  Toggle,
+  Toast,
+  type ToastType,
+} from "../../components/ui";
 import { ImageUpload } from "../../components/ui/ImageUpload";
+import { DatePicker, TimePicker } from "../../components/ui";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
 
 export default function CoverEditorPage() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
-  const [cfg, setCfg] = useState<CoverConfig>(event.draft_cover_config ?? event.cover_config ?? {});
-  const [name, setName] = useState(event.draft_name ?? event.name ?? "");
-  const [date, setDate] = useState(event.draft_event_date ?? event.event_date ?? "");
-  const [time, setTime] = useState(event.draft_event_time ?? event.event_time ?? "");
-  const [venue, setVenue] = useState(event.draft_venue ?? event.venue ?? "");
-  const [address, setAddress] = useState(event.draft_address ?? event.address ?? "");
+  const config: CoverConfig = event.draft_cover_config ?? event.cover_config ?? {};
+  const [bgImage, setBgImage] = useState<string | null>(config.bgImage ?? null);
+  const [logo, setLogo] = useState<string | null>(config.logo ?? null);
+  const [bgColor, setBgColor] = useState<string>(config.bgColor ?? "#ffffff");
+  const [textColor, setTextColor] = useState<string>(config.textColor ?? "#1a1a1a");
+  const [buttonColor, setButtonColor] = useState<string>(config.buttonColor ?? "#b08d57");
+  const [buttonText, setButtonText] = useState<string>(config.buttonText ?? "View Invitation");
+  const [customText, setCustomText] = useState<string>(config.customText ?? "");
+  const [showDate, setShowDate] = useState<boolean>(config.showDate ?? true);
+  const [showCountdown, setShowCountdown] = useState<boolean>(config.showCountdown ?? true);
+  const [logoWidth, setLogoWidth] = useState<number>(config.logoWidth ?? 120);
 
-  useEffect(() => {
-    setCfg(event.draft_cover_config ?? event.cover_config ?? {});
-    setName(event.draft_name ?? event.name ?? "");
-    setDate(event.draft_event_date ?? event.event_date ?? "");
-    setTime(event.draft_event_time ?? event.event_time ?? "");
-    setVenue(event.draft_venue ?? event.venue ?? "");
-    setAddress(event.draft_address ?? event.address ?? "");
-  }, [event]);
+  const [name, setName] = useState<string>(event.draft_name ?? event.name ?? "");
+  const [eventDate, setEventDate] = useState<string | null>(
+    event.draft_event_date ?? event.event_date,
+  );
+  const [eventTime, setEventTime] = useState<string | null>(
+    event.draft_event_time ?? event.event_time,
+  );
+  const [venue, setVenue] = useState<string>(event.draft_venue ?? event.venue ?? "");
+  const [address, setAddress] = useState<string>(event.draft_address ?? event.address ?? "");
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
+  const updateMutation = useMutation({
+    mutationFn: async (updates: Record<string, unknown>) => {
       const { error } = await supabase
         .from("user_events")
-        .update({
-          draft_cover_config: cfg,
-          draft_name: name,
-          draft_event_date: date || null,
-          draft_event_time: time || null,
-          draft_venue: venue || null,
-          draft_address: address || null,
-        })
+        .update(updates)
         .eq("id", event.id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", event.id] });
-      toast("Cover saved", "success");
+      setToast({ message: "Saved!", type: "success" });
     },
-    onError: (err: Error) => toast(err.message, "error"),
+    onError: (err: Error) => {
+      setToast({ message: err.message, type: "error" });
+    },
   });
 
-  // Auto-save on changes (debounced via effect)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      saveMutation.mutate();
-    }, 1500);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfg, name, date, time, venue, address]);
+  const handleSave = () => {
+    const newConfig: CoverConfig = {
+      ...config,
+      bgImage,
+      logo,
+      bgColor,
+      textColor,
+      buttonColor,
+      buttonText,
+      customText,
+      showDate,
+      showCountdown,
+      logoWidth,
+    };
+    updateMutation.mutate({
+      draft_cover_config: newConfig,
+      draft_name: name,
+      draft_event_date: eventDate,
+      draft_event_time: eventTime,
+      draft_venue: venue,
+      draft_address: address,
+    });
+  };
 
-  const previewEvent = {
+  // Build a live preview event with current edits
+  const previewEvent: UserEvent = {
     ...event,
-    draft_cover_config: cfg,
     draft_name: name,
-    draft_event_date: date,
-    draft_event_time: time,
+    draft_event_date: eventDate,
+    draft_event_time: eventTime,
     draft_venue: venue,
     draft_address: address,
-  } as UserEvent;
+    draft_cover_config: {
+      ...config,
+      bgImage,
+      logo,
+      bgColor,
+      textColor,
+      buttonColor,
+      buttonText,
+      customText,
+      showDate,
+      showCountdown,
+      logoWidth,
+    },
+  };
 
   return (
-    <SplitEditor preview={<CoverPreview event={previewEvent} />}>
-      <FormField label="Event name">
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Event name" />
-      </FormField>
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="Date">
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </FormField>
-        <FormField label="Time">
-          <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-        </FormField>
-      </div>
-      <FormField label="Venue">
-        <Input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue name" />
-      </FormField>
-      <FormField label="Address">
-        <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Address" />
-      </FormField>
+    <div className="h-full overflow-y-auto p-4">
+      <SplitEditor preview={<CoverPreview event={previewEvent} />}>
+        <div className="space-y-6 p-6">
+          <div className="flex items-center justify-between">
+            <h2 className="font-heading text-xl font-bold text-gray-900">
+              Cover Page
+            </h2>
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Saving...
+                </>
+              ) : (
+                "Save"
+              )}
+            </Button>
+          </div>
 
-      <div className="border-t border-gray-100 pt-4">
-        <h3 className="mb-3 text-sm font-semibold text-gray-900">Cover design</h3>
-        <div className="flex flex-col gap-4">
-          <FormField label="Background image">
-            <ImageUpload
-              value={cfg.bgImage || ""}
-              onChange={(url) => setCfg((c) => ({ ...c, bgImage: url }))}
-              eventId={event.id}
-              aspectRatio="16 / 9"
-            />
-          </FormField>
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Background color">
-              <Input
-                type="color"
-                value={cfg.bgColor || "#1a1a1a"}
-                onChange={(e) => setCfg((c) => ({ ...c, bgColor: e.target.value }))}
-                className="h-10"
-              />
+          {/* Event details */}
+          <Card className="space-y-4 p-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
+              Event Details
+            </h3>
+            <FormField label="Event name">
+              <Input value={name} onChange={(e) => setName(e.target.value)} />
             </FormField>
-            <FormField label="Text color">
-              <Input
-                type="color"
-                value={cfg.textColor || "#ffffff"}
-                onChange={(e) => setCfg((c) => ({ ...c, textColor: e.target.value }))}
-                className="h-10"
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <DatePicker
+                label="Event date"
+                value={eventDate}
+                onChange={(d) => setEventDate(d)}
               />
-            </FormField>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Button color">
-              <Input
-                type="color"
-                value={cfg.buttonColor || "#ffffff"}
-                onChange={(e) => setCfg((c) => ({ ...c, buttonColor: e.target.value }))}
-                className="h-10"
+              <TimePicker
+                label="Event time"
+                value={eventTime}
+                onChange={(t) => setEventTime(t)}
               />
+            </div>
+            <FormField label="Venue">
+              <Input value={venue} onChange={(e) => setVenue(e.target.value)} />
             </FormField>
-            <FormField label="Button text">
-              <Input
-                value={cfg.buttonText || ""}
-                onChange={(e) => setCfg((c) => ({ ...c, buttonText: e.target.value }))}
-                placeholder="Enter"
-              />
+            <FormField label="Address">
+              <Input value={address} onChange={(e) => setAddress(e.target.value)} />
             </FormField>
-          </div>
-          <FormField label="Custom text (above title)">
-            <Input
-              value={cfg.customText || ""}
-              onChange={(e) => setCfg((c) => ({ ...c, customText: e.target.value }))}
-              placeholder="Together with their families..."
-            />
-          </FormField>
-          <FormField label="Logo">
-            <ImageUpload
-              value={cfg.logo || ""}
-              onChange={(url) => setCfg((c) => ({ ...c, logo: url }))}
-              eventId={event.id}
-              aspectRatio="4 / 1"
-            />
-          </FormField>
-          <FormField label="Logo width (px)">
-            <Input
-              type="number"
-              value={cfg.logoWidth ?? ""}
-              onChange={(e) => setCfg((c) => ({ ...c, logoWidth: e.target.value ? Number(e.target.value) : undefined }))}
-              placeholder="120"
-            />
-          </FormField>
-          <div className="flex flex-col gap-2">
-            <Toggle
-              checked={cfg.showDate ?? true}
-              onChange={(v) => setCfg((c) => ({ ...c, showDate: v }))}
-              label="Show date"
-            />
-            <Toggle
-              checked={cfg.showCountdown ?? false}
-              onChange={(v) => setCfg((c) => ({ ...c, showCountdown: v }))}
-              label="Show countdown"
-            />
-          </div>
-        </div>
-      </div>
+          </Card>
 
-      {saveMutation.isPending && (
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          Saving...
+          {/* Cover config */}
+          <Card className="space-y-4 p-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
+              Cover Design
+            </h3>
+            <FormField label="Background image">
+              <ImageUpload
+                value={bgImage}
+                onChange={setBgImage}
+                eventId={event.id}
+                aspectRatio="16/9"
+              />
+            </FormField>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField label="Background color">
+                <Input
+                  type="color"
+                  value={bgColor}
+                  onChange={(e) => setBgColor(e.target.value)}
+                  className="h-10 p-1"
+                />
+              </FormField>
+              <FormField label="Text color">
+                <Input
+                  type="color"
+                  value={textColor}
+                  onChange={(e) => setTextColor(e.target.value)}
+                  className="h-10 p-1"
+                />
+              </FormField>
+            </div>
+            <FormField label="Custom text (above title)">
+              <Textarea
+                value={customText}
+                onChange={(e) => setCustomText(e.target.value)}
+                placeholder="e.g. Together with their families"
+                rows={2}
+              />
+            </FormField>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField label="Button text">
+                <Input
+                  value={buttonText}
+                  onChange={(e) => setButtonText(e.target.value)}
+                />
+              </FormField>
+              <FormField label="Button color">
+                <Input
+                  type="color"
+                  value={buttonColor}
+                  onChange={(e) => setButtonColor(e.target.value)}
+                  className="h-10 p-1"
+                />
+              </FormField>
+            </div>
+            <div className="flex items-center gap-6">
+              <Toggle
+                checked={showDate}
+                onChange={setShowDate}
+                label="Show date"
+              />
+              <Toggle
+                checked={showCountdown}
+                onChange={setShowCountdown}
+                label="Show countdown"
+              />
+            </div>
+          </Card>
+
+          {/* Logo */}
+          <Card className="space-y-4 p-4">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
+              Logo
+            </h3>
+            <FormField label="Logo image">
+              <ImageUpload
+                value={logo}
+                onChange={setLogo}
+                eventId={event.id}
+                aspectRatio="1/1"
+              />
+            </FormField>
+            <FormField label={`Logo width: ${logoWidth}px`}>
+              <input
+                type="range"
+                min={40}
+                max={300}
+                value={logoWidth}
+                onChange={(e) => setLogoWidth(Number(e.target.value))}
+                className="w-full accent-gray-900"
+              />
+            </FormField>
+          </Card>
         </div>
+      </SplitEditor>
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
-    </SplitEditor>
+    </div>
   );
 }

@@ -4,7 +4,8 @@ import { Loader2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
-import { FormField } from "../components/ui/index";
+import { Card, FormField } from "../components/ui";
+import { SiteHeader } from "../components/site/SiteHeader";
 
 export default function AuthPage() {
   const navigate = useNavigate();
@@ -23,7 +24,10 @@ export default function AuthPage() {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
         if (error) throw error;
       }
       navigate("/dashboard");
@@ -35,25 +39,39 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <Link to="/" className="text-2xl font-semibold tracking-tight text-gray-900">
-            Eventify
-          </Link>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-semibold text-gray-900">
-            {mode === "signin" ? "Sign in" : "Create account"}
+    <div className="flex min-h-screen flex-col bg-gray-50">
+      <SiteHeader
+        navLinks={[
+          { label: "Features", to: "/#features" },
+          { label: "Pricing", to: "/#pricing" },
+        ]}
+      >
+        <Link to="/dashboard">
+          <Button size="sm" variant="ghost">
+            Dashboard
+          </Button>
+        </Link>
+      </SiteHeader>
+
+      <main className="flex flex-1 items-center justify-center px-4 py-12">
+        <Card className="w-full max-w-md p-8">
+          <h1 className="font-heading text-2xl font-bold text-gray-900">
+            {mode === "signin" ? "Welcome back" : "Create your account"}
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-2 text-sm text-gray-600">
             {mode === "signin"
-              ? "Welcome back. Sign in to manage your events."
-              : "Get started with your free account."}
+              ? "Sign in to manage your events."
+              : "Start creating beautiful event websites."}
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
-            <FormField label="Email" required>
+          {error && (
+            <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <FormField label="Email">
               <Input
                 type="email"
                 value={email}
@@ -63,36 +81,44 @@ export default function AuthPage() {
                 autoComplete="email"
               />
             </FormField>
-            <FormField label="Password" required>
+            <FormField label="Password">
               <Input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                autoComplete={
+                  mode === "signin" ? "current-password" : "new-password"
+                }
                 minLength={6}
               />
             </FormField>
-
-            {error && (
-              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
-            )}
-
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {mode === "signin" ? "Sign in" : "Create account"}
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {mode === "signin" ? "Signing in..." : "Signing up..."}
+                </>
+              ) : mode === "signin" ? (
+                "Sign in"
+              ) : (
+                "Sign up"
+              )}
             </Button>
           </form>
 
-          <div className="mt-4 text-center text-sm text-gray-500">
+          <div className="mt-6 text-center text-sm text-gray-600">
             {mode === "signin" ? (
               <>
                 Don't have an account?{" "}
                 <button
                   type="button"
-                  onClick={() => setMode("signup")}
-                  className="font-medium text-gray-900 hover:underline"
+                  onClick={() => {
+                    setMode("signup");
+                    setError(null);
+                  }}
+                  className="font-medium text-gray-900 underline hover:text-gray-700"
                 >
                   Sign up
                 </button>
@@ -102,16 +128,19 @@ export default function AuthPage() {
                 Already have an account?{" "}
                 <button
                   type="button"
-                  onClick={() => setMode("signin")}
-                  className="font-medium text-gray-900 hover:underline"
+                  onClick={() => {
+                    setMode("signin");
+                    setError(null);
+                  }}
+                  className="font-medium text-gray-900 underline hover:text-gray-700"
                 >
                   Sign in
                 </button>
               </>
             )}
           </div>
-        </div>
-      </div>
+        </Card>
+      </main>
     </div>
   );
 }

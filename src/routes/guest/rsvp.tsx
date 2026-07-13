@@ -1,149 +1,241 @@
 import { useState } from "react";
-import { useNavigate, useOutletContext } from "react-router-dom";
-import { Loader2, Check, X } from "lucide-react";
+import { useOutletContext, useNavigate } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check, X, Loader2, Minus, Plus } from "lucide-react";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { useToast } from "../../components/ui";
+import { themeToEventCssVars } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
+import { Textarea } from "../../components/ui/Input";
+import { Toast, type ToastType } from "../../components/ui";
+import { isRsvpClosed } from "../../lib/utils";
 
 export default function GuestRsvpPage() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const navigate = useNavigate();
   const { guestName } = useGuestAuth();
-  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+
   const [status, setStatus] = useState<"attending" | "declined" | null>(null);
   const [plusOnes, setPlusOnes] = useState(0);
   const [dietary, setDietary] = useState("");
   const [message, setMessage] = useState("");
-  const [loading, setLoading] = useState(false);
 
+  const cssVars = themeToEventCssVars(event.theme);
+  const deadline = event.rsvp_deadline;
+  const closed = isRsvpClosed(deadline);
+
+  // Redirect to login if not signed in
   if (!guestName) {
     navigate("login");
+    return null;
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!status || !guestName) return;
-    setLoading(true);
-    try {
+  const submitMutation = useMutation({
+    mutationFn: async () => {
       const { error } = await supabase.from("event_rsvps").insert({
         event_id: event.id,
         guest_name: guestName,
-        status,
+        status: status!,
         plus_ones: status === "attending" ? plusOnes : 0,
-        dietary: dietary || null,
-        message: message || null,
+        dietary: dietary.trim() || null,
+        message: message.trim() || null,
+        submitted_at: new Date().toISOString(),
       });
       if (error) throw error;
-      toast("RSVP submitted! Thank you.", "success");
-      navigate("home");
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to submit RSVP", "error");
-    } finally {
-      setLoading(false);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["rsvps", event.id] });
+      setToast({ message: "RSVP submitted! Thank you.", type: "success" });
+      setTimeout(() => navigate("home"), 1500);
+    },
+    onError: (err: Error) => {
+      setToast({ message: err.message, type: "error" });
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!status) {
+      setToast({ message: "Please select attending or declined", type: "error" });
+      return;
     }
+    submitMutation.mutate();
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center gap-6 px-6 py-10" style={{ backgroundColor: "var(--event-bg)", color: "var(--event-text)" }}>
-      <h1 className="text-3xl font-semibold" style={{ fontFamily: "var(--event-font-heading)" }}>
-        RSVP
-      </h1>
-      <p style={{ color: "var(--event-text-muted)" }} className="text-sm">
-        Hi {guestName}, will you be attending?
-      </p>
+    <div className="event-themed min-h-screen" style={cssVars}>
+      <section className="px-6 py-12">
+        <div
+          className="mx-auto max-w-lg rounded-lg bg-surface p-8 shadow-sm"
+          style={{ boxShadow: "var(--event-shadow)" }}
+        >
+          <h2 className="font-heading text-center text-2xl">RSVP</h2>
+          <p className="font-body mt-2 text-center text-sm text-muted">
+            {event.name}
+          </p>
+          {event.event_date && (
+            <p className="font-body mt-1 text-center text-xs text-muted">
+              {event.event_date}
+            </p>
+          )}
 
-      <form onSubmit={handleSubmit} className="flex w-full max-w-md flex-col gap-4">
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => setStatus("attending")}
-            style={{
-              backgroundColor: status === "attending" ? "var(--event-primary)" : "var(--event-surface)",
-              color: status === "attending" ? "#fff" : "var(--event-text)",
-              border: "1px solid var(--event-border)",
-              borderRadius: "var(--event-radius)",
-            }}
-            className="flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-medium"
-          >
-            <Check className="h-4 w-4" />
-            Attending
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatus("declined")}
-            style={{
-              backgroundColor: status === "declined" ? "var(--event-primary)" : "var(--event-surface)",
-              color: status === "declined" ? "#fff" : "var(--event-text)",
-              border: "1px solid var(--event-border)",
-              borderRadius: "var(--event-radius)",
-            }}
-            className="flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm font-medium"
-          >
-            <X className="h-4 w-4" />
-            Decline
-          </button>
-        </div>
-
-        {status === "attending" && (
-          <>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                Plus ones: {plusOnes}
-              </label>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setPlusOnes((n) => Math.max(0, n - 1))}
-                  className="h-9 w-9 rounded-md border text-lg"
-                  style={{ borderColor: "var(--event-border)", color: "var(--event-text)" }}
-                >
-                  −
-                </button>
-                <span className="text-lg font-semibold">{plusOnes}</span>
-                <button
-                  type="button"
-                  onClick={() => setPlusOnes((n) => Math.min(10, n + 1))}
-                  className="h-9 w-9 rounded-md border text-lg"
-                  style={{ borderColor: "var(--event-border)", color: "var(--event-text)" }}
-                >
-                  +
-                </button>
+          {closed ? (
+            <div className="mt-8 text-center">
+              <p className="text-sm text-muted">
+                RSVP for this event has closed.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+              {/* Name */}
+              <div>
+                <label className="font-body mb-1 block text-xs font-medium uppercase tracking-wider text-muted">
+                  Your Name
+                </label>
+                <div className="rounded-md border-current bg-current px-3 py-2 text-sm text-current">
+                  {guestName}
+                </div>
               </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                Dietary requirements
-              </label>
-              <input
-                type="text"
-                value={dietary}
-                onChange={(e) => setDietary(e.target.value)}
-                placeholder="Vegetarian, allergies, etc."
-                className="h-10 w-full rounded-md border px-3 text-sm"
-                style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)", color: "var(--event-text)" }}
-              />
-            </div>
-          </>
-        )}
 
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium" style={{ color: "var(--event-text)" }}>
-            Message (optional)
-          </label>
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Leave a message for the host..."
-            className="min-h-[80px] w-full rounded-md border px-3 py-2 text-sm"
-            style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)", color: "var(--event-text)" }}
-          />
+              {/* Attending toggle */}
+              <div>
+                <label className="font-body mb-1 block text-xs font-medium uppercase tracking-wider text-muted">
+                  Will you attend?
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStatus("attending")}
+                    className="flex-1 rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors"
+                    style={
+                      status === "attending"
+                        ? {
+                            backgroundColor: "var(--event-primary)",
+                            color: "var(--event-bg)",
+                            borderRadius: "var(--event-button-radius)",
+                          }
+                        : {
+                            border: "1px solid var(--event-border)",
+                            color: "var(--event-text)",
+                            borderRadius: "var(--event-button-radius)",
+                          }
+                    }
+                  >
+                    <Check className="mr-1 inline h-4 w-4" /> Yes, with joy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatus("declined")}
+                    className="flex-1 rounded-md px-4 py-2.5 text-center text-sm font-medium transition-colors"
+                    style={
+                      status === "declined"
+                        ? {
+                            backgroundColor: "var(--event-primary)",
+                            color: "var(--event-bg)",
+                            borderRadius: "var(--event-button-radius)",
+                          }
+                        : {
+                            border: "1px solid var(--event-border)",
+                            color: "var(--event-text)",
+                            borderRadius: "var(--event-button-radius)",
+                          }
+                    }
+                  >
+                    <X className="mr-1 inline h-4 w-4" /> Sadly, no
+                  </button>
+                </div>
+              </div>
+
+              {/* Plus ones */}
+              {status === "attending" && (
+                <div>
+                  <label className="font-body mb-1 block text-xs font-medium uppercase tracking-wider text-muted">
+                    Number of additional guests
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPlusOnes(Math.max(0, plusOnes - 1))}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border-current"
+                      style={{ border: "1px solid var(--event-border)" }}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <span className="min-w-[2rem] text-center text-lg font-semibold">
+                      {plusOnes}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPlusOnes(plusOnes + 1)}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border-current"
+                      style={{ border: "1px solid var(--event-border)" }}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Dietary */}
+              {status === "attending" && (
+                <div>
+                  <label className="font-body mb-1 block text-xs font-medium uppercase tracking-wider text-muted">
+                    Dietary requirements
+                  </label>
+                  <Textarea
+                    value={dietary}
+                    onChange={(e) => setDietary(e.target.value)}
+                    placeholder="Any allergies or dietary preferences?"
+                    rows={2}
+                  />
+                </div>
+              )}
+
+              {/* Message */}
+              <div>
+                <label className="font-body mb-1 block text-xs font-medium uppercase tracking-wider text-muted">
+                  Message
+                </label>
+                <Textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Leave a message for the host..."
+                  rows={3}
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={submitMutation.isPending || !status}
+                style={{
+                  backgroundColor: "var(--event-primary)",
+                  color: "var(--event-bg)",
+                  borderRadius: "var(--event-button-radius)",
+                }}
+              >
+                {submitMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Submitting...
+                  </>
+                ) : (
+                  "Submit RSVP"
+                )}
+              </Button>
+            </form>
+          )}
         </div>
+      </section>
 
-        <Button type="submit" loading={loading} disabled={!status} className="w-full">
-          Submit RSVP
-        </Button>
-      </form>
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }
