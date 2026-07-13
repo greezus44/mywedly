@@ -1,60 +1,62 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save, Upload, Check, Palette } from "lucide-react";
 import { supabase, type Wedding, type ThemeConfig } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Label, Select } from "../../components/ui/Input";
-import { FormField } from "../../components/ui/ImageUpload";
-import { Toast, Card } from "../../components/ui/index";
-import { THEME_PRESETS, DEFAULT_THEME, getDraftTheme, themeToCssVars } from "../../lib/theme";
+import { Label, Select } from "../../components/ui/Input";
+import { Toast, EmptyState } from "../../components/ui/index";
+import { THEME_PRESETS, DEFAULT_THEME, themeToCssVars } from "../../lib/theme";
 import { cn } from "../../lib/utils";
+import { Save, Send, RefreshCw, Check, Palette } from "lucide-react";
 
-const FONT_OPTIONS = {
-  script: ["Playfair Display", "Cormorant Garamond", "Great Vibes", "Allura", "Sacramento"],
-  heading: ["Cormorant Garamond", "Playfair Display", "Cinzel", "Cardo", "EB Garamond"],
-  body: ["Cormorant Garamond", "EB Garamond", "Cardo", "Lora", "Crimson Text"],
-  ui: ["Jost", "Montserrat", "Lato", "Open Sans", "Inter"],
-};
+const SCRIPT_FONTS = ["Playfair Display", "Great Vibes", "Dancing Script", "Sacramento", "Allura"];
+const HEADING_FONTS = ["Cormorant Garamond", "Playfair Display", "EB Garamond", "Cinzel", "Marcellus"];
+const BODY_FONTS = ["Cormorant Garamond", "EB Garamond", "Lora", "Crimson Text", "Source Serif Pro"];
+const UI_FONTS = ["Jost", "Montserrat", "Lato", "Inter", "Poppins"];
 
-const BUTTON_STYLES = ["outline", "filled", "pill", "underline"];
+const COLOR_FIELDS: { key: string; label: string }[] = [
+  { key: "primary", label: "Primary" },
+  { key: "background", label: "Background" },
+  { key: "surface", label: "Surface" },
+  { key: "text", label: "Text" },
+  { key: "border", label: "Border" },
+];
 
 export function ThemeEditorPage() {
   const queryClient = useQueryClient();
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [theme, setTheme] = useState<ThemeConfig>(DEFAULT_THEME);
-  const [initialized, setInitialized] = useState(false);
 
-  const { data: wedding, isLoading } = useQuery({
+  const weddingQuery = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
-      const { data, error } = await supabase
-        .from("weddings")
-        .select("*")
-        .eq("created_by", user.user.id)
-        .single();
+      const { data, error } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).single();
       if (error) throw error;
       return data as Wedding;
     },
   });
 
+  const wedding = weddingQuery.data;
+
   useEffect(() => {
-    if (wedding && !initialized) {
-      setTheme(getDraftTheme(wedding));
-      setInitialized(true);
+    if (wedding) {
+      const draftTheme = wedding.draft_theme_config;
+      const pubTheme = wedding.theme_config && "colors" in wedding.theme_config ? (wedding.theme_config as ThemeConfig) : null;
+      const initial = draftTheme && "colors" in draftTheme ? draftTheme : pubTheme || DEFAULT_THEME;
+      setTheme(initial);
     }
-  }, [wedding, initialized]);
+  }, [wedding]);
 
   const saveDraftMutation = useMutation({
-    mutationFn: async (draft: ThemeConfig) => {
+    mutationFn: async (config: ThemeConfig) => {
       if (!wedding) throw new Error("No wedding");
       const { data, error } = await supabase
         .from("weddings")
-        .update({ draft_theme_config: draft, updated_at: new Date().toISOString() })
+        .update({ draft_theme_config: config, updated_at: new Date().toISOString() })
         .eq("id", wedding.id)
         .select("*")
         .single();
@@ -63,18 +65,19 @@ export function ThemeEditorPage() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["wedding"], data);
+      setToast({ message: "Theme draft saved", type: "success" });
     },
+    onError: () => setToast({ message: "Failed to save theme", type: "error" }),
   });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
       if (!wedding) throw new Error("No wedding");
-      const draft = getDraftTheme(wedding);
       const { data, error } = await supabase
         .from("weddings")
         .update({
-          theme_config: draft,
-          draft_theme_config: draft,
+          draft_theme_config: theme,
+          theme_config: theme,
           updated_at: new Date().toISOString(),
         })
         .eq("id", wedding.id)
@@ -85,154 +88,106 @@ export function ThemeEditorPage() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["wedding"], data);
-      setToast({ message: "Theme published!", type: "success" });
+      setToast({ message: "Theme published", type: "success" });
     },
     onError: () => setToast({ message: "Failed to publish theme", type: "error" }),
   });
 
-  const updateTheme = useCallback(
-    (updater: (prev: ThemeConfig) => ThemeConfig) => {
-      setTheme((prev) => {
-        const next = updater(prev);
-        saveDraftMutation.mutate(next);
-        return next;
-      });
-    },
-    [saveDraftMutation]
-  );
+  const handleSaveDraft = () => saveDraftMutation.mutate(theme);
+  const handlePublish = () => {
+    saveDraftMutation.mutate(theme, {
+      onSuccess: () => publishMutation.mutate(),
+    });
+  };
+
+  const applyPreset = (config: ThemeConfig) => setTheme(config);
 
   const updateColor = (key: string, value: string) => {
-    updateTheme((prev) => ({
+    setTheme((prev) => ({
       ...prev,
       colors: { ...prev.colors, [key]: value },
     }));
   };
 
-  const updateFont = (key: string, value: string) => {
-    updateTheme((prev) => ({
+  const updateFont = (key: "scriptFont" | "headingFont" | "bodyFont" | "uiFont", value: string) => {
+    setTheme((prev) => ({
       ...prev,
       typography: { ...prev.typography, [key]: value },
     }));
   };
 
-  const updateUI = (key: string, value: string) => {
-    updateTheme((prev) => ({
+  const updateRadius = (value: number) => {
+    setTheme((prev) => ({
       ...prev,
-      ui: { ...prev.ui, [key]: value },
+      ui: { ...prev.ui, radius: `${value}px`, buttonRadius: `${value}px` },
     }));
   };
 
-  const applyPreset = (config: ThemeConfig) => {
-    updateTheme(() => ({ ...config }));
-  };
-
-  const previewWedding: Wedding | undefined = wedding
-    ? {
-        ...wedding,
-        draft_theme_config: theme,
-        theme_config: theme,
-      }
-    : undefined;
-
-  if (isLoading || !wedding || !previewWedding) {
+  if (weddingQuery.isLoading) {
     return (
       <AdminLayout>
-        <div className="flex items-center justify-center h-full">
-          <p className="font-ui text-sm text-[var(--color-text-muted)]">Loading theme editor...</p>
+        <div className="flex items-center justify-center h-full p-20">
+          <RefreshCw size={24} className="animate-spin text-[var(--color-primary)]" />
         </div>
       </AdminLayout>
     );
   }
 
-  const colorFields: { key: string; label: string }[] = [
-    { key: "primary", label: "Primary" },
-    { key: "background", label: "Background" },
-    { key: "surface", label: "Surface" },
-    { key: "text", label: "Text" },
-    { key: "border", label: "Border" },
-    { key: "primaryLight", label: "Primary Light" },
-    { key: "primaryDark", label: "Primary Dark" },
-    { key: "textMuted", label: "Text Muted" },
-    { key: "accent", label: "Accent" },
-    { key: "success", label: "Success" },
-    { key: "warning", label: "Warning" },
-    { key: "error", label: "Error" },
-  ];
+  if (weddingQuery.isError || !wedding) {
+    return (
+      <AdminLayout>
+        <div className="p-8">
+          <EmptyState title="Unable to load theme editor" description="Please try again later." />
+        </div>
+      </AdminLayout>
+    );
+  }
 
-  const radiusValue = parseInt(theme.ui?.radius || "8");
+  const previewWedding: Wedding = {
+    ...wedding,
+    draft_theme_config: theme,
+  };
+
+  const currentRadius = theme.ui?.radius ? parseInt(theme.ui.radius) : 8;
 
   return (
     <AdminLayout>
       <SplitEditor title="Theme Editor" preview={<HomePreview wedding={previewWedding} />}>
         <div className="space-y-6">
           <div>
-            <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Theme Customization</h2>
-            <p className="font-ui text-sm text-[var(--color-text-muted)]">
-              Choose a preset or customize every detail.
-            </p>
+            <h2 className="font-heading text-xl text-[var(--color-text)] mb-1">Theme</h2>
+            <p className="font-ui text-xs text-[var(--color-text-muted)]">Customize your wedding site's appearance</p>
           </div>
 
-          {/* Publish bar */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--color-bg-light)] border border-[var(--color-border)]/15">
-            <div className="flex items-center gap-2">
-              {saveDraftMutation.isPending && (
-                <span className="font-ui text-xs text-[var(--color-text-muted)] flex items-center gap-1.5">
-                  <Save size={12} className="animate-pulse" /> Saving...
-                </span>
-              )}
-              {saveDraftMutation.isSuccess && !saveDraftMutation.isPending && (
-                <span className="font-ui text-xs text-[var(--color-success)]">Draft saved</span>
-              )}
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => publishMutation.mutate()}
-              disabled={publishMutation.isPending}
-            >
-              <Upload size={14} className="mr-1.5" />
-              {publishMutation.isPending ? "Publishing..." : "Publish"}
-            </Button>
-          </div>
-
-          {/* Theme Presets */}
+          {/* Preset Themes */}
           <div>
-            <h3 className="font-heading text-lg text-[var(--color-text)] mb-3 flex items-center gap-2">
-              <Palette size={18} /> Presets
-            </h3>
+            <Label>Preset Themes</Label>
             <div className="grid grid-cols-2 gap-3">
               {THEME_PRESETS.map((preset) => {
-                const isSelected =
-                  theme.colors?.primary === preset.config.colors?.primary &&
+                const isActive = theme.colors?.primary === preset.config.colors?.primary &&
                   theme.colors?.background === preset.config.colors?.background;
                 return (
                   <button
                     key={preset.name}
                     onClick={() => applyPreset(preset.config)}
                     className={cn(
-                      "p-3 rounded-lg border-2 text-left transition-all",
-                      isSelected
+                      "relative p-3 rounded-lg border-2 transition-all text-left",
+                      isActive
                         ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5"
-                        : "border-[var(--color-border)]/15 hover:border-[var(--color-primary)]/40"
+                        : "border-[var(--color-border)]/20 hover:border-[var(--color-primary)]/50"
                     )}
                   >
-                    <div className="flex items-center gap-1.5 mb-2">
-                      {[
-                        preset.config.colors?.primary,
-                        preset.config.colors?.background,
-                        preset.config.colors?.accent,
-                      ].map((color, i) => (
-                        <div
-                          key={i}
-                          className="w-5 h-5 rounded-full border border-[var(--color-border)]/20"
-                          style={{ background: color }}
-                        />
-                      ))}
-                      {isSelected && (
-                        <Check size={14} className="text-[var(--color-primary)] ml-auto" />
-                      )}
+                    {isActive && (
+                      <div className="absolute top-2 right-2 w-5 h-5 bg-[var(--color-primary)] rounded-full flex items-center justify-center">
+                        <Check size={12} className="text-white" />
+                      </div>
+                    )}
+                    <div className="flex gap-1.5 mb-2">
+                      <div className="w-6 h-6 rounded-full border border-gray-200" style={{ background: preset.config.colors?.primary }} />
+                      <div className="w-6 h-6 rounded-full border border-gray-200" style={{ background: preset.config.colors?.background }} />
+                      <div className="w-6 h-6 rounded-full border border-gray-200" style={{ background: preset.config.colors?.surface }} />
                     </div>
-                    <p className="font-ui text-xs font-medium text-[var(--color-text)]">{preset.name}</p>
+                    <span className="font-ui text-xs text-[var(--color-text)]">{preset.name}</span>
                   </button>
                 );
               })}
@@ -240,24 +195,27 @@ export function ThemeEditorPage() {
           </div>
 
           {/* Custom Colors */}
-          <div className="pt-4 border-t border-[var(--color-border)]/15">
-            <h3 className="font-heading text-lg text-[var(--color-text)] mb-3">Custom Colors</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {colorFields.map((field) => (
-                <div key={field.key}>
-                  <Label>{field.label}</Label>
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Palette size={16} className="text-[var(--color-primary)]" />
+              <Label className="mb-0">Custom Colors</Label>
+            </div>
+            <div className="space-y-3">
+              {COLOR_FIELDS.map((field) => (
+                <div key={field.key} className="flex items-center justify-between gap-3">
+                  <span className="font-ui text-sm text-[var(--color-text)]">{field.label}</span>
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
-                      value={(theme.colors as Record<string, string>)?.[field.key] || "#000000"}
+                      value={(theme.colors as Record<string, string>)?.[field.key] || DEFAULT_THEME.colors![field.key as keyof typeof DEFAULT_THEME.colors]!}
                       onChange={(e) => updateColor(field.key, e.target.value)}
-                      className="w-10 h-10 rounded-lg border border-[var(--color-border)]/20 cursor-pointer bg-transparent"
+                      className="w-10 h-10 rounded-lg border border-[var(--color-border)]/30 cursor-pointer"
                     />
-                    <Input
+                    <input
+                      type="text"
                       value={(theme.colors as Record<string, string>)?.[field.key] || ""}
                       onChange={(e) => updateColor(field.key, e.target.value)}
-                      placeholder="#b8973a"
-                      className="flex-1 text-xs"
+                      className="w-24 px-2 py-1.5 bg-[var(--color-surface)] border border-[var(--color-border)]/30 text-[var(--color-text)] font-ui text-xs rounded-lg focus:outline-none focus:border-[var(--color-primary)]"
                     />
                   </div>
                 </div>
@@ -265,90 +223,73 @@ export function ThemeEditorPage() {
             </div>
           </div>
 
-          {/* Typography */}
-          <div className="pt-4 border-t border-[var(--color-border)]/15">
-            <h3 className="font-heading text-lg text-[var(--color-text)] mb-3">Typography</h3>
+          {/* Fonts */}
+          <div>
+            <Label>Typography</Label>
             <div className="space-y-3">
-              <FormField label="Script Font">
-                <Select
-                  value={theme.typography?.scriptFont || "Playfair Display"}
-                  onChange={(e) => updateFont("scriptFont", e.target.value)}
-                >
-                  {FONT_OPTIONS.script.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
+              <div>
+                <label className="block font-ui text-xs text-[var(--color-text-muted)] mb-1">Script Font</label>
+                <Select value={theme.typography?.scriptFont || ""} onChange={(e) => updateFont("scriptFont", e.target.value)}>
+                  {SCRIPT_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
                 </Select>
-              </FormField>
-              <FormField label="Heading Font">
-                <Select
-                  value={theme.typography?.headingFont || "Cormorant Garamond"}
-                  onChange={(e) => updateFont("headingFont", e.target.value)}
-                >
-                  {FONT_OPTIONS.heading.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
+              </div>
+              <div>
+                <label className="block font-ui text-xs text-[var(--color-text-muted)] mb-1">Heading Font</label>
+                <Select value={theme.typography?.headingFont || ""} onChange={(e) => updateFont("headingFont", e.target.value)}>
+                  {HEADING_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
                 </Select>
-              </FormField>
-              <FormField label="Body Font">
-                <Select
-                  value={theme.typography?.bodyFont || "Cormorant Garamond"}
-                  onChange={(e) => updateFont("bodyFont", e.target.value)}
-                >
-                  {FONT_OPTIONS.body.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
+              </div>
+              <div>
+                <label className="block font-ui text-xs text-[var(--color-text-muted)] mb-1">Body Font</label>
+                <Select value={theme.typography?.bodyFont || ""} onChange={(e) => updateFont("bodyFont", e.target.value)}>
+                  {BODY_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
                 </Select>
-              </FormField>
-              <FormField label="UI Font">
-                <Select
-                  value={theme.typography?.uiFont || "Jost"}
-                  onChange={(e) => updateFont("uiFont", e.target.value)}
-                >
-                  {FONT_OPTIONS.ui.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
+              </div>
+              <div>
+                <label className="block font-ui text-xs text-[var(--color-text-muted)] mb-1">UI Font</label>
+                <Select value={theme.typography?.uiFont || ""} onChange={(e) => updateFont("uiFont", e.target.value)}>
+                  {UI_FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
                 </Select>
-              </FormField>
+              </div>
             </div>
           </div>
 
-          {/* UI Settings */}
-          <div className="pt-4 border-t border-[var(--color-border)]/15">
-            <h3 className="font-heading text-lg text-[var(--color-text)] mb-3">UI Settings</h3>
-            <FormField label={`Border Radius — ${radiusValue}px`}>
-              <input
-                type="range"
-                min="0"
-                max="24"
-                value={radiusValue}
-                onChange={(e) => updateUI("radius", `${e.target.value}px`)}
-                className="w-full accent-[var(--color-primary)]"
-              />
-              <div className="flex justify-between mt-1">
-                <span className="font-ui text-xs text-[var(--color-text-muted)]">Sharp</span>
-                <span className="font-ui text-xs text-[var(--color-text-muted)]">Round</span>
-              </div>
-            </FormField>
-            <FormField label="Button Style">
-              <Select
-                value={theme.ui?.buttonStyle || "outline"}
-                onChange={(e) => updateUI("buttonStyle", e.target.value)}
-              >
-                {BUTTON_STYLES.map((s) => (
-                  <option key={s} value={s}>
-                    {s.charAt(0).toUpperCase() + s.slice(1)}
-                  </option>
-                ))}
-              </Select>
-            </FormField>
+          {/* Radius Slider */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <Label className="mb-0">Corner Radius</Label>
+              <span className="font-ui text-xs text-[var(--color-text-muted)]">{currentRadius}px</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="24"
+              value={currentRadius}
+              onChange={(e) => updateRadius(parseInt(e.target.value))}
+              className="w-full accent-[var(--color-primary)]"
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="pt-4 space-y-3 border-t border-[var(--color-border)]/15">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={handleSaveDraft}
+              disabled={saveDraftMutation.isPending}
+            >
+              <Save size={14} className="mr-2" />
+              {saveDraftMutation.isPending ? "Saving..." : "Save Draft"}
+            </Button>
+            <Button
+              variant="primary"
+              className="w-full"
+              onClick={handlePublish}
+              disabled={publishMutation.isPending || saveDraftMutation.isPending}
+            >
+              <Send size={14} className="mr-2" />
+              {publishMutation.isPending ? "Publishing..." : "Publish"}
+            </Button>
           </div>
         </div>
       </SplitEditor>

@@ -38,8 +38,6 @@ createRoot(document.getElementById("root")!).render(
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/host-login" element={<HostLogin />} />
-
-            {/* Guest routes */}
             <Route path="/w/:slug" element={<Cover />} />
             <Route path="/w/:slug/login" element={<GuestAuthProvider><GuestLogin /></GuestAuthProvider>} />
             <Route path="/w/:slug" element={<GuestAuthProvider><GuestLayout /></GuestAuthProvider>}>
@@ -49,8 +47,6 @@ createRoot(document.getElementById("root")!).render(
               <Route path="contact" element={<Contact />} />
               <Route path="send-message" element={<SendMessage />} />
             </Route>
-
-            {/* Admin routes */}
             <Route path="/admin" element={<OverviewPage />} />
             <Route path="/admin/cover" element={<CoverEditorPage />} />
             <Route path="/admin/theme" element={<ThemeEditorPage />} />
@@ -63,7 +59,6 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/admin/messages" element={<MessagesPage />} />
             <Route path="/admin/rsvps" element={<RsvpsPage />} />
             <Route path="/admin/settings" element={<SettingsPage />} />
-
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>

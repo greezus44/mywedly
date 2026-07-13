@@ -1,48 +1,33 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ChevronRight } from "lucide-react";
-import { supabase } from "../../lib/supabase";
+import { supabase, type Wedding } from "../../lib/supabase";
 import { useLang } from "../../lib/lang-context";
-import { themeToCssVars, getTheme, getCoverContent } from "../../lib/theme";
-import { getCountdown } from "../../lib/utils";
+import { themeToCssVars, getCoverContent } from "../../lib/theme";
+import { getCountdown, formatDate } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import type { Wedding } from "../../lib/supabase";
 
 export function Cover() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const { lang, setLang, t } = useLang();
+  const { lang } = useLang();
   const [wedding, setWedding] = useState<Wedding | null>(null);
   const [loading, setLoading] = useState(true);
-  const [notFound, setNotFound] = useState(false);
-
-  const theme = getTheme(wedding);
-  const cssVars = themeToCssVars(theme);
-  const content = getCoverContent(wedding || {});
+  const [countdown, setCountdown] = useState(getCountdown(null));
 
   useEffect(() => {
-    if (!slug) {
-      setNotFound(true);
-      setLoading(false);
-      return;
-    }
-    (async () => {
+    async function fetchWedding() {
+      if (!slug) return;
       const { data, error } = await supabase
         .from("weddings")
         .select("*")
         .eq("slug", slug)
         .eq("is_published", true)
         .single();
-      if (error || !data) {
-        setNotFound(true);
-      } else {
-        setWedding(data as Wedding);
-      }
+      if (!error && data) setWedding(data as Wedding);
       setLoading(false);
-    })();
+    }
+    fetchWedding();
   }, [slug]);
-
-  const [countdown, setCountdown] = useState(getCountdown(wedding?.wedding_date || null));
 
   useEffect(() => {
     if (!wedding?.wedding_date) return;
@@ -50,55 +35,44 @@ export function Cover() {
       setCountdown(getCountdown(wedding.wedding_date));
     }, 1000);
     return () => clearInterval(interval);
-  }, [wedding?.wedding_date]);
+  }, [wedding]);
 
   if (loading) {
     return (
-      <div style={cssVars} className="min-h-screen flex items-center justify-center bg-[var(--color-bg)]">
-        <p className="font-ui text-sm uppercase tracking-wider-luxe text-[var(--color-text-muted)] animate-pulse">
-          {t("loading")}
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <p className="font-ui text-xs uppercase tracking-luxe text-white/60 animate-pulse">
+          {lang === "ms" ? "Memuatkan..." : "Loading..."}
         </p>
       </div>
     );
   }
 
-  if (notFound) {
+  if (!wedding) {
     return (
-      <div style={cssVars} className="min-h-screen flex items-center justify-center bg-[var(--color-bg)] px-6">
-        <div className="text-center animate-fade-in">
-          <h1 className="font-script text-3xl md:text-4xl text-[var(--color-primary)] mb-4">
-            Wedding Not Found
-          </h1>
-          <p className="font-ui text-sm text-[var(--color-text-muted)]">
-            The invitation you are looking for could not be found.
-          </p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <p className="font-ui text-sm uppercase tracking-wider-luxe text-white/60">
+          {lang === "ms" ? "Jemputan tidak dijumpai" : "Invitation not found"}
+        </p>
       </div>
     );
   }
 
-  const coupleNames =
-    content.cover_heading ||
-    (wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "");
-  const welcomeText = content.cover_welcome || t("welcome");
-  const subtitle = content.cover_subtitle || "";
-  const buttonText = content.cover_button_text || t("enterWebsite");
-  const bgUrl = content.cover_background_url || wedding?.hero_image_url || null;
-  const bgType = content.cover_background_type || "image";
-  const logoUrl = content.cover_logo_url || wedding?.cover_monogram_url || null;
-  const showCountdown = content.countdown_enabled !== false && wedding?.wedding_date && !countdown.isPast;
+  const content = getCoverContent(wedding);
+  const theme = wedding.theme_config && "colors" in wedding.theme_config ? wedding.theme_config : null;
+  const bgUrl = content.cover_background_url;
+  const isVideo = content.cover_background_type === "video";
 
   const handleEnter = () => {
-    if (slug) navigate(`/w/${slug}/login`);
+    navigate(`/w/${slug}/login`);
   };
 
   return (
     <div
-      style={cssVars}
-      className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-[var(--color-bg)]"
+      style={themeToCssVars(theme) as React.CSSProperties}
+      className="min-h-screen relative flex flex-col items-center justify-center text-center overflow-hidden"
     >
-      {/* Background image/video */}
-      {bgUrl && bgType === "video" ? (
+      {/* Background */}
+      {isVideo && bgUrl ? (
         <video
           src={bgUrl}
           autoPlay
@@ -107,114 +81,101 @@ export function Cover() {
           playsInline
           className="absolute inset-0 w-full h-full object-cover"
         />
-      ) : bgUrl ? (
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${bgUrl})` }}
-        />
       ) : (
-        <div className="absolute inset-0 bg-gradient-to-b from-[var(--color-bg-light)] via-[var(--color-bg)] to-[var(--color-bg)]" />
+        bgUrl && (
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: `url(${bgUrl})` }}
+          />
+        )
       )}
 
-      {/* Overlay for readability */}
-      <div className="absolute inset-0 bg-black/30" />
-      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40" />
+      {/* Dark Overlay */}
+      <div className="absolute inset-0 bg-black/40" />
 
-      {/* Language toggle top right */}
-      <div className="absolute top-5 right-5 z-20 flex items-center gap-1.5">
-        <button
-          onClick={() => setLang("en")}
-          className={`font-ui text-xs uppercase tracking-wider-luxe px-2 py-1 transition-opacity ${
-            lang === "en" ? "text-white opacity-100" : "text-white/60 opacity-60 hover:opacity-90"
-          }`}
-        >
-          EN
-        </button>
-        <span className="text-white/40 text-xs">|</span>
-        <button
-          onClick={() => setLang("ms")}
-          className={`font-ui text-xs uppercase tracking-wider-luxe px-2 py-1 transition-opacity ${
-            lang === "ms" ? "text-white opacity-100" : "text-white/60 opacity-60 hover:opacity-90"
-          }`}
-        >
-          MS
-        </button>
-      </div>
-
-      {/* Centered content */}
-      <div className="relative z-10 flex flex-col items-center justify-center text-center px-6 max-w-3xl mx-auto">
-        {/* Monogram / logo */}
-        {logoUrl && (
+      {/* Content */}
+      <div className="relative z-10 flex flex-col items-center px-6 py-16 max-w-2xl mx-auto">
+        {/* Logo */}
+        {content.cover_logo_url && (
           <img
-            src={logoUrl}
-            alt="Monogram"
-            className="w-20 h-20 md:w-24 md:h-24 object-contain mb-8 animate-fade-in opacity-0-init"
+            src={content.cover_logo_url}
+            alt=""
+            className="w-20 h-20 object-contain mb-8 animate-fade-in opacity-0-init"
           />
         )}
 
-        {/* Welcome text */}
-        <p className="font-ui text-xs md:text-sm uppercase tracking-luxe text-white/80 mb-6 animate-fade-in-down opacity-0-init">
-          {welcomeText}
-        </p>
+        {/* Welcome Text */}
+        {content.cover_welcome && (
+          <p className="font-ui text-xs uppercase tracking-luxe text-white/80 mb-6 animate-fade-in opacity-0-init delay-100">
+            {content.cover_welcome}
+          </p>
+        )}
 
-        {/* Couple names */}
-        <h1 className="font-script text-5xl md:text-7xl lg:text-8xl text-white leading-tight mb-4 animate-fade-in-up opacity-0-init delay-100">
-          {coupleNames}
+        {/* Cover Heading / Subtitle */}
+        {content.cover_heading && (
+          <p className="font-ui text-xs uppercase tracking-wider-luxe text-white/70 mb-4 animate-fade-in opacity-0-init delay-200">
+            {content.cover_heading}
+          </p>
+        )}
+
+        {/* Couple Names */}
+        <h1 className="font-script text-4xl md:text-6xl text-white mb-2 animate-fade-in-up opacity-0-init delay-200">
+          {wedding.couple_name_one}
+        </h1>
+        <p className="font-script text-2xl md:text-3xl text-white/50 mb-2 animate-fade-in-up opacity-0-init delay-300">
+          &
+        </p>
+        <h1 className="font-script text-4xl md:text-6xl text-white mb-8 animate-fade-in-up opacity-0-init delay-400">
+          {wedding.couple_name_two}
         </h1>
 
-        {/* Subtitle */}
-        {subtitle && (
-          <p className="font-heading text-lg md:text-xl text-white/90 italic mb-6 animate-fade-in-up opacity-0-init delay-200">
-            {subtitle}
+        {/* Date */}
+        {wedding.wedding_date && (
+          <p className="font-ui text-xs uppercase tracking-luxe text-white/80 mb-8 animate-fade-in opacity-0-init delay-500">
+            {formatDate(wedding.wedding_date, lang)}
           </p>
         )}
 
-        {/* Wedding date */}
-        {wedding?.wedding_date && (
-          <p className="font-ui text-sm md:text-base uppercase tracking-wider-luxe text-white/85 mb-10 animate-fade-in-up opacity-0-init delay-300">
-            {new Date(wedding.wedding_date).toLocaleDateString(lang === "ms" ? "ms-MY" : "en-US", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
-          </p>
-        )}
-
-        {/* Countdown timer */}
-        {showCountdown && (
-          <div className="flex items-center justify-center gap-4 md:gap-8 mb-10 animate-fade-in-up opacity-0-init delay-400">
-            {[
-              { label: t("days"), value: countdown.days },
-              { label: t("hours"), value: countdown.hours },
-              { label: t("minutes"), value: countdown.minutes },
-              { label: t("seconds"), value: countdown.seconds },
-            ].map((item) => (
-              <div key={item.label} className="flex flex-col items-center">
-                <div className="font-script text-3xl md:text-4xl text-white tabular-nums">
-                  {String(item.value).padStart(2, "0")}
+        {/* Countdown Timer */}
+        {!countdown.isPast && (
+          <div className="flex gap-4 md:gap-8 mb-10 animate-fade-in-up opacity-0-init delay-700">
+            {(["days", "hours", "minutes", "seconds"] as const).map((unit) => (
+              <div key={unit} className="text-center">
+                <div className="font-heading text-2xl md:text-4xl text-white mb-1">
+                  {String(countdown[unit]).padStart(2, "0")}
                 </div>
-                <div className="font-ui text-[10px] md:text-xs uppercase tracking-wider-luxe text-white/70 mt-1">
-                  {item.label}
+                <div className="font-ui text-[10px] uppercase tracking-wider-luxe text-white/60">
+                  {t_unit(unit, lang)}
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Enter button */}
-        <Button
-          variant="outline"
-          size="lg"
-          onClick={handleEnter}
-          className="animate-fade-in-up opacity-0-init delay-500 text-white border-white/70 hover:bg-white hover:text-[var(--color-primary)]"
-        >
-          {buttonText}
-          <ChevronRight size={16} className="ml-2" />
-        </Button>
+        {/* Enter Website Button */}
+        <div className="animate-fade-in-up opacity-0-init delay-1000">
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={handleEnter}
+            className="border-white/60 text-white hover:bg-white hover:text-black"
+          >
+            {content.cover_button_text || (lang === "ms" ? "Masuk Laman Web" : "Enter Website")}
+          </Button>
+        </div>
       </div>
     </div>
   );
+}
+
+function t_unit(unit: string, lang: "en" | "ms"): string {
+  const map: Record<string, { en: string; ms: string }> = {
+    days: { en: "Days", ms: "Hari" },
+    hours: { en: "Hours", ms: "Jam" },
+    minutes: { en: "Minutes", ms: "Minit" },
+    seconds: { en: "Seconds", ms: "Saat" },
+  };
+  return map[unit]?.[lang] || unit;
 }
 
 export default Cover;

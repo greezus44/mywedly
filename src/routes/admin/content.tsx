@@ -1,50 +1,61 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Save, Upload } from "lucide-react";
 import { supabase, type Wedding, type WeddingContent } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Toggle } from "../../components/ui/Input";
+import { Input, Textarea, Label, Toggle } from "../../components/ui/Input";
 import { ImageUpload, FormField } from "../../components/ui/ImageUpload";
-import { Toast } from "../../components/ui/index";
-import { getCoverContent } from "../../lib/theme";
+import { Toast, EmptyState } from "../../components/ui/index";
+import { Save, Send, RefreshCw } from "lucide-react";
 
 export function ContentPage() {
   const queryClient = useQueryClient();
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [content, setContent] = useState<WeddingContent>({});
-  const [initialized, setInitialized] = useState(false);
 
-  const { data: wedding, isLoading } = useQuery({
+  const weddingQuery = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error("Not authenticated");
-      const { data, error } = await supabase
-        .from("weddings")
-        .select("*")
-        .eq("created_by", user.user.id)
-        .single();
+      const { data, error } = await supabase.from("weddings").select("*").eq("created_by", user.user.id).single();
       if (error) throw error;
       return data as Wedding;
     },
   });
 
+  const wedding = weddingQuery.data;
+
   useEffect(() => {
-    if (wedding && !initialized) {
-      setContent(getCoverContent(wedding));
-      setInitialized(true);
+    if (wedding) {
+      const draft = (wedding.draft_content || {}) as WeddingContent;
+      const pub = (wedding.content || {}) as WeddingContent;
+      const merged: WeddingContent = {
+        home_title: draft.home_title ?? pub.home_title ?? "",
+        home_subtitle: draft.home_subtitle ?? pub.home_subtitle ?? "",
+        home_body: draft.home_body ?? pub.home_body ?? "",
+        home_image_url: draft.home_image_url ?? pub.home_image_url ?? "",
+        invitation_intro: draft.invitation_intro ?? pub.invitation_intro ?? "",
+        invitation_quran_verse: draft.invitation_quran_verse ?? pub.invitation_quran_verse ?? "",
+        invitation_quran_translation: draft.invitation_quran_translation ?? pub.invitation_quran_translation ?? "",
+        invitation_quran_reference: draft.invitation_quran_reference ?? pub.invitation_quran_reference ?? "",
+        invitation_closing: draft.invitation_closing ?? pub.invitation_closing ?? "",
+        countdown_enabled: draft.countdown_enabled ?? pub.countdown_enabled ?? true,
+      };
+      setContent(merged);
     }
-  }, [wedding, initialized]);
+  }, [wedding]);
 
   const saveDraftMutation = useMutation({
-    mutationFn: async (draft: WeddingContent) => {
+    mutationFn: async (values: WeddingContent) => {
       if (!wedding) throw new Error("No wedding");
+      const existingDraft = (wedding.draft_content || {}) as WeddingContent;
+      const merged = { ...existingDraft, ...values };
       const { data, error } = await supabase
         .from("weddings")
-        .update({ draft_content: draft, updated_at: new Date().toISOString() })
+        .update({ draft_content: merged, updated_at: new Date().toISOString() })
         .eq("id", wedding.id)
         .select("*")
         .single();
@@ -53,18 +64,21 @@ export function ContentPage() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["wedding"], data);
+      setToast({ message: "Draft saved", type: "success" });
     },
+    onError: () => setToast({ message: "Failed to save draft", type: "error" }),
   });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
       if (!wedding) throw new Error("No wedding");
-      const draft = (wedding.draft_content || {}) as WeddingContent;
-      const published = (wedding.content || {}) as WeddingContent;
-      const merged = { ...published, ...draft };
+      const existingDraft = (wedding.draft_content || {}) as WeddingContent;
+      const mergedDraft = { ...existingDraft, ...content };
+      const existingPub = (wedding.content || {}) as WeddingContent;
+      const mergedPub = { ...existingPub, ...content };
       const { data, error } = await supabase
         .from("weddings")
-        .update({ content: merged, draft_content: merged, updated_at: new Date().toISOString() })
+        .update({ draft_content: mergedDraft, content: mergedPub, updated_at: new Date().toISOString() })
         .eq("id", wedding.id)
         .select("*")
         .single();
@@ -73,180 +87,164 @@ export function ContentPage() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["wedding"], data);
-      setToast({ message: "Home page published!", type: "success" });
+      setToast({ message: "Content published", type: "success" });
     },
     onError: () => setToast({ message: "Failed to publish", type: "error" }),
   });
 
-  const updateField = useCallback(
-    (field: keyof WeddingContent, value: string | boolean) => {
-      setContent((prev) => {
-        const next = { ...prev, [field]: value };
-        saveDraftMutation.mutate(next);
-        return next;
-      });
-    },
-    [saveDraftMutation]
-  );
+  const handleSaveDraft = () => saveDraftMutation.mutate(content);
+  const handlePublish = () => {
+    saveDraftMutation.mutate(content, {
+      onSuccess: () => publishMutation.mutate(),
+    });
+  };
 
-  const previewWedding: Wedding | undefined = wedding
-    ? { ...wedding, draft_content: content }
-    : undefined;
+  const update = (key: keyof WeddingContent, value: string | boolean) => {
+    setContent((prev) => ({ ...prev, [key]: value }));
+  };
 
-  if (isLoading || !wedding || !previewWedding) {
+  if (weddingQuery.isLoading) {
     return (
       <AdminLayout>
-        <div className="flex items-center justify-center h-full">
-          <p className="font-ui text-sm text-[var(--color-text-muted)]">Loading editor...</p>
+        <div className="flex items-center justify-center h-full p-20">
+          <RefreshCw size={24} className="animate-spin text-[var(--color-primary)]" />
         </div>
       </AdminLayout>
     );
   }
 
+  if (weddingQuery.isError || !wedding) {
+    return (
+      <AdminLayout>
+        <div className="p-8">
+          <EmptyState title="Unable to load editor" description="Please try again later." />
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  const previewWedding: Wedding = {
+    ...wedding,
+    draft_content: { ...(wedding.draft_content || {}), ...content },
+  };
+
   return (
     <AdminLayout>
-      <SplitEditor title="Home Page Content" preview={<HomePreview wedding={previewWedding} />}>
+      <SplitEditor title="Home Content Editor" preview={<HomePreview wedding={previewWedding} />}>
         <div className="space-y-6">
           <div>
-            <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Home Page</h2>
-            <p className="font-ui text-sm text-[var(--color-text-muted)]">
-              The main invitation page guests land on.
-            </p>
+            <h2 className="font-heading text-xl text-[var(--color-text)] mb-1">Home Content</h2>
+            <p className="font-ui text-xs text-[var(--color-text-muted)]">Main page content and invitation</p>
           </div>
 
-          {/* Publish bar */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-[var(--color-bg-light)] border border-[var(--color-border)]/15">
-            <div className="flex items-center gap-2">
-              {saveDraftMutation.isPending && (
-                <span className="font-ui text-xs text-[var(--color-text-muted)] flex items-center gap-1.5">
-                  <Save size={12} className="animate-pulse" /> Saving draft...
-                </span>
-              )}
-              {saveDraftMutation.isSuccess && !saveDraftMutation.isPending && (
-                <span className="font-ui text-xs text-[var(--color-success)]">Draft saved</span>
-              )}
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => publishMutation.mutate()}
-              disabled={publishMutation.isPending}
-            >
-              <Upload size={14} className="mr-1.5" />
-              {publishMutation.isPending ? "Publishing..." : "Publish"}
-            </Button>
-          </div>
+          <FormField label="Home Title">
+            <Input
+              value={content.home_title || ""}
+              onChange={(e) => update("home_title", e.target.value)}
+              placeholder="Our Wedding"
+            />
+          </FormField>
 
-          {/* Home Section */}
-          <div className="pt-4 border-t border-[var(--color-border)]/15">
-            <h3 className="font-heading text-lg text-[var(--color-text)] mb-4">Home Content</h3>
+          <FormField label="Home Subtitle">
+            <Input
+              value={content.home_subtitle || ""}
+              onChange={(e) => update("home_subtitle", e.target.value)}
+              placeholder="We're getting married"
+            />
+          </FormField>
 
-            <FormField label="Home Title" hint="Overrides the couple names if set">
-              <Input
-                value={content.home_title || ""}
-                onChange={(e) => updateField("home_title", e.target.value)}
-                placeholder="Our Wedding"
-              />
-            </FormField>
+          <FormField label="Home Body" hint="Main text shown on the home page">
+            <Textarea
+              value={content.home_body || ""}
+              onChange={(e) => update("home_body", e.target.value)}
+              placeholder="Together with their families, we invite you to celebrate..."
+              className="min-h-[120px]"
+            />
+          </FormField>
 
-            <FormField label="Subtitle">
-              <Input
-                value={content.home_subtitle || ""}
-                onChange={(e) => updateField("home_subtitle", e.target.value)}
-                placeholder="Together with their families"
-              />
-            </FormField>
+          <ImageUpload
+            label="Home Image"
+            value={content.home_image_url || null}
+            onChange={(url) => update("home_image_url", url || "")}
+          />
 
-            <FormField label="Body Text" hint="Main paragraph on the home page">
-              <Textarea
-                value={content.home_body || ""}
-                onChange={(e) => updateField("home_body", e.target.value)}
-                placeholder="We invite you to share in our joy as we celebrate our union..."
-                className="min-h-[140px]"
-              />
-            </FormField>
-
-            <FormField label="Home Image">
-              <ImageUpload
-                value={content.home_image_url || null}
-                onChange={(v) => updateField("home_image_url", v || "")}
-                label="Home Page Image"
-              />
-            </FormField>
-          </div>
-
-          {/* Invitation Section */}
           <div className="pt-4 border-t border-[var(--color-border)]/15">
             <h3 className="font-heading text-lg text-[var(--color-text)] mb-4">Invitation</h3>
-
-            <FormField label="Invitation Intro" hint="Small heading above the invitation">
-              <Input
-                value={content.invitation_intro || ""}
-                onChange={(e) => updateField("invitation_intro", e.target.value)}
-                placeholder="With the blessing of our families"
-              />
-            </FormField>
-
-            <FormField label="Quran Verse">
-              <Textarea
-                value={content.invitation_quran_verse || ""}
-                onChange={(e) => updateField("invitation_quran_verse", e.target.value)}
-                placeholder="And among His signs is that He created for you mates from yourselves..."
-                className="min-h-[100px]"
-              />
-            </FormField>
-
-            <FormField label="Verse Translation">
-              <Textarea
-                value={content.invitation_quran_translation || ""}
-                onChange={(e) => updateField("invitation_quran_translation", e.target.value)}
-                placeholder="Translation of the verse..."
-                className="min-h-[80px]"
-              />
-            </FormField>
-
-            <FormField label="Verse Reference">
-              <Input
-                value={content.invitation_quran_reference || ""}
-                onChange={(e) => updateField("invitation_quran_reference", e.target.value)}
-                placeholder="Surah Ar-Rum 30:21"
-              />
-            </FormField>
-
-            <FormField label="Closing Text">
-              <Textarea
-                value={content.invitation_closing || ""}
-                onChange={(e) => updateField("invitation_closing", e.target.value)}
-                placeholder="We look forward to celebrating with you..."
-                className="min-h-[80px]"
-              />
-            </FormField>
           </div>
 
-          {/* Countdown Section */}
-          <div className="pt-4 border-t border-[var(--color-border)]/15">
-            <h3 className="font-heading text-lg text-[var(--color-text)] mb-4">Countdown</h3>
+          <FormField label="Invitation Intro">
+            <Input
+              value={content.invitation_intro || ""}
+              onChange={(e) => update("invitation_intro", e.target.value)}
+              placeholder="Bismillahirrahmanirrahim"
+            />
+          </FormField>
 
-            <div className="flex items-center justify-between p-3 rounded-lg border border-[var(--color-border)]/15 mb-3">
-              <div>
-                <p className="font-ui text-sm text-[var(--color-text)]">Enable Countdown</p>
-                <p className="font-ui text-xs text-[var(--color-text-muted)]">
-                  Show a live countdown to the wedding date
-                </p>
-              </div>
-              <Toggle
-                checked={content.countdown_enabled ?? true}
-                onChange={(v) => updateField("countdown_enabled", v)}
-              />
+          <FormField label="Quran Verse">
+            <Textarea
+              value={content.invitation_quran_verse || ""}
+              onChange={(e) => update("invitation_quran_verse", e.target.value)}
+              placeholder="And among His signs is that He created for you mates from yourselves..."
+              className="min-h-[80px]"
+            />
+          </FormField>
+
+          <FormField label="Quran Translation">
+            <Textarea
+              value={content.invitation_quran_translation || ""}
+              onChange={(e) => update("invitation_quran_translation", e.target.value)}
+              placeholder="Translation of the verse..."
+              className="min-h-[80px]"
+            />
+          </FormField>
+
+          <FormField label="Quran Reference">
+            <Input
+              value={content.invitation_quran_reference || ""}
+              onChange={(e) => update("invitation_quran_reference", e.target.value)}
+              placeholder="Surah Ar-Rum: 21"
+            />
+          </FormField>
+
+          <FormField label="Invitation Closing">
+            <Textarea
+              value={content.invitation_closing || ""}
+              onChange={(e) => update("invitation_closing", e.target.value)}
+              placeholder="We look forward to celebrating with you..."
+              className="min-h-[80px]"
+            />
+          </FormField>
+
+          <div className="flex items-center justify-between py-3 px-4 bg-[var(--color-bg)] rounded-lg">
+            <div>
+              <Label className="mb-0">Countdown Enabled</Label>
+              <p className="font-ui text-xs text-[var(--color-text-muted)] mt-1">Show wedding countdown timer</p>
             </div>
+            <Toggle
+              checked={content.countdown_enabled ?? true}
+              onChange={(v) => update("countdown_enabled", v)}
+            />
+          </div>
 
-            <FormField label="Countdown Label">
-              <Input
-                value={content.countdown_label || ""}
-                onChange={(e) => updateField("countdown_label", e.target.value)}
-                placeholder="Counting down to our big day"
-              />
-            </FormField>
+          <div className="pt-4 space-y-3 border-t border-[var(--color-border)]/15">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={handleSaveDraft}
+              disabled={saveDraftMutation.isPending}
+            >
+              <Save size={14} className="mr-2" />
+              {saveDraftMutation.isPending ? "Saving..." : "Save Draft"}
+            </Button>
+            <Button
+              variant="primary"
+              className="w-full"
+              onClick={handlePublish}
+              disabled={publishMutation.isPending || saveDraftMutation.isPending}
+            >
+              <Send size={14} className="mr-2" />
+              {publishMutation.isPending ? "Publishing..." : "Publish"}
+            </Button>
           </div>
         </div>
       </SplitEditor>

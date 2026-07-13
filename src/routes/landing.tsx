@@ -10,15 +10,8 @@ export function Landing() {
           <Heart size={36} className="text-[var(--color-primary)]" />
         </div>
         <h1 className="font-script text-5xl text-[var(--color-primary)] mb-4">Wedding Invitation</h1>
-        <p className="font-body text-lg text-[var(--color-text-muted)] mb-8">
-          Create a beautiful digital wedding invitation for your special day.
-        </p>
-        <Link to="/host-login">
-          <Button variant="primary" size="lg">
-            Get Started
-            <ArrowRight size={16} className="ml-2" />
-          </Button>
-        </Link>
+        <p className="font-body text-lg text-[var(--color-text-muted)] mb-8">Create a beautiful digital wedding invitation for your special day.</p>
+        <Link to="/host-login"><Button variant="primary" size="lg">Get Started<ArrowRight size={16} className="ml-2" /></Button></Link>
       </div>
     </div>
   );

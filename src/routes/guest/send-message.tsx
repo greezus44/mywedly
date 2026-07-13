@@ -1,35 +1,31 @@
 import { useState } from "react";
-import { Send, Check, Heart } from "lucide-react";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { useLang } from "../../lib/lang-context";
-import { themeToCssVars, getTheme, getContent } from "../../lib/theme";
+import { themeToCssVars, getCoverContent } from "../../lib/theme";
+import { supabase } from "../../lib/supabase";
+import { cn } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
 import { Textarea, Label } from "../../components/ui/Input";
-import { supabase } from "../../lib/supabase";
+import { Check, Send } from "lucide-react";
 
 const MAX_CHARS = 500;
 
 export function SendMessage() {
   const { session } = useGuestAuth();
   const { lang, t } = useLang();
-
-  const wedding = session?.wedding || null;
-  const theme = getTheme(wedding);
-  const cssVars = themeToCssVars(theme);
-  const content = getContent(wedding!);
-
-  const guest = session?.guest || null;
-
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [timestamp, setTimestamp] = useState<string | null>(null);
+  const [submittedAt, setSubmittedAt] = useState<string | null>(null);
 
-  if (!wedding || !guest) return null;
+  if (!session) return null;
 
-  const guestName = guest.full_name || `${guest.first_name || ""} ${guest.last_name || ""}`.trim();
-  const intro = content.message_intro || "";
+  const { guest, wedding } = session;
+  const content = getCoverContent(wedding);
+  const theme = wedding.theme_config && "colors" in wedding.theme_config ? wedding.theme_config : null;
+
+  const charsRemaining = MAX_CHARS - message.length;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,159 +33,137 @@ export function SendMessage() {
     setError(null);
     setSubmitting(true);
 
-    const now = new Date();
-    const { error: insertError } = await supabase
-      .from("guestbook_entries")
-      .insert({
-        wedding_id: wedding.id,
-        author_name: guestName,
-        message: message.trim(),
-        is_approved: false,
-        created_at: now.toISOString(),
-      });
-
-    setSubmitting(false);
+    const { error: insertError } = await supabase.from("guestbook_entries").insert({
+      wedding_id: wedding.id,
+      author_name: guest.full_name,
+      message: message.trim(),
+      is_approved: false,
+    });
 
     if (insertError) {
-      setError(t("error"));
-    } else {
-      setSuccess(true);
-      setTimestamp(now.toLocaleString(lang === "ms" ? "ms-MY" : "en-US"));
-      setMessage("");
+      setError(lang === "ms" ? "Gagal menghantar mesej. Sila cuba lagi." : "Failed to send message. Please try again.");
+      setSubmitting(false);
+      return;
     }
+
+    setSubmittedAt(new Date().toLocaleString(lang === "ms" ? "ms-MY" : "en-US"));
+    setSuccess(true);
+    setSubmitting(false);
+    setMessage("");
   };
 
   const handleReset = () => {
     setSuccess(false);
+    setSubmittedAt(null);
     setError(null);
-    setTimestamp(null);
   };
 
-  const charsRemaining = MAX_CHARS - message.length;
-
   return (
-    <div style={cssVars} className="bg-[var(--color-bg)] min-h-screen pb-20">
-      {/* Header */}
-      <section className="max-w-2xl mx-auto px-6 pt-16 md:pt-24 pb-10 text-center">
-        <p className="font-ui text-xs uppercase tracking-luxe text-[var(--color-text-muted)] mb-4 animate-fade-in-down opacity-0-init">
-          {t("wellWishes")}
-        </p>
-        <h1 className="font-script text-4xl md:text-5xl text-[var(--color-primary)] mb-6 animate-fade-in-up opacity-0-init delay-100">
-          {t("sendMessage")}
-        </h1>
-        <div className="flex items-center justify-center gap-3 mb-6">
-          <div className="h-px w-12 bg-[var(--color-border)]/30" />
-          <div className="w-1.5 h-1.5 rounded-full border border-[var(--color-border)]/40" />
-          <div className="h-px w-12 bg-[var(--color-border)]/30" />
+    <div
+      style={themeToCssVars(theme) as React.CSSProperties}
+      className="min-h-full bg-[var(--color-bg)] py-16 md:py-24 px-6"
+    >
+      <div className="max-w-lg mx-auto">
+        {/* Header */}
+        <div className="text-center mb-10 animate-fade-in-up opacity-0-init">
+          <h2 className="font-heading text-3xl md:text-4xl text-[var(--color-primary)] mb-3">
+            {t("sendMessage")}
+          </h2>
+          {content.message_intro && (
+            <p className="font-body text-sm md:text-base text-[var(--color-text-muted)] leading-relaxed">
+              {content.message_intro}
+            </p>
+          )}
         </div>
-        {intro && (
-          <p className="font-body text-lg text-[var(--color-text)] leading-relaxed animate-fade-in-up opacity-0-init delay-200">
-            {intro}
-          </p>
-        )}
-      </section>
 
-      {/* Form / Success */}
-      <section className="max-w-xl mx-auto px-6">
+        {/* Success State */}
         {success ? (
-          /* Success confirmation */
-          <div className="bg-[var(--color-surface)] border border-[var(--color-success)]/30 rounded-lg px-8 py-12 md:px-12 md:py-16 text-center animate-success-pop" style={{ borderRadius: "var(--button-radius, 8px)" }}>
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[var(--color-success)]/15 mb-6">
-              <Heart size={28} className="text-[var(--color-success)]" fill="currentColor" />
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)]/20 rounded-lg p-10 text-center shadow-[var(--shadow-card)] animate-success-pop">
+            <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-[var(--color-success)]/15 flex items-center justify-center">
+              <Check size={28} className="text-[var(--color-success)]" />
             </div>
-            <h2 className="font-script text-3xl text-[var(--color-primary)] mb-3">
+            <h3 className="font-heading text-xl md:text-2xl text-[var(--color-primary)] mb-2">
               {t("messageSent")}
-            </h2>
-            <p className="font-body text-base text-[var(--color-text-muted)] mb-2">
+            </h3>
+            <p className="font-body text-sm text-[var(--color-text-muted)] mb-2">
               {t("messageSentDesc")}
             </p>
-            {timestamp && (
-              <p className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)] mb-8">
-                {timestamp}
+            {submittedAt && (
+              <p className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)] mb-6">
+                {submittedAt}
               </p>
             )}
             <Button variant="outline" size="md" onClick={handleReset}>
-              {t("sendMessage")}
+              {lang === "ms" ? "Hantar Mesej Lain" : "Send Another Message"}
             </Button>
           </div>
         ) : (
-          /* Message form */
-          <form
-            onSubmit={handleSubmit}
-            className="bg-[var(--color-surface)] border border-[var(--color-border)]/20 rounded-lg px-8 py-10 md:px-12 md:py-12 animate-fade-in-up opacity-0-init delay-200"
-            style={{ borderRadius: "var(--button-radius, 8px)" }}
-          >
-            {/* Guest name (auto-filled, read-only) */}
-            <div className="mb-6">
-              <Label>{t("yourName")}</Label>
-              <div className="px-4 py-3 bg-[var(--color-bg-light)] border border-[var(--color-border)]/15 rounded-lg font-body text-base text-[var(--color-text)]" style={{ borderRadius: "var(--button-radius, 8px)" }}>
-                {guestName}
+          /* Message Form */
+          <div className="bg-[var(--color-surface)] border border-[var(--color-border)]/20 rounded-lg p-6 md:p-8 shadow-[var(--shadow-soft)] animate-fade-in-up opacity-0-init delay-200">
+            <form onSubmit={handleSubmit}>
+              {/* Guest Name (Read-Only) */}
+              <div className="mb-6">
+                <Label>{t("guestName")}</Label>
+                <div className="w-full px-4 py-3 border border-[var(--color-border)]/30 bg-[var(--color-bg)]/50 rounded-lg font-ui text-sm text-[var(--color-text)] cursor-not-allowed">
+                  {guest.full_name}
+                </div>
               </div>
-            </div>
 
-            {/* Message textarea */}
-            <div className="mb-2">
-              <Label>{t("yourMessage")}</Label>
-              <Textarea
-                value={message}
-                onChange={(e) => {
-                  if (e.target.value.length <= MAX_CHARS) setMessage(e.target.value);
-                }}
-                placeholder={t("yourMessage")}
-                rows={6}
-                maxLength={MAX_CHARS}
-                className="font-body text-base"
-                style={{ borderRadius: "var(--button-radius, 8px)" }}
-              />
-            </div>
+              {/* Message Textarea */}
+              <div className="mb-2">
+                <Label>{t("yourMessage")}</Label>
+                <Textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value.slice(0, MAX_CHARS))}
+                  placeholder={lang === "ms" ? "Tulis ucapan doa anda..." : "Write your well wishes..."}
+                  maxLength={MAX_CHARS}
+                  className="min-h-[140px]"
+                  style={{ borderRadius: "var(--button-radius, 8px)" }}
+                />
+              </div>
 
-            {/* Character counter */}
-            <div className="flex justify-end mb-6">
-              <p
-                className={`font-ui text-xs tracking-wider ${
-                  charsRemaining < 50
-                    ? "text-[var(--color-error)]"
-                    : "text-[var(--color-text-muted)]"
-                }`}
-              >
-                {charsRemaining} {t("charactersRemaining")}
-              </p>
-            </div>
+              {/* Character Counter */}
+              <div className="flex justify-end mb-6">
+                <span
+                  className={cn(
+                    "font-ui text-xs",
+                    charsRemaining < 50
+                      ? "text-[var(--color-error)]"
+                      : "text-[var(--color-text-muted)]"
+                  )}
+                >
+                  {charsRemaining} {t("charactersRemaining")}
+                </span>
+              </div>
 
-            {/* Error */}
-            {error && (
-              <p className="font-ui text-sm text-[var(--color-error)] mb-4 text-center animate-fade-in">
-                {error}
-              </p>
-            )}
-
-            {/* Submit button */}
-            <Button
-              type="submit"
-              variant="outline"
-              size="lg"
-              disabled={submitting || !message.trim()}
-              className="w-full"
-            >
-              {submitting ? (
-                t("loading")
-              ) : (
-                <>
-                  <Send size={14} className="mr-2" />
-                  {t("submit")}
-                </>
+              {/* Error */}
+              {error && (
+                <p className="font-ui text-xs text-[var(--color-error)] text-center mb-4 animate-fade-in">
+                  {error}
+                </p>
               )}
-            </Button>
-          </form>
-        )}
 
-        {/* Decorative footer */}
-        <div className="flex items-center justify-center gap-3 mt-12">
-          <div className="h-px w-16 bg-[var(--color-border)]/30" />
-          <Check size={14} className="text-[var(--color-primary)]/50" />
-          <div className="h-px w-16 bg-[var(--color-border)]/30" />
-        </div>
-      </section>
+              {/* Submit Button */}
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                disabled={!message.trim() || submitting}
+                className="w-full"
+              >
+                {submitting ? (
+                  t("loading")
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <Send size={14} />
+                    {t("submit")}
+                  </span>
+                )}
+              </Button>
+            </form>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
