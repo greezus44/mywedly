@@ -1,17 +1,14 @@
-import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Wedding, type Guest, type Rsvp, type GuestbookEntry } from "../../lib/supabase";
+import { useQuery } from "@tanstack/react-query";
+import { Users, MailCheck, Check, X, MessageSquare, Calendar, TrendingUp, Clock } from "lucide-react";
+import { supabase, type Wedding, type Guest, type Rsvp, type GuestbookEntry, type WeddingEvent } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
-import { Card, Badge, EmptyState } from "../../components/ui/index";
+import { Card, Badge, EmptyState, SectionTitle } from "../../components/ui/index";
 import { Button } from "../../components/ui/Button";
-import { formatDate, cn } from "../../lib/utils";
-import { Users, Mail, CheckCircle, XCircle, MessageSquare, Calendar, Clock, TrendingUp, RefreshCw } from "lucide-react";
+import { formatDate } from "../../lib/utils";
+import { cn } from "../../lib/utils";
 
 export function OverviewPage() {
-  const queryClient = useQueryClient();
-  const [toast, setToast] = useState<string | null>(null);
-
-  const weddingQuery = useQuery({
+  const { data: wedding, isLoading: wLoading } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -22,219 +19,182 @@ export function OverviewPage() {
     },
   });
 
-  const wedding = weddingQuery.data;
-
-  const statsQuery = useQuery({
+  const { data: stats, isLoading: sLoading } = useQuery({
     queryKey: ["overview-stats", wedding?.id],
     queryFn: async () => {
       if (!wedding) return null;
-      const [guestsRes, rsvpsRes, messagesRes] = await Promise.all([
-        supabase.from("guests").select("*", { count: "exact", head: false }).eq("wedding_id", wedding.id),
-        supabase.from("rsvps").select("*", { count: "exact", head: false }).eq("wedding_id", wedding.id),
-        supabase.from("guestbook_entries").select("*", { count: "exact", head: false }).eq("wedding_id", wedding.id),
+      const [guests, rsvps, messages, events] = await Promise.all([
+        supabase.from("guests").select("*").eq("wedding_id", wedding.id),
+        supabase.from("rsvps").select("*").eq("wedding_id", wedding.id),
+        supabase.from("guestbook_entries").select("*").eq("wedding_id", wedding.id),
+        supabase.from("events").select("*").eq("wedding_id", wedding.id),
       ]);
-      const guests = (guestsRes.data || []) as Guest[];
-      const rsvps = (rsvpsRes.data || []) as Rsvp[];
-      const messages = (messagesRes.data || []) as GuestbookEntry[];
+      const guestList = (guests.data || []) as Guest[];
+      const rsvpList = (rsvps.data || []) as Rsvp[];
+      const msgList = (messages.data || []) as GuestbookEntry[];
+      const eventList = (events.data || []) as WeddingEvent[];
       return {
-        totalGuests: guests.length,
-        pendingRsvps: rsvps.filter((r) => r.status === "pending").length,
-        accepted: rsvps.filter((r) => r.status === "accepted").length,
-        declined: rsvps.filter((r) => r.status === "declined").length,
-        totalRsvps: rsvps.length,
-        messages: messages.length,
-        pendingMessages: messages.filter((m) => !m.is_approved).length,
+        totalGuests: guestList.length,
+        pendingRsvps: rsvpList.filter((r) => r.status === "pending").length,
+        accepted: rsvpList.filter((r) => r.status === "accepted").length,
+        declined: rsvpList.filter((r) => r.status === "declined").length,
+        messages: msgList.length,
+        approvedMessages: msgList.filter((m) => m.is_approved).length,
+        pendingMessages: msgList.filter((m) => !m.is_approved).length,
+        events: eventList.length,
       };
     },
     enabled: !!wedding,
   });
 
-  const recentActivityQuery = useQuery({
+  const { data: recentActivity } = useQuery({
     queryKey: ["recent-activity", wedding?.id],
     queryFn: async () => {
       if (!wedding) return [];
-      const [rsvpsRes, messagesRes] = await Promise.all([
+      const [rsvps, messages, guests] = await Promise.all([
         supabase.from("rsvps").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false }).limit(5),
         supabase.from("guestbook_entries").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false }).limit(5),
+        supabase.from("guests").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false }).limit(5),
       ]);
-      const rsvps = (rsvpsRes.data || []) as Rsvp[];
-      const messages = (messagesRes.data || []) as GuestbookEntry[];
-      const activity = [
-        ...rsvps.map((r) => ({ type: "rsvp" as const, id: r.id, name: r.guest_name || "Unknown Guest", detail: r.status, created_at: r.created_at })),
-        ...messages.map((m) => ({ type: "message" as const, id: m.id, name: m.author_name, detail: m.message.slice(0, 60), created_at: m.created_at })),
-      ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 8);
-      return activity;
+      const activities: { type: string; label: string; time: string }[] = [];
+      (rsvps.data || []).forEach((r: Rsvp) => activities.push({ type: "rsvp", label: `${r.guest_name || "Guest"} ${r.status} RSVP`, time: r.created_at }));
+      (messages.data || []).forEach((m: GuestbookEntry) => activities.push({ type: "message", label: `${m.author_name} sent a message`, time: m.created_at }));
+      (guests.data || []).forEach((g: Guest) => activities.push({ type: "guest", label: `${g.full_name} was added`, time: g.created_at }));
+      return activities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 8);
     },
     enabled: !!wedding,
   });
 
-  const handleRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["overview-stats"] });
-    queryClient.invalidateQueries({ queryKey: ["recent-activity"] });
-    setToast("Dashboard refreshed");
-    setTimeout(() => setToast(null), 2500);
-  };
-
-  if (weddingQuery.isLoading) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-full p-20">
-          <RefreshCw size={24} className="animate-spin text-[var(--color-primary)]" />
-        </div>
-      </AdminLayout>
-    );
-  }
-
-  if (weddingQuery.isError || !wedding) {
-    return (
-      <AdminLayout>
-        <div className="p-8">
-          <EmptyState icon={<XCircle size={32} />} title="Unable to load dashboard" description="Please try again later." />
-        </div>
-      </AdminLayout>
-    );
-  }
-
-  const stats = statsQuery.data;
-  const activity = recentActivityQuery.data || [];
+  const loading = wLoading || sLoading;
 
   const statCards = [
-    { label: "Total Guests", value: stats?.totalGuests ?? "—", icon: Users, color: "text-[var(--color-primary)]" },
-    { label: "Pending RSVPs", value: stats?.pendingRsvps ?? "—", icon: Clock, color: "text-[var(--color-warning)]" },
-    { label: "Accepted", value: stats?.accepted ?? "—", icon: CheckCircle, color: "text-[var(--color-success)]" },
-    { label: "Declined", value: stats?.declined ?? "—", icon: XCircle, color: "text-[var(--color-error)]" },
-    { label: "Messages", value: stats?.messages ?? "—", icon: MessageSquare, color: "text-[var(--color-primary)]" },
-    { label: "RSVP Rate", value: stats && stats.totalRsvps > 0 ? `${Math.round((stats.accepted / stats.totalRsvps) * 100)}%` : "—", icon: TrendingUp, color: "text-[var(--color-success)]" },
+    { label: "Total Guests", value: stats?.totalGuests ?? 0, icon: Users, color: "text-[var(--color-primary)]" },
+    { label: "Pending RSVPs", value: stats?.pendingRsvps ?? 0, icon: Clock, color: "text-[var(--color-warning)]" },
+    { label: "Accepted", value: stats?.accepted ?? 0, icon: Check, color: "text-[var(--color-success)]" },
+    { label: "Declined", value: stats?.declined ?? 0, icon: X, color: "text-[var(--color-error)]" },
+    { label: "Messages", value: stats?.messages ?? 0, icon: MessageSquare, color: "text-[var(--color-primary)]" },
+    { label: "Events", value: stats?.events ?? 0, icon: Calendar, color: "text-[var(--color-primary)]" },
   ];
 
   return (
     <AdminLayout>
-      <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-[var(--color-bg)]">
-        <div className="max-w-6xl mx-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
-            <div>
-              <h1 className="font-heading text-3xl text-[var(--color-text)] mb-1">Dashboard</h1>
-              <p className="font-ui text-sm text-[var(--color-text-muted)]">
-                {wedding.couple_name_one} & {wedding.couple_name_two}
-                {wedding.wedding_date && ` · ${formatDate(wedding.wedding_date)}`}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {wedding.is_published ? (
-                <Badge variant="success">Published</Badge>
-              ) : (
-                <Badge variant="warning">Draft</Badge>
-              )}
-              <Button variant="ghost" size="sm" onClick={handleRefresh}>
-                <RefreshCw size={14} className={statsQuery.isFetching ? "animate-spin" : ""} />
-              </Button>
-            </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-8">
+          <div className="mb-8">
+            <h1 className="font-heading text-3xl text-[var(--color-text)] mb-1">Dashboard</h1>
+            <p className="font-ui text-sm text-[var(--color-text-muted)]">
+              {wedding ? `${wedding.couple_name_one} & ${wedding.couple_name_two}` : "Welcome back"}
+            </p>
           </div>
 
-          {/* Stat Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-            {statCards.map((card) => {
-              const Icon = card.icon;
-              return (
-                <Card key={card.label} className="p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <Icon size={20} className={card.color} />
-                  </div>
-                  <div className="font-heading text-3xl text-[var(--color-text)] mb-1">{card.value}</div>
-                  <div className="font-ui text-xs uppercase tracking-wider text-[var(--color-text-muted)]">{card.label}</div>
+          {loading ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Card key={i} className="p-6 animate-pulse">
+                  <div className="h-12 w-12 rounded-full bg-gray-100 mb-4" />
+                  <div className="h-8 w-16 bg-gray-100 rounded mb-2" />
+                  <div className="h-4 w-24 bg-gray-100 rounded" />
                 </Card>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+              {statCards.map((stat) => {
+                const Icon = stat.icon;
+                return (
+                  <Card key={stat.label} className="p-6 hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className={cn("p-3 rounded-full bg-[var(--color-primary)]/8", stat.color)}>
+                        <Icon size={20} />
+                      </div>
+                      {wedding?.is_published && stat.label === "Total Guests" && (
+                        <Badge variant="success">Live</Badge>
+                      )}
+                    </div>
+                    <p className="font-heading text-3xl text-[var(--color-text)] mb-1">{stat.value}</p>
+                    <p className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">{stat.label}</p>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
 
-          {/* Wedding Info + Recent Activity */}
-          <div className="grid lg:grid-cols-3 gap-6">
-            {/* Wedding Info */}
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card className="p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp size={18} className="text-[var(--color-primary)]" />
+                <h3 className="font-heading text-lg text-[var(--color-text)]">Recent Activity</h3>
+              </div>
+              {recentActivity && recentActivity.length > 0 ? (
+                <div className="space-y-3">
+                  {recentActivity.map((activity, i) => (
+                    <div key={i} className="flex items-center gap-3 py-2 border-b border-[var(--color-border)]/10 last:border-0">
+                      <div className="w-2 h-2 rounded-full bg-[var(--color-primary)]" />
+                      <div className="flex-1">
+                        <p className="font-ui text-sm text-[var(--color-text)]">{activity.label}</p>
+                        <p className="font-ui text-xs text-[var(--color-text-muted)]">
+                          {new Date(activity.time).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState icon={<MessageSquare size={32} />} title="No activity yet" description="Recent activity will appear here" />
+              )}
+            </Card>
+
             <Card className="p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Calendar size={18} className="text-[var(--color-primary)]" />
                 <h3 className="font-heading text-lg text-[var(--color-text)]">Wedding Details</h3>
               </div>
-              <div className="space-y-3">
-                <div>
-                  <p className="font-ui text-xs uppercase tracking-wider text-[var(--color-text-muted)] mb-1">Date</p>
-                  <p className="font-body text-sm text-[var(--color-text)]">{wedding.wedding_date ? formatDate(wedding.wedding_date) : "Not set"}</p>
-                </div>
-                <div>
-                  <p className="font-ui text-xs uppercase tracking-wider text-[var(--color-text-muted)] mb-1">Location</p>
-                  <p className="font-body text-sm text-[var(--color-text)]">{wedding.location || "Not set"}</p>
-                </div>
-                <div>
-                  <p className="font-ui text-xs uppercase tracking-wider text-[var(--color-text-muted)] mb-1">Hashtag</p>
-                  <p className="font-body text-sm text-[var(--color-text)]">{wedding.hashtag || "Not set"}</p>
-                </div>
-                <div>
-                  <p className="font-ui text-xs uppercase tracking-wider text-[var(--color-text-muted)] mb-1">RSVP Deadline</p>
-                  <p className="font-body text-sm text-[var(--color-text)]">{wedding.rsvp_deadline ? formatDate(wedding.rsvp_deadline) : "Not set"}</p>
-                </div>
-              </div>
-            </Card>
-
-            {/* Recent Activity */}
-            <Card className="p-6 lg:col-span-2">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-heading text-lg text-[var(--color-text)]">Recent Activity</h3>
-                {stats && stats.pendingMessages > 0 && (
-                  <Badge variant="warning">{stats.pendingMessages} pending</Badge>
-                )}
-              </div>
-              {activity.length === 0 ? (
-                <EmptyState title="No activity yet" description="RSVPs and messages will appear here." />
-              ) : (
+              {wedding ? (
                 <div className="space-y-3">
-                  {activity.map((item) => (
-                    <div key={`${item.type}-${item.id}`} className="flex items-start gap-3 py-2 border-b border-[var(--color-border)]/10 last:border-0">
-                      <div className={cn("w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0", item.type === "rsvp" ? "bg-[var(--color-primary)]/10" : "bg-[var(--color-accent)]/10")}>
-                        {item.type === "rsvp" ? <Mail size={14} className="text-[var(--color-primary)]" /> : <MessageSquare size={14} className="text-[var(--color-accent)]" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-ui text-sm text-[var(--color-text)] truncate">{item.name}</p>
-                        <p className="font-ui text-xs text-[var(--color-text-muted)] truncate">
-                          {item.type === "rsvp" ? `RSVP: ${item.detail}` : item.detail}
-                        </p>
-                      </div>
-                      <span className="font-ui text-xs text-[var(--color-text-muted)] flex-shrink-0">
-                        {new Date(item.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                      </span>
-                    </div>
-                  ))}
+                  <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]/10">
+                    <span className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">Date</span>
+                    <span className="font-ui text-sm text-[var(--color-text)]">{formatDate(wedding.wedding_date) || "Not set"}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]/10">
+                    <span className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">Location</span>
+                    <span className="font-ui text-sm text-[var(--color-text)]">{wedding.location || "Not set"}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]/10">
+                    <span className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">Hashtag</span>
+                    <span className="font-ui text-sm text-[var(--color-text)]">{wedding.hashtag || "—"}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-[var(--color-border)]/10">
+                    <span className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">RSVP Deadline</span>
+                    <span className="font-ui text-sm text-[var(--color-text)]">{formatDate(wedding.rsvp_deadline) || "Not set"}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
+                    <span className="font-ui text-xs uppercase tracking-wider-luxe text-[var(--color-text-muted)]">Status</span>
+                    <Badge variant={wedding.is_published ? "success" : "default"}>
+                      {wedding.is_published ? "Published" : "Draft"}
+                    </Badge>
+                  </div>
                 </div>
+              ) : (
+                <p className="font-ui text-sm text-[var(--color-text-muted)]">Loading wedding details...</p>
               )}
             </Card>
           </div>
 
-          {/* Pending Messages Alert */}
           {stats && stats.pendingMessages > 0 && (
-            <Card className="p-5 mt-6 border-[var(--color-warning)]/30">
-              <div className="flex items-center gap-3">
-                <MessageSquare size={20} className="text-[var(--color-warning)]" />
-                <div className="flex-1">
-                  <p className="font-ui text-sm text-[var(--color-text)]">
-                    You have {stats.pendingMessages} message{stats.pendingMessages > 1 ? "s" : ""} awaiting approval.
-                  </p>
+            <Card className="p-6 mt-6 border-[var(--color-warning)]/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-heading text-lg text-[var(--color-text)] mb-1">{stats.pendingMessages} messages awaiting approval</h3>
+                  <p className="font-ui text-sm text-[var(--color-text-muted)]">Review and approve guest messages from your guestbook</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => (window.location.href = "/admin/messages")}>
-                  Review
+                <Button variant="primary" size="sm" onClick={() => (window.location.href = "/admin/messages")}>
+                  Review Messages
                 </Button>
               </div>
             </Card>
           )}
         </div>
       </div>
-
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 animate-fade-in-up">
-          <div className="px-5 py-3 rounded-lg shadow-lg font-ui text-sm bg-[var(--color-success)] text-white">
-            {toast}
-          </div>
-        </div>
-      )}
     </AdminLayout>
   );
 }

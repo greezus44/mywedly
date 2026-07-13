@@ -1,20 +1,20 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check, Trash2, MessageSquare, Clock, CheckCircle } from "lucide-react";
 import { supabase, type Wedding, type GuestbookEntry } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Card, Badge, EmptyState, Toast } from "../../components/ui/index";
-import { formatDate, cn } from "../../lib/utils";
-import { Check, Trash2, Search, MessageSquare, RefreshCw, Clock, CheckCircle } from "lucide-react";
+import { cn } from "../../lib/utils";
 
 export function MessagesPage() {
   const queryClient = useQueryClient();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "pending" | "approved">("all");
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const weddingQuery = useQuery({
+  const { data: wedding, isLoading: wLoading } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -25,51 +25,24 @@ export function MessagesPage() {
     },
   });
 
-  const wedding = weddingQuery.data;
-
-  const messagesQuery = useQuery({
-    queryKey: ["guestbook-entries", wedding?.id],
+  const { data: messages, isLoading: mLoading } = useQuery({
+    queryKey: ["messages", wedding?.id],
     queryFn: async () => {
       if (!wedding) return [];
-      const { data, error } = await supabase
-        .from("guestbook_entries")
-        .select("*")
-        .eq("wedding_id", wedding.id)
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("guestbook_entries").select("*").eq("wedding_id", wedding.id).order("created_at", { ascending: false });
       if (error) throw error;
       return (data || []) as GuestbookEntry[];
     },
     enabled: !!wedding,
   });
 
-  const messages = messagesQuery.data || [];
-
-  const filteredMessages = messages.filter((m) => {
-    const matchesSearch = !search ||
-      m.author_name.toLowerCase().includes(search.toLowerCase()) ||
-      m.message.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter =
-      filter === "all" ||
-      (filter === "pending" && !m.is_approved) ||
-      (filter === "approved" && m.is_approved);
-    return matchesSearch && matchesFilter;
-  });
-
-  const pendingCount = messages.filter((m) => !m.is_approved).length;
-
   const approveMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase
-        .from("guestbook_entries")
-        .update({ is_approved: true })
-        .eq("id", id)
-        .select("*")
-        .single();
+      const { error } = await supabase.from("guestbook_entries").update({ is_approved: true }).eq("id", id);
       if (error) throw error;
-      return data as GuestbookEntry;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guestbook-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["messages", wedding?.id] });
       setToast({ message: "Message approved", type: "success" });
     },
     onError: () => setToast({ message: "Failed to approve message", type: "error" }),
@@ -77,17 +50,11 @@ export function MessagesPage() {
 
   const unapproveMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase
-        .from("guestbook_entries")
-        .update({ is_approved: false })
-        .eq("id", id)
-        .select("*")
-        .single();
+      const { error } = await supabase.from("guestbook_entries").update({ is_approved: false }).eq("id", id);
       if (error) throw error;
-      return data as GuestbookEntry;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guestbook-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["messages", wedding?.id] });
       setToast({ message: "Message unapproved", type: "success" });
     },
     onError: () => setToast({ message: "Failed to unapprove message", type: "error" }),
@@ -99,139 +66,184 @@ export function MessagesPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guestbook-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["messages", wedding?.id] });
       setToast({ message: "Message deleted", type: "success" });
     },
     onError: () => setToast({ message: "Failed to delete message", type: "error" }),
   });
 
-  if (weddingQuery.isLoading) {
+  const filteredMessages = (messages || []).filter((m) => {
+    const matchesSearch =
+      m.author_name.toLowerCase().includes(search.toLowerCase()) ||
+      m.message.toLowerCase().includes(search.toLowerCase());
+    const matchesFilter =
+      filter === "all" ||
+      (filter === "pending" && !m.is_approved) ||
+      (filter === "approved" && m.is_approved);
+    return matchesSearch && matchesFilter;
+  });
+
+  const pendingCount = (messages || []).filter((m) => !m.is_approved).length;
+  const approvedCount = (messages || []).filter((m) => m.is_approved).length;
+
+  if (wLoading) {
     return (
       <AdminLayout>
-        <div className="flex items-center justify-center h-full p-20">
-          <RefreshCw size={24} className="animate-spin text-[var(--color-primary)]" />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="font-ui text-sm text-[var(--color-text-muted)]">Loading...</p>
         </div>
       </AdminLayout>
     );
   }
 
-  if (weddingQuery.isError || !wedding) {
+  if (!wedding) {
     return (
       <AdminLayout>
-        <div className="p-8">
-          <EmptyState title="Unable to load messages" description="Please try again later." />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="font-ui text-sm text-[var(--color-text-muted)]">Wedding not found</p>
         </div>
       </AdminLayout>
     );
   }
+
+  const loading = wLoading || mLoading;
+
+  const filterTabs = [
+    { key: "all" as const, label: "All", count: messages?.length || 0 },
+    { key: "pending" as const, label: "Pending", count: pendingCount },
+    { key: "approved" as const, label: "Approved", count: approvedCount },
+  ];
 
   return (
     <AdminLayout>
-      <div className="flex-1 overflow-y-auto p-6 md:p-8 bg-[var(--color-bg)]">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
-            <div>
-              <h1 className="font-heading text-2xl text-[var(--color-text)] mb-1">Messages</h1>
-              <p className="font-ui text-sm text-[var(--color-text-muted)]">
-                {messages.length} message{messages.length !== 1 ? "s" : ""}
-                {pendingCount > 0 && ` · ${pendingCount} pending approval`}
-              </p>
-            </div>
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-4 md:px-6 py-8">
+          <div className="mb-6">
+            <h1 className="font-heading text-3xl text-[var(--color-text)] mb-1">Messages</h1>
+            <p className="font-ui text-sm text-[var(--color-text-muted)]">
+              Review and approve guest messages from your guestbook
+            </p>
           </div>
 
-          {/* Search + Filter */}
-          <div className="flex gap-3 mb-6 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search messages..."
-                className="pl-10"
-              />
-            </div>
-            <div className="inline-flex items-center gap-1 bg-white rounded-lg p-1 border border-[var(--color-border)]/20">
-              {(["all", "pending", "approved"] as const).map((f) => (
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            <div className="inline-flex items-center gap-1 bg-[var(--color-bg)] rounded-lg p-1">
+              {filterTabs.map((tab) => (
                 <button
-                  key={f}
-                  onClick={() => setFilter(f)}
+                  key={tab.key}
+                  onClick={() => setFilter(tab.key)}
                   className={cn(
-                    "px-4 py-2 rounded-md text-xs font-ui font-medium uppercase tracking-wider transition-all",
-                    filter === f ? "bg-[var(--color-primary)]/10 text-[var(--color-primary)]" : "text-gray-500 hover:text-gray-700"
+                    "px-4 py-2 rounded-md font-ui text-xs uppercase tracking-wider-luxe transition-all",
+                    filter === tab.key
+                      ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-primary)]"
+                      : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
                   )}
                 >
-                  {f}
+                  {tab.label} ({tab.count})
                 </button>
               ))}
             </div>
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search messages..."
+              className="max-w-xs flex-1"
+            />
           </div>
 
-          {/* Messages */}
-          {messagesQuery.isLoading ? (
-            <div className="flex justify-center py-12">
-              <RefreshCw size={20} className="animate-spin text-[var(--color-primary)]" />
+          {loading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Card key={i} className="p-6 animate-pulse">
+                  <div className="h-5 w-32 bg-gray-100 rounded mb-3" />
+                  <div className="h-4 w-full bg-gray-100 rounded mb-2" />
+                  <div className="h-4 w-3/4 bg-gray-100 rounded" />
+                </Card>
+              ))}
             </div>
-          ) : filteredMessages.length === 0 ? (
-            <Card className="p-8">
-              <EmptyState
-                icon={<MessageSquare size={32} />}
-                title={search || filter !== "all" ? "No messages found" : "No messages yet"}
-                description={search || filter !== "all" ? "Try a different search or filter." : "Guest messages will appear here."}
-              />
-            </Card>
-          ) : (
+          ) : filteredMessages.length > 0 ? (
             <div className="space-y-4">
               {filteredMessages.map((msg) => (
-                <Card key={msg.id} className="p-5">
+                <Card key={msg.id} className={cn("p-5", !msg.is_approved && "border-[var(--color-warning)]/30")}>
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center flex-shrink-0">
-                        <span className="font-heading text-base text-[var(--color-primary)]">
-                          {msg.author_name.charAt(0).toUpperCase()}
-                        </span>
+                      <div className="w-10 h-10 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center font-heading text-lg text-[var(--color-primary)]">
+                        {msg.author_name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <h3 className="font-ui text-sm font-medium text-[var(--color-text)]">{msg.author_name}</h3>
-                        <p className="font-ui text-xs text-[var(--color-text-muted)]">{formatDate(msg.created_at)}</p>
+                        <p className="font-ui text-sm font-medium text-[var(--color-text)]">{msg.author_name}</p>
+                        <p className="font-ui text-xs text-[var(--color-text-muted)]">
+                          {new Date(msg.created_at).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
                       </div>
                     </div>
-                    {msg.is_approved ? (
-                      <Badge variant="success"><CheckCircle size={12} className="mr-1" /> Approved</Badge>
-                    ) : (
-                      <Badge variant="warning"><Clock size={12} className="mr-1" /> Pending</Badge>
-                    )}
+                    <Badge variant={msg.is_approved ? "success" : "warning"}>
+                      {msg.is_approved ? (
+                        <span className="flex items-center gap-1"><CheckCircle size={10} /> Approved</span>
+                      ) : (
+                        <span className="flex items-center gap-1"><Clock size={10} /> Pending</span>
+                      )}
+                    </Badge>
                   </div>
 
-                  <p className="font-body text-sm text-[var(--color-text)] leading-relaxed mb-4 whitespace-pre-line">
+                  <p className="font-body text-sm text-[var(--color-text)] leading-relaxed whitespace-pre-line mb-4">
                     {msg.message}
                   </p>
 
                   <div className="flex items-center gap-2 pt-3 border-t border-[var(--color-border)]/10">
                     {msg.is_approved ? (
-                      <Button variant="ghost" size="sm" onClick={() => unapproveMutation.mutate(msg.id)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => unapproveMutation.mutate(msg.id)}
+                        disabled={unapproveMutation.isPending}
+                      >
                         Unapprove
                       </Button>
                     ) : (
-                      <Button variant="outline" size="sm" onClick={() => approveMutation.mutate(msg.id)}>
-                        <Check size={14} className="mr-1" /> Approve
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => approveMutation.mutate(msg.id)}
+                        disabled={approveMutation.isPending}
+                      >
+                        <Check size={12} className="mr-1.5" />
+                        Approve
                       </Button>
                     )}
                     <Button
                       variant="danger"
                       size="sm"
-                      onClick={() => { if (confirm("Delete this message?")) deleteMutation.mutate(msg.id); }}
+                      onClick={() => deleteMutation.mutate(msg.id)}
+                      disabled={deleteMutation.isPending}
                     >
-                      <Trash2 size={14} className="mr-1" /> Delete
+                      <Trash2 size={12} className="mr-1.5" />
+                      Delete
                     </Button>
                   </div>
                 </Card>
               ))}
             </div>
+          ) : search || filter !== "all" ? (
+            <EmptyState
+              icon={<MessageSquare size={32} />}
+              title="No messages found"
+              description={search ? `No messages match "${search}"` : "No messages in this category"}
+            />
+          ) : (
+            <EmptyState
+              icon={<MessageSquare size={32} />}
+              title="No messages yet"
+              description="Guest messages from your guestbook will appear here for approval"
+            />
           )}
         </div>
       </div>
-
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AdminLayout>
   );

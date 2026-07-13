@@ -49,7 +49,6 @@ export function SplitEditor({ title, children, preview }: { title: string; child
   const [fullscreen, setFullscreen] = useState(false);
   const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
 
-  const dims = DEVICE_DIMS[device][orientation];
   const zoomScale = zoom === "fit" ? null : parseInt(zoom) / 100;
 
   const previewContent = (

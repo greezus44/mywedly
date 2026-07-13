@@ -1,67 +1,64 @@
-import { useGuestAuth } from "../../lib/guest-auth";
 import { useLang } from "../../lib/lang-context";
-import { themeToCssVars, getCoverContent } from "../../lib/theme";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { themeToCssVars, getTheme, getCoverContent } from "../../lib/theme";
 
 export function Doa() {
+  const { t } = useLang();
   const { session } = useGuestAuth();
-  const { lang } = useLang();
+  const wedding = session?.wedding;
 
-  if (!session) return null;
+  if (!wedding) return null;
 
-  const { wedding } = session;
+  const theme = getTheme(wedding);
   const content = getCoverContent(wedding);
-  const theme = wedding.theme_config && "colors" in wedding.theme_config ? wedding.theme_config : null;
+  const title = content.doa_title || t("doa");
+  const body = content.doa_body || "";
+  const imageUrl = content.doa_image_url || null;
 
   return (
-    <div
-      style={themeToCssVars(theme) as React.CSSProperties}
-      className="min-h-full bg-[var(--color-bg)] py-16 md:py-24 px-6"
-    >
-      <div className="max-w-2xl mx-auto text-center">
-        {/* Title */}
-        <h2 className="font-heading text-3xl md:text-4xl text-[var(--color-primary)] mb-3 animate-fade-in-up opacity-0-init">
-          {content.doa_title || (lang === "ms" ? "Doa" : "Doa")}
-        </h2>
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]" style={themeToCssVars(theme) as React.CSSProperties}>
+      <div className="max-w-2xl mx-auto px-6 py-20 md:py-28 flex flex-col items-center text-center">
+        {/* Section label */}
+        <p className="font-ui text-xs uppercase tracking-luxe text-[var(--color-primary)] mb-6 opacity-0-init animate-fade-in">
+          {t("doa")}
+        </p>
 
-        {/* Decorative Divider */}
-        <div className="flex items-center justify-center gap-3 mb-10 animate-fade-in opacity-0-init delay-100">
-          <div className="h-px w-12 bg-[var(--color-border)]/30" />
-          <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)]" />
-          <div className="h-px w-12 bg-[var(--color-border)]/30" />
+        {/* Title */}
+        <h1 className="font-script text-4xl md:text-5xl text-[var(--color-text)] mb-6 opacity-0-init animate-fade-in-up delay-100">
+          {title}
+        </h1>
+
+        {/* Divider */}
+        <div className="flex items-center justify-center gap-2 mb-10 opacity-0-init animate-fade-in delay-200">
+          <span className="h-px w-12 bg-[var(--color-border)]/40" />
+          <span className="font-ui text-[10px] uppercase tracking-luxe text-[var(--color-primary)]">♡</span>
+          <span className="h-px w-12 bg-[var(--color-border)]/40" />
         </div>
 
-        {/* Doa Image */}
-        {content.doa_image_url && (
-          <div className="mb-10 animate-fade-in-up opacity-0-init delay-200">
+        {/* Image */}
+        {imageUrl && (
+          <div className="mb-12 max-w-sm opacity-0-init animate-fade-in-up delay-300">
             <img
-              src={content.doa_image_url}
-              alt=""
-              className="w-full max-w-md mx-auto rounded-lg shadow-[var(--shadow-card)]"
+              src={imageUrl}
+              alt={title}
+              className="w-full h-auto rounded-xl shadow-[0_4px_24px_rgba(184,151,58,0.12)]"
+              style={{ borderRadius: "var(--button-radius, 8px)" }}
             />
           </div>
         )}
 
-        {/* Doa Body */}
-        {content.doa_body && (
-          <p className="font-body text-base md:text-lg text-[var(--color-text)] leading-relaxed whitespace-pre-line animate-fade-in-up opacity-0-init delay-300">
-            {content.doa_body}
-          </p>
+        {/* Body */}
+        {body && (
+          <div className="max-w-lg opacity-0-init animate-fade-in-up delay-300">
+            <p className="font-body text-lg md:text-xl leading-relaxed text-[var(--color-text)] whitespace-pre-line">
+              {body}
+            </p>
+          </div>
         )}
 
-        {/* Bismillah if no specific doa body */}
-        {!content.doa_body && (
-          <p className="font-heading text-lg md:text-xl text-[var(--color-primary)] italic leading-relaxed animate-fade-in-up opacity-0-init delay-300">
-            {lang === "ms"
-              ? "Dengan nama Allah, Yang Maha Pemurah, Yang Maha Penyayang"
-              : "In the name of Allah, the Most Gracious, the Most Merciful"}
-          </p>
-        )}
-
-        {/* Closing decorative element */}
-        <div className="mt-12 flex items-center justify-center gap-3 animate-fade-in opacity-0-init delay-500">
-          <div className="h-px w-16 bg-[var(--color-border)]/20" />
-          <span className="font-script text-lg text-[var(--color-primary)]/40">❦</span>
-          <div className="h-px w-16 bg-[var(--color-border)]/20" />
+        {/* Closing flourish */}
+        <div className="mt-16 opacity-0-init animate-fade-in delay-500">
+          <span className="font-script text-2xl text-[var(--color-primary)]">آمين</span>
         </div>
       </div>
     </div>

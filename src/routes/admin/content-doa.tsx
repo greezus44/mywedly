@@ -1,21 +1,21 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Save, Globe } from "lucide-react";
 import { supabase, type Wedding, type WeddingContent } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { DoaPreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
 import { Input, Textarea } from "../../components/ui/Input";
+import { Toast } from "../../components/ui/index";
 import { ImageUpload, FormField } from "../../components/ui/ImageUpload";
-import { Toast, EmptyState } from "../../components/ui/index";
-import { Save, Send, RefreshCw } from "lucide-react";
 
 export function ContentDoaPage() {
   const queryClient = useQueryClient();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [content, setContent] = useState<WeddingContent>({});
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const weddingQuery = useQuery({
+  const { data: wedding, isLoading } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -26,37 +26,22 @@ export function ContentDoaPage() {
     },
   });
 
-  const wedding = weddingQuery.data;
-
   useEffect(() => {
     if (wedding) {
       const draft = (wedding.draft_content || {}) as WeddingContent;
       const pub = (wedding.content || {}) as WeddingContent;
-      const merged: WeddingContent = {
-        doa_title: draft.doa_title ?? pub.doa_title ?? "",
-        doa_body: draft.doa_body ?? pub.doa_body ?? "",
-        doa_image_url: draft.doa_image_url ?? pub.doa_image_url ?? "",
-      };
-      setContent(merged);
+      setContent({ ...pub, ...draft });
     }
   }, [wedding]);
 
   const saveDraftMutation = useMutation({
-    mutationFn: async (values: WeddingContent) => {
+    mutationFn: async (newContent: WeddingContent) => {
       if (!wedding) throw new Error("No wedding");
-      const existingDraft = (wedding.draft_content || {}) as WeddingContent;
-      const merged = { ...existingDraft, ...values };
-      const { data, error } = await supabase
-        .from("weddings")
-        .update({ draft_content: merged, updated_at: new Date().toISOString() })
-        .eq("id", wedding.id)
-        .select("*")
-        .single();
+      const { error } = await supabase.from("weddings").update({ draft_content: newContent }).eq("id", wedding.id);
       if (error) throw error;
-      return data as Wedding;
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["wedding"], data);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wedding"] });
       setToast({ message: "Draft saved", type: "success" });
     },
     onError: () => setToast({ message: "Failed to save draft", type: "error" }),
@@ -65,99 +50,70 @@ export function ContentDoaPage() {
   const publishMutation = useMutation({
     mutationFn: async () => {
       if (!wedding) throw new Error("No wedding");
-      const existingDraft = (wedding.draft_content || {}) as WeddingContent;
-      const mergedDraft = { ...existingDraft, ...content };
-      const existingPub = (wedding.content || {}) as WeddingContent;
-      const mergedPub = { ...existingPub, ...content };
-      const { data, error } = await supabase
-        .from("weddings")
-        .update({ draft_content: mergedDraft, content: mergedPub, updated_at: new Date().toISOString() })
-        .eq("id", wedding.id)
-        .select("*")
-        .single();
+      const draftContent = { ...(wedding.content || {}), ...content } as WeddingContent;
+      const { error } = await supabase.from("weddings").update({ content: draftContent, draft_content: draftContent }).eq("id", wedding.id);
       if (error) throw error;
-      return data as Wedding;
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["wedding"], data);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wedding"] });
       setToast({ message: "Doa content published", type: "success" });
     },
     onError: () => setToast({ message: "Failed to publish", type: "error" }),
   });
 
-  const handleSaveDraft = () => saveDraftMutation.mutate(content);
-  const handlePublish = () => {
-    saveDraftMutation.mutate(content, {
-      onSuccess: () => publishMutation.mutate(),
-    });
-  };
-
-  const update = (key: keyof WeddingContent, value: string) => {
+  const update = (key: keyof WeddingContent, value: string | boolean | null) => {
     setContent((prev) => ({ ...prev, [key]: value }));
   };
 
-  if (weddingQuery.isLoading) {
+  if (isLoading) {
     return (
       <AdminLayout>
-        <div className="flex items-center justify-center h-full p-20">
-          <RefreshCw size={24} className="animate-spin text-[var(--color-primary)]" />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="font-ui text-sm text-[var(--color-text-muted)]">Loading...</p>
         </div>
       </AdminLayout>
     );
   }
 
-  if (weddingQuery.isError || !wedding) {
+  if (!wedding) {
     return (
       <AdminLayout>
-        <div className="p-8">
-          <EmptyState title="Unable to load editor" description="Please try again later." />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="font-ui text-sm text-[var(--color-text-muted)]">Wedding not found</p>
         </div>
       </AdminLayout>
     );
   }
 
-  const previewWedding: Wedding = {
-    ...wedding,
-    draft_content: { ...(wedding.draft_content || {}), ...content },
-  };
+  const previewWedding = { ...wedding, draft_content: content } as Wedding;
 
   return (
     <AdminLayout>
       <SplitEditor title="Doa Content Editor" preview={<DoaPreview wedding={previewWedding} />}>
         <div className="space-y-6">
           <div>
-            <h2 className="font-heading text-xl text-[var(--color-text)] mb-1">Doa / Prayer</h2>
-            <p className="font-ui text-xs text-[var(--color-text-muted)]">A prayer or blessing for your guests</p>
+            <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Doa / Prayer</h2>
+            <p className="font-ui text-xs text-[var(--color-text-muted)] mb-6">A prayer or blessing section for your guests</p>
           </div>
 
-          <FormField label="Doa Title">
-            <Input
-              value={content.doa_title || ""}
-              onChange={(e) => update("doa_title", e.target.value)}
-              placeholder="Doa / Prayer"
-            />
+          <FormField label="Doa Title" hint="Section heading">
+            <Input value={content.doa_title || ""} onChange={(e) => update("doa_title", e.target.value)} placeholder="Doa Restu" />
           </FormField>
 
-          <FormField label="Doa Body" hint="Supports line breaks">
-            <Textarea
-              value={content.doa_body || ""}
-              onChange={(e) => update("doa_body", e.target.value)}
-              placeholder="Enter your prayer or blessing here..."
-              className="min-h-[200px]"
-            />
+          <FormField label="Doa Body" hint="The prayer or blessing text">
+            <Textarea value={content.doa_body || ""} onChange={(e) => update("doa_body", e.target.value)} placeholder="Write your prayer or blessing..." className="min-h-[200px]" />
           </FormField>
 
-          <ImageUpload
-            label="Doa Image"
-            value={content.doa_image_url || null}
-            onChange={(url) => update("doa_image_url", url || "")}
-          />
+          <FormField label="Doa Image" hint="An optional image to accompany the prayer">
+            <ImageUpload value={content.doa_image_url || null} onChange={(url) => update("doa_image_url", url)} label="Upload doa image" />
+          </FormField>
 
-          <div className="pt-4 space-y-3 border-t border-[var(--color-border)]/15">
+          <div className="pt-4 border-t border-[var(--color-border)]/15 space-y-3">
             <Button
               variant="outline"
+              size="md"
               className="w-full"
-              onClick={handleSaveDraft}
+              onClick={() => saveDraftMutation.mutate(content)}
               disabled={saveDraftMutation.isPending}
             >
               <Save size={14} className="mr-2" />
@@ -165,17 +121,17 @@ export function ContentDoaPage() {
             </Button>
             <Button
               variant="primary"
+              size="md"
               className="w-full"
-              onClick={handlePublish}
-              disabled={publishMutation.isPending || saveDraftMutation.isPending}
+              onClick={() => publishMutation.mutate()}
+              disabled={publishMutation.isPending}
             >
-              <Send size={14} className="mr-2" />
-              {publishMutation.isPending ? "Publishing..." : "Publish"}
+              <Globe size={14} className="mr-2" />
+              {publishMutation.isPending ? "Publishing..." : "Publish Doa"}
             </Button>
           </div>
         </div>
       </SplitEditor>
-
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AdminLayout>
   );

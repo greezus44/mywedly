@@ -1,22 +1,22 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Save, Upload, Globe } from "lucide-react";
 import { supabase, type Wedding, type WeddingContent } from "../../lib/supabase";
 import { AdminLayout } from "./admin-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
 import { Input, Textarea, Label, Select } from "../../components/ui/Input";
+import { Card, Toast } from "../../components/ui/index";
 import { ImageUpload, FormField } from "../../components/ui/ImageUpload";
-import { Toast, EmptyState } from "../../components/ui/index";
 import { getCoverContent } from "../../lib/theme";
-import { Save, Send, RefreshCw } from "lucide-react";
 
 export function CoverEditorPage() {
   const queryClient = useQueryClient();
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [content, setContent] = useState<WeddingContent>({});
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const weddingQuery = useQuery({
+  const { data: wedding, isLoading } = useQuery({
     queryKey: ["wedding"],
     queryFn: async () => {
       const { data: user } = await supabase.auth.getUser();
@@ -27,39 +27,22 @@ export function CoverEditorPage() {
     },
   });
 
-  const wedding = weddingQuery.data;
-
   useEffect(() => {
     if (wedding) {
       const draft = (wedding.draft_content || {}) as WeddingContent;
       const pub = (wedding.content || {}) as WeddingContent;
-      const merged: WeddingContent = {
-        cover_welcome: draft.cover_welcome ?? pub.cover_welcome ?? "",
-        cover_heading: draft.cover_heading ?? pub.cover_heading ?? "",
-        cover_subtitle: draft.cover_subtitle ?? pub.cover_subtitle ?? "",
-        cover_button_text: draft.cover_button_text ?? pub.cover_button_text ?? "",
-        cover_background_url: draft.cover_background_url ?? pub.cover_background_url ?? "",
-        cover_background_type: draft.cover_background_type ?? pub.cover_background_type ?? "image",
-        cover_logo_url: draft.cover_logo_url ?? pub.cover_logo_url ?? "",
-      };
-      setContent(merged);
+      setContent({ ...pub, ...draft });
     }
   }, [wedding]);
 
   const saveDraftMutation = useMutation({
-    mutationFn: async (values: WeddingContent) => {
+    mutationFn: async (newContent: WeddingContent) => {
       if (!wedding) throw new Error("No wedding");
-      const { data, error } = await supabase
-        .from("weddings")
-        .update({ draft_content: values, updated_at: new Date().toISOString() })
-        .eq("id", wedding.id)
-        .select("*")
-        .single();
+      const { error } = await supabase.from("weddings").update({ draft_content: newContent }).eq("id", wedding.id);
       if (error) throw error;
-      return data as Wedding;
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["wedding"], data);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wedding"] });
       setToast({ message: "Draft saved", type: "success" });
     },
     onError: () => setToast({ message: "Failed to save draft", type: "error" }),
@@ -68,130 +51,90 @@ export function CoverEditorPage() {
   const publishMutation = useMutation({
     mutationFn: async () => {
       if (!wedding) throw new Error("No wedding");
-      const draftContent = (wedding.draft_content || {}) as WeddingContent;
-      const mergedContent = { ...draftContent, ...content };
-      const { data, error } = await supabase
-        .from("weddings")
-        .update({ draft_content: mergedContent, content: mergedContent, updated_at: new Date().toISOString() })
-        .eq("id", wedding.id)
-        .select("*")
-        .single();
+      const draftContent = { ...(wedding.content || {}), ...content } as WeddingContent;
+      const { error } = await supabase.from("weddings").update({ content: draftContent, draft_content: draftContent }).eq("id", wedding.id);
       if (error) throw error;
-      return data as Wedding;
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(["wedding"], data);
-      setToast({ message: "Cover published", type: "success" });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["wedding"] });
+      setToast({ message: "Cover published successfully", type: "success" });
     },
     onError: () => setToast({ message: "Failed to publish", type: "error" }),
   });
 
-  const handleSaveDraft = () => saveDraftMutation.mutate(content);
-  const handlePublish = () => {
-    saveDraftMutation.mutate(content, {
-      onSuccess: () => publishMutation.mutate(),
-    });
-  };
-
-  const update = (key: keyof WeddingContent, value: string | boolean) => {
+  const update = (key: keyof WeddingContent, value: string | boolean | null) => {
     setContent((prev) => ({ ...prev, [key]: value }));
   };
 
-  if (weddingQuery.isLoading) {
+  if (isLoading) {
     return (
       <AdminLayout>
-        <div className="flex items-center justify-center h-full p-20">
-          <RefreshCw size={24} className="animate-spin text-[var(--color-primary)]" />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="font-ui text-sm text-[var(--color-text-muted)]">Loading...</p>
         </div>
       </AdminLayout>
     );
   }
 
-  if (weddingQuery.isError || !wedding) {
+  if (!wedding) {
     return (
       <AdminLayout>
-        <div className="p-8">
-          <EmptyState title="Unable to load editor" description="Please try again later." />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="font-ui text-sm text-[var(--color-text-muted)]">Wedding not found</p>
         </div>
       </AdminLayout>
     );
   }
 
-  const previewWedding: Wedding = {
-    ...wedding,
-    draft_content: { ...(wedding.draft_content || {}), ...content },
-  };
+  const previewWedding = { ...wedding, draft_content: content } as Wedding;
 
   return (
     <AdminLayout>
       <SplitEditor title="Cover Page Editor" preview={<CoverPreview wedding={previewWedding} />}>
         <div className="space-y-6">
           <div>
-            <h2 className="font-heading text-xl text-[var(--color-text)] mb-1">Cover Page</h2>
-            <p className="font-ui text-xs text-[var(--color-text-muted)]">Design the first thing guests see</p>
+            <h2 className="font-heading text-2xl text-[var(--color-text)] mb-1">Cover Page</h2>
+            <p className="font-ui text-xs text-[var(--color-text-muted)] mb-6">The first page guests see when they open your invitation</p>
           </div>
 
-          <FormField label="Welcome Text">
-            <Input
-              value={content.cover_welcome || ""}
-              onChange={(e) => update("cover_welcome", e.target.value)}
-              placeholder="Welcome to our wedding"
-            />
+          <FormField label="Welcome Text" hint="Small text above the names">
+            <Input value={content.cover_welcome || ""} onChange={(e) => update("cover_welcome", e.target.value)} placeholder="Welcome to our wedding" />
           </FormField>
 
-          <FormField label="Heading">
-            <Input
-              value={content.cover_heading || ""}
-              onChange={(e) => update("cover_heading", e.target.value)}
-              placeholder="The Wedding Of"
-            />
+          <FormField label="Heading" hint="Main heading (uses couple names by default)">
+            <Input value={content.cover_heading || ""} onChange={(e) => update("cover_heading", e.target.value)} placeholder="Custom heading" />
           </FormField>
 
           <FormField label="Subtitle">
-            <Textarea
-              value={content.cover_subtitle || ""}
-              onChange={(e) => update("cover_subtitle", e.target.value)}
-              placeholder="We invite you to celebrate with us"
-              className="min-h-[80px]"
-            />
+            <Textarea value={content.cover_subtitle || ""} onChange={(e) => update("cover_subtitle", e.target.value)} placeholder="A short subtitle or tagline" />
           </FormField>
 
           <FormField label="Button Text">
-            <Input
-              value={content.cover_button_text || ""}
-              onChange={(e) => update("cover_button_text", e.target.value)}
-              placeholder="Enter Website"
-            />
+            <Input value={content.cover_button_text || ""} onChange={(e) => update("cover_button_text", e.target.value)} placeholder="Enter Website" />
           </FormField>
 
           <div>
             <Label>Background Type</Label>
-            <Select
-              value={content.cover_background_type || "image"}
-              onChange={(e) => update("cover_background_type", e.target.value as "image" | "video")}
-            >
+            <Select value={content.cover_background_type || "image"} onChange={(e) => update("cover_background_type", e.target.value as "image" | "video")}>
               <option value="image">Image</option>
               <option value="video">Video</option>
             </Select>
           </div>
 
-          <ImageUpload
-            label="Background Image"
-            value={content.cover_background_url || null}
-            onChange={(url) => update("cover_background_url", url || "")}
-          />
+          <FormField label="Background Image">
+            <ImageUpload value={content.cover_background_url || null} onChange={(url) => update("cover_background_url", url)} label="Upload background image" />
+          </FormField>
 
-          <ImageUpload
-            label="Logo / Monogram"
-            value={content.cover_logo_url || null}
-            onChange={(url) => update("cover_logo_url", url || "")}
-          />
+          <FormField label="Logo / Monogram" hint="A small logo or monogram displayed at the top">
+            <ImageUpload value={content.cover_logo_url || null} onChange={(url) => update("cover_logo_url", url)} label="Upload logo" />
+          </FormField>
 
-          <div className="pt-4 space-y-3 border-t border-[var(--color-border)]/15">
+          <div className="pt-4 border-t border-[var(--color-border)]/15 space-y-3">
             <Button
               variant="outline"
+              size="md"
               className="w-full"
-              onClick={handleSaveDraft}
+              onClick={() => saveDraftMutation.mutate(content)}
               disabled={saveDraftMutation.isPending}
             >
               <Save size={14} className="mr-2" />
@@ -199,17 +142,17 @@ export function CoverEditorPage() {
             </Button>
             <Button
               variant="primary"
+              size="md"
               className="w-full"
-              onClick={handlePublish}
-              disabled={publishMutation.isPending || saveDraftMutation.isPending}
+              onClick={() => publishMutation.mutate()}
+              disabled={publishMutation.isPending}
             >
-              <Send size={14} className="mr-2" />
-              {publishMutation.isPending ? "Publishing..." : "Publish"}
+              <Globe size={14} className="mr-2" />
+              {publishMutation.isPending ? "Publishing..." : "Publish Cover"}
             </Button>
           </div>
         </div>
       </SplitEditor>
-
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </AdminLayout>
   );
