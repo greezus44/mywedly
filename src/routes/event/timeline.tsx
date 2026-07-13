@@ -1,128 +1,184 @@
-import { useState, useEffect } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useCallback } from "react";
+import { useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Plus,
+  Trash2,
+  Pencil,
+  GripVertical,
+  Calendar,
+  Clock,
+  MapPin,
+  Shirt,
+  Tag,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 import { supabase, type UserEvent, type ScheduleItem } from "../../lib/supabase";
-import { Card, Badge, EmptyState, ErrorState, Skeleton, Toast, Modal } from "../../components/ui";
-import { Input, Textarea, Select } from "../../components/ui/Input";
+import { cn, formatDate, formatTime } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { ImageUpload } from "../../components/ui/ImageUpload";
+import { Card, Badge, EmptyState, FormField, Skeleton, ErrorState, Toast, Modal } from "../../components/ui";
+import { Input, Textarea, Select } from "../../components/ui/Input";
 import { DatePicker } from "../../components/ui/DatePicker";
 import { TimePicker } from "../../components/ui/TimePicker";
-import {
-  Calendar, Plus, Trash2, Pencil, ChevronUp, ChevronDown, Loader2,
-} from "lucide-react";
-import { formatDate, formatTime } from "../../lib/utils";
 
-interface ScheduleInput {
-  title: string;
-  description: string;
-  schedule_date: string | null;
-  start_time: string | null;
-  end_time: string | null;
-  venue: string;
-  address: string;
-  dress_code: string;
-  category: string;
-  cover_image: string;
-}
+const CATEGORIES = ["Ceremony", "Reception", "Dinner", "Party", "Other"] as const;
 
-const emptySchedule: ScheduleInput = {
-  title: "", description: "", schedule_date: null, start_time: null, end_time: null,
-  venue: "", address: "", dress_code: "", category: "", cover_image: "",
-};
-
-export default function Timeline() {
-  const { event } = useOutletContext<{ event: UserEvent | null }>();
+function TimelinePage() {
   const { eventId } = useParams<{ eventId: string }>();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<ScheduleInput>(emptySchedule);
+  const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    schedule_date: null as string | null,
+    start_time: null as string | null,
+    end_time: null as string | null,
+    venue: "",
+    address: "",
+    dress_code: "",
+    category: "Ceremony",
+  });
 
-  const { data: items, isLoading, error, refetch } = useQuery<ScheduleItem[], Error>({
-    queryKey: ["schedule", eventId],
+  const { data: event } = useQuery<UserEvent>({
+    queryKey: ["event", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_schedule")
-        .select("*")
-        .eq("event_id", eventId!)
-        .order("order_index", { ascending: true });
+      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
       if (error) throw error;
-      return data || [];
+      return data;
     },
     enabled: !!eventId,
   });
 
-  const createMutation = useMutation<void, Error, ScheduleInput>({
-    mutationFn: async (input) => {
-      const nextOrder = (items?.length || 0);
-      const { error } = await supabase.from("event_schedule").insert({
-        ...input,
-        event_id: eventId!,
-        order_index: nextOrder,
-      });
+  const { data: items, isLoading, isError, refetch } = useQuery<ScheduleItem[]>({
+    queryKey: ["schedule", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("schedule_items")
+        .select("*")
+        .eq("event_id", eventId!)
+        .order("order_index", { ascending: true });
       if (error) throw error;
+      return data;
+    },
+    enabled: !!eventId,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (item: typeof form) => {
+      const maxOrder = items?.length ? Math.max(...items.map((i) => i.order_index)) : 0;
+      const { data, error } = await supabase
+        .from("schedule_items")
+        .insert({
+          event_id: eventId,
+          title: item.title,
+          description: item.description || null,
+          schedule_date: item.schedule_date,
+          start_time: item.start_time,
+          end_time: item.end_time,
+          venue: item.venue || null,
+          address: item.address || null,
+          dress_code: item.dress_code || null,
+          category: item.category,
+          order_index: maxOrder + 1,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["schedule", eventId] });
       setModalOpen(false);
+      resetForm();
       setToast({ message: "Schedule item added", type: "success" });
     },
     onError: () => setToast({ message: "Failed to add item", type: "error" }),
   });
 
-  const updateMutation = useMutation<void, Error, { id: string; input: ScheduleInput }>({
-    mutationFn: async ({ id, input }) => {
-      const { error } = await supabase.from("event_schedule").update(input).eq("id", id);
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, item }: { id: string; item: typeof form }) => {
+      const { data, error } = await supabase
+        .from("schedule_items")
+        .update({
+          title: item.title,
+          description: item.description || null,
+          schedule_date: item.schedule_date,
+          start_time: item.start_time,
+          end_time: item.end_time,
+          venue: item.venue || null,
+          address: item.address || null,
+          dress_code: item.dress_code || null,
+          category: item.category,
+        })
+        .eq("id", id)
+        .select()
+        .single();
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["schedule", eventId] });
       setModalOpen(false);
+      resetForm();
       setToast({ message: "Schedule item updated", type: "success" });
     },
     onError: () => setToast({ message: "Failed to update item", type: "error" }),
   });
 
-  const deleteMutation = useMutation<void, Error, string>({
-    mutationFn: async (id) => {
-      const { error } = await supabase.from("event_schedule").delete().eq("id", id);
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("schedule_items").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["schedule", eventId] });
-      setToast({ message: "Item deleted", type: "success" });
+      setToast({ message: "Item removed", type: "success" });
     },
-    onError: () => setToast({ message: "Failed to delete item", type: "error" }),
+    onError: () => setToast({ message: "Failed to remove item", type: "error" }),
   });
 
-  const reorderMutation = useMutation<void, Error, { id: string; direction: "up" | "down" }>({
-    mutationFn: async ({ id, direction }) => {
-      if (!items) return;
-      const idx = items.findIndex((i) => i.id === id);
-      if (idx === -1) return;
-      const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-      if (swapIdx < 0 || swapIdx >= items.length) return;
-      const current = items[idx];
-      const swap = items[swapIdx];
-      const { error: e1 } = await supabase.from("event_schedule").update({ order_index: swap.order_index }).eq("id", current.id);
-      if (e1) throw e1;
-      const { error: e2 } = await supabase.from("event_schedule").update({ order_index: current.order_index }).eq("id", swap.id);
-      if (e2) throw e2;
+  const reorderMutation = useMutation({
+    mutationFn: async (reordered: ScheduleItem[]) => {
+      const updates = reordered.map((item, index) => ({
+        id: item.id,
+        order_index: index + 1,
+      }));
+      for (const u of updates) {
+        const { error } = await supabase.from("schedule_items").update({ order_index: u.order_index }).eq("id", u.id);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["schedule", eventId] });
     },
+    onError: () => setToast({ message: "Failed to reorder", type: "error" }),
   });
 
-  const openAdd = () => {
-    setForm(emptySchedule);
-    setEditingId(null);
+  const resetForm = () => {
+    setForm({
+      title: "",
+      description: "",
+      schedule_date: null,
+      start_time: null,
+      end_time: null,
+      venue: "",
+      address: "",
+      dress_code: "",
+      category: "Ceremony",
+    });
+    setEditingItem(null);
+  };
+
+  const openAddModal = () => {
+    resetForm();
     setModalOpen(true);
   };
 
-  const openEdit = (item: ScheduleItem) => {
+  const openEditModal = (item: ScheduleItem) => {
+    setEditingItem(item);
     setForm({
       title: item.title,
       description: item.description || "",
@@ -132,170 +188,228 @@ export default function Timeline() {
       venue: item.venue || "",
       address: item.address || "",
       dress_code: item.dress_code || "",
-      category: item.category || "",
-      cover_image: item.cover_image || "",
+      category: item.category || "Ceremony",
     });
-    setEditingId(item.id);
     setModalOpen(true);
   };
 
-  const handleSubmit = () => {
+  const handleSave = () => {
     if (!form.title.trim()) {
       setToast({ message: "Title is required", type: "error" });
       return;
     }
-    if (editingId) {
-      updateMutation.mutate({ id: editingId, input: form });
+    if (editingItem) {
+      updateMutation.mutate({ id: editingItem.id, item: form });
     } else {
       createMutation.mutate(form);
     }
   };
 
-  if (!event) {
+  const moveItem = useCallback(
+    (index: number, direction: "up" | "down") => {
+      if (!items) return;
+      const reordered = [...items];
+      const swapIndex = direction === "up" ? index - 1 : index + 1;
+      if (swapIndex < 0 || swapIndex >= reordered.length) return;
+      [reordered[index], reordered[swapIndex]] = [reordered[swapIndex], reordered[index]];
+      reorderMutation.mutate(reordered);
+    },
+    [items, reorderMutation],
+  );
+
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+      <div className="p-8">
+        <Skeleton className="h-8 w-48 mb-6" />
+        <Skeleton className="h-32 w-full mb-4" />
+        <Skeleton className="h-32 w-full mb-4" />
       </div>
     );
   }
 
+  if (isError || !event) {
+    return <ErrorState message="Failed to load schedule" onRetry={refetch} />;
+  }
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="px-6 lg:px-8 py-6 border-b border-onyx/10 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Timeline</h1>
-          <p className="text-sm text-slate-500">Manage your event schedule.</p>
+          <h1 className="font-heading text-3xl text-onyx">Timeline</h1>
+          <p className="mt-1 text-sm text-onyx/50">Schedule of events and activities</p>
         </div>
-        <Button size="sm" onClick={openAdd}>
+        <Button onClick={openAddModal}>
           <Plus className="w-4 h-4" /> Add Item
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="space-y-3">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
-        </div>
-      ) : (error as any) ? (
-        <Card className="p-4"><ErrorState message={(error as any).message || "Failed to load schedule"} onRetry={() => refetch()} /></Card>
-      ) : !items || items.length === 0 ? (
-        <Card className="p-4">
-          <EmptyState
-            icon={<Calendar className="w-10 h-10" />}
-            title="No schedule items"
-            description="Add items to build your event timeline."
-            action={<Button size="sm" onClick={openAdd}><Plus className="w-4 h-4" /> Add Item</Button>}
-          />
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {items.map((item, idx) => (
-            <Card key={item.id} className="p-4">
-              <div className="flex items-start gap-4">
-                {item.cover_image ? (
-                  <img src={item.cover_image} alt={item.title} className="w-20 h-20 rounded-lg object-cover flex-shrink-0" />
-                ) : (
-                  <div className="w-20 h-20 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
-                    <Calendar className="w-6 h-6 text-slate-300" />
+      <div className="p-6 lg:p-8">
+        {items && items.length > 0 ? (
+          <div className="space-y-4">
+            {items.map((item, index) => (
+              <Card key={item.id} className="p-5">
+                <div className="flex items-start gap-4">
+                  <div className="flex flex-col items-center gap-1 pt-1">
+                    <button
+                      onClick={() => moveItem(index, "up")}
+                      disabled={index === 0}
+                      className="p-1 text-onyx/30 hover:text-onyx disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                    <GripVertical className="w-4 h-4 text-onyx/20" />
+                    <button
+                      onClick={() => moveItem(index, "down")}
+                      disabled={index === items.length - 1}
+                      className="p-1 text-onyx/30 hover:text-onyx disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ArrowDown className="w-4 h-4" />
+                    </button>
                   </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-sm font-semibold text-slate-900">{item.title}</h3>
-                    {item.category && <Badge variant="info">{item.category}</Badge>}
-                  </div>
-                  {item.description && <p className="text-sm text-slate-500 mb-1 line-clamp-2">{item.description}</p>}
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                    {item.schedule_date && <span>{formatDate(item.schedule_date)}</span>}
-                    {item.start_time && <span>{formatTime(item.start_time)}</span>}
-                    {item.end_time && <span>– {formatTime(item.end_time)}</span>}
-                    {item.venue && <span>• {item.venue}</span>}
-                  </div>
-                </div>
-                <div className="flex flex-col items-center gap-1">
-                  <button
-                    onClick={() => reorderMutation.mutate({ id: item.id, direction: "up" })}
-                    disabled={idx === 0 || reorderMutation.isPending}
-                    className="p-1 hover:bg-slate-100 rounded text-slate-400 disabled:opacity-30"
-                  >
-                    <ChevronUp className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => reorderMutation.mutate({ id: item.id, direction: "down" })}
-                    disabled={idx === items.length - 1 || reorderMutation.isPending}
-                    className="p-1 hover:bg-slate-100 rounded text-slate-400 disabled:opacity-30"
-                  >
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => openEdit(item)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500">
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => { if (confirm(`Delete "${item.title}"?`)) deleteMutation.mutate(item.id); }}
-                    className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingId ? "Edit Schedule Item" : "Add Schedule Item"}>
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="font-heading text-lg text-onyx">{item.title}</h3>
+                          {item.category && (
+                            <Badge variant="info">{item.category}</Badge>
+                          )}
+                        </div>
+                        {item.description && (
+                          <p className="text-sm text-onyx/60 mb-3">{item.description}</p>
+                        )}
+                        <div className="flex flex-wrap gap-x-6 gap-y-2">
+                          {item.schedule_date && (
+                            <div className="flex items-center gap-1.5 text-xs text-onyx/50">
+                              <Calendar className="w-3.5 h-3.5" /> {formatDate(item.schedule_date)}
+                            </div>
+                          )}
+                          {item.start_time && (
+                            <div className="flex items-center gap-1.5 text-xs text-onyx/50">
+                              <Clock className="w-3.5 h-3.5" />
+                              {formatTime(item.start_time)}
+                              {item.end_time && ` — ${formatTime(item.end_time)}`}
+                            </div>
+                          )}
+                          {item.venue && (
+                            <div className="flex items-center gap-1.5 text-xs text-onyx/50">
+                              <MapPin className="w-3.5 h-3.5" /> {item.venue}
+                            </div>
+                          )}
+                          {item.dress_code && (
+                            <div className="flex items-center gap-1.5 text-xs text-onyx/50">
+                              <Shirt className="w-3.5 h-3.5" /> {item.dress_code}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openEditModal(item)}
+                          className="p-1.5 text-onyx/30 hover:text-onyx transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteMutation.mutate(item.id)}
+                          className="p-1.5 text-onyx/30 hover:text-red-600 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<Calendar className="w-12 h-12" />}
+            title="No schedule items"
+            description="Add events like ceremony, reception, or dinner to build your timeline"
+            action={<Button onClick={openAddModal}><Plus className="w-4 h-4" /> Add Item</Button>}
+          />
+        )}
+      </div>
+
+      <Modal open={modalOpen} onClose={() => { setModalOpen(false); resetForm(); }} title={editingItem ? "Edit Schedule Item" : "Add Schedule Item"}>
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Title *</label>
-            <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Item title" />
+          <FormField label="Title">
+            <Input
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder="Ceremony"
+            />
+          </FormField>
+          <FormField label="Description">
+            <Textarea
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Optional description..."
+              rows={2}
+            />
+          </FormField>
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Date">
+              <DatePicker
+                value={form.schedule_date}
+                onChange={(v) => setForm({ ...form, schedule_date: v })}
+              />
+            </FormField>
+            <FormField label="Category">
+              <Select
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+              >
+                {CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </Select>
+            </FormField>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-            <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Description" />
+          <div className="grid grid-cols-2 gap-4">
+            <FormField label="Start Time">
+              <TimePicker
+                value={form.start_time}
+                onChange={(v) => setForm({ ...form, start_time: v })}
+              />
+            </FormField>
+            <FormField label="End Time">
+              <TimePicker
+                value={form.end_time}
+                onChange={(v) => setForm({ ...form, end_time: v })}
+              />
+            </FormField>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Date</label>
-              <DatePicker value={form.schedule_date} onChange={(v) => setForm({ ...form, schedule_date: v })} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-              <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Ceremony" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Start Time</label>
-              <TimePicker value={form.start_time} onChange={(v) => setForm({ ...form, start_time: v })} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">End Time</label>
-              <TimePicker value={form.end_time} onChange={(v) => setForm({ ...form, end_time: v })} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Venue</label>
-              <Input value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} placeholder="Venue name" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Dress Code</label>
-              <Input value={form.dress_code} onChange={(e) => setForm({ ...form, dress_code: e.target.value })} placeholder="Dress code" />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
-            <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Full address" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Cover Image</label>
-            <ImageUpload value={form.cover_image} onChange={(v) => setForm({ ...form, cover_image: v })} eventId={eventId} />
-          </div>
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSubmit} loading={createMutation.isPending || updateMutation.isPending}>
-              {editingId ? "Save Changes" : "Add Item"}
+          <FormField label="Venue">
+            <Input
+              value={form.venue}
+              onChange={(e) => setForm({ ...form, venue: e.target.value })}
+              placeholder="St. Mary's Church"
+            />
+          </FormField>
+          <FormField label="Address">
+            <Input
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              placeholder="123 Main Street"
+            />
+          </FormField>
+          <FormField label="Dress Code">
+            <Input
+              value={form.dress_code}
+              onChange={(e) => setForm({ ...form, dress_code: e.target.value })}
+              placeholder="Black Tie"
+            />
+          </FormField>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="ghost" onClick={() => { setModalOpen(false); resetForm(); }}>Cancel</Button>
+            <Button onClick={handleSave} loading={createMutation.isPending || updateMutation.isPending}>
+              {editingItem ? "Save Changes" : "Add Item"}
             </Button>
           </div>
         </div>
@@ -305,3 +419,5 @@ export default function Timeline() {
     </div>
   );
 }
+
+export default TimelinePage;

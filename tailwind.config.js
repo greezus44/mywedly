@@ -4,20 +4,27 @@ export default {
   theme: {
     extend: {
       colors: {
+        onyx: {
+          DEFAULT: "#1a1a1a",
+          light: "#2a2a2a",
+          muted: "#6b6b6b",
+          border: "#333333",
+        },
+        cream: {
+          DEFAULT: "#f5f0e8",
+          light: "#faf7f2",
+          dark: "#e8e0d4",
+        },
         rusty: {
-          bg: "#F5ECD7",
-          cream: "#FAF3E0",
-          gold: "#C4A44A",
-          "gold-dark": "#B8962E",
-          "gold-deep": "#A07820",
-          text: "#3D3528",
-          "text-light": "#8B7355",
-          border: "#D4C695",
+          bg: "#F5ECD7", cream: "#FAF3E0", gold: "#C4A44A",
+          "gold-dark": "#B8962E", "gold-deep": "#A07820",
+          text: "#3D3528", "text-light": "#8B7355", border: "#D4C695",
         },
       },
       fontFamily: {
         serif: ['"Cormorant Garamond"', "serif"],
         script: ['"Cormorant Garamond"', "serif"],
+        sans: ['Inter', "sans-serif"],
       },
       animation: {
         "fade-in": "fadeIn 0.6s ease-out",

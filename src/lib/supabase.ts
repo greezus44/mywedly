@@ -1,28 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-
-export const supabase: SupabaseClient = createClient(
-  supabaseUrl || "http://localhost:54321",
-  supabaseAnonKey || "placeholder",
-  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
-);
-
+export const supabase: SupabaseClient = createClient(supabaseUrl || "http://localhost:54321", supabaseAnonKey || "placeholder", { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
-
-export interface UserEvent {
-  id: string; creator_id: string; name: string; event_type: string;
-  event_date: string | null; event_time: string | null; venue: string | null; address: string | null;
-  cover_image: string | null; cover_config: CoverConfig | null; login_config: LoginConfig | null;
-  theme: ThemeConfig | null; logo_config: LogoConfig | null; content: EventContent | null; sharing_config: SharingConfig | null;
-  draft_name: string | null; draft_event_type: string | null; draft_event_date: string | null; draft_event_time: string | null;
-  draft_venue: string | null; draft_address: string | null; draft_cover_image: string | null;
-  draft_cover_config: CoverConfig | null; draft_login_config: LoginConfig | null; draft_theme: ThemeConfig | null;
-  draft_logo_config: LogoConfig | null; draft_content: EventContent | null; draft_sharing_config: SharingConfig | null;
-  is_published: boolean; is_archived: boolean; published_at: string | null; created_at: string; updated_at: string;
-  template_id: string; slug: string | null; draft_slug: string | null; rsvp_deadline: string | null; draft_rsvp_deadline: string | null;
-}
+export interface UserEvent { id: string; creator_id: string; name: string; event_type: string; event_date: string | null; event_time: string | null; venue: string | null; address: string | null; cover_image: string | null; cover_config: CoverConfig | null; login_config: LoginConfig | null; theme: ThemeConfig | null; logo_config: LogoConfig | null; content: EventContent | null; sharing_config: SharingConfig | null; draft_name: string | null; draft_event_type: string | null; draft_event_date: string | null; draft_event_time: string | null; draft_venue: string | null; draft_address: string | null; draft_cover_image: string | null; draft_cover_config: CoverConfig | null; draft_login_config: LoginConfig | null; draft_theme: ThemeConfig | null; draft_logo_config: LogoConfig | null; draft_content: EventContent | null; draft_sharing_config: SharingConfig | null; is_published: boolean; is_archived: boolean; published_at: string | null; created_at: string; updated_at: string; template_id: string; slug: string | null; draft_slug: string | null; rsvp_deadline: string | null; draft_rsvp_deadline: string | null; }
 export interface CoverConfig { bgImage?: string; bgColor?: string; overlayColor?: string; overlayOpacity?: number; textColor?: string; buttonColor?: string; buttonText?: string; font?: string; scriptFont?: string; customText?: string; showDate?: boolean; showCountdown?: boolean; }
 export interface LoginConfig { bgImage?: string; bgColor?: string; overlayColor?: string; overlayOpacity?: number; textColor?: string; buttonColor?: string; buttonText?: string; heading?: string; subheading?: string; inputPlaceholder?: string; }
 export interface ThemeConfig { preset?: string; primaryColor?: string; secondaryColor?: string; accentColor?: string; bgColor?: string; bgSubtleColor?: string; textColor?: string; textMutedColor?: string; borderColor?: string; headingFont?: string; bodyFont?: string; scriptFont?: string; buttonRadius?: number; sectionPadding?: number; maxWidth?: number; applyToAll?: boolean; }

@@ -1,239 +1,288 @@
-import { useState } from "react";
-import { useParams, useOutletContext } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
-import { useGuestAuth } from "../../lib/guest-auth";
-import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
-import { Card } from "../../components/ui/index";
+import { useParams, useOutletContext, Link } from "react-router-dom";
+import {
+  MapPin,
+  Clock,
+  CalendarDays,
+  Phone,
+  Mail,
+  Navigation,
+  ArrowLeft,
+  ExternalLink,
+} from "lucide-react";
+import { type UserEvent } from "../../lib/supabase";
 import { formatDate, formatTime } from "../../lib/utils";
-import { Calendar, Clock, MapPin, ExternalLink } from "lucide-react";
-import type { FormEvent } from "react";
-import type { GuestLayoutContext } from "./guest-layout";
 
-export default function Contact() {
-  const { eventId } = useParams<{ eventId: string }>();
-  const outletCtx = useOutletContext<GuestLayoutContext | null>();
-  const { guestName } = useGuestAuth();
-  const queryClient = useQueryClient();
+export default function GuestContact() {
+  const { slug } = useParams<{ slug: string }>();
+  const { event } = useOutletContext<{ event: UserEvent }>();
 
-  const [name, setName] = useState(guestName || "");
-  const [email, setEmail] = useState("");
-  const [message, setMessage] = useState("");
-  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const eventSlug = slug || event.slug || event.id;
 
-  const fallbackQuery = useQuery<UserEvent | null, Error>({
-    queryKey: ["public-event", eventId],
-    enabled: !!eventId && !outletCtx?.event,
-    queryFn: async () => {
-      if (!eventId) throw new Error("No event ID");
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("id", eventId)
-        .maybeSingle();
-      if (error) throw error;
-      return data as UserEvent | null;
-    },
-  });
-
-  const event = outletCtx?.event || fallbackQuery.data || null;
-
-  const mutation = useMutation<void, Error>({
-    mutationFn: async () => {
-      if (!eventId || !name.trim() || !message.trim()) throw new Error("Missing fields");
-      const { error } = await supabase.from("event_messages").insert({
-        event_id: eventId,
-        guest_name: name.trim(),
-        message: message.trim(),
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      setMessage("");
-      setSubmitSuccess(true);
-      queryClient.invalidateQueries({ queryKey: ["guest-messages", eventId] });
-      setTimeout(() => setSubmitSuccess(false), 5000);
-    },
-  });
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!message.trim() || !name.trim()) return;
-    mutation.mutate();
-  };
-
-  if (!event) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <p className="text-sm text-slate-500">Event details unavailable.</p>
-      </div>
-    );
-  }
-
-  const eventDate = event.event_date || event.draft_event_date || null;
-  const eventTime = event.event_time || event.draft_event_time || null;
-  const venue = event.venue || event.draft_venue || null;
-  const address = event.address || event.draft_address || null;
-
-  const mapsLink = address
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${venue || ""} ${address}`.trim())}`
+  // Build a maps query from venue + address
+  const mapQuery = [event.venue, event.address].filter(Boolean).join(", ");
+  const mapUrl = mapQuery
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`
     : null;
 
   return (
-    <div className="animate-fade-in px-6 py-10 max-w-2xl mx-auto">
-      <div className="text-center mb-10">
-        <h1 className="text-3xl font-light mb-2" style={{ color: "var(--color-primary)", fontFamily: "var(--font-heading)" }}>
-          Contact
-        </h1>
-        <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
-          Event details and how to reach us
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] font-sans">
+      {/* Nav */}
+      <nav
+        className="sticky top-0 z-20 backdrop-blur-sm border-b"
+        style={{
+          backgroundColor: "color-mix(in srgb, var(--color-bg) 95%, transparent)",
+          borderColor: "var(--color-border)",
+        }}
+      >
+        <div
+          className="mx-auto px-6 py-4 flex items-center justify-between"
+          style={{ maxWidth: "var(--max-width)" }}
+        >
+          <Link
+            to={`/e/${eventSlug}/home`}
+            className="font-heading text-xl tracking-wide"
+            style={{ color: "var(--color-primary)" }}
+          >
+            {event?.name || "Our Event"}
+          </Link>
+          <Link
+            to={`/e/${eventSlug}/home`}
+            className="flex items-center gap-1 text-xs uppercase tracking-[0.15em] hover:opacity-70"
+            style={{ color: "var(--color-text)" }}
+          >
+            <ArrowLeft className="w-3 h-3" /> Back
+          </Link>
+        </div>
+      </nav>
+
+      {/* Header */}
+      <section className="mx-auto px-6 pt-16 pb-8 text-center animate-fade-in-up" style={{ maxWidth: "var(--max-width)" }}>
+        <MapPin className="w-10 h-10 mx-auto mb-4" style={{ color: "var(--color-accent)" }} />
+        <p
+          className="font-heading italic text-sm uppercase tracking-[0.3em] mb-2"
+          style={{ color: "var(--color-accent)" }}
+        >
+          Find Us
         </p>
-      </div>
+        <h1 className="font-heading text-4xl sm:text-5xl tracking-wide mb-3" style={{ color: "var(--color-text)" }}>
+          Venue &amp; Contact
+        </h1>
+        <Divider />
+      </section>
 
-      <div className="space-y-4 mb-12">
-        <Card className="p-5">
-          <div className="flex items-start gap-3">
-            <Calendar className="w-5 h-5 mt-0.5" style={{ color: "var(--color-accent)" }} />
-            <div>
-              <p className="text-xs tracking-[0.15em] uppercase mb-1" style={{ color: "var(--color-text-muted)" }}>
-                Date
-              </p>
-              <p className="text-base" style={{ color: "var(--color-text)" }}>
-                {eventDate ? formatDate(eventDate) : "To be announced"}
-              </p>
-            </div>
+      {/* Event summary */}
+      <section className="mx-auto px-6 pb-8" style={{ maxWidth: "var(--max-width)" }}>
+        <div className="max-w-2xl mx-auto">
+          <div
+            className="flex flex-col items-center gap-5 px-8 py-10 text-center"
+            style={{
+              border: `1px solid var(--color-border)`,
+              backgroundColor: "var(--color-bg-subtle)",
+            }}
+          >
+            {event.event_date && (
+              <InfoRow
+                icon={<CalendarDays className="w-5 h-5" />}
+                label="Date"
+                value={formatDate(event.event_date)}
+              />
+            )}
+            {event.event_time && (
+              <InfoRow
+                icon={<Clock className="w-5 h-5" />}
+                label="Time"
+                value={formatTime(event.event_time)}
+              />
+            )}
+            {event.venue && (
+              <InfoRow
+                icon={<MapPin className="w-5 h-5" />}
+                label="Venue"
+                value={event.venue}
+              />
+            )}
+            {event.address && (
+              <InfoRow
+                icon={<Navigation className="w-5 h-5" />}
+                label="Address"
+                value={event.address}
+              />
+            )}
           </div>
-        </Card>
+        </div>
+      </section>
 
-        {eventTime && (
-          <Card className="p-5">
-            <div className="flex items-start gap-3">
-              <Clock className="w-5 h-5 mt-0.5" style={{ color: "var(--color-accent)" }} />
-              <div>
-                <p className="text-xs tracking-[0.15em] uppercase mb-1" style={{ color: "var(--color-text-muted)" }}>
-                  Time
+      {/* Map placeholder */}
+      {mapUrl && (
+        <section className="mx-auto px-6 pb-8" style={{ maxWidth: "var(--max-width)" }}>
+          <div className="max-w-2xl mx-auto">
+            <div
+              className="relative w-full h-64 flex items-center justify-center overflow-hidden"
+              style={{
+                border: `1px solid var(--color-border)`,
+                backgroundColor: "var(--color-bg-subtle)",
+              }}
+            >
+              {/* Stylized map placeholder */}
+              <div
+                className="absolute inset-0 opacity-30"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(var(--color-border) 1px, transparent 1px), linear-gradient(90deg, var(--color-border) 1px, transparent 1px)",
+                  backgroundSize: "40px 40px",
+                }}
+                aria-hidden
+              />
+              <div className="relative z-10 flex flex-col items-center gap-3">
+                <div
+                  className="flex items-center justify-center w-14 h-14 rounded-full"
+                  style={{ backgroundColor: "var(--color-accent)" }}
+                >
+                  <MapPin className="w-7 h-7" style={{ color: "var(--color-bg)" }} />
+                </div>
+                <p className="text-sm font-medium" style={{ color: "var(--color-text)" }}>
+                  {event.venue || "Venue Location"}
                 </p>
-                <p className="text-base" style={{ color: "var(--color-text)" }}>
-                  {formatTime(eventTime)}
-                </p>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {venue && (
-          <Card className="p-5">
-            <div className="flex items-start gap-3">
-              <MapPin className="w-5 h-5 mt-0.5" style={{ color: "var(--color-accent)" }} />
-              <div className="flex-1">
-                <p className="text-xs tracking-[0.15em] uppercase mb-1" style={{ color: "var(--color-text-muted)" }}>
-                  Venue
-                </p>
-                <p className="text-base" style={{ color: "var(--color-text)" }}>
-                  {venue}
-                </p>
-                {address && (
-                  <p className="text-sm mt-1" style={{ color: "var(--color-text-muted)" }}>
-                    {address}
+                {event.address && (
+                  <p className="text-xs max-w-xs text-center" style={{ color: "var(--color-text-muted)" }}>
+                    {event.address}
                   </p>
                 )}
-                {mapsLink && (
-                  <a
-                    href={mapsLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm mt-2 hover:underline"
-                    style={{ color: "var(--color-accent)" }}
-                  >
-                    View on Google Maps
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                )}
               </div>
             </div>
-          </Card>
-        )}
-      </div>
-
-      <section>
-        <h2 className="text-xl font-light tracking-wide text-center mb-6" style={{ color: "var(--color-primary)", fontFamily: "var(--font-heading)" }}>
-          Send a Message
-        </h2>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2" style={{ color: "var(--color-text)" }}>
-              Your Name
-            </label>
-            <Input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2" style={{ color: "var(--color-text)" }}>
-              Email (optional)
-            </label>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2" style={{ color: "var(--color-text)" }}>
-              Message
-            </label>
-            <Textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Write your message here..."
-              required
-              rows={5}
-            />
-          </div>
-
-          {submitSuccess && (
-            <div
-              className="text-center py-4 px-4 rounded-lg border animate-fade-in"
-              style={{ backgroundColor: "var(--color-bg-subtle)", borderColor: "var(--color-primary)" }}
+            <a
+              href={mapUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 flex items-center justify-center gap-2 text-xs uppercase tracking-[0.2em] transition-colors hover:opacity-70"
+              style={{ color: "var(--color-accent)" }}
             >
-              <p className="text-lg" style={{ color: "var(--color-primary)" }}>
-                Thank you! Your message has been sent.
-              </p>
+              <ExternalLink className="w-3 h-3" />
+              Open in Google Maps
+            </a>
+          </div>
+        </section>
+      )}
+
+      {/* Contact info */}
+      <section className="mx-auto px-6 pb-16" style={{ maxWidth: "var(--max-width)" }}>
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-8">
+            <p
+              className="font-heading italic text-sm uppercase tracking-[0.3em] mb-2"
+              style={{ color: "var(--color-accent)" }}
+            >
+              Get in Touch
+            </p>
+            <h2 className="font-heading text-3xl tracking-wide" style={{ color: "var(--color-text)" }}>
+              Contact
+            </h2>
+          </div>
+          <Divider />
+          <div
+            className="flex flex-col items-center gap-5 px-8 py-10 text-center"
+            style={{
+              border: `1px solid var(--color-border)`,
+              backgroundColor: "var(--color-bg-subtle)",
+            }}
+          >
+            <p className="text-sm max-w-md" style={{ color: "var(--color-text-muted)" }}>
+              Have questions about the event? Need directions or special arrangements?
+              We're here to help.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center gap-4 mt-2">
+              <ContactPill
+                icon={<Phone className="w-4 h-4" />}
+                label="Call Us"
+                href="tel:+10000000000"
+              />
+              <ContactPill
+                icon={<Mail className="w-4 h-4" />}
+                label="Email Us"
+                href="mailto:hello@example.com"
+              />
             </div>
-          )}
-
-          {(mutation as any).error && (
-            <div
-              className="text-center py-4 px-4 rounded-lg border"
-              style={{ backgroundColor: "var(--color-bg-subtle)", borderColor: "#dc2626" }}
-            >
-              <p className="text-sm" style={{ color: "#dc2626" }}>
-                Failed to send message. Please try again.
-              </p>
-            </div>
-          )}
-
-          <div className="text-center pt-2">
-            <Button
-              type="submit"
-              disabled={!message.trim() || !name.trim() || mutation.isPending}
-              loading={mutation.isPending}
-              size="lg"
-              style={{ backgroundColor: "var(--color-primary)", color: "var(--color-bg)" }}
-            >
-              {mutation.isPending ? "Sending..." : "Send Message"}
-            </Button>
           </div>
-        </form>
+        </div>
       </section>
+
+      {/* Footer */}
+      <footer
+        className="border-t"
+        style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-bg-subtle)" }}
+      >
+        <div className="mx-auto px-6 py-8 text-center" style={{ maxWidth: "var(--max-width)" }}>
+          <p
+            className="font-heading text-lg tracking-wide mb-1"
+            style={{ color: "var(--color-primary)" }}
+          >
+            {event?.name || "Our Event"}
+          </p>
+          <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+            We can't wait to celebrate with you.
+          </p>
+        </div>
+      </footer>
     </div>
+  );
+}
+
+function Divider() {
+  return (
+    <div className="flex items-center justify-center gap-3 my-6" aria-hidden>
+      <span className="block h-px w-16" style={{ backgroundColor: "var(--color-accent)" }} />
+      <span className="text-lg" style={{ color: "var(--color-accent)" }}>✦</span>
+      <span className="block h-px w-16" style={{ backgroundColor: "var(--color-accent)" }} />
+    </div>
+  );
+}
+
+function InfoRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div
+        className="flex items-center gap-2 text-xs uppercase tracking-[0.2em]"
+        style={{ color: "var(--color-accent)" }}
+      >
+        {icon}
+        {label}
+      </div>
+      <p className="text-base text-center max-w-md" style={{ color: "var(--color-text)" }}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function ContactPill({
+  icon,
+  label,
+  href,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  href: string;
+}) {
+  return (
+    <a
+      href={href}
+      className="flex items-center gap-2 px-6 py-3 text-xs uppercase tracking-[0.2em] transition-all hover:opacity-80"
+      style={{
+        border: `1px solid var(--color-accent)`,
+        backgroundColor: "transparent",
+        color: "var(--color-accent)",
+      }}
+    >
+      {icon}
+      {label}
+    </a>
   );
 }

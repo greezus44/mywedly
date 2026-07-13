@@ -1,80 +1,60 @@
-import { type ReactNode, useEffect } from "react";
-import { Outlet, useNavigate, useParams, Link, useLocation } from "react-router-dom";
+import { useEffect, useMemo } from "react";
+import { useParams, Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Home, CalendarCheck, Info, MessageSquare } from "lucide-react";
 import { supabase, type UserEvent } from "../../lib/supabase";
+import { RUSTY_THEME, themeToCssVars } from "../../lib/theme";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { themeToCssVars, RUSTY_THEME } from "../../lib/theme";
-import { cn } from "../../lib/utils";
-import type { CSSProperties } from "react";
+import { Loader2 } from "lucide-react";
 
-export type Lang = "en" | "bm";
+export type Lang = "en" | "id";
 
-export async function fetchPublicEvent(eventId: string): Promise<UserEvent | null> {
+async function fetchEventBySlug(slug: string): Promise<UserEvent | null> {
   const { data, error } = await supabase
     .from("events")
     .select("*")
-    .eq("id", eventId)
+    .or(`slug.eq.${slug},draft_slug.eq.${slug}`)
+    .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return data as UserEvent | null;
+  return (data as UserEvent | null) ?? null;
 }
 
-const navItems = [
-  { key: "home", labelEn: "Home", labelBm: "Utama", icon: Home, to: "" },
-  { key: "rsvp", labelEn: "RSVP", labelBm: "RSVP", icon: CalendarCheck, to: "/rsvp" },
-  { key: "info", labelEn: "Info", labelBm: "Info", icon: Info, to: "/info" },
-  { key: "message", labelEn: "Message", labelBm: "Mesej", icon: MessageSquare, to: "/message" },
-] as const;
-
-export interface RustyOutletContext {
-  event: UserEvent | null;
-  lang: Lang;
-  setLang: (lang: Lang) => void;
-}
-
-export function useRustyEvent(eventId: string | undefined) {
-  return useQuery<UserEvent | null, Error>({
-    queryKey: ["public-event", eventId],
-    queryFn: () => fetchPublicEvent(eventId!),
-    enabled: !!eventId,
-  });
-}
-
-export function RustyLayout({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
-  const { eventId } = useParams<{ eventId: string }>();
+export default function RustyLayout() {
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { isAuthenticated } = useGuestAuth();
-  const { data: event, isLoading, isError } = useRustyEvent(eventId);
+  const { eventId, isAuthenticated } = useGuestAuth();
 
+  const { data: event, isLoading, isError } = useQuery({
+    queryKey: ["rusty-event", slug],
+    queryFn: () => fetchEventBySlug(slug || ""),
+    enabled: !!slug,
+    retry: 1,
+  });
+
+  // CSS variables for the rusty theme (merged with event-level overrides if present)
+  const cssVars = useMemo(() => {
+    const merged = { ...RUSTY_THEME, ...(event?.theme || {}) };
+    return themeToCssVars(merged) as React.CSSProperties;
+  }, [event]);
+
+  // Guard: once we know the event id, ensure guest auth is bound to it.
+  // If a guest is authenticated for a different event, sign them out so they
+  // re-login on this event.
   useEffect(() => {
-    if (!isAuthenticated && eventId) {
-      navigate(`/${eventId}/login`, { replace: true });
+    if (!event) return;
+    if (isAuthenticated && eventId && eventId !== event.id) {
+      // mismatched event — force re-auth on this event
+      navigate(`/${slug || event.slug || event.id}/login`, { replace: true });
     }
-  }, [isAuthenticated, eventId, navigate]);
-
-  const theme = event?.theme || event?.draft_theme || RUSTY_THEME;
-  const cssVars = themeToCssVars(theme) as CSSProperties;
-
-  const basePath = `/${eventId}`;
-  const currentPath = location.pathname.replace(basePath, "") || "/";
-
-  const isActive = (to: string) => {
-    if (to === "") return currentPath === "/" || currentPath === "";
-    return currentPath.startsWith(to);
-  };
+  }, [event, eventId, isAuthenticated, navigate, slug]);
 
   if (isLoading) {
     return (
       <div
-        style={{ ...cssVars, backgroundColor: "#F5ECD7" }}
-        className="min-h-screen flex items-center justify-center"
+        style={cssVars}
+        className="min-h-screen flex items-center justify-center bg-[var(--color-bg)]"
       >
-        <div className="text-center">
-          <div className="w-10 h-10 mx-auto mb-4 border-2 border-[#B8962E] border-t-transparent rounded-full animate-spin" />
-          <p className="font-serif text-lg text-[#8B7355]">Loading...</p>
-        </div>
+        <Loader2 className="w-8 h-8 animate-spin text-[var(--color-accent)]" />
       </div>
     );
   }
@@ -82,81 +62,29 @@ export function RustyLayout({ lang, setLang }: { lang: Lang; setLang: (l: Lang) 
   if (isError || !event) {
     return (
       <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: "#F5ECD7" }}
+        style={cssVars}
+        className="min-h-screen flex flex-col items-center justify-center gap-3 bg-[var(--color-bg)] text-[var(--color-text)] px-6 text-center"
       >
-        <div className="text-center max-w-sm px-6">
-          <p className="font-serif text-2xl text-[#B8962E] mb-2">Event not found</p>
-          <p className="text-sm text-[#8B7355]">The event you are looking for could not be loaded.</p>
-        </div>
+        <p
+          className="font-heading text-3xl tracking-wide"
+          style={{ color: "var(--color-accent)" }}
+        >
+          Invitation Not Found
+        </p>
+        <p className="text-sm text-[var(--color-text-muted)] max-w-sm">
+          We could not locate the invitation you are looking for. Please check
+          your link and try again.
+        </p>
       </div>
     );
   }
 
-  const outletContext: RustyOutletContext = { event, lang, setLang };
-
   return (
-    <div style={{ ...cssVars, backgroundColor: "var(--color-bg)" }} className="min-h-screen flex flex-col">
-      <header
-        className="sticky top-0 z-30 border-b"
-        style={{ backgroundColor: "var(--color-bg)", borderColor: "var(--color-border)" }}
-      >
-        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
-          <h1
-            className="font-serif text-xl tracking-wide"
-            style={{ color: "var(--color-primary)" }}
-          >
-            {event.name}
-          </h1>
-          <div className="flex items-center gap-1 text-xs">
-            {(["en", "bm"] as Lang[]).map((l) => (
-              <button
-                key={l}
-                onClick={() => setLang(l)}
-                className={cn(
-                  "px-2.5 py-1 rounded font-medium uppercase tracking-wider transition-colors",
-                  lang === l ? "text-white" : "text-[#8B7355] hover:text-[#3D3528]"
-                )}
-                style={lang === l ? { backgroundColor: "var(--color-primary)" } : undefined}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-1 pb-24">
-        <Outlet context={outletContext} />
-      </main>
-
-      <nav
-        className="fixed bottom-0 inset-x-0 z-30 border-t"
-        style={{ backgroundColor: "var(--color-bg)", borderColor: "var(--color-border)" }}
-      >
-        <div className="max-w-3xl mx-auto px-4 py-2 flex items-center justify-around">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.to);
-            const label = lang === "bm" ? item.labelBm : item.labelEn;
-            return (
-              <Link
-                key={item.key}
-                to={`${basePath}${item.to}`}
-                className={cn(
-                  "flex flex-col items-center gap-1 px-3 py-1.5 rounded transition-colors",
-                  active ? "text-[#B8962E]" : "text-[#8B7355] hover:text-[#3D3528]"
-                )}
-              >
-                <Icon className="w-5 h-5" strokeWidth={active ? 2.5 : 1.8} />
-                <span className="text-[10px] font-medium uppercase tracking-wider">{label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
+    <div
+      style={cssVars}
+      className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] font-sans antialiased"
+    >
+      <Outlet context={{ event }} />
     </div>
   );
 }
-
-export default RustyLayout;

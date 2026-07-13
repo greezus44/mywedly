@@ -1,459 +1,486 @@
-import { useState, useEffect } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { supabase, type EventRsvp, type ScheduleItem, type EventGuest } from "../../lib/supabase";
+import { useState, useMemo, type FormEvent } from "react";
+import { useParams, useNavigate, useOutletContext, Link } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Check,
+  X,
+  CalendarClock,
+  Loader2,
+  PartyPopper,
+  Heart,
+  ArrowLeft,
+} from "lucide-react";
+import { supabase, type UserEvent, type EventRsvp } from "../../lib/supabase";
+import { cn, isRsvpClosed, formatDeadline } from "../../lib/utils";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { Button } from "../../components/ui/Button";
-import { Textarea } from "../../components/ui/Input";
-import { EmptyState } from "../../components/ui/index";
-import { CalendarDays, Clock, MapPin, Check, X, Minus, Plus } from "lucide-react";
-import { formatDate, formatTime, isRsvpClosed, formatDeadline } from "../../lib/utils";
-import type { Lang } from "./rusty-layout";
-import type { RustyOutletContext } from "./rusty-layout";
-import type { CSSProperties, FormEvent } from "react";
+import { Input, Textarea } from "../../components/ui/Input";
 
-const translations = {
-  en: {
-    title: "RSVP",
-    subtitle: "Kindly respond by the deadline",
-    schedule: "Event Schedule",
-    attending: "Joyfully Accepts",
-    declined: "Regretfully Declines",
-    plusOnes: "Plus Ones",
-    dietary: "Dietary Requirements",
-    dietaryPlaceholder: "Any allergies or dietary restrictions...",
-    message: "Message to the Couple",
-    messagePlaceholder: "Share your well wishes...",
-    submit: "Submit RSVP",
-    submitting: "Submitting...",
-    closed: "RSVPs are now closed",
-    closedOn: "RSVPs closed on",
-    noSchedule: "No schedule details available yet",
-    loading: "Loading...",
-    error: "Failed to load RSVP details",
-    success: "Thank you! Your RSVP has been submitted.",
-    errorSubmit: "Failed to submit RSVP. Please try again.",
-  },
-  bm: {
-    title: "RSVP",
-    subtitle: "Sila maklumkan sebelum tarikh tamat",
-    schedule: "Jadual Acara",
-    attending: "Dengan Gembira Menerima",
-    declined: "Dengan Sesal Menolak",
-    plusOnes: "Tetamu Tambahan",
-    dietary: "Keperluan Diet",
-    dietaryPlaceholder: "Sebarang alahan atau had pemakanan...",
-    message: "Mesej Untuk Pasangan",
-    messagePlaceholder: "Kongsi ucapan tahniah anda...",
-    submit: "Hantar RSVP",
-    submitting: "Menghantar...",
-    closed: "RSVP telah ditutup",
-    closedOn: "RSVP ditutup pada",
-    noSchedule: "Maklumat jadual belum tersedia",
-    loading: "Memuatkan...",
-    error: "Gagal memuatkan butiran RSVP",
-    success: "Terima kasih! RSVP anda telah dihantar.",
-    errorSubmit: "Gagal menghantar RSVP. Sila cuba lagi.",
-  },
-};
+export type Lang = "en" | "id";
+
+async function fetchExistingRsvp(
+  eventId: string,
+  guestName: string,
+): Promise<EventRsvp | null> {
+  const { data, error } = await supabase
+    .from("event_rsvps")
+    .select("*")
+    .eq("event_id", eventId)
+    .eq("guest_name", guestName)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as EventRsvp | null) ?? null;
+}
+
+async function submitRsvp(
+  payload: Omit<EventRsvp, "id" | "submitted_at">,
+): Promise<EventRsvp> {
+  const { data, error } = await supabase
+    .from("event_rsvps")
+    .insert({
+      event_id: payload.event_id,
+      guest_name: payload.guest_name,
+      status: payload.status,
+      plus_ones: payload.plus_ones,
+      dietary: payload.dietary,
+      message: payload.message,
+      answers: payload.answers,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as EventRsvp;
+}
 
 export default function RustyRsvp() {
-  const { event, lang } = useOutletContext<RustyOutletContext>();
-  const { eventId } = useParams<{ eventId: string }>();
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  const { event } = useOutletContext<{ event: UserEvent }>();
   const { guestName } = useGuestAuth();
-  const t = translations[lang];
+  const queryClient = useQueryClient();
 
-  const [status, setStatus] = useState<"attending" | "declined" | "">("");
-  const [plusOnes, setPlusOnes] = useState(0);
-  const [dietary, setDietary] = useState("");
-  const [message, setMessage] = useState("");
-  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const eventSlug = slug || event.slug || event.id;
+  const closed = isRsvpClosed(event.rsvp_deadline);
 
-  const guestId = eventId && guestName ? `${eventId}-${guestName}` : null;
-
-  const { data: schedule } = useQuery<ScheduleItem[], Error>({
-    queryKey: ["rusty-schedule", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("schedule_items")
-        .select("*")
-        .eq("event_id", eventId!)
-        .order("order_index", { ascending: true });
-      if (error) throw error;
-      return (data || []) as ScheduleItem[];
-    },
-    enabled: !!eventId,
+  const { data: existingRsvp, isLoading: loadingExisting } = useQuery({
+    queryKey: ["rusty-rsvp", event.id, guestName],
+    queryFn: () => fetchExistingRsvp(event.id, guestName || ""),
+    enabled: !!guestName,
   });
 
-  const { data: existingRsvp } = useQuery<EventRsvp | null, Error>({
-    queryKey: ["rusty-rsvp", eventId, guestName],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_rsvps")
-        .select("*")
-        .eq("event_id", eventId!)
-        .eq("guest_name", guestName!)
-        .maybeSingle();
-      if (error) throw error;
-      return data as EventRsvp | null;
-    },
-    enabled: !!eventId && !!guestName,
-  });
+  const [status, setStatus] = useState<"attending" | "declined" | "pending">(
+    existingRsvp?.status || "pending",
+  );
+  const [plusOnes, setPlusOnes] = useState<number>(existingRsvp?.plus_ones || 0);
+  const [dietary, setDietary] = useState<string>(existingRsvp?.dietary || "");
+  const [message, setMessage] = useState<string>(existingRsvp?.message || "");
+  const [submitted, setSubmitted] = useState(false);
 
-  const { data: existingGuest } = useQuery<EventGuest | null, Error>({
-    queryKey: ["rusty-guest", eventId, guestName],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_guests")
-        .select("*")
-        .eq("event_id", eventId!)
-        .eq("name", guestName!)
-        .maybeSingle();
-      if (error) throw error;
-      return data as EventGuest | null;
-    },
-    enabled: !!eventId && !!guestName,
-  });
-
-  useEffect(() => {
+  // Sync existing RSVP into form state once loaded
+  useMemo(() => {
     if (existingRsvp) {
-      setStatus(existingRsvp.status as "attending" | "declined" | "");
-      setPlusOnes(existingRsvp.plus_ones || 0);
-      setDietary(existingRsvp.dietary || "");
-      setMessage(existingRsvp.message || "");
-    } else if (existingGuest) {
-      setStatus(existingGuest.rsvp_status === "pending" ? "" : existingGuest.rsvp_status);
-      setPlusOnes(existingGuest.plus_ones || 0);
-      setDietary(existingGuest.dietary || "");
-      setMessage(existingGuest.message || "");
+      setStatus(existingRsvp.status);
+      setPlusOnes(existingRsvp.plus_ones);
+      setDietary(existingRsvp.dietary);
+      setMessage(existingRsvp.message);
     }
-  }, [existingRsvp, existingGuest]);
+  }, [existingRsvp]);
 
-  const mutation = useMutation<void, Error>({
-    mutationFn: async () => {
-      if (!eventId || !guestName) throw new Error("Missing event or guest info");
-
-      const rsvpPayload = {
-        event_id: eventId,
-        guest_name: guestName,
-        status,
-        plus_ones: status === "attending" ? plusOnes : 0,
-        dietary: status === "attending" ? dietary : "",
-        message,
-        submitted_at: new Date().toISOString(),
-      };
-
-      const { data: existing } = await supabase
-        .from("event_rsvps")
-        .select("id")
-        .eq("event_id", eventId)
-        .eq("guest_name", guestName)
-        .maybeSingle();
-
-      if (existing) {
-        const { error } = await supabase
-          .from("event_rsvps")
-          .update(rsvpPayload)
-          .eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("event_rsvps")
-          .insert({ ...rsvpPayload, answers: null });
-        if (error) throw error;
-      }
-
-      if (existingGuest) {
-        const { error } = await supabase
-          .from("event_guests")
-          .update({
-            rsvp_status: status,
-            rsvp_submitted_at: new Date().toISOString(),
-            plus_ones: status === "attending" ? plusOnes : 0,
-            dietary: status === "attending" ? dietary : "",
-            message,
-          })
-          .eq("id", existingGuest.id);
-        if (error) throw error;
-      }
-    },
+  const mutation = useMutation({
+    mutationFn: submitRsvp,
     onSuccess: () => {
-      setSubmitSuccess(true);
-      setTimeout(() => setSubmitSuccess(false), 5000);
+      setSubmitted(true);
+      queryClient.invalidateQueries({ queryKey: ["rusty-rsvp", event.id, guestName] });
     },
   });
-
-  const deadline = event?.rsvp_deadline || event?.draft_rsvp_deadline || null;
-  const rsvpClosed = isRsvpClosed(deadline);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!status || rsvpClosed) return;
-    mutation.mutate();
+    if (status === "pending") return;
+    if (!guestName) {
+      navigate(`/${eventSlug}/login`);
+      return;
+    }
+    mutation.mutate({
+      event_id: event.id,
+      guest_id: null,
+      guest_name: guestName,
+      status,
+      plus_ones: status === "attending" ? plusOnes : 0,
+      dietary: status === "attending" ? dietary : "",
+      message,
+      answers: null,
+    });
   };
 
-  if (!event) {
+  // RSVP closed state
+  if (closed) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <p className="font-serif text-lg text-[#8B7355]">{t.error}</p>
-      </div>
+      <Shell eventSlug={eventSlug} eventName={event.name}>
+        <div className="text-center py-16 px-6 max-w-lg mx-auto animate-fade-in-up">
+          <CalendarClock className="w-12 h-12 mx-auto mb-6" style={{ color: "#B8962E" }} />
+          <h1 className="font-heading text-4xl tracking-wide mb-4">
+            RSVP Closed
+          </h1>
+          <GoldDivider />
+          <p className="text-base mb-2" style={{ color: "#8B7355" }}>
+            We're sorry, the RSVP deadline has passed.
+          </p>
+          {event.rsvp_deadline && (
+            <p className="text-sm mb-8" style={{ color: "#8B7355" }}>
+              The deadline was {formatDeadline(event.rsvp_deadline)}.
+            </p>
+          )}
+          <p className="text-base mb-8">
+            If you have any questions, please reach out to us directly.
+          </p>
+          <Button
+            onClick={() => navigate(`/${eventSlug}/contact`)}
+            size="lg"
+            className={cn("px-10 uppercase tracking-[0.25em]")}
+            style={{ backgroundColor: "#B8962E", color: "#FAF3E0", borderRadius: 0 }}
+          >
+            Contact Us
+          </Button>
+        </div>
+      </Shell>
     );
   }
 
-  const cssVars = {} as CSSProperties;
+  // Success state
+  if (submitted && !mutation.isError) {
+    return (
+      <Shell eventSlug={eventSlug} eventName={event.name}>
+        <div className="text-center py-16 px-6 max-w-lg mx-auto animate-scale-in">
+          {status === "attending" ? (
+            <PartyPopper className="w-12 h-12 mx-auto mb-6" style={{ color: "#B8962E" }} />
+          ) : (
+            <Heart className="w-12 h-12 mx-auto mb-6" style={{ color: "#B8962E" }} />
+          )}
+          <h1 className="font-heading text-4xl tracking-wide mb-4">
+            {status === "attending" ? "Thank You!" : "We'll Miss You"}
+          </h1>
+          <GoldDivider />
+          <p className="text-base mb-8" style={{ color: "#8B7355" }}>
+            {status === "attending"
+              ? "We can't wait to celebrate with you. See you soon!"
+              : "Thank you for letting us know. You'll be missed."}
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Button
+              onClick={() => navigate(`/${eventSlug}/home`)}
+              size="lg"
+              className={cn("px-10 uppercase tracking-[0.25em]")}
+              style={{ backgroundColor: "#B8962E", color: "#FAF3E0", borderRadius: 0 }}
+            >
+              Back to Home
+            </Button>
+            <Button
+              onClick={() => navigate(`/${eventSlug}/wishes`)}
+              variant="ghost"
+              size="lg"
+              className={cn("px-10 uppercase tracking-[0.25em]")}
+              style={{ color: "#B8962E", borderRadius: 0 }}
+            >
+              Leave a Wish
+            </Button>
+          </div>
+        </div>
+      </Shell>
+    );
+  }
+
+  // Not logged in
+  if (!guestName) {
+    return (
+      <Shell eventSlug={eventSlug} eventName={event.name}>
+        <div className="text-center py-16 px-6 max-w-lg mx-auto animate-fade-in-up">
+          <Heart className="w-12 h-12 mx-auto mb-6" style={{ color: "#B8962E" }} />
+          <h1 className="font-heading text-4xl tracking-wide mb-4">
+            Please Sign In
+          </h1>
+          <GoldDivider />
+          <p className="text-base mb-8" style={{ color: "#8B7355" }}>
+            Please enter your name so we know who is responding.
+          </p>
+          <Button
+            onClick={() => navigate(`/${eventSlug}/login`)}
+            size="lg"
+            className={cn("px-10 uppercase tracking-[0.25em]")}
+            style={{ backgroundColor: "#B8962E", color: "#FAF3E0", borderRadius: 0 }}
+          >
+            Sign In
+          </Button>
+        </div>
+      </Shell>
+    );
+  }
 
   return (
-    <div style={cssVars} className="animate-fade-in px-6 py-10 max-w-2xl mx-auto">
-      <div className="text-center mb-10">
-        <div className="flex items-center justify-center gap-4 mb-6">
-          <div className="h-px w-12" style={{ backgroundColor: "#B8962E" }} />
-          <div className="w-2 h-2 rotate-45" style={{ backgroundColor: "#B8962E" }} />
-          <div className="h-px w-12" style={{ backgroundColor: "#B8962E" }} />
-        </div>
-        <h1
-          className="font-serif text-4xl font-light mb-2"
-          style={{ color: "#3D3528", fontFamily: '"Cormorant Garamond", serif' }}
-        >
-          {t.title}
-        </h1>
-        <p className="text-sm" style={{ color: "#8B7355" }}>
-          {t.subtitle}
-        </p>
-      </div>
-
-      {rsvpClosed && (
-        <div
-          className="text-center py-6 px-4 rounded-lg mb-8 border"
-          style={{
-            backgroundColor: "#FAF3E0",
-            borderColor: "#D4C695",
-          }}
-        >
-          <p className="font-serif text-lg" style={{ color: "#B8962E" }}>
-            {t.closed}
+    <Shell eventSlug={eventSlug} eventName={event.name}>
+      <div className="max-w-xl mx-auto px-6 py-12 animate-fade-in-up">
+        <div className="text-center mb-8">
+          <p
+            className="font-heading italic text-sm uppercase tracking-[0.3em] mb-2"
+            style={{ color: "#B8962E" }}
+          >
+            Kindly Respond
           </p>
-          {deadline && (
-            <p className="text-sm mt-1" style={{ color: "#8B7355" }}>
-              {t.closedOn} {formatDeadline(deadline)}
+          <h1 className="font-heading text-4xl sm:text-5xl tracking-wide mb-3">
+            RSVP
+          </h1>
+          {event.rsvp_deadline && (
+            <p className="text-xs" style={{ color: "#8B7355" }}>
+              Please respond by {formatDeadline(event.rsvp_deadline)}
             </p>
           )}
         </div>
-      )}
 
-      {schedule && schedule.length > 0 && (
-        <section className="mb-10">
-          <h2
-            className="font-serif text-xl font-light text-center mb-6 tracking-wide"
-            style={{ color: "#3D3528", fontFamily: '"Cormorant Garamond", serif' }}
+        <GoldDivider />
+
+        {existingRsvp && !submitted && (
+          <div
+            className="text-center text-sm px-4 py-3 mb-6"
+            style={{ border: "1px solid #D4C695", backgroundColor: "#FAF3E0", color: "#8B7355" }}
           >
-            {t.schedule}
-          </h2>
-          <div className="space-y-4">
-            {schedule.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-lg p-5 border"
+            You previously submitted a response. Submitting again will update it.
+          </div>
+        )}
+
+        {loadingExisting ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#B8962E" }} />
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-8">
+            {/* Guest name (read-only) */}
+            <div>
+              <label
+                className="block text-xs uppercase tracking-[0.2em] mb-2"
+                style={{ color: "#B8962E" }}
+              >
+                Name
+              </label>
+              <Input
+                value={guestName}
+                readOnly
+                className="cursor-not-allowed"
                 style={{
                   backgroundColor: "#FAF3E0",
                   borderColor: "#D4C695",
+                  color: "#8B7355",
+                  borderRadius: 0,
                 }}
-              >
-                <h3
-                  className="font-serif text-lg mb-2"
-                  style={{ color: "#3D3528", fontFamily: '"Cormorant Garamond", serif' }}
-                >
-                  {item.title}
-                </h3>
-                {item.description && (
-                  <p className="text-sm mb-3" style={{ color: "#8B7355" }}>
-                    {item.description}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-4 text-xs" style={{ color: "#8B7355" }}>
-                  {item.schedule_date && (
-                    <span className="flex items-center gap-1.5">
-                      <CalendarDays className="w-3.5 h-3.5" />
-                      {formatDate(item.schedule_date)}
-                    </span>
-                  )}
-                  {item.start_time && (
-                    <span className="flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5" />
-                      {formatTime(item.start_time)}
-                      {item.end_time && ` — ${formatTime(item.end_time)}`}
-                    </span>
-                  )}
-                  {item.venue && (
-                    <span className="flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5" />
-                      {item.venue}
-                    </span>
-                  )}
-                </div>
-                {item.dress_code && (
-                  <p className="text-xs mt-2" style={{ color: "#B8962E" }}>
-                    Dress code: {item.dress_code}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {schedule && schedule.length === 0 && (
-        <div className="mb-8">
-          <EmptyState title={t.noSchedule} />
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-8">
-        <div className="grid grid-cols-2 gap-4">
-          <button
-            type="button"
-            onClick={() => setStatus("attending")}
-            disabled={rsvpClosed}
-            className="flex flex-col items-center justify-center gap-2 py-6 rounded-lg border-2 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              borderColor: status === "attending" ? "#B8962E" : "#D4C695",
-              backgroundColor: status === "attending" ? "#B8962E" : "#FAF3E0",
-              color: status === "attending" ? "#FAF3E0" : "#3D3528",
-            }}
-          >
-            <Check className="w-6 h-6" />
-            <span className="font-serif text-base tracking-wide">{t.attending}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStatus("declined")}
-            disabled={rsvpClosed}
-            className="flex flex-col items-center justify-center gap-2 py-6 rounded-lg border-2 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              borderColor: status === "declined" ? "#B8962E" : "#D4C695",
-              backgroundColor: status === "declined" ? "#B8962E" : "#FAF3E0",
-              color: status === "declined" ? "#FAF3E0" : "#3D3528",
-            }}
-          >
-            <X className="w-6 h-6" />
-            <span className="font-serif text-base tracking-wide">{t.declined}</span>
-          </button>
-        </div>
-
-        {status === "attending" && (
-          <div className="space-y-6 animate-fade-in">
-            <div>
-              <label
-                className="block font-serif text-sm tracking-[0.15em] uppercase mb-3"
-                style={{ color: "#B8962E" }}
-              >
-                {t.plusOnes}
-              </label>
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  onClick={() => setPlusOnes(Math.max(0, plusOnes - 1))}
-                  disabled={rsvpClosed || plusOnes === 0}
-                  className="w-10 h-10 rounded-full border flex items-center justify-center transition-colors disabled:opacity-40"
-                  style={{ borderColor: "#B8962E", color: "#B8962E" }}
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <span
-                  className="font-serif text-3xl min-w-[3rem] text-center"
-                  style={{ color: "#3D3528" }}
-                >
-                  {plusOnes}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPlusOnes(Math.min(10, plusOnes + 1))}
-                  disabled={rsvpClosed || plusOnes >= 10}
-                  className="w-10 h-10 rounded-full border flex items-center justify-center transition-colors disabled:opacity-40"
-                  style={{ borderColor: "#B8962E", color: "#B8962E" }}
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label
-                className="block font-serif text-sm tracking-[0.15em] uppercase mb-3"
-                style={{ color: "#B8962E" }}
-              >
-                {t.dietary}
-              </label>
-              <Textarea
-                value={dietary}
-                onChange={(e) => setDietary(e.target.value)}
-                placeholder={t.dietaryPlaceholder}
-                disabled={rsvpClosed}
-                rows={3}
-                className="border-[#D4C695] bg-white/60 focus:border-[#B8962E]"
-                style={{ color: "#3D3528" }}
               />
             </div>
-          </div>
-        )}
 
-        <div>
-          <label
-            className="block font-serif text-sm tracking-[0.15em] uppercase mb-3"
+            {/* Attending / Declined */}
+            <div>
+              <label
+                className="block text-xs uppercase tracking-[0.2em] mb-3"
+                style={{ color: "#B8962E" }}
+              >
+                Will You Attend?
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <ChoiceCard
+                  selected={status === "attending"}
+                  onClick={() => setStatus("attending")}
+                  icon={<Check className="w-5 h-5" />}
+                  label="Joyfully Accepts"
+                />
+                <ChoiceCard
+                  selected={status === "declined"}
+                  onClick={() => setStatus("declined")}
+                  icon={<X className="w-5 h-5" />}
+                  label="Regretfully Declines"
+                />
+              </div>
+            </div>
+
+            {/* Plus ones (only if attending) */}
+            {status === "attending" && (
+              <div className="animate-fade-in">
+                <label
+                  className="block text-xs uppercase tracking-[0.2em] mb-2"
+                  style={{ color: "#B8962E" }}
+                >
+                  Number of Guests (Including You)
+                </label>
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setPlusOnes((n) => Math.max(0, n - 1))}
+                    className="px-4"
+                    style={{ borderColor: "#D4C695", borderRadius: 0, color: "#3D3528" }}
+                  >
+                    −
+                  </Button>
+                  <span
+                    className="font-heading text-2xl min-w-[40px] text-center"
+                    style={{ color: "#3D3528" }}
+                  >
+                    {plusOnes + 1}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setPlusOnes((n) => Math.min(10, n + 1))}
+                    className="px-4"
+                    style={{ borderColor: "#D4C695", borderRadius: 0, color: "#3D3528" }}
+                  >
+                    +
+                  </Button>
+                </div>
+                <p className="text-xs mt-2" style={{ color: "#8B7355" }}>
+                  {plusOnes} additional guest{plusOnes !== 1 ? "s" : ""} joining you.
+                </p>
+              </div>
+            )}
+
+            {/* Dietary (only if attending) */}
+            {status === "attending" && (
+              <div className="animate-fade-in">
+                <label
+                  className="block text-xs uppercase tracking-[0.2em] mb-2"
+                  style={{ color: "#B8962E" }}
+                >
+                  Dietary Requirements
+                </label>
+                <Textarea
+                  value={dietary}
+                  onChange={(e) => setDietary(e.target.value)}
+                  placeholder="Any allergies or dietary preferences?"
+                  rows={3}
+                  style={{
+                    backgroundColor: "#FAF3E0",
+                    borderColor: "#D4C695",
+                    color: "#3D3528",
+                    borderRadius: 0,
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Message */}
+            <div>
+              <label
+                className="block text-xs uppercase tracking-[0.2em] mb-2"
+                style={{ color: "#B8962E" }}
+              >
+                Message to the Couple
+              </label>
+              <Textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Share a note or well wishes..."
+                rows={4}
+                style={{
+                  backgroundColor: "#FAF3E0",
+                  borderColor: "#D4C695",
+                  color: "#3D3528",
+                  borderRadius: 0,
+                }}
+              />
+            </div>
+
+            {mutation.isError && (
+              <p className="text-sm text-left" style={{ color: "#A07820" }}>
+                Something went wrong. Please try again.
+              </p>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              loading={mutation.isPending}
+              disabled={status === "pending" || mutation.isPending}
+              className={cn("w-full uppercase tracking-[0.25em]")}
+              style={{ backgroundColor: "#B8962E", color: "#FAF3E0", borderRadius: 0 }}
+            >
+              {status === "declined" ? "Send Response" : "Confirm Attendance"}
+            </Button>
+          </form>
+        )}
+      </div>
+    </Shell>
+  );
+}
+
+function Shell({
+  eventSlug,
+  eventName,
+  children,
+}: {
+  eventSlug: string;
+  eventName: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-h-screen bg-[#F5ECD7] text-[#3D3528] font-sans">
+      <nav className="sticky top-0 z-20 bg-[#F5ECD7]/95 backdrop-blur-sm border-b border-[#D4C695]">
+        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link
+            to={`/${eventSlug}/home`}
+            className="font-heading text-xl tracking-wide"
             style={{ color: "#B8962E" }}
           >
-            {t.message}
-          </label>
-          <Textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder={t.messagePlaceholder}
-            disabled={rsvpClosed}
-            rows={4}
-            className="border-[#D4C695] bg-white/60 focus:border-[#B8962E]"
+            {eventName || "Our Wedding"}
+          </Link>
+          <Link
+            to={`/${eventSlug}/home`}
+            className="flex items-center gap-1 text-xs uppercase tracking-[0.15em] hover:opacity-70"
             style={{ color: "#3D3528" }}
-          />
+          >
+            <ArrowLeft className="w-3 h-3" /> Back
+          </Link>
         </div>
-
-        {submitSuccess && (
-          <div
-            className="text-center py-4 px-4 rounded-lg border animate-fade-in"
-            style={{ backgroundColor: "#FAF3E0", borderColor: "#B8962E" }}
-          >
-            <p className="font-serif text-lg" style={{ color: "#B8962E" }}>
-              {t.success}
-            </p>
-          </div>
-        )}
-
-        {(mutation as any).error && (
-          <div
-            className="text-center py-4 px-4 rounded-lg border"
-            style={{ backgroundColor: "#FAF3E0", borderColor: "#dc2626" }}
-          >
-            <p className="text-sm" style={{ color: "#dc2626" }}>
-              {t.errorSubmit}
-            </p>
-          </div>
-        )}
-
-        <div className="text-center pt-4">
-          <Button
-            type="submit"
-            disabled={!status || rsvpClosed || mutation.isPending}
-            loading={mutation.isPending}
-            size="lg"
-            className="px-16 py-4 font-serif text-lg tracking-[0.3em] uppercase"
-            style={{
-              backgroundColor: "#B8962E",
-              color: "#FAF3E0",
-              border: "1px solid #B8962E",
-            }}
-          >
-            {mutation.isPending ? t.submitting : t.submit}
-          </Button>
-        </div>
-      </form>
+      </nav>
+      {children}
     </div>
+  );
+}
+
+function GoldDivider() {
+  return (
+    <div className="flex items-center justify-center gap-3 my-6" aria-hidden>
+      <span className="block h-px w-16" style={{ backgroundColor: "#B8962E" }} />
+      <span className="text-lg" style={{ color: "#B8962E" }}>❦</span>
+      <span className="block h-px w-16" style={{ backgroundColor: "#B8962E" }} />
+    </div>
+  );
+}
+
+function ChoiceCard({
+  selected,
+  onClick,
+  icon,
+  label,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex flex-col items-center gap-2 px-4 py-6 transition-all",
+      )}
+      style={{
+        border: selected ? "2px solid #B8962E" : "1px solid #D4C695",
+        backgroundColor: selected ? "#FAF3E0" : "transparent",
+        color: selected ? "#B8962E" : "#3D3528",
+      }}
+    >
+      {icon}
+      <span className="text-xs uppercase tracking-[0.15em]">{label}</span>
+    </button>
   );
 }

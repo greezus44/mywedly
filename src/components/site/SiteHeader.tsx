@@ -1,76 +1,25 @@
-import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import type { Session } from "@supabase/supabase-js";
-
+import { Link, useLocation } from "react-router-dom";
+import { Menu, X } from "lucide-react";
+import { useState } from "react";
+import { cn } from "../../lib/utils";
+const navLinks = [{ to: "/", label: "Home" }, { to: "/#features", label: "Features" }, { to: "/#pricing", label: "Pricing" }, { to: "/dashboard", label: "Dashboard" }];
 export function SiteHeader() {
-  const [session, setSession] = useState<Session | null>(null);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
-    return () => sub.subscription.unsubscribe();
-  }, []);
-
-  async function handleSignOut() {
-    await supabase.auth.signOut();
-    navigate({ to: "/", replace: true });
-  }
-
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
   return (
-    <nav className="flex justify-between items-center px-6 md:px-10 py-6 border-b border-onyx/5 bg-parchment">
-      <Link to="/" className="font-serif italic text-2xl font-semibold tracking-tight text-onyx">
-        Aethel
-      </Link>
-      <div className="hidden md:flex gap-10 text-xs uppercase tracking-widest font-semibold text-onyx/60">
-        <a href="/#builder" className="hover:text-onyx transition-colors">
-          The Builder
-        </a>
-        <a href="/#showcase" className="hover:text-onyx transition-colors">
-          Showcase
-        </a>
-        <a href="/#pricing" className="hover:text-onyx transition-colors">
-          Pricing
-        </a>
-        <a href="/#craft" className="hover:text-onyx transition-colors">
-          Craft
-        </a>
+    <header className="sticky top-0 z-40 bg-cream/95 backdrop-blur border-b border-onyx/10">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
+        <Link to="/" className="flex items-center gap-2">
+          <span className="font-heading text-2xl text-onyx tracking-tight">MyWedly</span>
+          <span className="hidden sm:inline text-[10px] uppercase tracking-widest text-onyx/40 border-l border-onyx/20 pl-2">Editorial</span>
+        </Link>
+        <nav className="hidden md:flex items-center gap-8">
+          {navLinks.map((link) => <Link key={link.to} to={link.to} className={cn("text-sm uppercase tracking-wider transition-colors", location.pathname === link.to.split("#")[0] ? "text-onyx" : "text-onyx/50 hover:text-onyx")}>{link.label}</Link>)}
+          <Link to="/auth" className="px-5 py-2 bg-onyx text-cream text-sm uppercase tracking-wider hover:bg-onyx-light transition-colors">Sign In</Link>
+        </nav>
+        <button className="md:hidden p-2" onClick={() => setOpen(!open)}>{open ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}</button>
       </div>
-      <div className="flex items-center gap-3">
-        {session ? (
-          <>
-            <Link
-              to="/dashboard"
-              className="hidden sm:inline-flex px-5 py-2 border border-onyx text-onyx text-xs uppercase tracking-widest hover:bg-onyx hover:text-parchment transition-colors"
-            >
-              Dashboard
-            </Link>
-            <button
-              onClick={handleSignOut}
-              className="text-xs uppercase tracking-widest text-onyx/60 hover:text-onyx"
-            >
-              Sign out
-            </button>
-          </>
-        ) : (
-          <>
-            <Link
-              to="/auth"
-              className="hidden sm:inline text-xs uppercase tracking-widest text-onyx/60 hover:text-onyx"
-            >
-              Sign in
-            </Link>
-            <Link
-              to="/auth"
-              search={{ mode: "signup" }}
-              className="px-5 py-2 bg-onyx text-parchment text-xs uppercase tracking-widest hover:bg-ink transition-colors"
-            >
-              Begin planning
-            </Link>
-          </>
-        )}
-      </div>
-    </nav>
+      {open && <div className="md:hidden border-t border-onyx/10 bg-cream">{navLinks.map((link) => <Link key={link.to} to={link.to} onClick={() => setOpen(false)} className="block px-6 py-3 text-sm uppercase tracking-wider text-onyx/70 hover:bg-onyx/5 border-b border-onyx/5">{link.label}</Link>)}</div>}
+    </header>
   );
 }

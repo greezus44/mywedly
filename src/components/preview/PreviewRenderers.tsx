@@ -1,83 +1,73 @@
-import type { UserEvent } from "../../lib/supabase";
+import type { UserEvent, CoverConfig, LoginConfig, EventContent } from "../../lib/supabase";
 import { DEFAULT_THEME, themeToCssVars } from "../../lib/theme";
-import { formatDate, formatTime, getCountdown } from "../../lib/utils";
-import type { CSSProperties } from "react";
-export function CoverPreview({ event }: { event: UserEvent | null }) {
-  if (!event) return <div className="p-8 text-center text-slate-400">No event data</div>;
+import { formatDate, getCountdown } from "../../lib/utils";
+export function CoverPreview({ event }: { event: UserEvent }) {
   const config = event.draft_cover_config || event.cover_config || {};
-  const logo = event.draft_logo_config || event.logo_config || { enabled: false };
   const theme = event.draft_theme || event.theme || DEFAULT_THEME;
-  const cssVars = themeToCssVars(theme) as CSSProperties;
+  const vars = themeToCssVars(theme) as React.CSSProperties;
+  const bg = config.bgImage ? { backgroundImage: `url(${config.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundColor: config.bgColor || theme.bgColor };
+  const dateStr = event.draft_event_date || event.event_date;
+  const countdown = getCountdown(dateStr);
   return (
-    <div style={{ ...cssVars, backgroundImage: config.bgImage ? `url(${config.bgImage})` : undefined, backgroundColor: config.bgColor || "#0f172a", aspectRatio: "16/9" }} className="relative flex flex-col items-center justify-center overflow-hidden">
-      {config.bgImage && <div className="absolute inset-0" style={{ backgroundColor: config.overlayColor || "#000", opacity: config.overlayOpacity ?? 0.4 }} />}
-      <div className="relative z-10 text-center px-6">
-        {logo.enabled && logo.image && <img src={logo.image} alt="Logo" className="h-12 mx-auto mb-4" />}
-        {logo.enabled && logo.text && <div className="text-lg font-medium mb-3" style={{ color: logo.color || config.textColor || "#fff" }}>{logo.text}</div>}
-        {config.customText && <p className="text-sm mb-2" style={{ fontFamily: `"${config.scriptFont}", serif`, color: config.textColor || "#fff" }}>{config.customText}</p>}
-        <h1 className="text-3xl md:text-4xl font-bold" style={{ color: config.textColor || "#fff", fontFamily: `"${config.font}", sans-serif` }}>{event.draft_name || event.name}</h1>
-        {config.showDate && event.draft_event_date && <p className="mt-2 text-sm" style={{ color: config.textColor || "#fff" }}>{formatDate(event.draft_event_date)}</p>}
-        {config.showCountdown && event.draft_event_date && !getCountdown(event.draft_event_date).isPast && (
-          <div className="flex gap-4 mt-3 justify-center" style={{ color: config.textColor || "#fff" }}>
-            {[{ l: "Days", v: getCountdown(event.draft_event_date).days }, { l: "Hours", v: getCountdown(event.draft_event_date).hours }, { l: "Min", v: getCountdown(event.draft_event_date).minutes }, { l: "Sec", v: getCountdown(event.draft_event_date).seconds }].map((i) => <div key={i.l} className="text-center"><div className="text-xl font-bold">{i.v}</div><div className="text-xs opacity-75">{i.l}</div></div>)}
-          </div>
-        )}
-        <button className="mt-4 px-6 py-2 rounded-lg text-sm font-medium" style={{ backgroundColor: config.buttonColor || "#fff", color: "#000" }}>{config.buttonText || "Enter"}</button>
+    <div style={{ ...vars, ...bg, minHeight: "100vh" }} className="flex flex-col items-center justify-center text-center p-8">
+      {config.bgImage && <div className="absolute inset-0" style={{ backgroundColor: (config.overlayColor || "#000"), opacity: (config.overlayOpacity ?? 0.4) }} />}
+      <div className="relative" style={{ color: config.textColor || theme.textColor }}>
+        {config.customText && <p className="font-script italic text-lg mb-4 opacity-80">{config.customText}</p>}
+        <h1 className="font-heading text-5xl md:text-6xl mb-2">{event.draft_name || event.name}</h1>
+        {config.showDate && dateStr && <p className="text-sm uppercase tracking-widest mt-4 opacity-70">{formatDate(dateStr)}</p>}
+        {config.showCountdown && !countdown.isPast && <div className="flex gap-6 mt-8 justify-center">{["days", "hours", "minutes", "seconds"].map((u) => <div key={u}><div className="text-3xl font-heading">{(countdown as any)[u]}</div><div className="text-xs uppercase tracking-wider mt-1 opacity-60">{u}</div></div>)}</div>}
+        <button className="mt-8 px-8 py-3 text-sm uppercase tracking-wider" style={{ backgroundColor: config.buttonColor || theme.primaryColor, color: "#fff" }}>{config.buttonText || "Enter"}</button>
       </div>
     </div>
   );
 }
-export function LoginPreview({ event }: { event: UserEvent | null }) {
-  if (!event) return <div className="p-8 text-center text-slate-400">No event data</div>;
+export function LoginPreview({ event }: { event: UserEvent }) {
   const config = event.draft_login_config || event.login_config || {};
   const theme = event.draft_theme || event.theme || DEFAULT_THEME;
-  const cssVars = themeToCssVars(theme) as CSSProperties;
+  const vars = themeToCssVars(theme) as React.CSSProperties;
+  const bg = config.bgImage ? { backgroundImage: `url(${config.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" } : { backgroundColor: config.bgColor || theme.bgSubtleColor };
   return (
-    <div style={{ ...cssVars, backgroundColor: config.bgColor || "#f8fafc", backgroundImage: config.bgImage ? `url(${config.bgImage})` : undefined }} className="relative flex flex-col items-center justify-center p-8 min-h-[300px] overflow-hidden">
-      {config.bgImage && <div className="absolute inset-0" style={{ backgroundColor: config.overlayColor || "#000", opacity: config.overlayOpacity ?? 0.4 }} />}
-      <div className="relative z-10 text-center max-w-sm w-full">
-        {config.heading && <h2 className="text-2xl font-bold mb-2" style={{ color: config.textColor || "#1e293b" }}>{config.heading}</h2>}
-        {config.subheading && <p className="text-sm mb-4" style={{ color: config.textColor || "#64748b" }}>{config.subheading}</p>}
-        <input disabled placeholder={config.inputPlaceholder || "Your name"} className="w-full px-4 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-900 mb-3" />
-        <button className="w-full px-4 py-2.5 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: config.buttonColor || "#0f172a" }}>{config.buttonText || "Continue"}</button>
+    <div style={{ ...vars, ...bg, minHeight: "100vh" }} className="flex flex-col items-center justify-center p-8">
+      <div className="relative w-full max-w-sm text-center" style={{ color: config.textColor || theme.textColor }}>
+        <h2 className="font-heading text-3xl mb-2">{config.heading || "Welcome"}</h2>
+        {config.subheading && <p className="text-sm opacity-70 mb-6">{config.subheading}</p>}
+        <input type="text" placeholder={config.inputPlaceholder || "Your name"} className="w-full px-4 py-2.5 text-sm border bg-white/80 mb-3" style={{ borderColor: theme.borderColor }} />
+        <button className="w-full px-6 py-2.5 text-sm uppercase tracking-wider" style={{ backgroundColor: config.buttonColor || theme.primaryColor, color: "#fff" }}>{config.buttonText || "Continue"}</button>
       </div>
     </div>
   );
 }
-export function HomePreview({ event }: { event: UserEvent | null }) {
-  if (!event) return <div className="p-8 text-center text-slate-400">No event data</div>;
-  const content = event.draft_content || event.content || {};
+export function HomePreview({ event }: { event: UserEvent }) {
   const theme = event.draft_theme || event.theme || DEFAULT_THEME;
-  const cssVars = themeToCssVars(theme) as CSSProperties;
+  const vars = themeToCssVars(theme) as React.CSSProperties;
+  const content = (event.draft_content || event.content || {}) as EventContent;
+  const dateStr = event.draft_event_date || event.event_date;
   return (
-    <div style={cssVars} className="p-8 space-y-6">
-      <div className="text-center">
-        {content.invitation_title && <h2 className="text-2xl font-bold mb-1" style={{ color: "var(--color-primary)" }}>{content.invitation_title}</h2>}
-        {content.invitation_subtitle && <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>{content.invitation_subtitle}</p>}
+    <div style={vars} className="min-h-screen bg-white">
+      <div className="max-w-4xl mx-auto px-6 py-16 text-center" style={{ color: theme.textColor }}>
+        <p className="text-xs uppercase tracking-widest opacity-50 mb-3">{event.draft_event_type || event.event_type}</p>
+        <h1 className="font-heading text-4xl md:text-5xl mb-4">{event.draft_name || event.name}</h1>
+        {dateStr && <p className="text-sm uppercase tracking-wider opacity-70 mb-2">{formatDate(dateStr)}</p>}
+        {event.draft_venue && <p className="text-sm opacity-70">{event.draft_venue}</p>}
       </div>
-      {content.story_image && <img src={content.story_image} alt="Story" className="w-full rounded-lg" style={{ maxHeight: 200, objectFit: "cover" }} />}
-      {content.story && <p className="text-sm text-center" style={{ color: "var(--color-text)" }}>{content.story}</p>}
-      <div className="grid grid-cols-3 gap-4 text-center text-sm">
-        <div><div className="font-medium" style={{ color: "var(--color-primary)" }}>When</div><div style={{ color: "var(--color-text-muted)" }}>{formatDate(event.draft_event_date)}</div></div>
-        <div><div className="font-medium" style={{ color: "var(--color-primary)" }}>Time</div><div style={{ color: "var(--color-text-muted)" }}>{formatTime(event.draft_event_time)}</div></div>
-        <div><div className="font-medium" style={{ color: "var(--color-primary)" }}>Where</div><div style={{ color: "var(--color-text-muted)" }}>{event.draft_venue || "TBD"}</div></div>
-      </div>
-      <button className="w-full px-4 py-2.5 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: "var(--color-primary)" }}>{content.rsvp_button_text || "RSVP"}</button>
+      {content.story && <div className="max-w-2xl mx-auto px-6 py-12 text-center" style={{ color: theme.textColor }}><p className="font-script italic text-2xl mb-4 opacity-80">Our Story</p><p className="text-sm leading-relaxed opacity-80">{content.story}</p></div>}
+      {content.invitation_body && <div className="max-w-2xl mx-auto px-6 py-12 text-center" style={{ color: theme.textColor }}><h2 className="font-heading text-3xl mb-4">{content.invitation_title || "You're Invited"}</h2><p className="text-sm leading-relaxed opacity-80">{content.invitation_body}</p></div>}
     </div>
   );
 }
-export function RsvpPreview({ event }: { event: UserEvent | null }) {
-  if (!event) return <div className="p-8 text-center text-slate-400">No event data</div>;
+export function RsvpPreview({ event }: { event: UserEvent }) {
   const theme = event.draft_theme || event.theme || DEFAULT_THEME;
-  const cssVars = themeToCssVars(theme) as CSSProperties;
+  const vars = themeToCssVars(theme) as React.CSSProperties;
   return (
-    <div style={cssVars} className="p-8 space-y-4">
-      <h2 className="text-xl font-bold text-center" style={{ color: "var(--color-primary)" }}>RSVP</h2>
-      <div className="flex gap-3">
-        <button className="flex-1 py-2.5 rounded-lg border-2 font-medium text-sm" style={{ borderColor: "var(--color-primary)", color: "var(--color-primary)" }}>Accept</button>
-        <button className="flex-1 py-2.5 rounded-lg border-2 border-slate-200 font-medium text-sm text-slate-500">Decline</button>
+    <div style={vars} className="min-h-screen bg-white flex flex-col items-center justify-center p-8">
+      <div className="w-full max-w-md text-center" style={{ color: theme.textColor }}>
+        <p className="font-script italic text-2xl mb-2 opacity-80">RSVP</p>
+        <h2 className="font-heading text-3xl mb-6">Will you attend?</h2>
+        <div className="flex gap-3 justify-center">
+          <button className="px-8 py-3 text-sm uppercase tracking-wider" style={{ backgroundColor: theme.primaryColor, color: "#fff" }}>Joyfully Accepts</button>
+          <button className="px-8 py-3 text-sm uppercase tracking-wider border" style={{ borderColor: theme.borderColor, color: theme.textColor }}>Regretfully Declines</button>
+        </div>
       </div>
-      <button className="w-full py-2.5 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: "var(--color-primary)" }}>Submit RSVP</button>
     </div>
   );
 }

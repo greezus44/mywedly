@@ -1,27 +1,30 @@
-import { useState, useMemo } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect, useCallback } from "react";
+import { useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { CalendarClock, Check, X, Clock, Save } from "lucide-react";
 import { supabase, type UserEvent, type EventRsvp } from "../../lib/supabase";
-import { Card, Badge, EmptyState, ErrorState, Skeleton, Toast, Modal } from "../../components/ui";
+import { cn, formatDate, formatTime, isRsvpClosed, getRsvpStatus, formatDeadline, toDatetimeLocal, fromDatetimeLocal } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { Select } from "../../components/ui/Input";
-import {
-  CheckCircle, XCircle, Clock, Download, Pencil, Loader2, MailOpen,
-} from "lucide-react";
-import { getRsvpStatus, formatDeadline, formatDate } from "../../lib/utils";
+import { Card, Badge, EmptyState, FormField, Skeleton, ErrorState, Toast } from "../../components/ui";
+import { Input } from "../../components/ui/Input";
 
-type StatusFilter = "all" | "attending" | "declined" | "pending";
-
-export default function Rsvp() {
-  const { event } = useOutletContext<{ event: UserEvent | null }>();
+function RsvpPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState<StatusFilter>("all");
+  const [deadlineInput, setDeadlineInput] = useState("");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editStatus, setEditStatus] = useState<"attending" | "declined" | "pending">("pending");
 
-  const { data: rsvps, isLoading, error, refetch } = useQuery<EventRsvp[], Error>({
+  const { data: event, isLoading: eventLoading } = useQuery<UserEvent>({
+    queryKey: ["event", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!eventId,
+  });
+
+  const { data: rsvps, isLoading: rsvpsLoading, isError, refetch } = useQuery<EventRsvp[]>({
     queryKey: ["rsvps", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -30,210 +33,211 @@ export default function Rsvp() {
         .eq("event_id", eventId!)
         .order("submitted_at", { ascending: false });
       if (error) throw error;
-      return data || [];
+      return data;
     },
     enabled: !!eventId,
   });
 
-  const counts = useMemo(() => {
-    const total = rsvps?.length || 0;
-    const attending = rsvps?.filter((r) => r.status === "attending").length || 0;
-    const declined = rsvps?.filter((r) => r.status === "declined").length || 0;
-    const pending = rsvps?.filter((r) => r.status === "pending").length || 0;
-    return { total, attending, declined, pending };
-  }, [rsvps]);
+  useEffect(() => {
+    setDeadlineInput(toDatetimeLocal(event?.rsvp_deadline || null));
+  }, [event]);
 
-  const filtered = useMemo(() => {
-    if (!rsvps) return [];
-    if (filter === "all") return rsvps;
-    return rsvps.filter((r) => r.status === filter);
-  }, [rsvps, filter]);
-
-  const updateStatusMutation = useMutation<void, Error, { id: string; status: string }>({
-    mutationFn: async ({ id, status }) => {
-      const { error } = await supabase.from("event_rsvps").update({ status }).eq("id", id);
+  const deadlineMutation = useMutation({
+    mutationFn: async (deadline: string | null) => {
+      const { data, error } = await supabase
+        .from("user_events")
+        .update({ rsvp_deadline: deadline, updated_at: new Date().toISOString() })
+        .eq("id", eventId!)
+        .select()
+        .single();
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["rsvps", eventId] });
-      setEditingId(null);
-      setToast({ message: "RSVP updated", type: "success" });
+    onSuccess: (data) => {
+      queryClient.setQueryData(["event", eventId], data);
+      setToast({ message: "RSVP deadline updated", type: "success" });
     },
-    onError: () => setToast({ message: "Failed to update RSVP", type: "error" }),
+    onError: () => setToast({ message: "Failed to update deadline", type: "error" }),
   });
 
-  const handleExport = () => {
-    if (!rsvps || rsvps.length === 0) return;
-    const headers = ["guest_name", "status", "plus_ones", "dietary", "message", "submitted_at"];
-    const rows = rsvps.map((r) =>
-      [r.guest_name, r.status, r.plus_ones, r.dietary, r.message, r.submitted_at]
-        .map((v) => `"${String(v || "").replace(/"/g, '""')}"`)
-        .join(",")
-    );
-    const csv = [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `rsvps-${eventId}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const handleDeadlineSave = useCallback(() => {
+    const iso = deadlineInput ? fromDatetimeLocal(deadlineInput) : null;
+    deadlineMutation.mutate(iso);
+  }, [deadlineInput, deadlineMutation]);
+
+  const isLoading = eventLoading || rsvpsLoading;
+
+  const stats = {
+    attending: (rsvps || []).filter((r) => r.status === "attending").length,
+    declined: (rsvps || []).filter((r) => r.status === "declined").length,
+    pending: (rsvps || []).filter((r) => r.status === "pending").length,
+    total: rsvps?.length || 0,
   };
 
-  const deadline = event?.draft_rsvp_deadline || event?.rsvp_deadline || null;
-  const rsvpStatus = getRsvpStatus(deadline);
+  const rsvpStatus = getRsvpStatus(event?.rsvp_deadline || null);
+  const closed = isRsvpClosed(event?.rsvp_deadline || null);
 
-  const statusBadge = (status: string) => {
-    if (status === "attending") return <Badge variant="success"><CheckCircle className="w-3 h-3 mr-1" />Attending</Badge>;
-    if (status === "declined") return <Badge variant="error"><XCircle className="w-3 h-3 mr-1" />Declined</Badge>;
-    return <Badge variant="warning"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
-  };
-
-  if (!event) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+      <div className="p-8">
+        <Skeleton className="h-8 w-48 mb-6" />
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+          <Skeleton className="h-24" />
+        </div>
+        <Skeleton className="h-64 w-full" />
       </div>
     );
   }
 
+  if (isError || !event) {
+    return <ErrorState message="Failed to load RSVPs" onRetry={refetch} />;
+  }
+
+  const statusBadgeVariant = (status: string): "default" | "success" | "warning" | "error" => {
+    switch (status) {
+      case "attending": return "success";
+      case "declined": return "error";
+      default: return "warning";
+    }
+  };
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">RSVP Management</h1>
-          <p className="text-sm text-slate-500">View and manage RSVP responses.</p>
-        </div>
-        <Button variant="secondary" size="sm" onClick={handleExport} disabled={!rsvps || rsvps.length === 0}>
-          <Download className="w-4 h-4" /> Export
-        </Button>
+      <div className="px-6 lg:px-8 py-6 border-b border-onyx/10">
+        <h1 className="font-heading text-3xl text-onyx">RSVP Management</h1>
+        <p className="mt-1 text-sm text-onyx/50">Track responses and manage your RSVP deadline</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <Card className="p-4">
-          <div className="text-xs text-slate-400 mb-1">Total RSVPs</div>
-          <div className="text-2xl font-bold text-slate-900">{counts.total}</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-xs text-slate-400 mb-1">Attending</div>
-          <div className="text-2xl font-bold text-green-600">{counts.attending}</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-xs text-slate-400 mb-1">Declined</div>
-          <div className="text-2xl font-bold text-red-600">{counts.declined}</div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-xs text-slate-400 mb-1">Pending</div>
-          <div className="text-2xl font-bold text-amber-600">{counts.pending}</div>
-        </Card>
-      </div>
-
-      {deadline && (
-        <Card className="p-4 mb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-400 mb-1">RSVP Deadline</div>
-              <div className="text-sm font-medium text-slate-900">{formatDeadline(deadline)}</div>
+      <div className="p-6 lg:p-8 space-y-6">
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium uppercase tracking-wider text-onyx/50">Total</span>
+              <span className="text-2xl text-onyx/20">∑</span>
             </div>
-            <div>
-              {rsvpStatus === "open" && <Badge variant="success">Open</Badge>}
-              {rsvpStatus === "closing-soon" && <Badge variant="warning">Closing Soon</Badge>}
-              {rsvpStatus === "closed" && <Badge variant="error">Closed</Badge>}
-              {rsvpStatus === "no-deadline" && <Badge variant="default">No Deadline</Badge>}
+            <p className="font-heading text-3xl text-onyx">{stats.total}</p>
+          </Card>
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium uppercase tracking-wider text-onyx/50">Attending</span>
+              <Check className="w-5 h-5 text-green-600/40" />
             </div>
-          </div>
-        </Card>
-      )}
-
-      <Card className="overflow-hidden">
-        <div className="p-4 border-b border-slate-100 flex items-center gap-2">
-          {(["all", "attending", "declined", "pending"] as StatusFilter[]).map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-3 py-1.5 text-sm rounded-lg capitalize transition-colors ${
-                filter === s ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
+            <p className="font-heading text-3xl text-green-700">{stats.attending}</p>
+          </Card>
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium uppercase tracking-wider text-onyx/50">Declined</span>
+              <X className="w-5 h-5 text-red-600/40" />
+            </div>
+            <p className="font-heading text-3xl text-red-700">{stats.declined}</p>
+          </Card>
+          <Card className="p-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium uppercase tracking-wider text-onyx/50">Pending</span>
+              <Clock className="w-5 h-5 text-amber-600/40" />
+            </div>
+            <p className="font-heading text-3xl text-amber-700">{stats.pending}</p>
+          </Card>
         </div>
 
-        {isLoading ? (
-          <div className="p-4 space-y-3">
-            {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+        {/* Deadline */}
+        <Card className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <CalendarClock className="w-5 h-5 text-onyx/50" />
+            <h2 className="font-heading text-xl text-onyx">RSVP Deadline</h2>
           </div>
-        ) : (error as any) ? (
-          <ErrorState message={(error as any).message || "Failed to load RSVPs"} onRetry={() => refetch()} />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={<MailOpen className="w-10 h-10" />}
-            title="No RSVPs"
-            description={filter !== "all" ? `No ${filter} responses yet.` : "No RSVP responses yet."}
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-100">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Guest</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Status</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">+1s</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Dietary</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Message</th>
-                  <th className="px-4 py-3 text-left font-medium text-slate-600">Submitted</th>
-                  <th className="px-4 py-3 text-right font-medium text-slate-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {filtered.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-900">{r.guest_name || "—"}</td>
-                    <td className="px-4 py-3">{statusBadge(r.status)}</td>
-                    <td className="px-4 py-3 text-slate-600">{r.plus_ones}</td>
-                    <td className="px-4 py-3 text-slate-600 max-w-[150px] truncate">{r.dietary || "—"}</td>
-                    <td className="px-4 py-3 text-slate-600 max-w-[200px] truncate">{r.message || "—"}</td>
-                    <td className="px-4 py-3 text-slate-500 text-xs">{formatDate(r.submitted_at)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => { setEditingId(r.id); setEditStatus(r.status); }}
-                        className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      <Modal open={!!editingId} onClose={() => setEditingId(null)} title="Edit RSVP Status">
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-            <Select value={editStatus} onChange={(e) => setEditStatus(e.target.value as any)}>
-              <option value="attending">Attending</option>
-              <option value="declined">Declined</option>
-              <option value="pending">Pending</option>
-            </Select>
-          </div>
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setEditingId(null)}>Cancel</Button>
-            <Button
-              onClick={() => editingId && updateStatusMutation.mutate({ id: editingId, status: editStatus })}
-              loading={updateStatusMutation.isPending}
-            >
-              Save
+          <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+            <div className="flex-1">
+              <FormField label="Deadline Date & Time">
+                <Input
+                  type="datetime-local"
+                  value={deadlineInput}
+                  onChange={(e) => setDeadlineInput(e.target.value)}
+                />
+              </FormField>
+            </div>
+            <Button onClick={handleDeadlineSave} loading={deadlineMutation.isPending}>
+              <Save className="w-4 h-4" /> Save Deadline
             </Button>
           </div>
-        </div>
-      </Modal>
+          <div className="mt-4 flex items-center gap-3">
+            {event.rsvp_deadline ? (
+              <>
+                <Badge variant={closed ? "error" : rsvpStatus === "closing-soon" ? "warning" : "success"}>
+                  {closed ? "Closed" : rsvpStatus === "closing-soon" ? "Closing Soon" : "Open"}
+                </Badge>
+                <p className="text-sm text-onyx/50">
+                  {formatDeadline(event.rsvp_deadline)}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-onyx/40">No deadline set — RSVPs remain open indefinitely</p>
+            )}
+          </div>
+        </Card>
+
+        {/* RSVP Table */}
+        {rsvps && rsvps.length > 0 ? (
+          <Card>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-onyx/10">
+                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-onyx/60">Guest</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-onyx/60">Status</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-onyx/60">+1s</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-onyx/60">Dietary</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-onyx/60">Message</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium uppercase tracking-wider text-onyx/60">Submitted</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rsvps.map((rsvp) => (
+                    <tr key={rsvp.id} className="border-b border-onyx/5 hover:bg-cream/20 transition-colors">
+                      <td className="px-4 py-3">
+                        <p className="text-sm font-medium text-onyx">{rsvp.guest_name}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge variant={statusBadgeVariant(rsvp.status)}>{rsvp.status}</Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-sm text-onyx/70">{rsvp.plus_ones}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-sm text-onyx/70 max-w-[160px] truncate">{rsvp.dietary || "—"}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-sm text-onyx/70 max-w-[200px] truncate">{rsvp.message || "—"}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-xs text-onyx/50">
+                          {formatDate(rsvp.submitted_at)}
+                        </p>
+                        <p className="text-xs text-onyx/40">
+                          {formatTime(rsvp.submitted_at.split("T")[1] || null)}
+                        </p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        ) : (
+          <EmptyState
+            icon={<Clock className="w-12 h-12" />}
+            title="No RSVPs yet"
+            description="Responses will appear here once guests start replying"
+          />
+        )}
+      </div>
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
+
+export default RsvpPage;

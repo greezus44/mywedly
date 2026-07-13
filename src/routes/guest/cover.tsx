@@ -1,152 +1,181 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CoverConfig } from "../../lib/supabase";
-import { themeToCssVars, DEFAULT_THEME } from "../../lib/theme";
-import { formatDate, getCountdown } from "../../lib/utils";
-import type { CSSProperties } from "react";
+import { useEffect, useState } from "react";
+import { useParams, useNavigate, useOutletContext } from "react-router-dom";
+import { CalendarDays, Clock, MapPin, ArrowRight } from "lucide-react";
+import { type UserEvent, type CoverConfig } from "../../lib/supabase";
+import { cn, formatDate, formatTime, getCountdown } from "../../lib/utils";
+import { DEFAULT_THEME } from "../../lib/theme";
+import { Button } from "../../components/ui/Button";
 
-export default function Cover() {
-  const { eventId } = useParams<{ eventId: string }>();
+const DEFAULT_COVER_CONFIG: CoverConfig = {
+  bgColor: DEFAULT_THEME.bgColor,
+  textColor: DEFAULT_THEME.textColor,
+  buttonColor: DEFAULT_THEME.primaryColor,
+  buttonText: "Enter",
+  showDate: true,
+  showCountdown: true,
+};
+
+export default function GuestCover() {
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const [mounted, setMounted] = useState(false);
+  const { event } = useOutletContext<{ event: UserEvent }>();
 
+  const cover: CoverConfig = { ...DEFAULT_COVER_CONFIG, ...(event?.cover_config || {}) };
+  const hasBgImage = Boolean(cover.bgImage || event?.cover_image);
+
+  // live countdown ticker
+  const [, setTick] = useState(0);
   useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 50);
-    return () => clearTimeout(t);
-  }, []);
+    if (!cover.showCountdown || !event?.event_date) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [cover.showCountdown, event?.event_date]);
 
-  const { data: event, isLoading, isError } = useQuery<UserEvent | null, Error>({
-    queryKey: ["public-event", eventId],
-    enabled: !!eventId,
-    queryFn: async () => {
-      if (!eventId) throw new Error("No event ID");
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("id", eventId)
-        .maybeSingle();
-      if (error) throw error;
-      return data as UserEvent | null;
-    },
-  });
+  const countdown = getCountdown(event?.event_date || null);
 
-  const theme = event?.theme || event?.draft_theme || DEFAULT_THEME;
-  const cssVars = themeToCssVars(theme) as CSSProperties;
-  const config: CoverConfig = event?.cover_config || event?.draft_cover_config || {};
-  const eventName = event?.name || event?.draft_name || "Our Event";
-  const eventDate = event?.event_date || event?.draft_event_date || null;
-
-  const bgImage = config.bgImage || event?.cover_image || event?.draft_cover_image || "";
-  const bgColor = config.bgColor || "#0f172a";
-  const overlayColor = config.overlayColor || "#000000";
-  const overlayOpacity = config.overlayOpacity ?? 0.4;
-  const textColor = config.textColor || "#ffffff";
-  const buttonColor = config.buttonColor || "#ffffff";
-  const buttonText = config.buttonText || "Enter";
-  const scriptFont = config.scriptFont || theme.scriptFont || "Cormorant Garamond";
+  const eventSlug = slug || event?.slug || event?.id || "";
 
   const handleEnter = () => {
-    if (eventId) navigate(`/${eventId}/login`);
+    navigate(`/e/${eventSlug}/login`);
   };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: bgColor }}>
-        <div className="w-10 h-10 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (isError || !event) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center px-6">
-          <p className="text-xl font-semibold text-slate-900 mb-2">Event not found</p>
-          <p className="text-sm text-slate-500">The invitation you are looking for could not be found.</p>
-        </div>
-      </div>
-    );
-  }
-
-  const countdown = config.showCountdown && eventDate ? getCountdown(eventDate) : null;
-
-  const backgroundStyle: CSSProperties = bgImage
-    ? {
-        backgroundImage: `url(${bgImage})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }
-    : { backgroundColor: bgColor };
 
   return (
     <div
-      style={{ ...cssVars, ...backgroundStyle }}
-      className="relative min-h-screen flex items-center justify-center overflow-hidden"
+      className="relative min-h-screen w-full flex flex-col items-center justify-center overflow-hidden"
+      style={{
+        backgroundColor: cover.bgColor || DEFAULT_THEME.bgColor,
+        color: cover.textColor || DEFAULT_THEME.textColor,
+      }}
     >
-      <div
-        className="absolute inset-0"
-        style={{ backgroundColor: overlayColor, opacity: bgImage ? overlayOpacity : 0 }}
-      />
+      {/* Background image with overlay */}
+      {hasBgImage && (
+        <>
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: `url(${cover.bgImage || event?.cover_image})` }}
+            aria-hidden
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundColor: cover.overlayColor || "#1a1a1a",
+              opacity: cover.overlayOpacity ?? 0.4,
+            }}
+            aria-hidden
+          />
+        </>
+      )}
 
-      <div
-        className={`relative z-10 text-center px-8 max-w-2xl transition-all duration-1000 ${
-          mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-        }`}
-      >
-        {config.customText && (
+      {/* Content */}
+      <div className="relative z-10 flex flex-col items-center text-center px-6 py-16 max-w-3xl mx-auto animate-fade-in-up">
+        {cover.customText && (
           <p
-            className="italic text-lg md:text-xl mb-4 tracking-wide"
-            style={{ color: textColor, fontFamily: `"${scriptFont}", serif` }}
+            className="font-heading italic text-lg sm:text-xl tracking-wide mb-6"
+            style={{ color: cover.buttonColor || DEFAULT_THEME.primaryColor }}
           >
-            {config.customText}
+            {cover.customText}
           </p>
         )}
 
+        {/* Event name */}
         <h1
-          className="text-5xl md:text-7xl font-light leading-tight mb-4"
-          style={{ color: textColor, fontFamily: `"${scriptFont}", serif` }}
+          className="font-heading text-5xl sm:text-6xl md:text-7xl leading-tight tracking-wide mb-6"
+          style={{ color: cover.textColor || DEFAULT_THEME.textColor }}
         >
-          {eventName}
+          {event?.name || "You're Invited"}
         </h1>
 
-        {config.showDate && eventDate && (
-          <p className="text-lg md:text-xl tracking-[0.2em] uppercase mb-8" style={{ color: textColor }}>
-            {formatDate(eventDate)}
-          </p>
+        {/* Date & venue */}
+        {cover.showDate && event?.event_date && (
+          <div className="flex flex-col items-center gap-2 mb-8">
+            <div
+              className="flex items-center gap-2 text-base sm:text-lg"
+              style={{ color: cover.textColor || DEFAULT_THEME.textColor }}
+            >
+              <CalendarDays
+                className="w-4 h-4"
+                style={{ color: cover.buttonColor || DEFAULT_THEME.primaryColor }}
+              />
+              <span>{formatDate(event.event_date)}</span>
+              {event?.event_time && (
+                <>
+                  <span
+                    className="mx-1"
+                    style={{ color: cover.buttonColor || DEFAULT_THEME.primaryColor }}
+                  >
+                    •
+                  </span>
+                  <Clock
+                    className="w-4 h-4"
+                    style={{ color: cover.buttonColor || DEFAULT_THEME.primaryColor }}
+                  />
+                  <span>{formatTime(event.event_time)}</span>
+                </>
+              )}
+            </div>
+            {event?.venue && (
+              <div
+                className="flex items-center gap-2 text-sm"
+                style={{ color: cover.textColor || DEFAULT_THEME.textColor, opacity: 0.8 }}
+              >
+                <MapPin
+                  className="w-4 h-4"
+                  style={{ color: cover.buttonColor || DEFAULT_THEME.primaryColor }}
+                />
+                <span>{event.venue}</span>
+              </div>
+            )}
+          </div>
         )}
 
-        {countdown && !countdown.isPast && (
-          <div className="flex items-center justify-center gap-6 mb-10">
+        {/* Countdown */}
+        {cover.showCountdown && !countdown.isPast && (
+          <div className="flex items-stretch gap-3 sm:gap-6 mb-10">
             {([
               { label: "Days", value: countdown.days },
               { label: "Hours", value: countdown.hours },
               { label: "Minutes", value: countdown.minutes },
               { label: "Seconds", value: countdown.seconds },
-            ]).map((unit) => (
-              <div key={unit.label} className="text-center">
-                <div className="text-3xl md:text-4xl font-light" style={{ color: textColor }}>
+            ] as const).map((unit) => (
+              <div
+                key={unit.label}
+                className="flex flex-col items-center min-w-[64px] px-3 py-3"
+                style={{
+                  border: `1px solid ${cover.buttonColor || DEFAULT_THEME.primaryColor}`,
+                  backgroundColor: hasBgImage ? "rgba(255,255,255,0.08)" : "transparent",
+                }}
+              >
+                <span
+                  className="font-heading text-3xl sm:text-4xl leading-none"
+                  style={{ color: cover.textColor || DEFAULT_THEME.textColor }}
+                >
                   {String(unit.value).padStart(2, "0")}
-                </div>
-                <div className="text-[10px] uppercase tracking-[0.2em] mt-1" style={{ color: textColor, opacity: 0.7 }}>
+                </span>
+                <span
+                  className="mt-1 text-[10px] uppercase tracking-[0.2em]"
+                  style={{ color: cover.buttonColor || DEFAULT_THEME.primaryColor }}
+                >
                   {unit.label}
-                </div>
+                </span>
               </div>
             ))}
           </div>
         )}
 
-        <button
+        {/* Enter button */}
+        <Button
           onClick={handleEnter}
-          className="px-12 py-3 text-lg tracking-[0.2em] uppercase transition-all duration-300 hover:scale-105"
+          size="lg"
+          className={cn("mt-2 px-12 py-3.5 text-sm uppercase tracking-[0.25em] font-medium")}
           style={{
-            backgroundColor: buttonColor,
-            color: bgColor,
-            border: `1px solid ${buttonColor}`,
+            backgroundColor: cover.buttonColor || DEFAULT_THEME.primaryColor,
+            color: DEFAULT_THEME.bgColor,
+            borderRadius: "var(--radius)",
           }}
         >
-          {buttonText}
-        </button>
+          {cover.buttonText || "Enter"}
+          <ArrowRight className="w-4 h-4" />
+        </Button>
       </div>
     </div>
   );

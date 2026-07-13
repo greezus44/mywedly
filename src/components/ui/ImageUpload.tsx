@@ -20,22 +20,22 @@ export function ImageUpload({ value, onChange, eventId, label, aspectRatio = "16
   const handleRemove = useCallback(async () => { if (value) { const path = extractPathFromUrl(value); if (path) { try { await removeImage(path); } catch { /* ignore */ } } } onChange(""); }, [value, onChange]);
   return (
     <div>
-      {label && <label className="block text-sm font-medium text-slate-700 mb-1.5">{label}</label>}
+      {label && <label className="block text-xs font-medium uppercase tracking-wider text-onyx/60 mb-1.5">{label}</label>}
       {value && !uploading ? (
-        <div className="relative group rounded-lg overflow-hidden border border-slate-200" style={{ aspectRatio }}>
+        <div className="relative group overflow-hidden border border-onyx/10" style={{ aspectRatio }}>
           <img src={value} alt="Preview" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-            <button type="button" onClick={handleRemove} className="p-2 bg-white/90 rounded-full shadow-lg hover:bg-white"><X className="w-4 h-4 text-slate-700" /></button>
+          <div className="absolute inset-0 bg-onyx/0 group-hover:bg-onyx/30 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+            <button type="button" onClick={handleRemove} className="p-2 bg-white/90 hover:bg-white"><X className="w-4 h-4 text-onyx" /></button>
           </div>
         </div>
       ) : uploading ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8" style={{ aspectRatio }}>
-          <Loader2 className="w-6 h-6 text-slate-400 animate-spin mb-2" /><span className="text-sm text-slate-500">Uploading... {progress}%</span>
-          <div className="w-full max-w-xs mt-3 h-1.5 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-slate-900 transition-all" style={{ width: `${progress}%` }} /></div>
+        <div className="flex flex-col items-center justify-center border border-dashed border-onyx/20 bg-cream/30 p-8" style={{ aspectRatio }}>
+          <Loader2 className="w-6 h-6 text-onyx/40 animate-spin mb-2" /><span className="text-sm text-onyx/50">Uploading... {progress}%</span>
+          <div className="w-full max-w-xs mt-3 h-1 bg-onyx/10"><div className="h-full bg-onyx transition-all" style={{ width: `${progress}%` }} /></div>
         </div>
       ) : (
-        <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }} onClick={() => inputRef.current?.click()} className={cn("flex flex-col items-center justify-center rounded-lg border border-dashed cursor-pointer transition-colors p-8", dragOver ? "border-slate-900 bg-slate-50" : "border-slate-300 hover:border-slate-400 hover:bg-slate-50")} style={{ aspectRatio }}>
-          <Upload className="w-6 h-6 text-slate-400 mb-2" /><span className="text-sm text-slate-500">Click or drag to upload</span><span className="text-xs text-slate-400 mt-1">JPG, PNG, WebP</span>
+        <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }} onClick={() => inputRef.current?.click()} className={cn("flex flex-col items-center justify-center border border-dashed cursor-pointer transition-colors p-8", dragOver ? "border-onyx bg-cream/30" : "border-onyx/20 hover:border-onyx/40 hover:bg-cream/20")} style={{ aspectRatio }}>
+          <Upload className="w-6 h-6 text-onyx/30 mb-2" /><span className="text-sm text-onyx/50">Click or drag to upload</span><span className="text-xs text-onyx/30 mt-1">JPG, PNG, WebP</span>
         </div>
       )}
       {error && <p className="mt-1.5 text-xs text-red-600">{error}</p>}

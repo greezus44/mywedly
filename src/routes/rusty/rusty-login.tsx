@@ -1,175 +1,184 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useState, type FormEvent } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { Loader2, User } from "lucide-react";
 import { supabase, type UserEvent } from "../../lib/supabase";
+import { cn } from "../../lib/utils";
+import { RUSTY_LOGIN_CONFIG } from "../../lib/theme";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { themeToCssVars, RUSTY_THEME, RUSTY_LOGIN_CONFIG } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
-import type { CSSProperties, FormEvent } from "react";
 
-export async function fetchLoginEvent(eventId: string): Promise<UserEvent | null> {
+export type Lang = "en" | "id";
+
+async function fetchEventBySlug(slug: string): Promise<UserEvent | null> {
   const { data, error } = await supabase
     .from("events")
     .select("*")
-    .eq("id", eventId)
+    .or(`slug.eq.${slug},draft_slug.eq.${slug}`)
+    .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return data as UserEvent | null;
+  return (data as UserEvent | null) ?? null;
 }
 
 export default function RustyLogin() {
-  const { eventId } = useParams<{ eventId: string }>();
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { signIn, isAuthenticated, eventId: authEventId } = useGuestAuth();
-  const [name, setName] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const { signIn, eventId, guestName } = useGuestAuth();
 
-  useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 50);
-    return () => clearTimeout(t);
-  }, []);
-
-  const { data: event, isLoading } = useQuery<UserEvent | null, Error>({
-    queryKey: ["public-event", eventId],
-    queryFn: () => fetchLoginEvent(eventId!),
-    enabled: !!eventId,
+  const { data: event, isLoading } = useQuery({
+    queryKey: ["rusty-event", slug],
+    queryFn: () => fetchEventBySlug(slug || ""),
+    enabled: !!slug,
   });
 
-  useEffect(() => {
-    if (isAuthenticated && eventId && authEventId === eventId) {
-      navigate(`/${eventId}`, { replace: true });
-    }
-  }, [isAuthenticated, authEventId, eventId, navigate]);
+  const [name, setName] = useState(guestName || "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const theme = event?.theme || event?.draft_theme || RUSTY_THEME;
-  const cssVars = themeToCssVars(theme) as CSSProperties;
-  const config = event?.login_config || event?.draft_login_config || RUSTY_LOGIN_CONFIG;
-  const eventName = event?.draft_name || event?.name || "";
+  const login = { ...RUSTY_LOGIN_CONFIG, ...(event?.login_config || {}) };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !eventId) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Please enter your name.");
+      return;
+    }
+    if (!event) {
+      setError("Event not loaded yet. Please try again.");
+      return;
+    }
+
+    setError(null);
     setSubmitting(true);
-    signIn(name.trim(), eventId);
-    setTimeout(() => {
-      navigate(`/${eventId}`, { replace: true });
-    }, 100);
+
+    try {
+      // If guest is already authenticated for this event, skip re-signing.
+      if (eventId === event.id && guestName === trimmed) {
+        navigate(`/${slug || event.slug || event.id}/home`);
+        return;
+      }
+      signIn(trimmed, event.id);
+      navigate(`/${slug || event.slug || event.id}/home`);
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (isLoading) {
     return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: config.bgColor || "#FAF3E0" }}
-      >
-        <div className="w-10 h-10 border-2 border-[#B8962E] border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-[#F5ECD7]">
+        <Loader2 className="w-8 h-8 animate-spin text-[#B8962E]" />
       </div>
     );
   }
 
   return (
     <div
-      style={{ ...cssVars, backgroundColor: config.bgColor || "#FAF3E0" }}
-      className="relative min-h-screen flex items-center justify-center overflow-hidden px-6"
+      className="relative min-h-screen w-full flex items-center justify-center overflow-hidden px-6 py-16"
+      style={{
+        backgroundColor: login.bgColor || "#FAF3E0",
+        color: login.textColor || "#3D3528",
+      }}
     >
-      <div className="absolute left-6 top-0 bottom-0 w-px" style={{ backgroundColor: "#B8962E", opacity: 0.3 }} />
-      <div className="absolute right-6 top-0 bottom-0 w-px" style={{ backgroundColor: "#B8962E", opacity: 0.3 }} />
-
-      <div className="absolute top-6 right-8 flex items-center gap-1 text-xs">
-        {(["EN", "BM"] as const).map((l) => (
-          <span
-            key={l}
-            className="px-2 py-0.5 font-medium tracking-wider"
+      {/* Background image with overlay */}
+      {login.bgImage && (
+        <>
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: `url(${login.bgImage})` }}
+            aria-hidden
+          />
+          <div
+            className="absolute inset-0"
             style={{
-              color: l === "EN" ? "#B8962E" : "#8B7355",
-              opacity: l === "EN" ? 1 : 0.5,
+              backgroundColor: login.overlayColor || "#3D3528",
+              opacity: login.overlayOpacity ?? 0.4,
             }}
-          >
-            {l}
-          </span>
-        ))}
-      </div>
+            aria-hidden
+          />
+        </>
+      )}
 
+      {/* Card */}
       <div
-        className={`relative z-10 w-full max-w-md transition-all duration-1000 ${
-          mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-        }`}
+        className="relative z-10 w-full max-w-md flex flex-col items-center text-center px-8 py-12 animate-fade-in-up"
+        style={{
+          backgroundColor: login.bgImage
+            ? "rgba(250, 243, 224, 0.92)"
+            : "rgba(250, 243, 224, 0.6)",
+          border: "1px solid #D4C695",
+        }}
       >
-        <div
-          className="text-center mb-10"
-        >
-          <div className="flex items-center justify-center gap-4 mb-6">
-            <div className="h-px w-12" style={{ backgroundColor: "#B8962E" }} />
-            <div className="w-2 h-2 rotate-45" style={{ backgroundColor: "#B8962E" }} />
-            <div className="h-px w-12" style={{ backgroundColor: "#B8962E" }} />
-          </div>
-
-          {eventName && (
-            <p
-              className="font-serif italic text-lg mb-2"
-              style={{ color: "#8B7355", fontFamily: '"Cormorant Garamond", serif' }}
-            >
-              {eventName}
-            </p>
-          )}
-
-          {config.heading && (
-            <h1
-              className="font-serif text-4xl md:text-5xl font-light mb-3"
-              style={{
-                color: config.textColor || "#3D3528",
-                fontFamily: '"Cormorant Garamond", serif',
-              }}
-            >
-              {config.heading}
-            </h1>
-          )}
-
-          {config.subheading && (
-            <p
-              className="text-sm tracking-wide"
-              style={{ color: "#8B7355" }}
-            >
-              {config.subheading}
-            </p>
-          )}
+        {/* Ornamental divider */}
+        <div className="flex items-center gap-3 mb-6" aria-hidden>
+          <span className="block h-px w-10" style={{ backgroundColor: "#B8962E" }} />
+          <span className="text-lg" style={{ color: "#B8962E" }}>❦</span>
+          <span className="block h-px w-10" style={{ backgroundColor: "#B8962E" }} />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="relative">
+        <h1
+          className="font-heading text-4xl sm:text-5xl tracking-wide mb-3"
+          style={{ color: login.textColor || "#3D3528" }}
+        >
+          {login.heading || "Welcome"}
+        </h1>
+
+        <p
+          className="text-sm sm:text-base mb-8 max-w-xs"
+          style={{ color: login.textColor || "#3D3528", opacity: 0.8 }}
+        >
+          {login.subheading || "Please enter your name to continue"}
+        </p>
+
+        <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
+          <div className="relative w-full">
+            <User
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+              style={{ color: "#B8962E" }}
+            />
             <Input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={config.inputPlaceholder || "Your full name"}
-              required
+              placeholder={login.inputPlaceholder || "Your full name"}
               autoFocus
-              className="text-center font-serif text-lg py-3.5 border-[#D4C695] bg-white/60 focus:border-[#B8962E] focus:ring-[#B8962E]/20"
-              style={{ color: "#3D3528" }}
+              autoComplete="name"
+              className={cn("pl-10")}
+              style={{
+                backgroundColor: "#FAF3E0",
+                borderColor: "#D4C695",
+                color: "#3D3528",
+                borderRadius: 0,
+              }}
             />
           </div>
 
+          {error && (
+            <p className="text-xs text-left" style={{ color: "#A07820" }}>
+              {error}
+            </p>
+          )}
+
           <Button
             type="submit"
-            disabled={!name.trim() || submitting}
+            size="lg"
             loading={submitting}
-            className="w-full py-3.5 font-serif text-lg tracking-[0.2em] uppercase"
+            disabled={submitting}
+            className={cn("mt-2 w-full uppercase tracking-[0.25em]")}
             style={{
-              backgroundColor: config.buttonColor || "#B8962E",
+              backgroundColor: login.buttonColor || "#B8962E",
               color: "#FAF3E0",
-              border: `1px solid ${config.buttonColor || "#B8962E"}`,
+              borderRadius: 0,
             }}
           >
-            {config.buttonText || "Continue"}
+            {login.buttonText || "Continue"}
           </Button>
         </form>
-
-        <div className="flex items-center justify-center gap-4 mt-10">
-          <div className="h-px w-16" style={{ backgroundColor: "#B8962E", opacity: 0.5 }} />
-          <div className="h-px w-16" style={{ backgroundColor: "#B8962E", opacity: 0.5 }} />
-        </div>
       </div>
     </div>
   );

@@ -1,164 +1,163 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type LoginConfig, type LogoConfig } from "../../lib/supabase";
+import { useState, type FormEvent } from "react";
+import { useParams, useNavigate, useOutletContext } from "react-router-dom";
+import { User } from "lucide-react";
+import { type UserEvent, type LoginConfig } from "../../lib/supabase";
+import { cn } from "../../lib/utils";
+import { DEFAULT_THEME } from "../../lib/theme";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { themeToCssVars, DEFAULT_THEME } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
-import type { CSSProperties, FormEvent } from "react";
+
+const DEFAULT_LOGIN_CONFIG: LoginConfig = {
+  bgColor: DEFAULT_THEME.bgSubtleColor,
+  textColor: DEFAULT_THEME.textColor,
+  buttonColor: DEFAULT_THEME.primaryColor,
+  buttonText: "Continue",
+  heading: "Welcome",
+  subheading: "Please enter your name to continue",
+  inputPlaceholder: "Your full name",
+};
 
 export default function GuestLogin() {
-  const { eventId } = useParams<{ eventId: string }>();
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { signIn, isAuthenticated, eventId: authEventId } = useGuestAuth();
-  const [name, setName] = useState("");
+  const { event } = useOutletContext<{ event: UserEvent }>();
+  const { signIn, eventId, guestName } = useGuestAuth();
+
+  const login: LoginConfig = { ...DEFAULT_LOGIN_CONFIG, ...(event?.login_config || {}) };
+
+  const [name, setName] = useState(guestName || "");
   const [submitting, setSubmitting] = useState(false);
-  const [mounted, setMounted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const t = setTimeout(() => setMounted(true), 50);
-    return () => clearTimeout(t);
-  }, []);
+  const eventSlug = slug || event?.slug || event?.id || "";
 
-  const { data: event, isLoading } = useQuery<UserEvent | null, Error>({
-    queryKey: ["public-event", eventId],
-    enabled: !!eventId,
-    queryFn: async () => {
-      if (!eventId) throw new Error("No event ID");
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("id", eventId)
-        .maybeSingle();
-      if (error) throw error;
-      return data as UserEvent | null;
-    },
-  });
-
-  useEffect(() => {
-    if (isAuthenticated && eventId && authEventId === eventId) {
-      navigate(`/${eventId}/home`, { replace: true });
-    }
-  }, [isAuthenticated, authEventId, eventId, navigate]);
-
-  const theme = event?.theme || event?.draft_theme || DEFAULT_THEME;
-  const cssVars = themeToCssVars(theme) as CSSProperties;
-  const config: LoginConfig = event?.login_config || event?.draft_login_config || {};
-  const logo: LogoConfig = event?.logo_config || event?.draft_logo_config || { enabled: false };
-  const eventName = event?.name || event?.draft_name || "";
-
-  const bgImage = config.bgImage || "";
-  const bgColor = config.bgColor || "#f8fafc";
-  const overlayColor = config.overlayColor || "#000000";
-  const overlayOpacity = config.overlayOpacity ?? 0.4;
-  const textColor = config.textColor || "#1e293b";
-  const buttonColor = config.buttonColor || "#0f172a";
-  const buttonText = config.buttonText || "Continue";
-  const heading = config.heading || "Welcome";
-  const subheading = config.subheading || "Please enter your name to continue";
-  const inputPlaceholder = config.inputPlaceholder || "Your full name";
-
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !eventId) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Please enter your name.");
+      return;
+    }
+    if (!event) {
+      setError("Event not loaded yet. Please try again.");
+      return;
+    }
+
+    setError(null);
     setSubmitting(true);
-    signIn(name.trim(), eventId);
-    setTimeout(() => {
-      navigate(`/${eventId}/home`, { replace: true });
-    }, 100);
+
+    try {
+      // If guest is already authenticated for this event, skip re-signing.
+      if (eventId === event.id && guestName === trimmed) {
+        navigate(`/e/${eventSlug}/home`);
+        return;
+      }
+      signIn(trimmed, event.id);
+      navigate(`/e/${eventSlug}/home`);
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: bgColor }}>
-        <div className="w-10 h-10 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  const backgroundStyle: CSSProperties = bgImage
-    ? { backgroundImage: `url(${bgImage})`, backgroundSize: "cover", backgroundPosition: "center" }
-    : { backgroundColor: bgColor };
 
   return (
     <div
-      style={{ ...cssVars, ...backgroundStyle }}
-      className="relative min-h-screen flex items-center justify-center overflow-hidden px-6"
+      className="relative min-h-screen w-full flex items-center justify-center overflow-hidden px-6 py-16"
+      style={{
+        backgroundColor: login.bgColor || DEFAULT_THEME.bgSubtleColor,
+        color: login.textColor || DEFAULT_THEME.textColor,
+      }}
     >
-      <div
-        className="absolute inset-0"
-        style={{ backgroundColor: overlayColor, opacity: bgImage ? overlayOpacity : 0 }}
-      />
+      {/* Background image with overlay */}
+      {login.bgImage && (
+        <>
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{ backgroundImage: `url(${login.bgImage})` }}
+            aria-hidden
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              backgroundColor: login.overlayColor || "#1a1a1a",
+              opacity: login.overlayOpacity ?? 0.4,
+            }}
+            aria-hidden
+          />
+        </>
+      )}
 
+      {/* Card */}
       <div
-        className={`relative z-10 w-full max-w-md transition-all duration-1000 ${
-          mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-        }`}
+        className="relative z-10 w-full max-w-md flex flex-col items-center text-center px-8 py-12 animate-fade-in-up"
+        style={{
+          backgroundColor: login.bgImage ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.6)",
+          border: `1px solid ${DEFAULT_THEME.borderColor}`,
+        }}
       >
-        <div
-          className="rounded-2xl p-8 shadow-xl border"
-          style={{ backgroundColor: "var(--color-bg)", borderColor: "var(--color-border)" }}
+        <h1
+          className="font-heading text-4xl sm:text-5xl tracking-wide mb-3"
+          style={{ color: login.textColor || DEFAULT_THEME.textColor }}
         >
-          {logo.enabled && (logo.image || logo.text) && (
-            <div className="flex justify-center mb-6">
-              {logo.image ? (
-                <img
-                  src={logo.image}
-                  alt={logo.text || eventName}
-                  className="max-h-16 object-contain"
-                  style={logo.fontSize ? { maxHeight: logo.fontSize } : undefined}
-                />
-              ) : (
-                <p
-                  className="font-semibold"
-                  style={{
-                    color: logo.color || textColor,
-                    fontSize: `${logo.fontSize || 18}px`,
-                  }}
-                >
-                  {logo.text}
-                </p>
-              )}
-            </div>
-          )}
+          {login.heading || "Welcome"}
+        </h1>
 
-          <div className="text-center mb-8">
-            {eventName && (
-              <p className="italic text-sm mb-2" style={{ color: "var(--color-text-muted)" }}>
-                {eventName}
-              </p>
-            )}
-            <h1 className="text-3xl font-light mb-2" style={{ color: textColor, fontFamily: "var(--font-heading)" }}>
-              {heading}
-            </h1>
-            <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
-              {subheading}
-            </p>
-          </div>
+        <p
+          className="text-sm sm:text-base mb-8 max-w-xs"
+          style={{ color: login.textColor || DEFAULT_THEME.textColor, opacity: 0.75 }}
+        >
+          {login.subheading || "Please enter your name to continue"}
+        </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
+          <div className="relative w-full">
+            <User
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+              style={{ color: login.buttonColor || DEFAULT_THEME.primaryColor }}
+            />
             <Input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={inputPlaceholder}
-              required
+              placeholder={login.inputPlaceholder || "Your full name"}
               autoFocus
-              className="text-center text-base py-3"
+              autoComplete="name"
+              className={cn("pl-10")}
+              style={{
+                backgroundColor: DEFAULT_THEME.bgColor,
+                borderColor: DEFAULT_THEME.borderColor,
+                color: DEFAULT_THEME.textColor,
+                borderRadius: "var(--radius)",
+              }}
             />
-            <Button
-              type="submit"
-              disabled={!name.trim() || submitting}
-              loading={submitting}
-              size="lg"
-              className="w-full"
-              style={{ backgroundColor: buttonColor, color: bgColor }}
+          </div>
+
+          {error && (
+            <p
+              className="text-xs text-left"
+              style={{ color: "var(--color-error, #dc2626)" }}
             >
-              {buttonText}
-            </Button>
-          </form>
-        </div>
+              {error}
+            </p>
+          )}
+
+          <Button
+            type="submit"
+            size="lg"
+            loading={submitting}
+            disabled={submitting}
+            className={cn("mt-2 w-full uppercase tracking-[0.25em]")}
+            style={{
+              backgroundColor: login.buttonColor || DEFAULT_THEME.primaryColor,
+              color: DEFAULT_THEME.bgColor,
+              borderRadius: "var(--radius)",
+            }}
+          >
+            {login.buttonText || "Continue"}
+          </Button>
+        </form>
       </div>
     </div>
   );

@@ -1,362 +1,438 @@
 import { useState, useEffect, useCallback } from "react";
-import { useOutletContext, useParams, useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useParams, useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Save,
+  Archive,
+  Trash2,
+  Globe,
+  Check,
+  AlertTriangle,
+  Link as LinkIcon,
+} from "lucide-react";
 import { supabase, type UserEvent, EVENT_TYPES } from "../../lib/supabase";
-import { Card, Badge, Toggle, Toast, Modal, FormField } from "../../components/ui";
-import { Input, Select } from "../../components/ui/Input";
+import { cn, toDatetimeLocal, fromDatetimeLocal, formatDeadline } from "../../lib/utils";
+import { slugify, isValidSlug } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
+import { Card, FormField, Toggle, Badge, Skeleton, ErrorState, Toast, Modal } from "../../components/ui";
+import { Input, Select } from "../../components/ui/Input";
 import { DatePicker } from "../../components/ui/DatePicker";
 import { TimePicker } from "../../components/ui/TimePicker";
-import {
-  Trash2, Copy, Loader2, AlertTriangle, Check, Globe, Calendar,
-} from "lucide-react";
-import { slugify, isValidSlug } from "../../lib/theme";
-import { toDatetimeLocal, fromDatetimeLocal, getRsvpStatus, formatDeadline } from "../../lib/utils";
 
-export default function Settings() {
-  const { event } = useOutletContext<{ event: UserEvent | null }>();
+function SettingsPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [name, setName] = useState("");
-  const [eventType, setEventType] = useState("Other");
-  const [eventDate, setEventDate] = useState<string | null>(null);
-  const [eventTime, setEventTime] = useState<string | null>(null);
-  const [venue, setVenue] = useState("");
-  const [address, setAddress] = useState("");
-  const [slug, setSlug] = useState("");
-  const [slugTouched, setSlugTouched] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    event_type: "Wedding",
+    event_date: null as string | null,
+    event_time: null as string | null,
+    venue: "",
+    address: "",
+    slug: "",
+    rsvp_deadline: "",
+  });
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
-  const [rsvpDeadline, setRsvpDeadline] = useState<string>("");
-  const [isPublished, setIsPublished] = useState(false);
-  const [isArchived, setIsArchived] = useState(false);
+  const [slugChecking, setSlugChecking] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState("");
-  const [duplicateOpen, setDuplicateOpen] = useState(false);
-  const [dupName, setDupName] = useState("");
-  const initialized = false;
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  const { data: event, isLoading, isError, refetch } = useQuery<UserEvent>({
+    queryKey: ["event", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!eventId,
+  });
 
   useEffect(() => {
-    if (event && !(initialized as any)) {
-      setName(event.draft_name || event.name || "");
-      setEventType(event.draft_event_type || event.event_type || "Other");
-      setEventDate(event.draft_event_date || event.event_date || null);
-      setEventTime(event.draft_event_time || event.event_time || null);
-      setVenue(event.draft_venue || event.venue || "");
-      setAddress(event.draft_address || event.address || "");
-      setSlug(event.draft_slug || event.slug || slugify(event.draft_name || event.name || ""));
-      setRsvpDeadline(toDatetimeLocal(event.draft_rsvp_deadline || event.rsvp_deadline || null));
-      setIsPublished(event.is_published);
-      setIsArchived(event.is_archived);
-      setDupName(`${event.draft_name || event.name || "Event"} (Copy)`);
-      (initialized as any) = true;
+    if (event) {
+      setForm({
+        name: event.name || "",
+        event_type: event.event_type || "Wedding",
+        event_date: event.event_date || null,
+        event_time: event.event_time || null,
+        venue: event.venue || "",
+        address: event.address || "",
+        slug: event.draft_slug || event.slug || "",
+        rsvp_deadline: toDatetimeLocal(event.rsvp_deadline || null),
+      });
     }
   }, [event]);
 
+  // Check slug uniqueness
   useEffect(() => {
-    if (!slug) { setSlugAvailable(null); return; }
-    let active = true;
+    if (!form.slug || !isValidSlug(form.slug)) {
+      setSlugAvailable(null);
+      return;
+    }
+    if (form.slug === event?.slug) {
+      setSlugAvailable(true);
+      return;
+    }
+    setSlugChecking(true);
     const timer = setTimeout(async () => {
-      if (!isValidSlug(slug)) { setSlugAvailable(false); return; }
-      const currentSlug = event?.draft_slug || event?.slug;
-      if (slug === currentSlug) { setSlugAvailable(true); return; }
-      const { data } = await supabase.from("events").select("id").eq("slug", slug).maybeSingle();
-      if (active) setSlugAvailable(!data);
-    }, 400);
-    return () => { active = false; clearTimeout(timer); };
-  }, [slug, event]);
+      try {
+        const { data } = await supabase
+          .from("user_events")
+          .select("id")
+          .eq("draft_slug", form.slug)
+          .neq("id", eventId!)
+          .maybeSingle();
+        setSlugAvailable(!data);
+      } catch {
+        setSlugAvailable(null);
+      } finally {
+        setSlugChecking(false);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [form.slug, event?.slug, eventId]);
 
-  const saveMutation = useMutation<void, Error, Record<string, unknown>>({
-    mutationFn: async (patch) => {
-      const { error } = await supabase.from("events").update(patch).eq("id", eventId!);
+  const updateMutation = useMutation({
+    mutationFn: async (updates: Partial<UserEvent>) => {
+      const { data, error } = await supabase
+        .from("user_events")
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq("id", eventId!)
+        .select()
+        .single();
       if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["event", eventId], data);
+      setToast({ message: "Settings saved", type: "success" });
+    },
+    onError: () => setToast({ message: "Failed to save settings", type: "error" }),
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async (publish: boolean) => {
+      const updates: Partial<UserEvent> = {
+        is_published: publish,
+        updated_at: new Date().toISOString(),
+      };
+      if (publish) {
+        updates.published_at = new Date().toISOString();
+        // Copy draft fields to published fields
+        if (event?.draft_name) updates.name = event.draft_name;
+        if (event?.draft_event_type) updates.event_type = event.draft_event_type;
+        if (event?.draft_event_date !== undefined) updates.event_date = event.draft_event_date;
+        if (event?.draft_event_time !== undefined) updates.event_time = event.draft_event_time;
+        if (event?.draft_venue !== undefined) updates.venue = event.draft_venue;
+        if (event?.draft_address !== undefined) updates.address = event.draft_address;
+        if (event?.draft_cover_config) updates.cover_config = event.draft_cover_config;
+        if (event?.draft_login_config) updates.login_config = event.draft_login_config;
+        if (event?.draft_theme) updates.theme = event.draft_theme;
+        if (event?.draft_logo_config) updates.logo_config = event.draft_logo_config;
+        if (event?.draft_content) updates.content = event.draft_content;
+        if (event?.draft_sharing_config) updates.sharing_config = event.draft_sharing_config;
+        if (event?.draft_slug) updates.slug = event.draft_slug;
+        if (event?.draft_rsvp_deadline !== undefined) updates.rsvp_deadline = event.draft_rsvp_deadline;
+      }
+      const { data, error } = await supabase
+        .from("user_events")
+        .update(updates)
+        .eq("id", eventId!)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["event", eventId], data);
+      setToast({ message: data.is_published ? "Event published" : "Event unpublished", type: "success" });
+    },
+    onError: () => setToast({ message: "Failed to toggle publish", type: "error" }),
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase
+        .from("user_events")
+        .update({ is_archived: true, updated_at: new Date().toISOString() })
+        .eq("id", eventId!)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["events"] });
-      setToast({ message: "Settings saved", type: "success" });
+      setToast({ message: "Event archived", type: "success" });
+      setArchiveModalOpen(false);
     },
-    onError: () => setToast({ message: "Failed to save", type: "error" }),
+    onError: () => setToast({ message: "Failed to archive event", type: "error" }),
   });
 
-  const saveDetails = () => {
-    saveMutation.mutate({
-      draft_name: name,
-      draft_event_type: eventType,
-      draft_event_date: eventDate,
-      draft_event_time: eventTime,
-      draft_venue: venue,
-      draft_address: address,
-    });
-  };
-
-  const saveSlug = () => {
-    if (!isValidSlug(slug)) {
-      setToast({ message: "Invalid slug format", type: "error" });
-      return;
-    }
-    if (slugAvailable === false) {
-      setToast({ message: "Slug is already taken", type: "error" });
-      return;
-    }
-    saveMutation.mutate({ draft_slug: slug });
-  };
-
-  const saveDeadline = () => {
-    saveMutation.mutate({
-      draft_rsvp_deadline: rsvpDeadline ? fromDatetimeLocal(rsvpDeadline) : null,
-    });
-  };
-
-  const togglePublished = (v: boolean) => {
-    setIsPublished(v);
-    saveMutation.mutate({ is_published: v });
-  };
-
-  const toggleArchived = (v: boolean) => {
-    setIsArchived(v);
-    saveMutation.mutate({ is_archived: v });
-  };
-
-  const deleteMutation = useMutation<void, Error, void>({
+  const deleteMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("events").delete().eq("id", eventId!);
+      const { error } = await supabase.from("user_events").delete().eq("id", eventId!);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["events"] });
-      navigate("/dashboard");
+      navigate("/");
     },
     onError: () => setToast({ message: "Failed to delete event", type: "error" }),
   });
 
-  const duplicateMutation = useMutation<void, Error, { name: string }>({
-    mutationFn: async ({ name: dupName }) => {
-      const { data: userData } = await supabase.auth.getUser();
-      const creatorId = userData.user?.id;
-      if (!creatorId) throw new Error("Not authenticated");
-      const newSlug = slugify(dupName);
-      const { data: existing } = await supabase.from("events").select("id").eq("slug", newSlug).maybeSingle();
-      const finalSlug = existing ? `${newSlug}-${Date.now().toString(36)}` : newSlug;
-      const { error } = await supabase.from("events").insert({
-        creator_id: creatorId,
-        name: dupName,
-        draft_name: dupName,
-        event_type: eventType,
-        draft_event_type: eventType,
-        event_date: eventDate,
-        draft_event_date: eventDate,
-        event_time: eventTime,
-        draft_event_time: eventTime,
-        venue,
-        draft_venue: venue,
-        address,
-        draft_address: address,
-        cover_config: event?.draft_cover_config || event?.cover_config || null,
-        draft_cover_config: event?.draft_cover_config || event?.cover_config || null,
-        login_config: event?.draft_login_config || event?.login_config || null,
-        draft_login_config: event?.draft_login_config || event?.login_config || null,
-        theme: event?.draft_theme || event?.theme || null,
-        draft_theme: event?.draft_theme || event?.theme || null,
-        logo_config: event?.draft_logo_config || event?.logo_config || null,
-        draft_logo_config: event?.draft_logo_config || event?.logo_config || null,
-        content: event?.draft_content || event?.content || null,
-        draft_content: event?.draft_content || event?.content || null,
-        sharing_config: event?.draft_sharing_config || event?.sharing_config || null,
-        draft_sharing_config: event?.draft_sharing_config || event?.sharing_config || null,
-        template_id: event?.template_id || "default",
-        slug: finalSlug,
-        draft_slug: finalSlug,
-        is_published: false,
-        is_archived: false,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["events"] });
-      setDuplicateOpen(false);
-      setToast({ message: "Event duplicated", type: "success" });
-      navigate("/dashboard");
-    },
-    onError: () => setToast({ message: "Failed to duplicate event", type: "error" }),
-  });
+  const handleSaveSettings = useCallback(() => {
+    const updates: Partial<UserEvent> = {
+      name: form.name,
+      event_type: form.event_type,
+      event_date: form.event_date,
+      event_time: form.event_time,
+      venue: form.venue,
+      address: form.address,
+      draft_slug: form.slug,
+      rsvp_deadline: form.rsvp_deadline ? fromDatetimeLocal(form.rsvp_deadline) : null,
+    };
+    updateMutation.mutate(updates);
+  }, [form, updateMutation]);
 
-  if (!event) {
+  const slugValid = !form.slug || isValidSlug(form.slug);
+
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+      <div className="p-8">
+        <Skeleton className="h-8 w-48 mb-6" />
+        <Skeleton className="h-96 w-full max-w-2xl" />
       </div>
     );
   }
 
-  const previewUrl = slug && isValidSlug(slug) ? `${window.location.origin}/e/${slug}` : "";
+  if (isError || !event) {
+    return <ErrorState message="Failed to load event" onRetry={refetch} />;
+  }
 
   return (
-    <div className="max-w-2xl">
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
-        <p className="text-sm text-slate-500">Manage your event configuration.</p>
+    <div>
+      <div className="px-6 lg:px-8 py-6 border-b border-onyx/10 flex items-center justify-between">
+        <div>
+          <h1 className="font-heading text-3xl text-onyx">Settings</h1>
+          <p className="mt-1 text-sm text-onyx/50">Manage event details, URL, and status</p>
+        </div>
+        <Button onClick={handleSaveSettings} loading={updateMutation.isPending}>
+          <Save className="w-4 h-4" /> Save Changes
+        </Button>
       </div>
 
-      <Card className="p-6 mb-4 space-y-4">
-        <h3 className="text-sm font-semibold text-slate-900">Event Details</h3>
-        <FormField label="Event Name">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Event name" />
-        </FormField>
-        <FormField label="Event Type">
-          <Select value={eventType} onChange={(e) => setEventType(e.target.value)}>
-            {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </Select>
-        </FormField>
-        <div className="grid grid-cols-2 gap-3">
-          <FormField label="Date">
-            <DatePicker value={eventDate} onChange={setEventDate} />
+      <div className="p-6 lg:p-8 max-w-2xl space-y-6">
+        {/* Publish Status */}
+        <Card className="p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-heading text-xl text-onyx">Publish Status</h2>
+              <p className="text-sm text-onyx/40 mt-1">
+                {event.is_published
+                  ? "Event is live and accessible to guests"
+                  : "Event is in draft mode — only visible to you"}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge variant={event.is_published ? "success" : "default"}>
+                {event.is_published ? "Published" : "Draft"}
+              </Badge>
+              <Button
+                variant={event.is_published ? "secondary" : "primary"}
+                size="sm"
+                onClick={() => publishMutation.mutate(!event.is_published)}
+                loading={publishMutation.isPending}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                {event.is_published ? "Unpublish" : "Publish"}
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* Event Details */}
+        <Card className="p-5">
+          <h2 className="font-heading text-xl text-onyx mb-4">Event Details</h2>
+          <div className="space-y-4">
+            <FormField label="Event Name">
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Our Wedding"
+              />
+            </FormField>
+            <FormField label="Event Type">
+              <Select
+                value={form.event_type}
+                onChange={(e) => setForm({ ...form, event_type: e.target.value })}
+              >
+                {EVENT_TYPES.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </Select>
+            </FormField>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField label="Date">
+                <DatePicker
+                  value={form.event_date}
+                  onChange={(v) => setForm({ ...form, event_date: v })}
+                />
+              </FormField>
+              <FormField label="Time">
+                <TimePicker
+                  value={form.event_time}
+                  onChange={(v) => setForm({ ...form, event_time: v })}
+                />
+              </FormField>
+            </div>
+            <FormField label="Venue">
+              <Input
+                value={form.venue}
+                onChange={(e) => setForm({ ...form, venue: e.target.value })}
+                placeholder="The Grand Ballroom"
+              />
+            </FormField>
+            <FormField label="Address">
+              <Input
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+                placeholder="123 Main Street, City"
+              />
+            </FormField>
+          </div>
+        </Card>
+
+        {/* Custom URL */}
+        <Card className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <LinkIcon className="w-5 h-5 text-onyx/50" />
+            <h2 className="font-heading text-xl text-onyx">Custom URL</h2>
+          </div>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-onyx/40 font-mono whitespace-nowrap">
+                {window.location.origin}/e/
+              </span>
+              <Input
+                value={form.slug}
+                onChange={(e) => setForm({ ...form, slug: slugify(e.target.value) })}
+                placeholder="my-event"
+                className={cn(
+                  !slugValid && "border-red-400",
+                  slugAvailable === false && "border-red-400",
+                )}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setForm({ ...form, slug: slugify(form.name) })}
+              >
+                Generate from name
+              </Button>
+            </div>
+            {form.slug && !slugValid && (
+              <p className="text-xs text-red-600">
+                Invalid slug. Use only lowercase letters, numbers, and hyphens (2-50 characters).
+              </p>
+            )}
+            {slugValid && slugChecking && (
+              <p className="text-xs text-onyx/40">Checking availability...</p>
+            )}
+            {slugValid && slugAvailable === true && form.slug !== event.slug && (
+              <p className="text-xs text-green-600 flex items-center gap-1">
+                <Check className="w-3.5 h-3.5" /> URL is available
+              </p>
+            )}
+            {slugValid && slugAvailable === false && (
+              <p className="text-xs text-red-600 flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" /> This URL is already taken
+              </p>
+            )}
+          </div>
+        </Card>
+
+        {/* RSVP Deadline */}
+        <Card className="p-5">
+          <h2 className="font-heading text-xl text-onyx mb-4">RSVP Deadline</h2>
+          <FormField label="Deadline Date & Time" hint="After this time, guests can no longer submit RSVPs">
+            <Input
+              type="datetime-local"
+              value={form.rsvp_deadline}
+              onChange={(e) => setForm({ ...form, rsvp_deadline: e.target.value })}
+            />
           </FormField>
-          <FormField label="Time">
-            <TimePicker value={eventTime} onChange={setEventTime} />
-          </FormField>
-        </div>
-        <FormField label="Venue">
-          <Input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue name" />
-        </FormField>
-        <FormField label="Address">
-          <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Full address" />
-        </FormField>
-        <Button onClick={saveDetails} loading={saveMutation.isPending}>Save Details</Button>
-      </Card>
+          {event.rsvp_deadline && (
+            <p className="mt-2 text-xs text-onyx/40">
+              Current deadline: {formatDeadline(event.rsvp_deadline)}
+            </p>
+          )}
+        </Card>
 
-      <Card className="p-6 mb-4 space-y-4">
-        <h3 className="text-sm font-semibold text-slate-900">Custom URL</h3>
-        <FormField label="Slug" hint="Letters, numbers, and hyphens only (2-50 characters)">
-          <Input
-            value={slug}
-            onChange={(e) => { setSlug(e.target.value); setSlugTouched(true); }}
-            placeholder="my-event"
-          />
-        </FormField>
-        {slugTouched && slug && !isValidSlug(slug) && (
-          <div className="flex items-center gap-2 text-sm text-amber-600">
-            <AlertTriangle className="w-4 h-4" /> Invalid slug format
+        {/* Danger Zone */}
+        <Card className="p-5 border-red-200">
+          <h2 className="font-heading text-xl text-onyx mb-4">Danger Zone</h2>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-onyx/70">Archive Event</p>
+                <p className="text-xs text-onyx/40">Hide this event from your dashboard without deleting it</p>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => setArchiveModalOpen(true)}>
+                <Archive className="w-3.5 h-3.5" /> Archive
+              </Button>
+            </div>
+            <div className="border-t border-onyx/5 pt-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-red-600">Delete Event</p>
+                <p className="text-xs text-onyx/40">Permanently remove this event and all associated data</p>
+              </div>
+              <Button variant="danger" size="sm" onClick={() => setDeleteModalOpen(true)}>
+                <Trash2 className="w-3.5 h-3.5" /> Delete
+              </Button>
+            </div>
           </div>
-        )}
-        {slugTouched && slug && isValidSlug(slug) && slugAvailable === false && (
-          <div className="flex items-center gap-2 text-sm text-red-600">
-            <AlertTriangle className="w-4 h-4" /> This slug is already taken
-          </div>
-        )}
-        {slug && isValidSlug(slug) && slugAvailable === true && (
-          <div className="flex items-center gap-2 text-sm text-green-600">
-            <Check className="w-4 h-4" /> Available
-          </div>
-        )}
-        {previewUrl && (
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <Globe className="w-4 h-4" />
-            <span className="font-mono">{previewUrl}</span>
-          </div>
-        )}
-        <Button onClick={saveSlug} loading={saveMutation.isPending} disabled={!isValidSlug(slug) || slugAvailable === false}>
-          Save URL
-        </Button>
-      </Card>
+        </Card>
+      </div>
 
-      <Card className="p-6 mb-4 space-y-4">
-        <h3 className="text-sm font-semibold text-slate-900">RSVP Deadline</h3>
-        <FormField label="Deadline" hint="Guests cannot RSVP after this time">
-          <Input
-            type="datetime-local"
-            value={rsvpDeadline}
-            onChange={(e) => setRsvpDeadline(e.target.value)}
-          />
-        </FormField>
-        {rsvpDeadline && (
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-slate-400" />
-            <span className="text-sm text-slate-600">{formatDeadline(fromDatetimeLocal(rsvpDeadline))}</span>
-            {(() => {
-              const status = getRsvpStatus(fromDatetimeLocal(rsvpDeadline));
-              if (status === "open") return <Badge variant="success">Open</Badge>;
-              if (status === "closing-soon") return <Badge variant="warning">Closing Soon</Badge>;
-              if (status === "closed") return <Badge variant="error">Closed</Badge>;
-              return null;
-            })()}
-          </div>
-        )}
-        <Button onClick={saveDeadline} loading={saveMutation.isPending}>Save Deadline</Button>
-      </Card>
-
-      <Card className="p-6 mb-4 space-y-4">
-        <h3 className="text-sm font-semibold text-slate-900">Status</h3>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-medium text-slate-900">Published</div>
-            <p className="text-xs text-slate-500">Make event visible to guests.</p>
-          </div>
-          <Toggle checked={isPublished} onChange={togglePublished} />
-        </div>
-        <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-          <div>
-            <div className="text-sm font-medium text-slate-900">Archived</div>
-            <p className="text-xs text-slate-500">Archive this event to hide from dashboard.</p>
-          </div>
-          <Toggle checked={isArchived} onChange={toggleArchived} />
-        </div>
-      </Card>
-
-      <Card className="p-6 mb-4 space-y-4">
-        <h3 className="text-sm font-semibold text-slate-900">Duplicate Event</h3>
-        <p className="text-sm text-slate-500">Create a copy of this event with all settings.</p>
-        <Button variant="secondary" onClick={() => setDuplicateOpen(true)}>
-          <Copy className="w-4 h-4" /> Duplicate
-        </Button>
-      </Card>
-
-      <Card className="p-6 space-y-4 border-red-200">
-        <h3 className="text-sm font-semibold text-red-900">Danger Zone</h3>
-        <p className="text-sm text-slate-500">Deleting an event permanently removes all data including guests, RSVPs, and messages.</p>
-        <Button variant="danger" onClick={() => setDeleteOpen(true)}>
-          <Trash2 className="w-4 h-4" /> Delete Event
-        </Button>
-      </Card>
-
-      <Modal open={deleteOpen} onClose={() => { setDeleteOpen(false); setDeleteConfirm(""); }} title="Delete Event">
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600">
-            This will permanently delete <span className="font-semibold text-slate-900">{event.draft_name || event.name}</span> and all associated data. This cannot be undone.
-          </p>
-          <FormField label={`Type "${event.draft_name || event.name}" to confirm`}>
-            <Input value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} placeholder="Event name" />
-          </FormField>
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => { setDeleteOpen(false); setDeleteConfirm(""); }}>Cancel</Button>
-            <Button
-              variant="danger"
-              onClick={() => deleteMutation.mutate()}
-              loading={deleteMutation.isPending}
-              disabled={deleteConfirm !== (event.draft_name || event.name)}
-            >
-              Delete Permanently
-            </Button>
-          </div>
+      {/* Archive Modal */}
+      <Modal open={archiveModalOpen} onClose={() => setArchiveModalOpen(false)} title="Archive Event">
+        <p className="text-sm text-onyx/60 mb-4">
+          Are you sure you want to archive <strong className="text-onyx">{event.name}</strong>?
+          The event will be hidden from your dashboard but can be restored later.
+        </p>
+        <div className="flex justify-end gap-3">
+          <Button variant="ghost" onClick={() => setArchiveModalOpen(false)}>Cancel</Button>
+          <Button variant="secondary" onClick={() => archiveMutation.mutate()} loading={archiveMutation.isPending}>
+            <Archive className="w-4 h-4" /> Archive Event
+          </Button>
         </div>
       </Modal>
 
-      <Modal open={duplicateOpen} onClose={() => setDuplicateOpen(false)} title="Duplicate Event">
+      {/* Delete Modal */}
+      <Modal open={deleteModalOpen} onClose={() => setDeleteModalOpen(false)} title="Delete Event">
         <div className="space-y-4">
-          <FormField label="New Event Name">
-            <Input value={dupName} onChange={(e) => setDupName(e.target.value)} placeholder="Copied event name" />
-          </FormField>
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setDuplicateOpen(false)}>Cancel</Button>
-            <Button
-              onClick={() => duplicateMutation.mutate({ name: dupName })}
-              loading={duplicateMutation.isPending}
-              disabled={!dupName.trim()}
-            >
-              Duplicate
-            </Button>
+          <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200">
+            <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-red-700 font-medium">This action cannot be undone.</p>
+              <p className="text-xs text-red-600 mt-1">
+                All event data including guests, RSVPs, and schedule items will be permanently deleted.
+              </p>
+            </div>
           </div>
+          <p className="text-sm text-onyx/60">
+            Type the event name <strong className="text-onyx">{event.name}</strong> to confirm:
+          </p>
+          <ConfirmDeleteInput
+            confirmText={event.name}
+            onConfirm={() => deleteMutation.mutate()}
+            loading={deleteMutation.isPending}
+            onCancel={() => setDeleteModalOpen(false)}
+          />
         </div>
       </Modal>
 
@@ -364,3 +440,39 @@ export default function Settings() {
     </div>
   );
 }
+
+function ConfirmDeleteInput({
+  confirmText,
+  onConfirm,
+  loading,
+  onCancel,
+}: {
+  confirmText: string;
+  onConfirm: () => void;
+  loading: boolean;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState("");
+  return (
+    <div className="space-y-3">
+      <Input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={confirmText}
+      />
+      <div className="flex justify-end gap-3">
+        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button
+          variant="danger"
+          onClick={onConfirm}
+          loading={loading}
+          disabled={value !== confirmText}
+        >
+          <Trash2 className="w-4 h-4" /> Delete Permanently
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export default SettingsPage;

@@ -1,203 +1,300 @@
-import { useState, useEffect } from "react";
-import { useParams, useOutletContext } from "react-router-dom";
+import { useState, type FormEvent } from "react";
+import { useParams, useNavigate, useOutletContext, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Send, ArrowLeft, Heart, MessageSquare } from "lucide-react";
 import { supabase, type UserEvent, type EventMessage } from "../../lib/supabase";
+import { cn } from "../../lib/utils";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { Button } from "../../components/ui/Button";
 import { Input, Textarea } from "../../components/ui/Input";
-import { EmptyState } from "../../components/ui/index";
-import { formatDate } from "../../lib/utils";
-import type { FormEvent } from "react";
-import type { GuestLayoutContext } from "./guest-layout";
 
-const MAX_CHARS = 500;
+async function fetchMessages(eventId: string): Promise<EventMessage[]> {
+  const { data, error } = await supabase
+    .from("event_messages")
+    .select("*")
+    .eq("event_id", eventId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data as EventMessage[]) || [];
+}
 
-export default function Wishes() {
-  const { eventId } = useParams<{ eventId: string }>();
-  const outletCtx = useOutletContext<GuestLayoutContext | null>();
+async function submitMessage(
+  payload: { event_id: string; guest_name: string; message: string },
+): Promise<EventMessage> {
+  const { data, error } = await supabase
+    .from("event_messages")
+    .insert({
+      event_id: payload.event_id,
+      guest_name: payload.guest_name,
+      message: payload.message,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as EventMessage;
+}
+
+function timeAgo(dateStr: string): string {
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "";
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+export default function GuestWishes() {
+  const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
+  const { event } = useOutletContext<{ event: UserEvent }>();
   const { guestName } = useGuestAuth();
   const queryClient = useQueryClient();
 
+  const eventSlug = slug || event.slug || event.id;
+
+  const { data: messages = [], isLoading } = useQuery({
+    queryKey: ["guest-messages", event.id],
+    queryFn: () => fetchMessages(event.id),
+  });
+
   const [name, setName] = useState(guestName || "");
   const [message, setMessage] = useState("");
-  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (guestName) setName(guestName);
-  }, [guestName]);
-
-  const fallbackQuery = useQuery<UserEvent | null, Error>({
-    queryKey: ["public-event", eventId],
-    enabled: !!eventId && !outletCtx?.event,
-    queryFn: async () => {
-      if (!eventId) throw new Error("No event ID");
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("id", eventId)
-        .maybeSingle();
-      if (error) throw error;
-      return data as UserEvent | null;
-    },
-  });
-
-  const event = outletCtx?.event || fallbackQuery.data || null;
-
-  const { data: messages, isLoading, refetch } = useQuery<EventMessage[], Error>({
-    queryKey: ["guest-messages", eventId],
-    enabled: !!eventId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_messages")
-        .select("*")
-        .eq("event_id", eventId!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data || []) as EventMessage[];
-    },
-  });
-
-  const mutation = useMutation<void, Error>({
-    mutationFn: async () => {
-      if (!eventId || !name.trim() || !message.trim()) throw new Error("Missing fields");
-      const { error } = await supabase.from("event_messages").insert({
-        event_id: eventId,
-        guest_name: name.trim(),
-        message: message.trim(),
-      });
-      if (error) throw error;
-    },
+  const mutation = useMutation({
+    mutationFn: submitMessage,
     onSuccess: () => {
       setMessage("");
-      setSubmitSuccess(true);
-      queryClient.invalidateQueries({ queryKey: ["guest-messages", eventId] });
-      refetch();
-      setTimeout(() => setSubmitSuccess(false), 5000);
+      queryClient.invalidateQueries({ queryKey: ["guest-messages", event.id] });
     },
   });
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!message.trim() || !name.trim()) return;
-    mutation.mutate();
+    const trimmedName = name.trim();
+    const trimmedMsg = message.trim();
+    if (!trimmedName) {
+      setLocalError("Please enter your name.");
+      return;
+    }
+    if (!trimmedMsg) {
+      setLocalError("Please write a message.");
+      return;
+    }
+    setLocalError(null);
+    mutation.mutate({
+      event_id: event.id,
+      guest_name: trimmedName,
+      message: trimmedMsg,
+    });
   };
 
-  const charsRemaining = MAX_CHARS - message.length;
-
   return (
-    <div className="animate-fade-in px-6 py-10 max-w-2xl mx-auto">
-      <div className="text-center mb-10">
-        <h1 className="text-3xl font-light mb-2" style={{ color: "var(--color-primary)", fontFamily: "var(--font-heading)" }}>
-          Wishes
-        </h1>
-        <p className="text-sm" style={{ color: "var(--color-text-muted)" }}>
-          Share your well wishes with us
+    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] font-sans">
+      {/* Nav */}
+      <nav
+        className="sticky top-0 z-20 backdrop-blur-sm border-b"
+        style={{
+          backgroundColor: "color-mix(in srgb, var(--color-bg) 95%, transparent)",
+          borderColor: "var(--color-border)",
+        }}
+      >
+        <div
+          className="mx-auto px-6 py-4 flex items-center justify-between"
+          style={{ maxWidth: "var(--max-width)" }}
+        >
+          <Link
+            to={`/e/${eventSlug}/home`}
+            className="font-heading text-xl tracking-wide"
+            style={{ color: "var(--color-primary)" }}
+          >
+            {event?.name || "Our Event"}
+          </Link>
+          <Link
+            to={`/e/${eventSlug}/home`}
+            className="flex items-center gap-1 text-xs uppercase tracking-[0.15em] hover:opacity-70"
+            style={{ color: "var(--color-text)" }}
+          >
+            <ArrowLeft className="w-3 h-3" /> Back
+          </Link>
+        </div>
+      </nav>
+
+      {/* Header */}
+      <section className="mx-auto px-6 pt-16 pb-8 text-center animate-fade-in-up" style={{ maxWidth: "var(--max-width)" }}>
+        <MessageSquare className="w-10 h-10 mx-auto mb-4" style={{ color: "var(--color-accent)" }} />
+        <p
+          className="font-heading italic text-sm uppercase tracking-[0.3em] mb-2"
+          style={{ color: "var(--color-accent)" }}
+        >
+          From the Heart
         </p>
-      </div>
+        <h1 className="font-heading text-4xl sm:text-5xl tracking-wide mb-3" style={{ color: "var(--color-text)" }}>
+          Guest Wishes
+        </h1>
+        <Divider />
+        <p className="text-base max-w-md mx-auto" style={{ color: "var(--color-text-muted)" }}>
+          Share your love, advice, and well wishes with us on our special day.
+        </p>
+      </section>
 
-      <form onSubmit={handleSubmit} className="space-y-5 mb-12">
-        <div>
-          <label className="block text-sm font-medium mb-2" style={{ color: "var(--color-text)" }}>
-            Your Name
-          </label>
-          <Input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-2" style={{ color: "var(--color-text)" }}>
-            Message
-          </label>
-          <Textarea
-            value={message}
-            onChange={(e) => {
-              if (e.target.value.length <= MAX_CHARS) setMessage(e.target.value);
+      {/* Form */}
+      <section className="mx-auto px-6 pb-12" style={{ maxWidth: "var(--max-width)" }}>
+        <div className="max-w-2xl mx-auto">
+          <div
+            className="px-8 py-8"
+            style={{
+              border: `1px solid var(--color-border)`,
+              backgroundColor: "var(--color-bg-subtle)",
             }}
-            placeholder="Write your message here..."
-            required
-            rows={5}
-          />
-          <div className="flex justify-end mt-1">
-            <span className="text-xs" style={{ color: charsRemaining < 50 ? "var(--color-accent)" : "var(--color-text-muted)" }}>
-              {charsRemaining} characters remaining
-            </span>
-          </div>
-        </div>
-
-        {submitSuccess && (
-          <div
-            className="text-center py-4 px-4 rounded-lg border animate-fade-in"
-            style={{ backgroundColor: "var(--color-bg-subtle)", borderColor: "var(--color-primary)" }}
           >
-            <p className="text-lg" style={{ color: "var(--color-primary)" }}>
-              Thank you! Your message has been sent.
-            </p>
-          </div>
-        )}
+            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+              <div>
+                <label
+                  className="block text-xs uppercase tracking-[0.2em] mb-2"
+                  style={{ color: "var(--color-accent)" }}
+                >
+                  Your Name
+                </label>
+                <Input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Enter your name"
+                  style={{
+                    backgroundColor: "var(--color-bg)",
+                    borderColor: "var(--color-border)",
+                    color: "var(--color-text)",
+                    borderRadius: "var(--radius)",
+                  }}
+                />
+              </div>
+              <div>
+                <label
+                  className="block text-xs uppercase tracking-[0.2em] mb-2"
+                  style={{ color: "var(--color-accent)" }}
+                >
+                  Your Wish
+                </label>
+                <Textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Write your message..."
+                  rows={4}
+                  style={{
+                    backgroundColor: "var(--color-bg)",
+                    borderColor: "var(--color-border)",
+                    color: "var(--color-text)",
+                    borderRadius: "var(--radius)",
+                  }}
+                />
+              </div>
 
-        {(mutation as any).error && (
-          <div
-            className="text-center py-4 px-4 rounded-lg border"
-            style={{ backgroundColor: "var(--color-bg-subtle)", borderColor: "#dc2626" }}
-          >
-            <p className="text-sm" style={{ color: "#dc2626" }}>
-              Failed to send message. Please try again.
-            </p>
-          </div>
-        )}
+              {localError && (
+                <p className="text-xs" style={{ color: "var(--color-error, #dc2626)" }}>
+                  {localError}
+                </p>
+              )}
+              {mutation.isError && (
+                <p className="text-xs" style={{ color: "var(--color-error, #dc2626)" }}>
+                  Failed to send. Please try again.
+                </p>
+              )}
+              {mutation.isSuccess && !mutation.isError && (
+                <p className="text-xs flex items-center gap-1" style={{ color: "var(--color-accent)" }}>
+                  <Heart className="w-3 h-3" /> Thank you! Your wish has been sent.
+                </p>
+              )}
 
-        <div className="text-center pt-2">
-          <Button
-            type="submit"
-            disabled={!message.trim() || !name.trim() || mutation.isPending}
-            loading={mutation.isPending}
-            size="lg"
-            style={{ backgroundColor: "var(--color-primary)", color: "var(--color-bg)" }}
-          >
-            {mutation.isPending ? "Sending..." : "Send"}
-          </Button>
-        </div>
-      </form>
-
-      <section>
-        <h2 className="text-xl font-light tracking-wide text-center mb-6" style={{ color: "var(--color-primary)", fontFamily: "var(--font-heading)" }}>
-          Recent Messages
-        </h2>
-
-        {isLoading ? (
-          <div className="flex justify-center py-8">
-            <div className="w-8 h-8 border-2 border-slate-300 border-t-slate-700 rounded-full animate-spin" />
-          </div>
-        ) : !messages || messages.length === 0 ? (
-          <EmptyState title="No messages yet" description="Be the first to leave a well wish." />
-        ) : (
-          <div className="space-y-4">
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className="rounded-xl p-5 border shadow-sm"
-                style={{ backgroundColor: "var(--color-bg)", borderColor: "var(--color-border)" }}
+              <Button
+                type="submit"
+                size="lg"
+                loading={mutation.isPending}
+                disabled={mutation.isPending}
+                className={cn("w-full uppercase tracking-[0.25em]")}
+                style={{
+                  backgroundColor: "var(--color-primary)",
+                  color: "var(--color-bg)",
+                  borderRadius: "var(--radius)",
+                }}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-lg font-medium" style={{ color: "var(--color-primary)", fontFamily: "var(--font-script)" }}>
-                    {msg.guest_name}
-                  </p>
-                  <p className="text-xs" style={{ color: "var(--color-text-muted)" }}>
-                    {formatDate(msg.created_at)}
+                <Send className="w-4 h-4" />
+                Send Wish
+              </Button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      {/* Messages list */}
+      <section className="mx-auto px-6 pb-20" style={{ maxWidth: "var(--max-width)" }}>
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-8">
+            <p
+              className="font-heading italic text-sm uppercase tracking-[0.3em]"
+              style={{ color: "var(--color-accent)" }}
+            >
+              {messages.length} {messages.length === 1 ? "Wish" : "Wishes"}
+            </p>
+          </div>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--color-accent)" }} />
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="text-center py-16">
+              <Heart className="w-10 h-10 mx-auto mb-4" style={{ color: "var(--color-border)" }} />
+              <p className="text-base" style={{ color: "var(--color-text-muted)" }}>
+                No wishes yet. Be the first to share your love!
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-5">
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className="px-6 py-5 animate-fade-in-up"
+                  style={{
+                    border: `1px solid var(--color-border)`,
+                    backgroundColor: "var(--color-bg-subtle)",
+                  }}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <span
+                      className="font-heading text-lg tracking-wide"
+                      style={{ color: "var(--color-accent)" }}
+                    >
+                      {msg.guest_name}
+                    </span>
+                    <span className="text-xs" style={{ color: "var(--color-text-muted)" }}>
+                      {timeAgo(msg.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: "var(--color-text)" }}>
+                    {msg.message}
                   </p>
                 </div>
-                <p className="text-sm leading-relaxed whitespace-pre-line" style={{ color: "var(--color-text)" }}>
-                  {msg.message}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </section>
+    </div>
+  );
+}
+
+function Divider() {
+  return (
+    <div className="flex items-center justify-center gap-3 my-6" aria-hidden>
+      <span className="block h-px w-16" style={{ backgroundColor: "var(--color-accent)" }} />
+      <span className="text-lg" style={{ color: "var(--color-accent)" }}>✦</span>
+      <span className="block h-px w-16" style={{ backgroundColor: "var(--color-accent)" }} />
     </div>
   );
 }

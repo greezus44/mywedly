@@ -3,22 +3,22 @@
 @tailwind utilities;
 
 :root {
-  --color-primary: #0f172a;
-  --color-primary-light: #334155;
+  --color-primary: #1a1a1a;
+  --color-primary-light: #2a2a2a;
   --color-bg: #ffffff;
-  --color-bg-subtle: #f8fafc;
+  --color-bg-subtle: #f5f0e8;
   --color-border: #e2e8f0;
-  --color-text: #1e293b;
-  --color-text-muted: #64748b;
+  --color-text: #1a1a1a;
+  --color-text-muted: #6b6b6b;
   --color-accent: #0ea5e9;
   --color-accent-dark: #0284c7;
   --color-success: #16a34a;
   --color-warning: #f59e0b;
   --color-error: #dc2626;
-  --font-heading: "Inter", sans-serif;
+  --font-heading: "Cormorant Garamond", serif;
   --font-body: "Inter", sans-serif;
   --font-script: "Cormorant Garamond", serif;
-  --radius: 8px;
+  --radius: 2px;
   --max-width: 1200px;
 }
 
@@ -32,7 +32,10 @@ body {
 
 * { box-sizing: border-box; }
 
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+.font-heading { font-family: "Cormorant Garamond", serif; }
+.font-script { font-family: "Cormorant Garamond", serif; }

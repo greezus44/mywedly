@@ -1,176 +1,188 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useOutletContext, useParams } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CoverConfig, type LogoConfig } from "../../lib/supabase";
+import { useState, useEffect, useCallback } from "react";
+import { useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Image as ImageIcon, Save, AlertCircle } from "lucide-react";
+import { supabase, type UserEvent, type CoverConfig } from "../../lib/supabase";
+import { cn } from "../../lib/utils";
+import { Button } from "../../components/ui/Button";
+import { Card, FormField, Toggle, ColorInput, RangeInput, Skeleton, ErrorState, Toast } from "../../components/ui";
+import { Input } from "../../components/ui/Input";
+import { ImageUpload } from "../../components/ui/ImageUpload";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
-import { ImageUpload } from "../../components/ui/ImageUpload";
-import { ColorInput, RangeInput, FormField, Toggle, Toast } from "../../components/ui";
-import { Input, Textarea, Select } from "../../components/ui/Input";
-import { Button } from "../../components/ui/Button";
-import { FONT_OPTIONS } from "../../lib/theme";
-import { debounce } from "../../lib/utils";
-import { Save, Loader2 } from "lucide-react";
 
-export default function CoverEditor() {
-  const { event } = useOutletContext<{ event: UserEvent | null }>();
+function CoverEditorPage() {
   const { eventId } = useParams<{ eventId: string }>();
-  const [cover, setCover] = useState<CoverConfig>({});
-  const [logo, setLogo] = useState<LogoConfig>({ enabled: false });
+  const queryClient = useQueryClient();
+  const [config, setConfig] = useState<CoverConfig>({});
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const [saving, setSaving] = useState(false);
-  const initialized = useRef(false);
+
+  const { data: event, isLoading, isError, refetch } = useQuery<UserEvent>({
+    queryKey: ["event", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!eventId,
+  });
 
   useEffect(() => {
-    if (event && !initialized.current) {
-      setCover(event.draft_cover_config || event.cover_config || {});
-      setLogo(event.draft_logo_config || event.logo_config || { enabled: false });
-      initialized.current = true;
+    if (event) {
+      setConfig(event.draft_cover_config || event.cover_config || {});
     }
   }, [event]);
 
-  const saveMutation = useMutation<void, Error, { cover: CoverConfig; logo: LogoConfig }>({
-    mutationFn: async ({ cover, logo }) => {
-      setSaving(true);
-      const { error } = await supabase
-        .from("events")
-        .update({ draft_cover_config: cover, draft_logo_config: logo })
-        .eq("id", eventId!);
+  const updateMutation = useMutation({
+    mutationFn: async (newConfig: CoverConfig) => {
+      const { data, error } = await supabase
+        .from("user_events")
+        .update({ draft_cover_config: newConfig, updated_at: new Date().toISOString() })
+        .eq("id", eventId!)
+        .select()
+        .single();
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => setToast({ message: "Saved", type: "success" }),
-    onError: () => setToast({ message: "Failed to save", type: "error" }),
-    onSettled: () => setSaving(false),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["event", eventId], data);
+      setToast({ message: "Cover saved", type: "success" });
+    },
+    onError: () => {
+      setToast({ message: "Failed to save cover", type: "error" });
+    },
   });
 
-  const debouncedSave = useRef(
-    debounce((cover: CoverConfig, logo: LogoConfig) => {
-      saveMutation.mutate({ cover, logo });
-    }, 800)
-  ).current;
-
-  const triggerSave = useCallback(
-    (nextCover: CoverConfig, nextLogo: LogoConfig) => {
-      setCover(nextCover);
-      setLogo(nextLogo);
-      debouncedSave(nextCover, nextLogo);
+  const updateField = useCallback(
+    <K extends keyof CoverConfig>(field: K, value: CoverConfig[K]) => {
+      setConfig((prev) => {
+        const next = { ...prev, [field]: value };
+        updateMutation.mutate(next);
+        return next;
+      });
     },
-    [debouncedSave]
+    [updateMutation],
   );
 
-  const updateCover = (patch: Partial<CoverConfig>) => triggerSave({ ...cover, ...patch }, logo);
-  const updateLogo = (patch: Partial<LogoConfig>) => triggerSave(cover, { ...logo, ...patch });
-
-  if (!event) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+      <div className="p-8">
+        <Skeleton className="h-8 w-48 mb-6" />
+        <div className="grid lg:grid-cols-2 gap-6">
+          <Skeleton className="h-96" />
+          <Skeleton className="h-96" />
+        </div>
       </div>
     );
   }
 
-  const previewEvent: UserEvent = {
-    ...event,
-    draft_cover_config: cover,
-    draft_logo_config: logo,
-  };
+  if (isError || !event) {
+    return <ErrorState message="Failed to load event" onRetry={refetch} />;
+  }
+
+  const previewEvent: UserEvent = { ...event, draft_cover_config: config };
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">Cover Editor</h1>
-          <p className="text-sm text-slate-500">Customize the landing page cover for your event.</p>
-        </div>
-        {saving && (
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <Loader2 className="w-4 h-4 animate-spin" /> Saving...
-          </div>
-        )}
+      <div className="px-6 lg:px-8 py-6 border-b border-onyx/10">
+        <h1 className="font-heading text-3xl text-onyx">Cover Editor</h1>
+        <p className="mt-1 text-sm text-onyx/50">Customize the entry page guests see first</p>
       </div>
-      <SplitEditor
-        preview={<CoverPreview event={previewEvent} />}
-      >
-        <div className="space-y-5">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900 mb-3">Background</h3>
-            <FormField label="Background Image">
-              <ImageUpload value={cover.bgImage || ""} onChange={(v) => updateCover({ bgImage: v })} eventId={eventId} />
-            </FormField>
-            <div className="mt-3">
-              <ColorInput label="Background Color" value={cover.bgColor || "#0f172a"} onChange={(v) => updateCover({ bgColor: v })} />
-            </div>
-            <div className="mt-3">
-              <ColorInput label="Overlay Color" value={cover.overlayColor || "#000000"} onChange={(v) => updateCover({ overlayColor: v })} />
-            </div>
-            <div className="mt-3">
-              <RangeInput label="Overlay Opacity" value={cover.overlayOpacity ?? 0.4} min={0} max={1} step={0.05} onChange={(v) => updateCover({ overlayOpacity: v })} />
-            </div>
-          </div>
 
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900 mb-3">Text</h3>
-            <ColorInput label="Text Color" value={cover.textColor || "#ffffff"} onChange={(v) => updateCover({ textColor: v })} />
-            <div className="mt-3">
-              <FormField label="Custom Text">
-                <Textarea value={cover.customText || ""} onChange={(e) => updateCover({ customText: e.target.value })} placeholder="e.g. Together with their families" />
-              </FormField>
+      <SplitEditor preview={<CoverPreview event={previewEvent} />}>
+        <div className="space-y-6">
+          {updateMutation.isPending && (
+            <div className="flex items-center gap-2 text-xs text-onyx/50 uppercase tracking-wider">
+              <Save className="w-3.5 h-3.5 animate-pulse" /> Saving...
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <FormField label="Font">
-                <Select value={cover.font || "Inter"} onChange={(e) => updateCover({ font: e.target.value })}>
-                  {FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-                </Select>
-              </FormField>
-              <FormField label="Script Font">
-                <Select value={cover.scriptFont || "Cormorant Garamond"} onChange={(e) => updateCover({ scriptFont: e.target.value })}>
-                  {FONT_OPTIONS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-                </Select>
-              </FormField>
-            </div>
-          </div>
+          )}
 
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900 mb-3">Button</h3>
-            <ColorInput label="Button Color" value={cover.buttonColor || "#ffffff"} onChange={(v) => updateCover({ buttonColor: v })} />
-            <div className="mt-3">
+          <Card className="p-5">
+            <h2 className="font-heading text-xl text-onyx mb-4">Background</h2>
+            <div className="space-y-4">
+              <FormField label="Background Image">
+                <ImageUpload
+                  value={config.bgImage || ""}
+                  onChange={(url) => updateField("bgImage", url)}
+                  eventId={eventId}
+                  label="Cover Background"
+                />
+              </FormField>
+              <FormField label="Background Color" hint="Used when no image is set">
+                <ColorInput value={config.bgColor || "#1a1a1a"} onChange={(v) => updateField("bgColor", v)} />
+              </FormField>
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="font-heading text-xl text-onyx mb-4">Overlay</h2>
+            <div className="space-y-4">
+              <FormField label="Overlay Color">
+                <ColorInput value={config.overlayColor || "#000000"} onChange={(v) => updateField("overlayColor", v)} />
+              </FormField>
+              <FormField label="Overlay Opacity">
+                <RangeInput
+                  value={config.overlayOpacity ?? 0.4}
+                  onChange={(v) => updateField("overlayOpacity", v)}
+                  min={0}
+                  max={1}
+                  step={0.1}
+                />
+              </FormField>
+            </div>
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="font-heading text-xl text-onyx mb-4">Text &amp; Button</h2>
+            <div className="space-y-4">
+              <FormField label="Text Color">
+                <ColorInput value={config.textColor || "#ffffff"} onChange={(v) => updateField("textColor", v)} />
+              </FormField>
+              <FormField label="Button Color">
+                <ColorInput value={config.buttonColor || "#1a1a1a"} onChange={(v) => updateField("buttonColor", v)} />
+              </FormField>
               <FormField label="Button Text">
-                <Input value={cover.buttonText || ""} onChange={(e) => updateCover({ buttonText: e.target.value })} placeholder="Enter" />
+                <Input
+                  value={config.buttonText || ""}
+                  onChange={(e) => updateField("buttonText", e.target.value)}
+                  placeholder="Enter"
+                />
+              </FormField>
+              <FormField label="Custom Intro Text" hint="Appears above the event name in italic script">
+                <Input
+                  value={config.customText || ""}
+                  onChange={(e) => updateField("customText", e.target.value)}
+                  placeholder="Together with their families"
+                />
               </FormField>
             </div>
-          </div>
+          </Card>
 
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900 mb-3">Display Options</h3>
-            <div className="space-y-2">
-              <Toggle checked={cover.showDate ?? false} onChange={(v) => updateCover({ showDate: v })} label="Show event date" />
-              <Toggle checked={cover.showCountdown ?? false} onChange={(v) => updateCover({ showCountdown: v })} label="Show countdown" />
-            </div>
-          </div>
-
-          <div className="border-t border-slate-100 pt-4">
-            <h3 className="text-sm font-semibold text-slate-900 mb-3">Logo</h3>
-            <Toggle checked={logo.enabled} onChange={(v) => updateLogo({ enabled: v })} label="Show logo" />
-            {logo.enabled && (
-              <div className="mt-3 space-y-3">
-                <FormField label="Logo Image">
-                  <ImageUpload value={logo.image || ""} onChange={(v) => updateLogo({ image: v })} eventId={eventId} aspectRatio="3/1" />
-                </FormField>
-                <FormField label="Logo Text">
-                  <Input value={logo.text || ""} onChange={(e) => updateLogo({ text: e.target.value })} placeholder="Optional text" />
-                </FormField>
-                <div className="grid grid-cols-2 gap-3">
-                  <FormField label="Font Size">
-                    <RangeInput value={logo.fontSize ?? 18} min={10} max={48} step={1} onChange={(v) => updateLogo({ fontSize: v })} />
-                  </FormField>
-                  <ColorInput label="Color" value={logo.color || "#ffffff"} onChange={(v) => updateLogo({ color: v })} />
+          <Card className="p-5">
+            <h2 className="font-heading text-xl text-onyx mb-4">Display Options</h2>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-onyx/70">Show Date</p>
+                  <p className="text-xs text-onyx/40">Display the event date on the cover</p>
                 </div>
+                <Toggle checked={config.showDate ?? true} onChange={(v) => updateField("showDate", v)} />
               </div>
-            )}
-          </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-onyx/70">Show Countdown</p>
+                  <p className="text-xs text-onyx/40">Display a live countdown timer</p>
+                </div>
+                <Toggle checked={config.showCountdown ?? false} onChange={(v) => updateField("showCountdown", v)} />
+              </div>
+            </div>
+          </Card>
         </div>
       </SplitEditor>
+
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
+
+export default CoverEditorPage;
