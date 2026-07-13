@@ -1,22 +1,17 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight } from "lucide-react";
-import { supabase, UserEvent } from "../../lib/supabase";
-import {
-  DEFAULT_COVER_CONFIG,
-  DEFAULT_LOGO_CONFIG,
-  shouldShowLogo,
-  getLogoStyle,
-} from "../../lib/theme";
-import { getCountdown, formatDate, formatTime } from "../../lib/utils";
-import { ErrorState, Skeleton } from "../../components/ui/index";
+import { supabase, type UserEvent } from "../../lib/supabase";
+import { DEFAULT_COVER_CONFIG, DEFAULT_LOGO_CONFIG } from "../../lib/theme";
+import { formatDate, getCountdown } from "../../lib/utils";
+import { Button } from "../../components/ui/Button";
 
 export default function Cover() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
+  const [countdown, setCountdown] = useState(getCountdown(null));
 
-  const { data: event, isLoading, error, refetch } = useQuery<UserEvent | null>({
+  const { data: event, isLoading, isError } = useQuery<UserEvent | null>({
     queryKey: ["public-event", eventId],
     queryFn: async () => {
       if (!eventId) return null;
@@ -32,168 +27,144 @@ export default function Cover() {
     enabled: !!eventId,
   });
 
-  const [countdown, setCountdown] = useState(
-    getCountdown(event?.event_date || null)
-  );
+  const eventDate = event?.event_date ?? null;
+  const config = event ? { ...DEFAULT_COVER_CONFIG, ...event.cover_config } : DEFAULT_COVER_CONFIG;
+  const logoConfig = event ? { ...DEFAULT_LOGO_CONFIG, ...event.logo_config } : DEFAULT_LOGO_CONFIG;
 
   useEffect(() => {
-    if (!event?.event_date) return;
-    setCountdown(getCountdown(event.event_date));
-    const interval = setInterval(
-      () => setCountdown(getCountdown(event.event_date!)),
-      1000
-    );
+    if (!eventDate) return;
+    setCountdown(getCountdown(eventDate));
+    const interval = setInterval(() => {
+      setCountdown(getCountdown(eventDate));
+    }, 1000);
     return () => clearInterval(interval);
-  }, [event?.event_date]);
+  }, [eventDate]);
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 p-6 space-y-6">
-        <Skeleton className="h-96 w-full max-w-3xl mx-auto" />
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="animate-pulse text-white/60 text-sm">Loading...</div>
       </div>
     );
   }
 
-  if (error || !event) {
+  if (isError || !event) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <ErrorState
-          message={error ? error.message : "Event not found or not published."}
-          onRetry={() => refetch()}
-        />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
+        <div className="text-center">
+          <h2 className="text-lg font-semibold text-gray-900">Event not found</h2>
+          <p className="mt-1 text-sm text-gray-500">This event may be private or no longer available.</p>
+        </div>
       </div>
     );
   }
 
-  const cover = event.cover_config || DEFAULT_COVER_CONFIG;
-  const logo = event.logo_config || DEFAULT_LOGO_CONFIG;
-  const loginConfig = event.login_config;
-  const welcomeText =
-    loginConfig?.welcomeMessage || cover.customText || "You are cordially invited";
-
-  const handleEnter = () => navigate(`/${eventId}/login`);
-
-  const countdownItems = [
-    { label: "Days", value: countdown.days },
-    { label: "Hours", value: countdown.hours },
-    { label: "Minutes", value: countdown.minutes },
-    { label: "Seconds", value: countdown.seconds },
-  ];
+  const handleEnter = () => {
+    navigate(`/${eventId}/login`);
+  };
 
   return (
     <div
-      className="relative min-h-screen w-full overflow-hidden flex flex-col items-center justify-center"
+      className="relative min-h-screen flex flex-col items-center justify-center text-center px-6 py-12"
       style={{
-        backgroundColor: cover.bgColor,
-        color: cover.textColor,
-        fontFamily: `"${cover.font}", serif`,
+        background: config.bgImage
+          ? `linear-gradient(${config.overlayColor} 0%, ${config.overlayColor} 100%), url(${config.bgImage}) center/cover no-repeat`
+          : config.bgColor,
+        color: config.textColor,
+        fontFamily: config.font,
       }}
     >
-      {cover.bgImage && (
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${cover.bgImage})` }}
-        />
-      )}
       <div
         className="absolute inset-0"
         style={{
-          backgroundColor: cover.overlayColor,
-          opacity: cover.overlayOpacity,
+          background: config.overlayColor,
+          opacity: config.overlayOpacity,
         }}
       />
 
-      <div className="relative z-10 text-center px-6 py-16 max-w-2xl mx-auto flex flex-col items-center">
-        {shouldShowLogo(logo) && (
-          <div className="mb-8">
-            {logo.image ? (
+      <div className="relative z-10 flex flex-col items-center max-w-2xl mx-auto space-y-6">
+        {logoConfig.enabled && (
+          <div className="mb-2">
+            {logoConfig.image ? (
               <img
-                src={logo.image}
-                alt={event.name}
-                className="max-h-20 object-contain mx-auto"
+                src={logoConfig.image}
+                alt="Logo"
+                className="h-16 w-16 object-contain rounded-full mx-auto"
+                style={{ filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.2))" }}
               />
             ) : (
               <div
+                className="font-bold leading-none"
                 style={{
-                  ...getLogoStyle(logo),
-                  fontSize: `${logo.fontSize * 1.5}px`,
+                  color: logoConfig.color,
+                  fontSize: logoConfig.fontSize,
+                  textShadow: "0 2px 8px rgba(0,0,0,0.2)",
                 }}
               >
-                {logo.text}
+                {logoConfig.text}
               </div>
             )}
           </div>
         )}
 
-        <p
-          className="text-sm uppercase tracking-[0.3em] mb-4 opacity-80"
-          style={{ fontFamily: `"${cover.font}", serif` }}
-        >
-          {welcomeText}
-        </p>
-
-        <div
-          className="w-16 h-px mb-6"
-          style={{ backgroundColor: cover.textColor, opacity: 0.4 }}
-        />
-
-        <p
-          className="text-xl mb-3 opacity-90"
-          style={{ fontFamily: `"${cover.scriptFont}", cursive` }}
-        >
-          The {event.event_type}
-        </p>
+        {config.customText && (
+          <p
+            className="text-base opacity-80 tracking-wider uppercase"
+            style={{ fontFamily: config.scriptFont }}
+          >
+            {config.customText}
+          </p>
+        )}
 
         <h1
-          className="text-5xl md:text-7xl font-bold mb-6 leading-tight"
-          style={{ fontFamily: `"${cover.font}", serif` }}
+          className="text-4xl sm:text-5xl font-bold leading-tight"
+          style={{
+            fontFamily: config.font,
+            textShadow: "0 2px 12px rgba(0,0,0,0.15)",
+          }}
         >
           {event.name}
         </h1>
 
-        {cover.showDate && event.event_date && (
-          <p className="text-base md:text-lg opacity-90 mb-2 tracking-wide">
-            {formatDate(event.event_date)}
-          </p>
-        )}
-        {event.event_time && (
-          <p className="text-sm opacity-70 mb-8 tracking-wide">
-            {formatTime(event.event_time)}
-          </p>
+        <div
+          className="w-16 h-px"
+          style={{ background: config.textColor, opacity: 0.4 }}
+        />
+
+        {config.showDate && event.event_date && (
+          <p className="text-base opacity-80 tracking-wide">{formatDate(event.event_date)}</p>
         )}
 
-        {cover.showCountdown && !countdown.expired && (
-          <div className="flex justify-center gap-4 md:gap-8 mt-4 mb-8">
-            {countdownItems.map((item) => (
-              <div key={item.label} className="text-center">
+        {config.showCountdown && !countdown.isPast && (
+          <div className="flex gap-6 sm:gap-10 text-center pt-2">
+            {(["days", "hours", "minutes", "seconds"] as const).map((key) => (
+              <div key={key} className="flex flex-col items-center">
                 <div
-                  className="text-3xl md:text-4xl font-bold tabular-nums"
-                  style={{ fontFamily: `"${cover.font}", serif` }}
+                  className="text-3xl sm:text-4xl font-bold tabular-nums"
+                  style={{ fontFamily: config.font }}
                 >
-                  {String(item.value).padStart(2, "0")}
+                  {String(countdown[key]).padStart(2, "0")}
                 </div>
-                <div className="text-[10px] md:text-xs uppercase tracking-[0.2em] opacity-70 mt-1">
-                  {item.label}
+                <div className="text-[10px] sm:text-xs opacity-60 uppercase tracking-widest mt-1">
+                  {key}
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {cover.buttonText && (
-          <button
-            onClick={handleEnter}
-            className="mt-4 group inline-flex items-center gap-2 px-8 py-3.5 rounded-lg font-medium text-sm tracking-wide transition-all duration-300 hover:scale-105 hover:shadow-2xl"
-            style={{
-              backgroundColor: cover.buttonColor,
-              color: "#ffffff",
-              borderRadius: "8px",
-            }}
-          >
-            {cover.buttonText}
-            <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-          </button>
-        )}
+        <button
+          onClick={handleEnter}
+          className="mt-6 px-10 py-3.5 rounded-full text-base font-medium tracking-wide transition-all duration-300 hover:scale-105 hover:shadow-xl"
+          style={{
+            background: config.buttonColor,
+            color: config.bgColor,
+            border: `1px solid ${config.buttonColor}`,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+          }}
+        >
+          {config.buttonText}
+        </button>
       </div>
     </div>
   );

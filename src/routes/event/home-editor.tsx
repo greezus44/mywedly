@@ -20,8 +20,8 @@ export default function HomeEditor() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [content, setContent] = useState<EventContent>(event?.draft_content || event?.content || DEFAULT_CONTENT);
-  const [theme, setTheme] = useState<ThemeConfig>(event?.draft_theme || event?.theme || DEFAULT_THEME);
+  const [content, setContent] = useState<EventContent>(event?.draft_content || DEFAULT_CONTENT);
+  const [theme] = useState<ThemeConfig>(event?.draft_theme || DEFAULT_THEME);
   const [eventDate, setEventDate] = useState<string | null>(event?.draft_event_date || event?.event_date || null);
   const [eventTime, setEventTime] = useState<string | null>(event?.draft_event_time || event?.event_time || null);
   const [venue, setVenue] = useState(event?.draft_venue || event?.venue || "");
@@ -32,8 +32,7 @@ export default function HomeEditor() {
 
   useEffect(() => {
     if (event) {
-      setContent(event.draft_content || event.content || DEFAULT_CONTENT);
-      setTheme(event.draft_theme || event.theme || DEFAULT_THEME);
+      setContent(event.draft_content || DEFAULT_CONTENT);
       setEventDate(event.draft_event_date || event.event_date || null);
       setEventTime(event.draft_event_time || event.event_time || null);
       setVenue(event.draft_venue || event.venue || "");
@@ -41,8 +40,8 @@ export default function HomeEditor() {
     }
   }, [event?.id]);
 
-  const debouncedPreviewUpdate = useMemo(() => debounce(() => setPreviewKey(k => String(Number(k) + 1)), 150), []);
-  const updateContent = useCallback((patch: Partial<EventContent>) => { setContent(prev => ({ ...prev, ...patch })); debouncedPreviewUpdate(); }, [debouncedPreviewUpdate]);
+  const debouncedPreview = useMemo(() => debounce(() => setPreviewKey(k => String(Number(k) + 1)), 150), []);
+  const updateContent = useCallback((patch: Partial<EventContent>) => { setContent(p => ({ ...p, ...patch })); debouncedPreview(); }, [debouncedPreview]);
 
   const handleSave = useCallback(async () => {
     if (!event || !eventId) return;
@@ -53,7 +52,7 @@ export default function HomeEditor() {
       }).eq("id", eventId);
       if (error) throw error;
       queryClient.setQueryData(["event", eventId], (old: UserEvent | null) => old ? { ...old, draft_content: content, draft_event_date: eventDate, draft_event_time: eventTime, draft_venue: venue, draft_address: address } : old);
-      setToast("Home page saved!"); setTimeout(() => setToast(null), 3000);
+      setToast("Saved!"); setTimeout(() => setToast(null), 3000);
     } catch (err: any) { setToast("Failed: " + err.message); setTimeout(() => setToast(null), 3000); }
     finally { setSaving(false); }
   }, [event, eventId, content, eventDate, eventTime, venue, address, queryClient]);
@@ -70,10 +69,10 @@ export default function HomeEditor() {
       <SplitEditor title="Home Page Content" previewKey={previewKey} preview={<HomePreview event={previewEvent} theme={theme} content={content} />} children={
         <div className="space-y-5">
           <div className="space-y-3"><h3 className="text-sm font-semibold text-gray-900">Event Details</h3>
-            <DatePicker value={eventDate} onChange={setEventDate} label="Event Date" />
-            <TimePicker value={eventTime} onChange={setEventTime} label="Event Time" />
-            <FormField label="Venue"><Input value={venue} onChange={(e) => { setVenue(e.target.value); debouncedPreviewUpdate(); }} /></FormField>
-            <FormField label="Address"><Textarea value={address} onChange={(e) => { setAddress(e.target.value); debouncedPreviewUpdate(); }} /></FormField>
+            <DatePicker value={eventDate} onChange={(v) => { setEventDate(v); debouncedPreview(); }} label="Event Date" />
+            <TimePicker value={eventTime} onChange={(v) => { setEventTime(v); debouncedPreview(); }} label="Event Time" />
+            <FormField label="Venue"><Input value={venue} onChange={(e) => { setVenue(e.target.value); debouncedPreview(); }} /></FormField>
+            <FormField label="Address"><Textarea value={address} onChange={(e) => { setAddress(e.target.value); debouncedPreview(); }} /></FormField>
           </div>
           <div className="space-y-3 border-t border-gray-200 pt-4"><h3 className="text-sm font-semibold text-gray-900">Our Story</h3>
             <FormField label="Story"><Textarea value={content.story} onChange={(e) => updateContent({ story: e.target.value })} placeholder="Tell your story..." className="min-h-[120px]" /></FormField>

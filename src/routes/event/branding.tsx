@@ -15,13 +15,13 @@ export default function BrandingEditor() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [logoConfig, setLogoConfig] = useState<LogoConfig>(event?.draft_logo_config || event?.logo_config || DEFAULT_LOGO_CONFIG);
+  const [logoConfig, setLogoConfig] = useState<LogoConfig>(event?.draft_logo_config || DEFAULT_LOGO_CONFIG);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => { if (event) setLogoConfig(event.draft_logo_config || event.logo_config || DEFAULT_LOGO_CONFIG); }, [event?.id]);
+  useEffect(() => { if (event) setLogoConfig(event.draft_logo_config || DEFAULT_LOGO_CONFIG); }, [event?.id]);
 
-  const update = useCallback((patch: Partial<LogoConfig>) => setLogoConfig(prev => ({ ...prev, ...patch })), []);
+  const update = useCallback((patch: Partial<LogoConfig>) => setLogoConfig(p => ({ ...p, ...patch })), []);
 
   const handleSave = useCallback(async () => {
     if (!event || !eventId) return;
@@ -30,7 +30,7 @@ export default function BrandingEditor() {
       const { error } = await supabase.from("user_events").update({ draft_logo_config: logoConfig }).eq("id", eventId);
       if (error) throw error;
       queryClient.setQueryData(["event", eventId], (old: UserEvent | null) => old ? { ...old, draft_logo_config: logoConfig } : old);
-      setToast("Branding saved!"); setTimeout(() => setToast(null), 3000);
+      setToast("Saved!"); setTimeout(() => setToast(null), 3000);
     } catch (err: any) { setToast("Failed: " + err.message); setTimeout(() => setToast(null), 3000); }
     finally { setSaving(false); }
   }, [event, eventId, logoConfig, queryClient]);

@@ -18,22 +18,20 @@ export default function ThemeEditor() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [config, setConfig] = useState<ThemeConfig>(event?.draft_theme || event?.theme || DEFAULT_THEME);
-  const [content, setContent] = useState<EventContent>(event?.draft_content || event?.content || DEFAULT_CONTENT);
+  const [config, setConfig] = useState<ThemeConfig>(event?.draft_theme || DEFAULT_THEME);
+  const [content] = useState<EventContent>(event?.draft_content || DEFAULT_CONTENT);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState("0");
 
-  useEffect(() => {
-    if (event) { setConfig(event.draft_theme || event.theme || DEFAULT_THEME); setContent(event.draft_content || event.content || DEFAULT_CONTENT); }
-  }, [event?.id]);
+  useEffect(() => { if (event) setConfig(event.draft_theme || DEFAULT_THEME); }, [event?.id]);
 
-  const debouncedPreviewUpdate = useMemo(() => debounce(() => setPreviewKey(k => String(Number(k) + 1)), 150), []);
-  const updateConfig = useCallback((patch: Partial<ThemeConfig>) => { setConfig(prev => ({ ...prev, ...patch })); debouncedPreviewUpdate(); }, [debouncedPreviewUpdate]);
+  const debouncedPreview = useMemo(() => debounce(() => setPreviewKey(k => String(Number(k) + 1)), 150), []);
+  const updateConfig = useCallback((patch: Partial<ThemeConfig>) => { setConfig(p => ({ ...p, ...patch })); debouncedPreview(); }, [debouncedPreview]);
 
   const applyPreset = (presetId: string) => {
     const preset = THEME_PRESETS.find(p => p.id === presetId);
-    if (preset) { setConfig(prev => ({ ...prev, ...preset.config, preset: presetId } as ThemeConfig)); debouncedPreviewUpdate(); }
+    if (preset) { setConfig(p => ({ ...p, ...preset.config, preset: presetId } as ThemeConfig)); debouncedPreview(); }
   };
 
   const handleSave = useCallback(async () => {
@@ -43,7 +41,7 @@ export default function ThemeEditor() {
       const { error } = await supabase.from("user_events").update({ draft_theme: config }).eq("id", eventId);
       if (error) throw error;
       queryClient.setQueryData(["event", eventId], (old: UserEvent | null) => old ? { ...old, draft_theme: config } : old);
-      setToast("Theme saved!"); setTimeout(() => setToast(null), 3000);
+      setToast("Saved!"); setTimeout(() => setToast(null), 3000);
     } catch (err: any) { setToast("Failed: " + err.message); setTimeout(() => setToast(null), 3000); }
     finally { setSaving(false); }
   }, [event, eventId, config, queryClient]);

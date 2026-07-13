@@ -1,52 +1,106 @@
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { supabase } from "./supabase";
 
-interface GuestAuthState { token: string | null; guestId: string | null; eventId: string | null; guestName: string | null; }
-interface GuestAuthContextValue extends GuestAuthState {
-  signIn: (name: string, eventId: string) => Promise<{ success: boolean; error?: string }>;
-  signInWithToken: (token: string) => Promise<{ success: boolean; error?: string }>;
+interface GuestAuthState {
+  token: string | null;
+  guestId: string | null;
+  eventId: string | null;
+  guestName: string | null;
+  signIn: (name: string, eventId: string) => Promise<void>;
+  signInWithToken: (token: string) => Promise<void>;
   signOut: () => void;
 }
 
-const GuestAuthContext = createContext<GuestAuthContextValue | undefined>(undefined);
+const GuestAuthContext = createContext<GuestAuthState | null>(null);
+
 const STORAGE_KEY = "event_guest_auth";
 
 export function GuestAuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<GuestAuthState>({ token: null, guestId: null, eventId: null, guestName: null });
+  const [token, setToken] = useState<string | null>(null);
+  const [guestId, setGuestId] = useState<string | null>(null);
+  const [eventId, setEventId] = useState<string | null>(null);
+  const [guestName, setGuestName] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem(STORAGE_KEY);
-    if (stored) { try { setState(JSON.parse(stored)); } catch { sessionStorage.removeItem(STORAGE_KEY); } }
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setToken(parsed.token || null);
+        setGuestId(parsed.guestId || null);
+        setEventId(parsed.eventId || null);
+        setGuestName(parsed.guestName || null);
+      }
+    } catch {}
   }, []);
 
-  const persist = (s: GuestAuthState) => {
-    setState(s);
-    if (s.token) sessionStorage.setItem(STORAGE_KEY, JSON.stringify(s));
-    else sessionStorage.removeItem(STORAGE_KEY);
+  const persist = (data: { token: string | null; guestId: string | null; eventId: string | null; guestName: string | null }) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   };
 
-  const signIn = useCallback(async (name: string, eventId: string) => {
-    const { data, error } = await supabase.from("event_guests").select("id, token, name").eq("event_id", eventId).ilike("name", name.trim()).limit(1).maybeSingle();
-    if (error) return { success: false, error: error.message };
-    if (!data) return { success: false, error: "Name not found in guest list" };
-    persist({ token: data.token, guestId: data.id, eventId, guestName: data.name });
-    return { success: true };
+  const signIn = useCallback(async (name: string, evId: string) => {
+    const { data, error } = await supabase
+      .from("event_guests")
+      .insert({ event_id: evId, name, token: Math.random().toString(36).substring(2) + Date.now().toString(36) })
+      .select()
+      .single();
+    if (error) {
+      const { data: existing } = await supabase
+        .from("event_guests")
+        .select("*")
+        .eq("event_id", evId)
+        .eq("name", name)
+        .maybeSingle();
+      if (existing) {
+        const newToken = existing.token || Math.random().toString(36).substring(2) + Date.now().toString(36);
+        setToken(newToken);
+        setGuestId(existing.id);
+        setEventId(evId);
+        setGuestName(name);
+        persist({ token: newToken, guestId: existing.id, eventId: evId, guestName: name });
+        return;
+      }
+      throw error;
+    }
+    setToken(data.token);
+    setGuestId(data.id);
+    setEventId(evId);
+    setGuestName(name);
+    persist({ token: data.token, guestId: data.id, eventId: evId, guestName: name });
   }, []);
 
-  const signInWithToken = useCallback(async (token: string) => {
-    const { data, error } = await supabase.from("event_guests").select("id, event_id, name, token").eq("token", token).limit(1).maybeSingle();
-    if (error) return { success: false, error: error.message };
-    if (!data) return { success: false, error: "Invalid invitation token" };
-    persist({ token: data.token, guestId: data.id, eventId: data.event_id, guestName: data.name });
-    return { success: true };
+  const signInWithToken = useCallback(async (tkn: string) => {
+    const { data, error } = await supabase
+      .from("event_guests")
+      .select("*")
+      .eq("token", tkn)
+      .maybeSingle();
+    if (error) throw error;
+    if (data) {
+      setToken(data.token);
+      setGuestId(data.id);
+      setEventId(data.event_id);
+      setGuestName(data.name);
+      persist({ token: data.token, guestId: data.id, eventId: data.event_id, guestName: data.name });
+    }
   }, []);
 
-  const signOut = useCallback(() => persist({ token: null, guestId: null, eventId: null, guestName: null }), []);
+  const signOut = useCallback(() => {
+    setToken(null);
+    setGuestId(null);
+    setEventId(null);
+    setGuestName(null);
+    localStorage.removeItem(STORAGE_KEY);
+  }, []);
 
-  return <GuestAuthContext.Provider value={{ ...state, signIn, signInWithToken, signOut }}>{children}</GuestAuthContext.Provider>;
+  return (
+    <GuestAuthContext.Provider value={{ token, guestId, eventId, guestName, signIn, signInWithToken, signOut }}>
+      {children}
+    </GuestAuthContext.Provider>
+  );
 }
 
-export function useGuestAuth() {
+export function useGuestAuth(): GuestAuthState {
   const ctx = useContext(GuestAuthContext);
   if (!ctx) throw new Error("useGuestAuth must be used within GuestAuthProvider");
   return ctx;

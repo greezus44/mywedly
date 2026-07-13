@@ -1,21 +1,21 @@
 import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, CalendarHeart, XCircle, Loader2 } from "lucide-react";
-import { supabase, EventRsvp } from "../../lib/supabase";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { supabase, type UserEvent, type EventRsvp } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { DEFAULT_THEME } from "../../lib/theme";
+import { Button } from "../../components/ui/Button";
 import { Input, Textarea, Select } from "../../components/ui/Input";
-import { ErrorState, Skeleton } from "../../components/ui/index";
-import type { GuestLayoutContext } from "./guest-layout";
+import { Card } from "../../components/ui/index";
+import type { FormEvent } from "react";
+import { CheckCircle2, CalendarX, CalendarCheck } from "lucide-react";
 
-type RsvpStatus = "attending" | "not_attending";
+type RsvpStatus = "attending" | "declined";
 
 export default function Rsvp() {
-  const { event } = useOutletContext<GuestLayoutContext>();
-  const { guestName, guestId } = useGuestAuth();
-  const queryClient = useQueryClient();
-  const theme = event.theme;
-  const content = event.content;
+  const { event } = useOutletContext<{ event: UserEvent }>();
+  const { guestId, guestName } = useGuestAuth();
+  const theme = { ...DEFAULT_THEME, ...event.theme };
 
   const [status, setStatus] = useState<RsvpStatus>("attending");
   const [plusOnes, setPlusOnes] = useState(0);
@@ -24,7 +24,7 @@ export default function Rsvp() {
   const [submitted, setSubmitted] = useState(false);
 
   const { data: existingRsvp, isLoading } = useQuery<EventRsvp | null>({
-    queryKey: ["guest-rsvp", event.id, guestId],
+    queryKey: ["event-rsvp", event.id, guestId],
     queryFn: async () => {
       if (!guestId) return null;
       const { data, error } = await supabase
@@ -41,7 +41,7 @@ export default function Rsvp() {
 
   useEffect(() => {
     if (existingRsvp) {
-      setStatus(existingRsvp.status as RsvpStatus);
+      setStatus(existingRsvp.status === "declined" ? "declined" : "attending");
       setPlusOnes(existingRsvp.plus_ones || 0);
       setDietary(existingRsvp.dietary || "");
       setMessage(existingRsvp.message || "");
@@ -51,314 +51,278 @@ export default function Rsvp() {
 
   const mutation = useMutation<void, Error>({
     mutationFn: async () => {
+      if (!guestId || !guestName) throw new Error("Not authenticated");
+
       const payload = {
         event_id: event.id,
         guest_id: guestId,
         guest_name: guestName,
         status,
         plus_ones: status === "attending" ? plusOnes : 0,
-        dietary: status === "attending" ? dietary : "",
-        message,
+        dietary: dietary.trim() || null,
+        message: message.trim() || null,
       };
 
       if (existingRsvp) {
         const { error } = await supabase
           .from("event_rsvps")
-          .update({
-            status: payload.status,
-            plus_ones: payload.plus_ones,
-            dietary: payload.dietary,
-            message: payload.message,
-            submitted_at: new Date().toISOString(),
-          })
+          .update(payload)
           .eq("id", existingRsvp.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("event_rsvps").insert(payload);
+        const { error } = await supabase
+          .from("event_rsvps")
+          .insert({ ...payload, submitted_at: new Date().toISOString() });
         if (error) throw error;
       }
 
-      if (guestId) {
-        const { error: guestError } = await supabase
-          .from("event_guests")
-          .update({
-            rsvp_status: status,
-            rsvp_submitted_at: new Date().toISOString(),
-            plus_ones: payload.plus_ones,
-            dietary: payload.dietary,
-            message,
-          })
-          .eq("id", guestId);
-        if (guestError) throw guestError;
-      }
+      const { error: guestError } = await supabase
+        .from("event_guests")
+        .update({
+          rsvp_status: status,
+          plus_ones: status === "attending" ? plusOnes : 0,
+          dietary: dietary.trim() || null,
+          message: message.trim() || null,
+        })
+        .eq("id", guestId);
+      if (guestError) throw guestError;
     },
     onSuccess: () => {
       setSubmitted(true);
-      queryClient.invalidateQueries({ queryKey: ["guest-rsvp", event.id, guestId] });
     },
   });
 
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    mutation.mutate();
+  };
+
+  const handleUpdate = () => {
+    setSubmitted(false);
+  };
+
   if (isLoading) {
     return (
-      <div className="p-6 space-y-4" style={{ backgroundColor: theme.bgColor }}>
-        <Skeleton className="h-8 w-48 mx-auto" />
-        <Skeleton className="h-64 w-full max-w-md mx-auto" />
+      <div className="px-6 py-16 text-center" style={{ color: theme.bodyColor }}>
+        <div className="animate-pulse text-sm">Loading...</div>
       </div>
     );
   }
 
-  if (mutation.isError) {
+  if (submitted && existingRsvp) {
     return (
-      <div
-        className="p-6 min-h-[60vh] flex items-center justify-center"
-        style={{ backgroundColor: theme.bgColor }}
-      >
-        <ErrorState
-          message={(mutation as any).error?.message || "Failed to submit RSVP."}
-          onRetry={() => mutation.reset()}
-        />
+      <div className="px-6 py-12" style={{ maxWidth: theme.maxWidth, margin: "0 auto" }}>
+        <div className="text-center space-y-4">
+          <div
+            className="w-16 h-16 rounded-full mx-auto flex items-center justify-center"
+            style={{ background: `${theme.primaryColor}15` }}
+          >
+            <CheckCircle2 className="w-8 h-8" style={{ color: theme.primaryColor }} />
+          </div>
+          <h2
+            className="text-2xl font-bold"
+            style={{ color: theme.headingColor, fontFamily: theme.headingFont }}
+          >
+            {status === "attending" ? "Thank you!" : "Response Received"}
+          </h2>
+          <p className="text-sm" style={{ color: theme.bodyColor }}>
+            {status === "attending"
+              ? "We look forward to celebrating with you."
+              : "We're sorry you can't make it. Thank you for letting us know."}
+          </p>
+        </div>
+
+        <Card className="mt-8 p-6" >
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-xs uppercase tracking-wider opacity-60" style={{ color: theme.bodyColor }}>
+                Status
+              </span>
+              <span
+                className="text-sm font-medium px-3 py-1 rounded-full"
+                style={{
+                  background: status === "attending" ? `${theme.primaryColor}20` : `${theme.accentColor}20`,
+                  color: status === "attending" ? theme.primaryColor : theme.accentColor,
+                }}
+              >
+                {status === "attending" ? "Attending" : "Not Attending"}
+              </span>
+            </div>
+            {status === "attending" && (
+              <div className="flex justify-between items-center">
+                <span className="text-xs uppercase tracking-wider opacity-60" style={{ color: theme.bodyColor }}>
+                  Plus Ones
+                </span>
+                <span className="text-sm font-medium" style={{ color: theme.headingColor }}>
+                  {plusOnes}
+                </span>
+              </div>
+            )}
+            {dietary && (
+              <div className="flex justify-between items-start gap-4">
+                <span className="text-xs uppercase tracking-wider opacity-60 flex-shrink-0" style={{ color: theme.bodyColor }}>
+                  Dietary
+                </span>
+                <span className="text-sm text-right" style={{ color: theme.headingColor }}>
+                  {dietary}
+                </span>
+              </div>
+            )}
+            {message && (
+              <div className="flex justify-between items-start gap-4">
+                <span className="text-xs uppercase tracking-wider opacity-60 flex-shrink-0" style={{ color: theme.bodyColor }}>
+                  Message
+                </span>
+                <span className="text-sm text-right" style={{ color: theme.headingColor }}>
+                  {message}
+                </span>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <div className="mt-6 text-center">
+          <Button variant="secondary" onClick={handleUpdate}>
+            Update Response
+          </Button>
+        </div>
       </div>
     );
   }
+
+  const mutationError = (mutation as any).error as Error | undefined;
 
   return (
-    <div className="w-full pb-20" style={{ backgroundColor: theme.bgColor }}>
-      <div
-        className="text-center py-12 px-6"
-        style={{ padding: `${theme.sectionPadding}px 24px` }}
-      >
-        <p
-          className="text-base mb-2 opacity-70"
-          style={{ fontFamily: `var(--wed-script-font)` }}
+    <div className="px-6 py-12" style={{ maxWidth: theme.maxWidth, margin: "0 auto" }}>
+      <div className="text-center mb-8">
+        <h2
+          className="text-2xl font-bold mb-2"
+          style={{ color: theme.headingColor, fontFamily: theme.headingFont }}
         >
-          {content.rsvp_description || "Please let us know if you can make it"}
+          RSVP
+        </h2>
+        <p className="text-sm" style={{ color: theme.bodyColor }}>
+          {existingRsvp ? "Update your response" : "Will you be attending?"}
         </p>
-        <h1
-          className="text-4xl font-bold mb-4"
-          style={{
-            fontFamily: `var(--wed-heading-font)`,
-            color: theme.headingColor,
-          }}
-        >
-          {content.rsvp_title || "RSVP"}
-        </h1>
-        <div
-          className="w-12 h-px mx-auto"
-          style={{ backgroundColor: theme.primaryColor, opacity: 0.5 }}
-        />
       </div>
 
-      <div
-        className="px-6 pb-12"
-        style={{ maxWidth: `${Math.min(theme.maxWidth, 480)}px`, margin: "0 auto" }}
-      >
-        {submitted && !mutation.isPending && (
-          <div
-            className="mb-6 p-5 rounded-xl text-center"
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setStatus("attending")}
+            className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 transition-all"
             style={{
-              backgroundColor: `color-mix(in srgb, ${theme.primaryColor} 12%, transparent)`,
-              border: `1px solid color-mix(in srgb, ${theme.primaryColor} 30%, transparent)`,
+              borderColor: status === "attending" ? theme.primaryColor : `${theme.accentColor}30`,
+              background: status === "attending" ? `${theme.primaryColor}10` : "transparent",
             }}
           >
-            <CheckCircle2
-              className="w-10 h-10 mx-auto mb-3"
-              style={{ color: theme.primaryColor }}
+            <CalendarCheck
+              className="w-6 h-6"
+              style={{ color: status === "attending" ? theme.primaryColor : theme.bodyColor }}
             />
-            <p
-              className="text-sm font-medium mb-1"
+            <span
+              className="text-sm font-medium"
+              style={{ color: status === "attending" ? theme.primaryColor : theme.bodyColor }}
+            >
+              Joyfully Accept
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setStatus("declined")}
+            className="flex flex-col items-center gap-2 p-5 rounded-xl border-2 transition-all"
+            style={{
+              borderColor: status === "declined" ? theme.primaryColor : `${theme.accentColor}30`,
+              background: status === "declined" ? `${theme.primaryColor}10` : "transparent",
+            }}
+          >
+            <CalendarX
+              className="w-6 h-6"
+              style={{ color: status === "declined" ? theme.primaryColor : theme.bodyColor }}
+            />
+            <span
+              className="text-sm font-medium"
+              style={{ color: status === "declined" ? theme.primaryColor : theme.bodyColor }}
+            >
+              Regretfully Decline
+            </span>
+          </button>
+        </div>
+
+        {status === "attending" && (
+          <div>
+            <label
+              className="block text-sm font-medium mb-2"
               style={{ color: theme.headingColor }}
             >
-              {status === "attending"
-                ? "Thank you for your RSVP!"
-                : "We're sorry you can't make it."}
-            </p>
-            <p className="text-xs opacity-60" style={{ color: theme.bodyColor }}>
-              {status === "attending"
-                ? "We can't wait to celebrate with you."
-                : "Thank you for letting us know."}
-            </p>
-            <button
-              onClick={() => setSubmitted(false)}
-              className="mt-4 text-xs underline opacity-70 hover:opacity-100 transition-opacity"
-              style={{ color: theme.primaryColor }}
+              Number of Plus Ones
+            </label>
+            <Select
+              value={String(plusOnes)}
+              onChange={(e) => setPlusOnes(Number(e.target.value))}
+              style={{ background: theme.bgColor, color: theme.bodyColor, borderColor: `${theme.accentColor}40` }}
             >
-              Update my response
-            </button>
+              {[0, 1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Select>
           </div>
         )}
 
-        {!submitted && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              mutation.mutate();
-            }}
-            className="space-y-6"
+        <div>
+          <label
+            className="block text-sm font-medium mb-2"
+            style={{ color: theme.headingColor }}
           >
-            <div>
-              <label
-                className="block text-sm font-medium mb-3"
-                style={{ color: theme.headingColor }}
-              >
-                Will you be attending?
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setStatus("attending")}
-                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all"
-                  style={{
-                    borderColor:
-                      status === "attending"
-                        ? theme.primaryColor
-                        : `color-mix(in srgb, ${theme.accentColor} 20%, transparent)`,
-                    backgroundColor:
-                      status === "attending"
-                        ? `color-mix(in srgb, ${theme.primaryColor} 10%, transparent)`
-                        : "transparent",
-                  }}
-                >
-                  <CalendarHeart
-                    className="w-6 h-6"
-                    style={{
-                      color: status === "attending" ? theme.primaryColor : theme.bodyColor,
-                    }}
-                  />
-                  <span
-                    className="text-sm font-medium"
-                    style={{
-                      color: status === "attending" ? theme.headingColor : theme.bodyColor,
-                    }}
-                  >
-                    Yes, with joy
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatus("not_attending")}
-                  className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all"
-                  style={{
-                    borderColor:
-                      status === "not_attending"
-                        ? theme.primaryColor
-                        : `color-mix(in srgb, ${theme.accentColor} 20%, transparent)`,
-                    backgroundColor:
-                      status === "not_attending"
-                        ? `color-mix(in srgb, ${theme.primaryColor} 10%, transparent)`
-                        : "transparent",
-                  }}
-                >
-                  <XCircle
-                    className="w-6 h-6"
-                    style={{
-                      color:
-                        status === "not_attending" ? theme.primaryColor : theme.bodyColor,
-                    }}
-                  />
-                  <span
-                    className="text-sm font-medium"
-                    style={{
-                      color:
-                        status === "not_attending" ? theme.headingColor : theme.bodyColor,
-                    }}
-                  >
-                    Can't make it
-                  </span>
-                </button>
-              </div>
-            </div>
+            Dietary Requirements
+          </label>
+          <Input
+            type="text"
+            value={dietary}
+            onChange={(e) => setDietary(e.target.value)}
+            placeholder="e.g. Vegetarian, Gluten-free, Allergies..."
+            style={{ background: theme.bgColor, color: theme.bodyColor, borderColor: `${theme.accentColor}40` }}
+          />
+        </div>
 
-            {status === "attending" && (
-              <>
-                <div>
-                  <label
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: theme.headingColor }}
-                  >
-                    Number of plus ones
-                  </label>
-                  <Select
-                    value={String(plusOnes)}
-                    onChange={(e) => setPlusOnes(Number(e.target.value))}
-                    style={{
-                      borderColor: `color-mix(in srgb, ${theme.accentColor} 30%, transparent)`,
-                      backgroundColor: theme.bgColor,
-                      color: theme.bodyColor,
-                    }}
-                  >
-                    {[0, 1, 2, 3, 4, 5].map((n) => (
-                      <option key={n} value={n}>
-                        {n === 0 ? "Just me" : `${n} guest${n > 1 ? "s" : ""}`}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
+        <div>
+          <label
+            className="block text-sm font-medium mb-2"
+            style={{ color: theme.headingColor }}
+          >
+            Message {status === "declined" ? "(optional)" : ""}
+          </label>
+          <Textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Share a message with the host..."
+            rows={4}
+            style={{ background: theme.bgColor, color: theme.bodyColor, borderColor: `${theme.accentColor}40` }}
+          />
+        </div>
 
-                <div>
-                  <label
-                    className="block text-sm font-medium mb-2"
-                    style={{ color: theme.headingColor }}
-                  >
-                    Dietary requirements
-                  </label>
-                  <Input
-                    type="text"
-                    value={dietary}
-                    onChange={(e) => setDietary(e.target.value)}
-                    placeholder="e.g. Vegetarian, gluten-free, allergies..."
-                    style={{
-                      borderColor: `color-mix(in srgb, ${theme.accentColor} 30%, transparent)`,
-                      backgroundColor: theme.bgColor,
-                      color: theme.bodyColor,
-                    }}
-                  />
-                </div>
-              </>
-            )}
-
-            <div>
-              <label
-                className="block text-sm font-medium mb-2"
-                style={{ color: theme.headingColor }}
-              >
-                Message{" "}
-                <span className="opacity-50 font-normal">(optional)</span>
-              </label>
-              <Textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Share a message with the host..."
-                rows={4}
-                style={{
-                  borderColor: `color-mix(in srgb, ${theme.accentColor} 30%, transparent)`,
-                  backgroundColor: theme.bgColor,
-                  color: theme.bodyColor,
-                }}
-              />
-            </div>
-
-            {mutation.isError && (
-              <p className="text-sm text-red-600 text-center">
-                {(mutation as any).error?.message}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={mutation.isPending}
-              className="w-full py-3.5 rounded-lg font-medium transition-all duration-200 hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
-              style={{
-                backgroundColor: theme.buttonBgColor,
-                color: theme.buttonTextColor,
-                borderRadius: `${theme.buttonRadius}px`,
-              }}
-            >
-              {mutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              {existingRsvp ? "Update RSVP" : "Submit RSVP"}
-            </button>
-          </form>
+        {mutationError && (
+          <p className="text-sm text-red-500 text-center">{mutationError.message}</p>
         )}
-      </div>
+
+        <Button
+          type="submit"
+          loading={mutation.isPending}
+          className="w-full"
+          style={{
+            background: theme.buttonBgColor,
+            color: theme.buttonTextColor,
+            borderRadius: theme.buttonRadius,
+            border: `1px solid ${theme.buttonBgColor}`,
+          }}
+        >
+          {existingRsvp ? "Update RSVP" : "Submit RSVP"}
+        </Button>
+      </form>
     </div>
   );
 }

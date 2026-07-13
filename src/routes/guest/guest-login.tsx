@@ -1,30 +1,22 @@
-import { useState, useEffect, type FormEvent, type CSSProperties } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, AlertCircle } from "lucide-react";
-import { supabase, UserEvent } from "../../lib/supabase";
+import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import {
-  DEFAULT_LOGIN_CONFIG,
-  DEFAULT_LOGO_CONFIG,
-  shouldShowLogo,
-  getLogoStyle,
-} from "../../lib/theme";
-import { ErrorState, Skeleton } from "../../components/ui/index";
+import { DEFAULT_LOGIN_CONFIG, DEFAULT_LOGO_CONFIG } from "../../lib/theme";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
+import type { FormEvent } from "react";
 
 export default function GuestLogin() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  const { signIn, token, guestName } = useGuestAuth();
-  const isAuthenticated = !!token;
-
+  const { token, eventId: authEventId, signIn } = useGuestAuth();
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: event, isLoading, error: queryError, refetch } = useQuery<
-    UserEvent | null
-  >({
+  const { data: event, isLoading } = useQuery<UserEvent | null>({
     queryKey: ["public-event", eventId],
     queryFn: async () => {
       if (!eventId) return null;
@@ -40,191 +32,142 @@ export default function GuestLogin() {
     enabled: !!eventId,
   });
 
+  const isAuthenticated = !!token && authEventId === eventId;
+
   useEffect(() => {
     if (isAuthenticated && eventId) {
       navigate(`/${eventId}/home`, { replace: true });
     }
   }, [isAuthenticated, eventId, navigate]);
 
+  const config = event ? { ...DEFAULT_LOGIN_CONFIG, ...event.login_config } : DEFAULT_LOGIN_CONFIG;
+  const logoConfig = event ? { ...DEFAULT_LOGO_CONFIG, ...event.logo_config } : DEFAULT_LOGO_CONFIG;
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !eventId) return;
     setSubmitting(true);
     setError(null);
-    const result = await signIn(name, eventId);
-    if (result.success) {
+    try {
+      await signIn(name.trim(), eventId);
       navigate(`/${eventId}/home`, { replace: true });
-    } else {
-      setError(result.error || "Unable to sign in. Please check your name.");
+    } catch {
+      setError("Unable to sign in. Please try again.");
+    } finally {
       setSubmitting(false);
     }
   };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6 space-y-6">
-        <Skeleton className="h-96 w-full max-w-md mx-auto" />
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="animate-pulse text-white/60 text-sm">Loading...</div>
       </div>
     );
   }
 
-  if (queryError || !event) {
+  if (!event) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <ErrorState
-          message={
-            queryError ? queryError.message : "Event not found or not published."
-          }
-          onRetry={() => refetch()}
-        />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
+        <div className="text-center">
+          <h2 className="text-lg font-semibold text-gray-900">Event not found</h2>
+          <p className="mt-1 text-sm text-gray-500">This event may be private or no longer available.</p>
+        </div>
       </div>
     );
   }
-
-  const loginConfig = event.login_config || DEFAULT_LOGIN_CONFIG;
-  const logo = event.logo_config || DEFAULT_LOGO_CONFIG;
 
   return (
     <div
-      className="relative min-h-screen w-full flex flex-col items-center justify-center p-6"
+      className="relative min-h-screen flex items-center justify-center px-6 py-12"
       style={{
-        backgroundColor: loginConfig.bgColor,
-        color: loginConfig.textColor,
-        fontFamily: `"${loginConfig.font}", sans-serif`,
+        background: config.bgImage
+          ? `linear-gradient(rgba(0,0,0,${config.overlayOpacity}), rgba(0,0,0,${config.overlayOpacity})), url(${config.bgImage}) center/cover no-repeat`
+          : config.bgColor,
+        color: config.textColor,
+        fontFamily: config.font,
       }}
     >
-      {loginConfig.bgImage && (
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${loginConfig.bgImage})` }}
-        />
-      )}
-      {loginConfig.bgImage && (
-        <div
-          className="absolute inset-0"
-          style={{ backgroundColor: "#000", opacity: loginConfig.overlayOpacity }}
-        />
-      )}
-
       <div
-        className="relative z-10 w-full max-w-sm p-8 md:p-10 rounded-2xl shadow-2xl"
+        className="relative z-10 w-full max-w-sm rounded-2xl shadow-2xl"
         style={{
-          backgroundColor: loginConfig.cardBgColor,
-          border: `1px solid ${loginConfig.borderColor}`,
+          background: config.cardBgColor,
+          border: `1px solid ${config.borderColor}`,
         }}
       >
-        {loginConfig.showLogo && shouldShowLogo(logo) && (
-          <div className="text-center mb-6">
-            {logo.image ? (
-              <img
-                src={logo.image}
-                alt={event.name}
-                className="mx-auto max-h-16 object-contain"
-              />
-            ) : (
-              <div
-                style={{
-                  ...getLogoStyle(logo),
-                  fontSize: `${loginConfig.logoSize * 1.5}px`,
-                  color: loginConfig.accentColor,
-                }}
-              >
-                {logo.text}
-              </div>
-            )}
-          </div>
-        )}
-
-        <h2
-          className="text-center mb-2"
-          style={{
-            fontFamily: `"${loginConfig.headingFont}", serif`,
-            fontSize: `${loginConfig.headingFontSize}px`,
-            fontWeight: loginConfig.headingWeight as CSSProperties["fontWeight"],
-            color: loginConfig.textColor,
-          }}
-        >
-          {loginConfig.title}
-        </h2>
-
-        <p
-          className="text-center mb-1 opacity-70"
-          style={{ fontSize: `${loginConfig.bodyFontSize}px` }}
-        >
-          {loginConfig.subtitle}
-        </p>
-
-        {loginConfig.welcomeMessage && (
-          <p
-            className="text-center mb-6 opacity-60 italic"
-            style={{
-              fontSize: `${loginConfig.bodyFontSize}px`,
-              fontFamily: `"${loginConfig.headingFont}", serif`,
-            }}
-          >
-            {loginConfig.welcomeMessage}
-          </p>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={loginConfig.inputPlaceholder}
-            autoFocus
-            disabled={submitting}
-            className="w-full px-4 py-3 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-offset-0"
-            style={{
-              borderColor: loginConfig.borderColor,
-              backgroundColor: loginConfig.inputBgColor,
-              color: loginConfig.textColor,
-              fontSize: `${loginConfig.bodyFontSize + 2}px`,
-            }}
-          />
-
-          {error && (
-            <div
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm"
-              style={{
-                backgroundColor: `color-mix(in srgb, #dc2626 10%, transparent)`,
-                color: "#dc2626",
-              }}
-            >
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{error}</span>
+        <div className="p-8 space-y-5">
+          {config.showLogo && logoConfig.enabled && (
+            <div className="text-center">
+              {logoConfig.image ? (
+                <img src={logoConfig.image} alt="Logo" className="h-14 mx-auto object-contain" />
+              ) : (
+                <div
+                  className="font-bold leading-none"
+                  style={{ color: logoConfig.color, fontSize: logoConfig.fontSize }}
+                >
+                  {logoConfig.text}
+                </div>
+              )}
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={submitting || !name.trim()}
-            className="w-full py-3 rounded-lg font-medium transition-all duration-200 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            style={{
-              backgroundColor: loginConfig.buttonColor,
-              color: "#ffffff",
-              fontSize: `${loginConfig.bodyFontSize + 1}px`,
-            }}
-          >
-            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-            {loginConfig.buttonText}
-          </button>
-        </form>
+          <div className="text-center space-y-1">
+            <h2
+              className="font-bold"
+              style={{
+                fontFamily: config.headingFont,
+                fontSize: config.headingFontSize,
+                fontWeight: config.headingWeight,
+                color: config.textColor,
+              }}
+            >
+              {config.title}
+            </h2>
+            <p className="text-sm opacity-70" style={{ color: config.textColor }}>
+              {config.subtitle}
+            </p>
+          </div>
 
-        {guestName && (
-          <p className="text-center mt-4 text-xs opacity-50">
-            Signed in as {guestName}
+          <p className="text-sm text-center opacity-80" style={{ color: config.textColor }}>
+            {config.welcomeMessage}
           </p>
-        )}
-      </div>
 
-      <button
-        onClick={() => navigate(`/${eventId}`)}
-        className="relative z-10 mt-6 text-xs opacity-60 hover:opacity-100 transition-opacity"
-        style={{ color: loginConfig.textColor }}
-      >
-        ← Back to cover
-      </button>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <Input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={config.inputPlaceholder}
+              disabled={submitting}
+              required
+              autoFocus
+              className="text-center"
+              style={{
+                background: config.inputBgColor,
+                color: config.textColor,
+                border: `1px solid ${config.borderColor}`,
+              }}
+            />
+            <Button
+              type="submit"
+              loading={submitting}
+              disabled={!name.trim()}
+              className="w-full"
+              style={{
+                background: config.buttonColor,
+                color: "#ffffff",
+                border: `1px solid ${config.buttonColor}`,
+              }}
+            >
+              {config.buttonText}
+            </Button>
+          </form>
+
+          {error && (
+            <p className="text-sm text-red-500 text-center">{error}</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,218 +1,165 @@
 import { useMemo } from "react";
 import { useOutletContext, useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Users, CheckCircle, XCircle, Clock, Mail, BarChart3, Calendar } from "lucide-react";
-import { supabase, UserEvent, EventGuest, EventRsvp, EventMessage } from "../../lib/supabase";
-import { Card, EmptyState, Skeleton, ErrorState } from "../../components/ui/index";
-import { formatDateShort } from "../../lib/utils";
+import { supabase, UserEvent } from "../../lib/supabase";
+import { Badge, ErrorState, Skeleton } from "../../components/ui/index";
+import { Users, Check, X, Clock, MessageSquare, TrendingUp } from "lucide-react";
 
 type Ctx = { event: UserEvent | null };
 
-interface AnalyticsData {
-  totalGuests: number;
-  attending: number;
-  declined: number;
-  pending: number;
-  maybe: number;
-  plusOnes: number;
-  totalRsvps: number;
-  messages: number;
-}
-
-export default function AnalyticsPage() {
+export default function Analytics() {
   const { event } = useOutletContext<Ctx>();
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
 
-  const { data, isLoading, error, refetch } = useQuery<AnalyticsData>({
-    queryKey: ["analytics", eventId],
+  const { data: guests = [], isLoading: guestsLoading, isError: guestsError, refetch: refetchGuests } = useQuery({
+    queryKey: ["guests", eventId],
     queryFn: async () => {
-      if (!eventId) throw new Error("No event ID");
-
-      const [guestsRes, rsvpsRes, messagesRes] = await Promise.all([
-        supabase.from("event_guests").select("*").eq("event_id", eventId),
-        supabase.from("event_rsvps").select("*").eq("event_id", eventId),
-        supabase.from("event_messages").select("*").eq("event_id", eventId),
-      ]);
-
-      if (guestsRes.error) throw guestsRes.error;
-      if (rsvpsRes.error) throw rsvpsRes.error;
-      if (messagesRes.error) throw messagesRes.error;
-
-      const guests = (guestsRes.data || []) as EventGuest[];
-      const rsvps = (rsvpsRes.data || []) as EventRsvp[];
-      const messages = (messagesRes.data || []) as EventMessage[];
-
-      return {
-        totalGuests: guests.length,
-        attending: guests.filter((g) => g.rsvp_status === "attending").length,
-        declined: guests.filter((g) => g.rsvp_status === "not_attending").length,
-        pending: guests.filter((g) => g.rsvp_status === "pending").length,
-        maybe: guests.filter((g) => g.rsvp_status === "maybe").length,
-        plusOnes: guests.reduce((sum, g) => sum + (g.plus_ones || 0), 0),
-        totalRsvps: rsvps.length,
-        messages: messages.length,
-      };
+      const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId);
+      if (error) throw error;
+      return data || [];
     },
     enabled: !!eventId,
     staleTime: 30000,
   });
 
-  const rsvpRate = useMemo(() => {
-    if (!data || data.totalGuests === 0) return 0;
-    return Math.round(((data.attending + data.declined + data.maybe) / data.totalGuests) * 100);
-  }, [data]);
+  const { data: rsvps = [], isLoading: rsvpsLoading, isError: rsvpsError, refetch: refetchRsvps } = useQuery({
+    queryKey: ["rsvps", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("event_rsvps").select("*").eq("event_id", eventId);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!eventId,
+    staleTime: 30000,
+  });
+
+  const { data: messages = [], isLoading: messagesLoading, isError: messagesError, refetch: refetchMessages } = useQuery({
+    queryKey: ["messages", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("event_messages").select("*").eq("event_id", eventId);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!eventId,
+    staleTime: 30000,
+  });
+
+  const stats = useMemo(() => {
+    const total = guests.length;
+    const attending = guests.filter(g => g.rsvp_status === "attending").length;
+    const declined = guests.filter(g => g.rsvp_status === "declined").length;
+    const pending = guests.filter(g => !g.rsvp_status || g.rsvp_status === "pending").length;
+    const rsvpAttending = rsvps.filter(r => r.status === "attending").length;
+    const rsvpDeclined = rsvps.filter(r => r.status === "declined").length;
+    const rsvpMaybe = rsvps.filter(r => r.status === "maybe").length;
+    return {
+      total, attending, declined, pending,
+      messages: messages.length,
+      rsvpAttending, rsvpDeclined, rsvpMaybe,
+      rsvpTotal: rsvps.length,
+      attendanceRate: total > 0 ? Math.round((attending / total) * 100) : 0,
+    };
+  }, [guests, rsvps, messages]);
 
   if (!event) return <ErrorState message="Could not load event data" onRetry={() => navigate("/dashboard")} />;
-  if (error) return <ErrorState message={error.message} onRetry={() => refetch()} />;
+
+  const isLoading = guestsLoading || rsvpsLoading || messagesLoading;
+  const isError = guestsError || rsvpsError || messagesError;
+  const retry = () => { refetchGuests(); refetchRsvps(); refetchMessages(); };
+
+  if (isError) return <ErrorState message="Failed to load analytics" onRetry={retry} />;
+
+  const cards = [
+    { label: "Total Guests", value: stats.total, icon: <Users className="w-5 h-5" />, color: "text-gray-900" },
+    { label: "Attending", value: stats.attending, icon: <Check className="w-5 h-5" />, color: "text-green-600" },
+    { label: "Declined", value: stats.declined, icon: <X className="w-5 h-5" />, color: "text-red-600" },
+    { label: "Pending", value: stats.pending, icon: <Clock className="w-5 h-5" />, color: "text-gray-500" },
+    { label: "Messages", value: stats.messages, icon: <MessageSquare className="w-5 h-5" />, color: "text-blue-600" },
+    { label: "Attendance Rate", value: `${stats.attendanceRate}%`, icon: <TrendingUp className="w-5 h-5" />, color: "text-gray-900" },
+  ];
+
+  const breakdown = [
+    { label: "Attending", count: stats.rsvpAttending, color: "bg-green-500" },
+    { label: "Maybe", count: stats.rsvpMaybe, color: "bg-yellow-500" },
+    { label: "Declined", count: stats.rsvpDeclined, color: "bg-red-500" },
+  ];
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold text-gray-900">Analytics</h1>
-        <p className="text-sm text-gray-500">Track your event engagement</p>
+        <p className="text-sm text-gray-500">Overview of your event</p>
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[...Array(8)].map((_, i) => (
-            <Skeleton key={i} className="h-28" />
-          ))}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28 w-full" />)}
         </div>
-      ) : !data ? (
-        <EmptyState icon={<BarChart3 className="w-12 h-12" />} title="No data available" description="Analytics will appear once you have guests" />
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard
-              icon={<Users className="w-5 h-5" />}
-              label="Total Guests"
-              value={data.totalGuests}
-              color="gray"
-            />
-            <StatCard
-              icon={<CheckCircle className="w-5 h-5" />}
-              label="Attending"
-              value={data.attending}
-              color="green"
-            />
-            <StatCard
-              icon={<XCircle className="w-5 h-5" />}
-              label="Declined"
-              value={data.declined}
-              color="red"
-            />
-            <StatCard
-              icon={<Clock className="w-5 h-5" />}
-              label="Pending"
-              value={data.pending}
-              color="yellow"
-            />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {cards.map(card => (
+              <div key={card.label} className="bg-white border border-gray-200 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-500">{card.label}</span>
+                  <span className={card.color}>{card.icon}</span>
+                </div>
+                <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+              </div>
+            ))}
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard
-              icon={<Mail className="w-5 h-5" />}
-              label="Messages"
-              value={data.messages}
-              color="gray"
-            />
-            <StatCard
-              icon={<Calendar className="w-5 h-5" />}
-              label="RSVP Responses"
-              value={data.totalRsvps}
-              color="blue"
-            />
-            <StatCard
-              icon={<Users className="w-5 h-5" />}
-              label="Plus Ones"
-              value={data.plusOnes}
-              color="gray"
-            />
-            <StatCard
-              icon={<BarChart3 className="w-5 h-5" />}
-              label="Response Rate"
-              value={`${rsvpRate}%`}
-              color="green"
-            />
-          </div>
-
-          <Card className="p-6">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">RSVP Breakdown</h3>
-            <div className="space-y-3">
-              <ProgressBar label="Attending" value={data.attending} total={data.totalGuests} color="bg-green-500" />
-              <ProgressBar label="Declined" value={data.declined} total={data.totalGuests} color="bg-red-500" />
-              <ProgressBar label="Maybe" value={data.maybe} total={data.totalGuests} color="bg-yellow-500" />
-              <ProgressBar label="Pending" value={data.pending} total={data.totalGuests} color="bg-gray-300" />
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-900">RSVP Breakdown</h3>
+              <Badge variant="info">{stats.rsvpTotal} responses</Badge>
             </div>
-          </Card>
+            {stats.rsvpTotal === 0 ? (
+              <p className="text-sm text-gray-400 py-4 text-center">No RSVP responses yet</p>
+            ) : (
+              <div className="space-y-4">
+                {breakdown.map(item => {
+                  const pct = stats.rsvpTotal > 0 ? (item.count / stats.rsvpTotal) * 100 : 0;
+                  return (
+                    <div key={item.label}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-medium text-gray-700">{item.label}</span>
+                        <span className="text-sm text-gray-500">{item.count} ({Math.round(pct)}%)</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={`h-full ${item.color} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Card className="p-4">
-              <h3 className="text-sm font-semibold text-gray-900 mb-2">Estimated Headcount</h3>
-              <p className="text-3xl font-bold text-gray-900">
-                {data.attending + data.plusOnes}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {data.attending} attending + {data.plusOnes} plus ones
-              </p>
-            </Card>
-            <Card className="p-4">
-              <h3 className="text-sm font-semibold text-gray-900 mb-2">Event Date</h3>
-              <p className="text-lg font-semibold text-gray-900">
-                {event.event_date ? formatDateShort(event.event_date) : "Not set"}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">{event.venue || "No venue set"}</p>
-            </Card>
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Guest Summary</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div>
+                <p className="text-xs text-gray-500">Invited</p>
+                <p className="text-lg font-bold text-gray-900">{stats.total}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Responded</p>
+                <p className="text-lg font-bold text-gray-900">{stats.attending + stats.declined}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Awaiting Reply</p>
+                <p className="text-lg font-bold text-gray-900">{stats.pending}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Plus Ones (RSVP)</p>
+                <p className="text-lg font-bold text-gray-900">{rsvps.reduce((sum, r) => sum + (r.plus_ones || 0), 0)}</p>
+              </div>
+            </div>
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number | string;
-  color: "gray" | "green" | "red" | "yellow" | "blue";
-}) {
-  const iconColors = {
-    gray: "text-gray-400",
-    green: "text-green-500",
-    red: "text-red-500",
-    yellow: "text-yellow-500",
-    blue: "text-blue-500",
-  };
-  return (
-    <Card className="p-4">
-      <div className={"flex items-center gap-2 mb-2 " + iconColors[color]}>
-        {icon}
-        <p className="text-xs text-gray-500 font-medium">{label}</p>
-      </div>
-      <p className="text-3xl font-bold text-gray-900">{value}</p>
-    </Card>
-  );
-}
-
-function ProgressBar({ label, value, total, color }: { label: string; value: number; total: number; color: string }) {
-  const pct = total === 0 ? 0 : Math.round((value / total) * 100);
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-sm text-gray-700">{label}</span>
-        <span className="text-sm text-gray-500">
-          {value} ({pct}%)
-        </span>
-      </div>
-      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className={"h-full rounded-full transition-all " + color} style={{ width: `${pct}%` }} />
-      </div>
     </div>
   );
 }

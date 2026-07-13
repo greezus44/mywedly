@@ -1,70 +1,91 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { Clock, ChevronUp, ChevronDown } from "lucide-react";
-import { cn, formatTime } from "../../lib/utils";
+import { useState, useRef, useEffect } from "react";
+import { ChevronUp, ChevronDown, Clock } from "lucide-react";
+import { cn } from "../../lib/utils";
 
 interface TimePickerProps {
   value: string | null;
   onChange: (value: string | null) => void;
   label?: string;
   placeholder?: string;
-  interval?: 5 | 10 | 15;
+  interval?: number;
   use24Hour?: boolean;
-}
-
-function generateTimes(interval: number, use24Hour: boolean): { value: string; label: string }[] {
-  const times: { value: string; label: string }[] = [];
-  for (let h = 0; h < 24; h++) for (let m = 0; m < 60; m += interval) { const value = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`; times.push({ value, label: use24Hour ? value : formatTime(value) }); }
-  return times;
 }
 
 export function TimePicker({ value, onChange, label, placeholder = "Select time", interval = 15, use24Hour = false }: TimePickerProps) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const times = useCallback(() => generateTimes(interval, use24Hour), [interval, use24Hour]);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => { if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false); };
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  useEffect(() => {
-    if (open && value && listRef.current) {
-      const idx = times().findIndex(t => t.value === value);
-      if (idx >= 0) { const item = listRef.current.children[idx] as HTMLElement; if (item) item.scrollIntoView({ block: "center" }); }
-    }
   }, [open]);
 
-  const adjustTime = (direction: 1 | -1) => {
-    if (!value) { onChange("10:00"); return; }
-    const allTimes = times();
-    const idx = allTimes.findIndex(t => t.value === value);
-    onChange(allTimes[Math.max(0, Math.min(allTimes.length - 1, idx + direction))].value);
+  useEffect(() => {
+    if (open && listRef.current && value) {
+      const selected = listRef.current.querySelector(`[data-time="${value}"]`);
+      selected?.scrollIntoView({ block: "center" });
+    }
+  }, [open, value]);
+
+  const times: { value: string; label: string }[] = [];
+  for (let h = 0; h < 24; h++) {
+    for (let m = 0; m < 60; m += interval) {
+      const value24 = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+      if (use24Hour) {
+        times.push({ value: value24, label: value24 });
+      } else {
+        const period = h >= 12 ? "PM" : "AM";
+        const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+        times.push({ value: value24, label: `${hour12}:${m.toString().padStart(2, "0")} ${period}` });
+      }
+    }
+  }
+
+  const formatDisplay = (val: string | null) => {
+    if (!val) return placeholder;
+    if (use24Hour) return val;
+    const [h, m] = val.split(":").map(Number);
+    const period = h >= 12 ? "PM" : "AM";
+    const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+    return `${hour12}:${m.toString().padStart(2, "0")} ${period}`;
   };
 
   return (
-    <div className="space-y-1.5" ref={containerRef}>
-      {label && <label className="block text-sm font-medium text-gray-700">{label}</label>}
-      <div className="relative">
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={() => setOpen(!open)} className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-900 bg-white hover:bg-gray-50 transition-colors text-left">
-            <Clock className="w-4 h-4 text-gray-400 flex-shrink-0" />
-            <span className={cn(!value && "text-gray-400")}>{value ? (use24Hour ? value : formatTime(value)) : placeholder}</span>
-          </button>
-          <div className="flex flex-col">
-            <button type="button" onClick={() => adjustTime(1)} className="p-0.5 rounded hover:bg-gray-100"><ChevronUp className="w-3 h-3 text-gray-500" /></button>
-            <button type="button" onClick={() => adjustTime(-1)} className="p-0.5 rounded hover:bg-gray-100"><ChevronDown className="w-3 h-3 text-gray-500" /></button>
+    <div className="relative" ref={ref}>
+      {label && <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-900 transition-colors hover:border-gray-400 focus:outline-none focus:border-gray-900"
+      >
+        <Clock className="w-4 h-4 text-gray-400" />
+        <span className={cn(!value && "text-gray-400")}>{formatDisplay(value)}</span>
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg w-40">
+          <div ref={listRef} className="max-h-60 overflow-y-auto py-1">
+            {times.map(t => (
+              <button
+                key={t.value}
+                type="button"
+                data-time={t.value}
+                onClick={() => { onChange(t.value); setOpen(false); }}
+                className={cn(
+                  "w-full px-3 py-1.5 text-left text-sm transition-colors hover:bg-gray-100",
+                  value === t.value && "bg-gray-900 text-white hover:bg-gray-900"
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
           </div>
         </div>
-        {open && (
-          <div className="absolute z-50 mt-1 bg-white rounded-xl shadow-lg border border-gray-200 w-full max-w-48">
-            <div ref={listRef} className="max-h-56 overflow-y-auto scrollbar-thin p-1">
-              {times().map(t => <button key={t.value} type="button" onClick={() => { onChange(t.value); setOpen(false); }} className={cn("w-full text-left px-3 py-1.5 rounded-lg text-sm transition-colors", value === t.value ? "bg-gray-900 text-white font-medium" : "text-gray-700 hover:bg-gray-100")}>{t.label}</button>)}
-            </div>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }

@@ -18,22 +18,22 @@ export default function LoginEditor() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [config, setConfig] = useState<LoginConfig>(event?.draft_login_config || event?.login_config || DEFAULT_LOGIN_CONFIG);
-  const [logoConfig, setLogoConfig] = useState<LogoConfig>(event?.draft_logo_config || event?.logo_config || DEFAULT_LOGO_CONFIG);
+  const [config, setConfig] = useState<LoginConfig>(event?.draft_login_config || DEFAULT_LOGIN_CONFIG);
+  const [logoConfig, setLogoConfig] = useState<LogoConfig>(event?.draft_logo_config || DEFAULT_LOGO_CONFIG);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState("0");
 
   useEffect(() => {
     if (event) {
-      setConfig(event.draft_login_config || event.login_config || DEFAULT_LOGIN_CONFIG);
-      setLogoConfig(event.draft_logo_config || event.logo_config || DEFAULT_LOGO_CONFIG);
+      setConfig(event.draft_login_config || DEFAULT_LOGIN_CONFIG);
+      setLogoConfig(event.draft_logo_config || DEFAULT_LOGO_CONFIG);
     }
   }, [event?.id]);
 
-  const debouncedPreviewUpdate = useMemo(() => debounce(() => setPreviewKey(k => String(Number(k) + 1)), 150), []);
-  const updateConfig = useCallback((patch: Partial<LoginConfig>) => { setConfig(prev => ({ ...prev, ...patch })); debouncedPreviewUpdate(); }, [debouncedPreviewUpdate]);
-  const updateLogo = useCallback((patch: Partial<LogoConfig>) => { setLogoConfig(prev => ({ ...prev, ...patch })); debouncedPreviewUpdate(); }, [debouncedPreviewUpdate]);
+  const debouncedPreview = useMemo(() => debounce(() => setPreviewKey(k => String(Number(k) + 1)), 150), []);
+  const updateConfig = useCallback((patch: Partial<LoginConfig>) => { setConfig(p => ({ ...p, ...patch })); debouncedPreview(); }, [debouncedPreview]);
+  const updateLogo = useCallback((patch: Partial<LogoConfig>) => { setLogoConfig(p => ({ ...p, ...patch })); debouncedPreview(); }, [debouncedPreview]);
 
   const handleSave = useCallback(async () => {
     if (!event || !eventId) return;
@@ -42,7 +42,7 @@ export default function LoginEditor() {
       const { error } = await supabase.from("user_events").update({ draft_login_config: config, draft_logo_config: logoConfig }).eq("id", eventId);
       if (error) throw error;
       queryClient.setQueryData(["event", eventId], (old: UserEvent | null) => old ? { ...old, draft_login_config: config, draft_logo_config: logoConfig } : old);
-      setToast("Sign In page saved!"); setTimeout(() => setToast(null), 3000);
+      setToast("Saved!"); setTimeout(() => setToast(null), 3000);
     } catch (err: any) { setToast("Failed: " + err.message); setTimeout(() => setToast(null), 3000); }
     finally { setSaving(false); }
   }, [event, eventId, config, logoConfig, queryClient]);

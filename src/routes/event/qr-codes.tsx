@@ -1,142 +1,118 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useOutletContext, useParams, useNavigate } from "react-router-dom";
-import { Download, QrCode as QrCodeIcon, Globe, FileText, Mail } from "lucide-react";
-import { UserEvent } from "../../lib/supabase";
+import { UserEvent, SharingConfig } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Card, ErrorState, Skeleton } from "../../components/ui/index";
+import { FormField, ColorInput, ErrorState, Skeleton, Toast } from "../../components/ui/index";
 import { generateQrDataUrl, downloadQrCode } from "../../lib/qr";
+import { Download, QrCode } from "lucide-react";
 
 type Ctx = { event: UserEvent | null };
 
-interface QrTarget {
-  id: string;
-  label: string;
-  url: string;
-  icon: React.ReactNode;
-  description: string;
-}
+const defaultSharing: SharingConfig = {
+  showShareButtons: true, shareMessage: "", whatsappText: "", facebookText: "",
+  emailSubject: "", emailBody: "", qrColor: "#000000", qrBgColor: "#ffffff",
+};
 
-export default function QrCodesPage() {
+export default function QrCodes() {
   const { event } = useOutletContext<Ctx>();
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
 
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
-  const eventUrl = eventId ? `${baseUrl}/${eventId}` : "";
-
-  const targets: QrTarget[] = [
-    {
-      id: "event",
-      label: "Event Page",
-      url: eventUrl,
-      icon: <Globe className="w-5 h-5" />,
-      description: "Main event landing page",
-    },
-    {
-      id: "cover",
-      label: "Cover Page",
-      url: `${eventUrl}#cover`,
-      icon: <FileText className="w-5 h-5" />,
-      description: "Cover / welcome page",
-    },
-    {
-      id: "rsvp",
-      label: "RSVP Page",
-      url: `${eventUrl}#rsvp`,
-      icon: <Mail className="w-5 h-5" />,
-      description: "RSVP submission page",
-    },
-  ];
-
-  const [qrDataUrls, setQrDataUrls] = useState<Record<string, string>>({});
+  const [qrColor, setQrColor] = useState(event?.sharing_config?.qrColor || "#000000");
+  const [qrBgColor, setQrBgColor] = useState(event?.sharing_config?.qrBgColor || "#ffffff");
+  const [eventUrl, setEventUrl] = useState<string>("");
+  const [coverUrl, setCoverUrl] = useState<string>("");
+  const [rsvpUrl, setRsvpUrl] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const generateAll = useCallback(async () => {
-    if (!eventUrl) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const results: Record<string, string> = {};
-      for (const target of targets) {
-        const dataUrl = await generateQrDataUrl(target.url, { width: 300 });
-        results[target.id] = dataUrl;
-      }
-      setQrDataUrls(results);
-    } catch (err: any) {
-      setError(err.message || "Failed to generate QR codes");
-    } finally {
-      setLoading(false);
-    }
-  }, [eventUrl]);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
-    generateAll();
-  }, [generateAll]);
+    if (event?.sharing_config) {
+      setQrColor(event.sharing_config.qrColor || "#000000");
+      setQrBgColor(event.sharing_config.qrBgColor || "#ffffff");
+    }
+  }, [event?.id]);
 
-  const handleDownload = (target: QrTarget) => {
-    const dataUrl = qrDataUrls[target.id];
-    if (!dataUrl) return;
-    const safeName = event?.name?.replace(/[^a-z0-9]/gi, "-").toLowerCase() || "event";
-    downloadQrCode(dataUrl, `qr-${safeName}-${target.id}.png`);
+  useEffect(() => {
+    if (!eventId) return;
+    const base = `${window.location.origin}/e/${eventId}`;
+    setEventUrl(base);
+    setCoverUrl(`${base}`);
+    setRsvpUrl(`${base}/rsvp`);
+    setLoading(false);
+  }, [eventId]);
+
+  const generate = async (text: string) => {
+    return generateQrDataUrl(text, { color: qrColor, bgColor: qrBgColor, size: 300 });
+  };
+
+  const handleDownload = async (text: string, filename: string) => {
+    try {
+      const url = await generate(text);
+      downloadQrCode(url, filename);
+      setToast("Downloaded");
+      setTimeout(() => setToast(null), 3000);
+    } catch {
+      setToast("Failed to generate QR");
+      setTimeout(() => setToast(null), 3000);
+    }
   };
 
   if (!event) return <ErrorState message="Could not load event data" onRetry={() => navigate("/dashboard")} />;
+
+  const codes = [
+    { label: "Event URL", url: eventUrl, filename: `qr-event-${eventId}.png`, description: "Link to the main event page" },
+    { label: "Cover Page", url: coverUrl, filename: `qr-cover-${eventId}.png`, description: "Link to the event cover" },
+    { label: "RSVP Page", url: rsvpUrl, filename: `qr-rsvp-${eventId}.png`, description: "Direct link to RSVP form" },
+  ];
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold text-gray-900">QR Codes</h1>
-        <p className="text-sm text-gray-500">Generate and download QR codes for your event pages</p>
+        <p className="text-sm text-gray-500">Generate and download QR codes for your event</p>
       </div>
 
-      <Card className="p-4">
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Event URL</label>
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
-            <Globe className="w-4 h-4 text-gray-400 flex-shrink-0" />
-            <span className="text-sm text-gray-700 font-mono truncate">{eventUrl || "—"}</span>
-          </div>
+      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-4">
+        <h3 className="text-sm font-semibold text-gray-900">QR Colors</h3>
+        <div className="grid grid-cols-2 gap-4 max-w-md">
+          <FormField label="QR Color"><ColorInput value={qrColor} onChange={setQrColor} /></FormField>
+          <FormField label="Background Color"><ColorInput value={qrBgColor} onChange={setQrBgColor} /></FormField>
         </div>
+      </div>
 
-        {error ? (
-          <ErrorState message={error} onRetry={generateAll} />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {targets.map((target) => (
-              <Card key={target.id} className="p-4 flex flex-col items-center text-center">
-                <div className="flex items-center gap-2 mb-3 text-gray-700">
-                  {target.icon}
-                  <h3 className="text-sm font-semibold">{target.label}</h3>
-                </div>
-                <p className="text-xs text-gray-500 mb-4">{target.description}</p>
-                <div className="w-48 h-48 flex items-center justify-center bg-white border border-gray-200 rounded-lg mb-4">
-                  {loading ? (
-                    <Skeleton className="w-40 h-40" />
-                  ) : qrDataUrls[target.id] ? (
-                    <img src={qrDataUrls[target.id]} alt={`QR code for ${target.label}`} className="w-40 h-40" />
-                  ) : (
-                    <QrCodeIcon className="w-12 h-12 text-gray-300" />
-                  )}
-                </div>
-                <p className="text-xs text-gray-400 font-mono mb-3 truncate max-w-full">{target.url}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDownload(target)}
-                  disabled={loading || !qrDataUrls[target.id]}
-                >
-                  <Download className="w-4 h-4" /> Download PNG
-                </Button>
-              </Card>
-            ))}
-          </div>
-        )}
-      </Card>
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-64 w-full" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {codes.map(code => (
+            <div key={code.label} className="bg-white border border-gray-200 rounded-xl p-6 flex flex-col items-center text-center">
+              <div className="w-48 h-48 flex items-center justify-center bg-gray-50 rounded-lg border border-gray-100 mb-4 overflow-hidden">
+                <QrCodePreview text={code.url} color={qrColor} bgColor={qrBgColor} />
+              </div>
+              <h3 className="font-semibold text-gray-900">{code.label}</h3>
+              <p className="text-xs text-gray-500 mt-1 mb-3">{code.description}</p>
+              <p className="text-xs text-gray-400 truncate w-full mb-4">{code.url}</p>
+              <Button variant="secondary" size="sm" onClick={() => handleDownload(code.url, code.filename)}><Download className="w-4 h-4" /> Download PNG</Button>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <p className="text-xs text-gray-400 text-center">
-        QR codes link directly to your guest-facing pages. Share them on invitations, posters, or digital media.
-      </p>
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
     </div>
   );
+}
+
+function QrCodePreview({ text, color, bgColor }: { text: string; color: string; bgColor: string }) {
+  const [src, setSrc] = useState<string>("");
+
+  useEffect(() => {
+    generateQrDataUrl(text, { color, bgColor, size: 300 }).then(setSrc);
+  }, [text, color, bgColor]);
+
+  if (!src) return <QrCode className="w-16 h-16 text-gray-300" />;
+  return <img src={src} alt="QR Code" className="w-44 h-44" />;
 }

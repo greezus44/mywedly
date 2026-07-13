@@ -1,29 +1,27 @@
-import { useEffect, type CSSProperties } from "react";
-import { Outlet, useNavigate, useLocation, useParams } from "react-router-dom";
+import { useEffect } from "react";
+import { Outlet, useNavigate, useParams, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Home, CalendarHeart, MessageSquareHeart, Phone } from "lucide-react";
-import { supabase, UserEvent } from "../../lib/supabase";
+import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { themeToCssVars, shouldShowLogo, getLogoStyle } from "../../lib/theme";
-import { ErrorState, Skeleton } from "../../components/ui/index";
-
-export type GuestLayoutContext = { event: UserEvent };
-
-const NAV_ITEMS = [
-  { label: "Home", path: "home", icon: Home },
-  { label: "RSVP", path: "rsvp", icon: CalendarHeart },
-  { label: "Wishes", path: "wishes", icon: MessageSquareHeart },
-  { label: "Contact", path: "contact", icon: Phone },
-];
+import { DEFAULT_THEME, DEFAULT_LOGO_CONFIG, themeToCssVars } from "../../lib/theme";
+import type { CSSProperties } from "react";
+import { Home, CalendarCheck, MessageSquareHeart, Phone } from "lucide-react";
 
 export default function GuestLayout() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { token } = useGuestAuth();
-  const isAuthenticated = !!token;
+  const { token, eventId: authEventId } = useGuestAuth();
 
-  const { data: event, isLoading, error, refetch } = useQuery<UserEvent | null>({
+  const isAuthenticated = !!token && authEventId === eventId;
+
+  useEffect(() => {
+    if (!isAuthenticated && eventId) {
+      navigate(`/${eventId}/login`, { replace: true });
+    }
+  }, [isAuthenticated, eventId, navigate]);
+
+  const { data: event, isLoading, isError } = useQuery<UserEvent | null>({
     queryKey: ["public-event", eventId],
     queryFn: async () => {
       if (!eventId) return null;
@@ -36,154 +34,108 @@ export default function GuestLayout() {
       if (error) throw error;
       return data as UserEvent | null;
     },
-    enabled: !!eventId,
+    enabled: !!eventId && isAuthenticated,
   });
 
-  useEffect(() => {
-    if (!isAuthenticated && eventId) {
-      navigate(`/${eventId}/login`, { replace: true });
-    }
-  }, [isAuthenticated, eventId, navigate]);
-
-  if (!eventId) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <ErrorState message="Event ID is missing from the URL." />
-      </div>
-    );
+  if (!isAuthenticated) {
+    return null;
   }
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6 space-y-6">
-        <Skeleton className="h-20 w-full max-w-3xl mx-auto" />
-        <Skeleton className="h-64 w-full max-w-3xl mx-auto" />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-pulse text-gray-400 text-sm">Loading...</div>
       </div>
     );
   }
 
-  if (error || !event) {
+  if (isError || !event) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <ErrorState
-          message={error ? error.message : "Event not found or not published."}
-          onRetry={() => refetch()}
-        />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
+        <div className="text-center">
+          <h2 className="text-lg font-semibold text-gray-900">Event not found</h2>
+          <p className="mt-1 text-sm text-gray-500">This event may be private or no longer available.</p>
+        </div>
       </div>
     );
   }
 
-  if (!isAuthenticated) return null;
-
-  const theme = event.theme;
+  const theme = { ...DEFAULT_THEME, ...event.theme };
+  const logoConfig = { ...DEFAULT_LOGO_CONFIG, ...event.logo_config };
   const cssVars = themeToCssVars(theme) as CSSProperties;
-  const currentPath = location.pathname.split("/").pop() || "home";
+
+  const navItems = [
+    { label: "Home", icon: Home, path: "home" },
+    { label: "RSVP", icon: CalendarCheck, path: "rsvp" },
+    { label: "Wishes", icon: MessageSquareHeart, path: "wishes" },
+    { label: "Contact", icon: Phone, path: "contact" },
+  ];
 
   return (
-    <div className="min-h-screen flex flex-col" style={cssVars}>
+    <div className="min-h-screen pb-20" style={{ ...cssVars, background: theme.bgColor, fontFamily: theme.bodyFont } as CSSProperties}>
       <header
         className="sticky top-0 z-30 backdrop-blur-md border-b"
         style={{
-          backgroundColor: `color-mix(in srgb, ${theme.bgColor} 88%, transparent)`,
-          borderColor: `color-mix(in srgb, ${theme.accentColor} 25%, transparent)`,
+          background: `${theme.bgColor}f5`,
+          borderColor: `${theme.accentColor}30`,
+          color: theme.headingColor,
         }}
       >
-        <div
-          className="mx-auto flex items-center justify-center py-4 px-6"
-          style={{ maxWidth: `${theme.maxWidth}px` }}
-        >
-          {shouldShowLogo(event.logo_config) ? (
-            event.logo_config.image ? (
-              <img
-                src={event.logo_config.image}
-                alt={event.name}
-                className="max-h-10 object-contain"
-              />
-            ) : (
-              <span
-                style={{
-                  ...getLogoStyle(event.logo_config),
-                  fontSize: `${event.logo_config.fontSize}px`,
-                }}
-              >
-                {event.logo_config.text}
-              </span>
-            )
-          ) : (
-            <h1
-              className="text-lg font-semibold tracking-wide"
-              style={{
-                fontFamily: `var(--wed-heading-font)`,
-                color: theme.headingColor,
-              }}
-            >
-              {event.name}
-            </h1>
+        <div className="max-w-3xl mx-auto px-5 py-3 flex items-center gap-3">
+          {logoConfig.enabled && (
+            <div className="flex items-center gap-2">
+              {logoConfig.image ? (
+                <img src={logoConfig.image} alt="Logo" className="h-8 w-8 object-contain rounded" />
+              ) : (
+                <span
+                  className="font-bold leading-none"
+                  style={{ color: logoConfig.color, fontSize: logoConfig.fontSize }}
+                >
+                  {logoConfig.text}
+                </span>
+              )}
+            </div>
           )}
+          <h1
+            className="text-sm font-semibold truncate"
+            style={{ color: theme.headingColor, fontFamily: theme.headingFont }}
+          >
+            {event.name}
+          </h1>
         </div>
       </header>
 
-      <main className="flex-1 w-full" style={{ backgroundColor: theme.bgColor }}>
-        <Outlet context={{ event } satisfies GuestLayoutContext} />
+      <main className="max-w-3xl mx-auto">
+        <Outlet context={{ event }} />
       </main>
 
       <nav
-        className="sticky bottom-0 z-30 border-t backdrop-blur-md"
+        className="fixed bottom-0 left-0 right-0 z-30 border-t backdrop-blur-md"
         style={{
-          backgroundColor: `color-mix(in srgb, ${theme.bgColor} 92%, transparent)`,
-          borderColor: `color-mix(in srgb, ${theme.accentColor} 25%, transparent)`,
+          background: `${theme.bgColor}f8`,
+          borderColor: `${theme.accentColor}30`,
         }}
       >
-        <div
-          className="mx-auto flex items-center justify-around px-2"
-          style={{ maxWidth: `${theme.maxWidth}px` }}
-        >
-          {NAV_ITEMS.map((item) => {
-            const active = currentPath === item.path;
+        <div className="max-w-3xl mx-auto px-2 py-1.5 flex items-center justify-around">
+          {navItems.map((item) => {
             const Icon = item.icon;
+            const isActive = location.pathname.endsWith(`/${item.path}`);
             return (
               <button
                 key={item.path}
                 onClick={() => navigate(`/${eventId}/${item.path}`)}
-                className="flex flex-col items-center gap-1 py-3 px-4 transition-colors"
+                className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg transition-colors"
                 style={{
-                  color: active ? theme.primaryColor : theme.bodyColor,
+                  color: isActive ? theme.primaryColor : theme.bodyColor,
                 }}
               >
-                <Icon
-                  className="w-5 h-5"
-                  strokeWidth={active ? 2.5 : 1.75}
-                />
-                <span
-                  className="text-[11px] font-medium tracking-wide"
-                  style={{ fontWeight: active ? 600 : 400 }}
-                >
-                  {item.label}
-                </span>
-                {active && (
-                  <span
-                    className="absolute -mt-3 h-0.5 w-6 rounded-full"
-                    style={{ backgroundColor: theme.primaryColor }}
-                  />
-                )}
+                <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
+                <span className="text-[10px] font-medium">{item.label}</span>
               </button>
             );
           })}
         </div>
       </nav>
-
-      {event.content.footer_enabled && event.content.footer_text && (
-        <footer
-          className="py-6 px-6 text-center text-xs"
-          style={{
-            color: theme.bodyColor,
-            opacity: 0.6,
-            fontFamily: `var(--wed-body-font)`,
-          }}
-        >
-          {event.content.footer_text}
-        </footer>
-      )}
     </div>
   );
 }
