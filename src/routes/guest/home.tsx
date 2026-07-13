@@ -1,149 +1,179 @@
-import { useParams, useNavigate, useOutletContext } from "react-router-dom";
+import { useOutletContext, useNavigate, useParams } from "react-router-dom";
 import { Calendar, Clock, MapPin } from "lucide-react";
-import { formatDate, formatTime, isRsvpClosed, formatDeadline } from "../../lib/utils";
-import { Button } from "../../components/ui/Button";
 import type { GuestLayoutContext } from "./guest-layout";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { formatDate, formatTime, isRsvpClosed } from "../../lib/utils";
+import { Button } from "../../components/ui/Button";
 
 export default function Home() {
+  const { event } = useOutletContext<GuestLayoutContext>();
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  const { event } = useOutletContext<GuestLayoutContext>();
-  const theme = event.theme;
+  const { guestName } = useGuestAuth();
+
+  const content = event.content;
+  const story = content?.story;
+  const storyImage = content?.story_image;
+  const invitationTitle = content?.invitation_title || "You're Invited";
+  const invitationSubtitle = content?.invitation_subtitle || "We would love for you to join us";
+  const invitationBody = content?.invitation_body || content?.invitation_text || "";
+  const rsvpButtonText = content?.rsvp_button_text || "RSVP";
 
   const rsvpClosed = isRsvpClosed(event.rsvp_deadline);
-  const rsvpButtonText = event.content?.rsvp_button_text || "RSVP";
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: theme.bgColor, color: theme.bodyColor, fontFamily: theme.bodyFont }}>
-      {event.cover_image && (
-        <div className="relative w-full h-64 sm:h-80 overflow-hidden">
-          <img src={event.cover_image} alt={event.name} className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+    <div className="animate-fade-in">
+      <div className="text-center py-8">
+        {guestName && (
+          <p
+            className="text-sm italic mb-3"
+            style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-script)" }}
+          >
+            Dear {guestName},
+          </p>
+        )}
+
+        <h1
+          className="text-4xl md:text-5xl mb-3"
+          style={{ color: "var(--color-primary)", fontFamily: "var(--font-heading)" }}
+        >
+          {invitationTitle}
+        </h1>
+
+        <p
+          className="text-lg italic"
+          style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-script)" }}
+        >
+          {invitationSubtitle}
+        </p>
+      </div>
+
+      {invitationBody && (
+        <div
+          className="text-center py-6 border-y"
+          style={{ borderColor: "var(--color-border)" }}
+        >
+          <p
+            className="text-sm leading-relaxed max-w-md mx-auto"
+            style={{ color: "var(--color-text)" }}
+          >
+            {invitationBody}
+          </p>
         </div>
       )}
 
-      <div className="px-6 py-12 sm:py-16">
-        <div className="text-center mb-12">
-          {event.content?.invitation_title && (
+      <div className="py-8 space-y-5">
+        <div className="flex items-center gap-3">
+          <Calendar className="w-4 h-4 flex-shrink-0" style={{ color: "var(--color-accent)" }} />
+          <div>
             <p
-              className="text-sm uppercase tracking-[0.25em] mb-4 opacity-60"
-              style={{ fontFamily: theme.scriptFont, color: theme.accentColor }}
+              className="text-[10px] tracking-[0.2em] uppercase"
+              style={{ color: "var(--color-text-muted)" }}
             >
-              {event.content.invitation_title}
+              When
             </p>
-          )}
-
-          <h1
-            className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4"
-            style={{ fontFamily: theme.headingFont, color: theme.headingColor }}
-          >
-            {event.name}
-          </h1>
-
-          {event.content?.invitation_subtitle && (
             <p
-              className="text-base sm:text-lg opacity-70"
-              style={{ fontFamily: theme.bodyFont }}
+              className="text-sm font-medium"
+              style={{ color: "var(--color-text)" }}
             >
-              {event.content.invitation_subtitle}
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-col items-center gap-6 mb-12">
-          {event.event_date && (
-            <div className="flex items-center gap-3">
-              <Calendar className="w-4 h-4 opacity-50" style={{ color: theme.accentColor }} />
-              <span className="text-sm sm:text-base" style={{ color: theme.bodyColor }}>
-                {formatDate(event.event_date)}
-              </span>
-            </div>
-          )}
-
-          {event.event_time && (
-            <div className="flex items-center gap-3">
-              <Clock className="w-4 h-4 opacity-50" style={{ color: theme.accentColor }} />
-              <span className="text-sm sm:text-base" style={{ color: theme.bodyColor }}>
-                {formatTime(event.event_time)}
-              </span>
-            </div>
-          )}
-
-          {event.venue && (
-            <div className="flex items-center gap-3 text-center">
-              <MapPin className="w-4 h-4 opacity-50 flex-shrink-0" style={{ color: theme.accentColor }} />
-              <span className="text-sm sm:text-base" style={{ color: theme.bodyColor }}>
-                {event.venue}
-                {event.address && <span className="block text-xs opacity-60 mt-0.5">{event.address}</span>}
-              </span>
-            </div>
-          )}
-        </div>
-
-        {event.content?.invitation_body && (
-          <div className="text-center max-w-lg mx-auto mb-12">
-            <p
-              className="text-sm sm:text-base leading-relaxed opacity-80"
-              style={{ fontFamily: theme.bodyFont, color: theme.bodyColor }}
-            >
-              {event.content.invitation_body}
+              {formatDate(event.event_date) || "TBD"}
             </p>
           </div>
-        )}
+        </div>
 
-        <div className="flex flex-col items-center gap-3 mb-16">
+        <div className="flex items-center gap-3">
+          <Clock className="w-4 h-4 flex-shrink-0" style={{ color: "var(--color-accent)" }} />
+          <div>
+            <p
+              className="text-[10px] tracking-[0.2em] uppercase"
+              style={{ color: "var(--color-text-muted)" }}
+            >
+              Time
+            </p>
+            <p
+              className="text-sm font-medium"
+              style={{ color: "var(--color-text)" }}
+            >
+              {formatTime(event.event_time) || "TBD"}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: "var(--color-accent)" }} />
+          <div>
+            <p
+              className="text-[10px] tracking-[0.2em] uppercase"
+              style={{ color: "var(--color-text-muted)" }}
+            >
+              Where
+            </p>
+            <p
+              className="text-sm font-medium"
+              style={{ color: "var(--color-text)" }}
+            >
+              {event.venue || "TBD"}
+            </p>
+            {event.address && (
+              <p
+                className="text-xs mt-0.5"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                {event.address}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {story && (
+        <div
+          className="py-8 border-t"
+          style={{ borderColor: "var(--color-border)" }}
+        >
+          <h2
+            className="text-xl text-center mb-4"
+            style={{ color: "var(--color-primary)", fontFamily: "var(--font-heading)" }}
+          >
+            Our Story
+          </h2>
+          {storyImage && (
+            <img
+              src={storyImage}
+              alt="Our Story"
+              className="w-full rounded-lg mb-5 object-cover"
+              style={{ maxHeight: 240 }}
+            />
+          )}
+          <p
+            className="text-sm leading-relaxed text-center italic"
+            style={{ color: "var(--color-text)", fontFamily: "var(--font-script)" }}
+          >
+            {story}
+          </p>
+        </div>
+      )}
+
+      <div className="py-8 text-center">
+        {rsvpClosed ? (
+          <p
+            className="text-sm italic"
+            style={{ color: "var(--color-text-muted)" }}
+          >
+            RSVPs closed
+          </p>
+        ) : (
           <Button
             size="lg"
             onClick={() => navigate(`/${eventId}/rsvp`)}
-            disabled={rsvpClosed}
             style={{
-              backgroundColor: theme.buttonBgColor,
-              color: theme.buttonTextColor,
-              borderRadius: `${theme.buttonRadius}px`,
+              backgroundColor: "var(--color-primary)",
+              color: "#ffffff",
+              borderRadius: "var(--radius)",
             }}
           >
             {rsvpButtonText}
           </Button>
-          {rsvpClosed && event.rsvp_deadline && (
-            <p className="text-xs opacity-60" style={{ color: theme.bodyColor }}>
-              RSVPs closed on {formatDeadline(event.rsvp_deadline)}
-            </p>
-          )}
-        </div>
-
-        {event.content?.story && (
-          <div className="max-w-lg mx-auto text-center mb-16">
-            {event.content.story_image && (
-              <img
-                src={event.content.story_image}
-                alt="Our story"
-                className="w-full max-h-72 object-cover rounded-2xl mb-8 shadow-sm"
-              />
-            )}
-            <h2
-              className="text-xl sm:text-2xl font-semibold mb-4"
-              style={{ fontFamily: theme.headingFont, color: theme.headingColor }}
-            >
-              Our Story
-            </h2>
-            <p
-              className="text-sm sm:text-base leading-relaxed whitespace-pre-line opacity-80"
-              style={{ fontFamily: theme.bodyFont, color: theme.bodyColor }}
-            >
-              {event.content.story}
-            </p>
-          </div>
-        )}
-
-        {event.content?.invitation_text && (
-          <div className="text-center mb-8">
-            <p
-              className="text-base sm:text-lg italic opacity-70"
-              style={{ fontFamily: theme.scriptFont, color: theme.accentColor }}
-            >
-              {event.content.invitation_text}
-            </p>
-          </div>
         )}
       </div>
     </div>

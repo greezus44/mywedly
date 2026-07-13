@@ -1,22 +1,28 @@
-import { ReactNode } from "react";
+import { type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { X } from "lucide-react";
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("bg-white border border-gray-200 rounded-xl", className)}>{children}</div>;
+  return <div className={cn("bg-white rounded-xl border border-slate-200 shadow-sm", className)}>{children}</div>;
 }
 
 export function Badge({ children, variant = "default" }: { children: ReactNode; variant?: "default" | "success" | "warning" | "error" | "info" }) {
-  const v = { default: "bg-gray-100 text-gray-700", success: "bg-green-100 text-green-700", warning: "bg-yellow-100 text-yellow-700", error: "bg-red-100 text-red-700", info: "bg-blue-100 text-blue-700" };
-  return <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium", v[variant])}>{children}</span>;
+  const variants = {
+    default: "bg-slate-100 text-slate-700",
+    success: "bg-green-100 text-green-700",
+    warning: "bg-amber-100 text-amber-700",
+    error: "bg-red-100 text-red-700",
+    info: "bg-blue-100 text-blue-700",
+  };
+  return <span className={cn("inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium", variants[variant])}>{children}</span>;
 }
 
 export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: string; description?: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      {icon && <div className="mb-4 text-gray-300">{icon}</div>}
-      <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-      {description && <p className="mt-1 text-sm text-gray-500 max-w-sm">{description}</p>}
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      {icon && <div className="mb-3 text-slate-300">{icon}</div>}
+      <h3 className="text-sm font-medium text-slate-900">{title}</h3>
+      {description && <p className="mt-1 text-sm text-slate-500 max-w-sm">{description}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
@@ -25,63 +31,72 @@ export function EmptyState({ icon, title, description, action }: { icon?: ReactN
 export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
     <label className="flex items-center gap-2 cursor-pointer">
-      <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors", checked ? "bg-black" : "bg-gray-200")}>
-        <span className={cn("inline-block h-4 w-4 transform rounded-full bg-white transition-transform", checked ? "translate-x-4" : "translate-x-0.5")} />
+      <button
+        type="button"
+        onClick={() => onChange(!checked)}
+        className={cn("relative w-10 h-6 rounded-full transition-colors", checked ? "bg-slate-900" : "bg-slate-200")}
+      >
+        <span className={cn("absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform", checked && "translate-x-4")} />
       </button>
-      {label && <span className="text-sm text-gray-700">{label}</span>}
+      {label && <span className="text-sm text-slate-700">{label}</span>}
     </label>
   );
 }
 
-export function ColorInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function ColorInput({ value, onChange, label }: { value: string; onChange: (v: string) => void; label?: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5" />
-      <input type="text" value={value} onChange={(e) => onChange(e.target.value)} className="flex-1 px-3 py-2 rounded-lg border border-gray-300 text-sm font-mono uppercase" />
-    </div>
-  );
-}
-
-export function RangeInput({ value, min, max, step = 1, onChange }: { value: number; min: number; max: number; step?: number; onChange: (v: number) => void }) {
-  return (
-    <div className="flex items-center gap-3">
-      <input type="range" value={value} min={min} max={max} step={step} onChange={(e) => onChange(Number(e.target.value))} className="flex-1 accent-black" />
-      <span className="text-sm text-gray-600 w-12 text-right tabular-nums">{value}</span>
-    </div>
-  );
-}
-
-export function FormField({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
-  return (<div><label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>{children}{hint && <p className="mt-1 text-xs text-gray-400">{hint}</p>}</div>);
-}
-
-export function Modal({ open, onClose, title, children, maxWidth = "max-w-lg" }: { open: boolean; onClose: () => void; title: string; children: ReactNode; maxWidth?: string }) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className={cn("relative bg-white rounded-xl border border-gray-200 w-full max-h-[90vh] overflow-y-auto", maxWidth)}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100"><h2 className="text-base font-semibold text-gray-900">{title}</h2><button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100"><X className="w-4 h-4 text-gray-500" /></button></div>
-        <div className="p-6">{children}</div>
+    <div>
+      {label && <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>}
+      <div className="flex items-center gap-2">
+        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} className="w-10 h-10 rounded border border-slate-200 cursor-pointer" />
+        <input type="text" value={value} onChange={(e) => onChange(e.target.value)} className="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-200" />
       </div>
     </div>
   );
 }
 
-export function Toast({ message, type = "success", onClose }: { message: string; type?: "success" | "error"; onClose: () => void }) {
-  return <div className="fixed bottom-4 right-4 z-50 animate-fade-up"><div className={cn("px-4 py-3 rounded-lg text-sm font-medium shadow-lg", type === "success" ? "bg-black text-white" : "bg-red-600 text-white")}>{message}</div></div>;
+export function RangeInput({ value, onChange, min = 0, max = 100, step = 1, label }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; label?: string }) {
+  return (
+    <div>
+      {label && <label className="block text-sm font-medium text-slate-700 mb-1">{label}: {value}</label>}
+      <input type="range" value={value} onChange={(e) => onChange(Number(e.target.value))} min={min} max={max} step={step} className="w-full" />
+    </div>
+  );
 }
 
-export function Skeleton({ className }: { className?: string }) { return <div className={cn("animate-pulse bg-gray-100 rounded", className)} />; }
+export function FormField({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+      {children}
+      {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+    </div>
+  );
+}
+
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cn("animate-pulse bg-slate-200 rounded", className)} />;
+}
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mb-4"><X className="w-6 h-6 text-red-500" /></div>
-      <h3 className="text-base font-semibold text-gray-900">{message}</h3>
-      {onRetry && <button onClick={onRetry} className="mt-3 text-sm text-gray-600 hover:text-black underline">Try again</button>}
+    <div className="flex flex-col items-center justify-center py-12 text-center">
+      <p className="text-sm text-red-600">{message}</p>
+      {onRetry && <button onClick={onRetry} className="mt-3 text-sm text-slate-700 underline">Try again</button>}
     </div>
   );
 }
 
 export { Select } from "./Input";
+export { Modal } from "./DatePicker";
+
+export function Toast({ message, type = "success", onClose }: { message: string; type?: "success" | "error"; onClose: () => void }) {
+  return (
+    <div className="fixed bottom-6 right-6 z-50 animate-slide-up">
+      <div className={cn("flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg", type === "success" ? "bg-green-600 text-white" : "bg-red-600 text-white")}>
+        <span className="text-sm font-medium">{message}</span>
+        <button onClick={onClose} className="opacity-70 hover:opacity-100"><X className="w-4 h-4" /></button>
+      </div>
+    </div>
+  );
+}

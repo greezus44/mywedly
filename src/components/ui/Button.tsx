@@ -1,4 +1,5 @@
-import { ButtonHTMLAttributes, ReactNode } from "react";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
+import { Loader2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
@@ -8,14 +9,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
   loading?: boolean;
-  children: ReactNode;
 }
 
 const variants: Record<Variant, string> = {
-  primary: "bg-black text-white hover:bg-gray-800 border border-black",
-  secondary: "bg-white text-black border border-gray-300 hover:border-gray-900",
-  ghost: "bg-transparent text-gray-600 hover:text-black hover:bg-gray-100",
-  danger: "bg-white text-red-600 border border-red-200 hover:bg-red-50",
+  primary: "bg-slate-900 text-white hover:bg-slate-800 active:bg-slate-950",
+  secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200 active:bg-slate-300 border border-slate-200",
+  ghost: "text-slate-700 hover:bg-slate-100 active:bg-slate-200",
+  danger: "bg-red-600 text-white hover:bg-red-700 active:bg-red-800",
 };
 
 const sizes: Record<Size, string> = {
@@ -24,11 +24,25 @@ const sizes: Record<Size, string> = {
   lg: "px-6 py-3 text-base",
 };
 
-export function Button({ variant = "primary", size = "md", loading, children, className, disabled, ...props }: ButtonProps) {
-  return (
-    <button className={cn("inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed", variants[variant], sizes[size], className)} disabled={disabled || loading} {...props}>
-      {loading && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
-      {children}
-    </button>
-  );
-}
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ variant = "primary", size = "md", loading = false, className, children, disabled, ...props }, ref) => {
+    return (
+      <button
+        ref={ref}
+        className={cn(
+          "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+          variants[variant],
+          sizes[size],
+          className
+        )}
+        disabled={disabled || loading}
+        {...props}
+      >
+        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+        {children}
+      </button>
+    );
+  }
+);
+
+Button.displayName = "Button";

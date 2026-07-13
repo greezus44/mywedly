@@ -1,30 +1,40 @@
 import { supabase } from "./supabase";
 
 export interface UploadedImage {
-  path: string;
   url: string;
+  path: string;
 }
 
-function compressImage(file: File, maxWidth: number = 1920, quality: number = 0.82): Promise<File> {
+export async function compressImage(file: File, maxWidth = 1920, quality = 0.82): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    if (!file.type.startsWith("image/")) { resolve(file); return; }
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        let { width, height } = img;
-        if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
         const canvas = document.createElement("canvas");
-        canvas.width = width; canvas.height = height;
+        let { width, height } = img;
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
         const ctx = canvas.getContext("2d");
-        if (!ctx) { resolve(file); return; }
+        if (!ctx) {
+          reject(new Error("Canvas not supported"));
+          return;
+        }
         ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob((blob) => {
-          if (blob) { resolve(new File([blob], file.name, { type: file.type || "image/jpeg" })); }
-          else resolve(file);
-        }, file.type === "image/png" ? "image/png" : "image/jpeg", quality);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Compression failed"));
+          },
+          "image/jpeg",
+          quality
+        );
       };
-      img.onerror = () => resolve(file);
+      img.onerror = () => reject(new Error("Failed to load image"));
       img.src = e.target?.result as string;
     };
     reader.onerror = () => reject(new Error("Failed to read file"));
@@ -32,34 +42,39 @@ function compressImage(file: File, maxWidth: number = 1920, quality: number = 0.
   });
 }
 
-export async function uploadImage(file: File, eventId: string, onProgress?: (progress: number) => void): Promise<UploadedImage> {
+export async function uploadImage(
+  file: File,
+  eventId: string,
+  onProgress?: (pct: number) => void
+): Promise<UploadedImage> {
   const compressed = await compressImage(file);
-  const ext = compressed.name.split(".").pop() || "jpg";
-  const fileName = `${eventId}/${Date.now()}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const fileName = `${eventId}/${Date.now()}.${ext}`;
 
-  const { data, error } = await supabase.storage.from("event-images").upload(fileName, compressed, {
-    cacheControl: "3600",
-    upsert: false,
-  });
+  const { data, error } = await supabase.storage
+    .from("event-images")
+    .upload(fileName, compressed, { contentType: "image/jpeg", upsert: false });
 
-  if (error) throw new Error(`Upload failed: ${error.message}`);
+  if (error) throw error;
 
-  const { data: urlData } = supabase.storage.from("event-images").getPublicUrl(fileName);
-  return { path: fileName, url: urlData.publicUrl };
+  const { data: urlData } = supabase.storage.from("event-images").getPublicUrl(data.path);
+  if (onProgress) onProgress(100);
+  return { url: urlData.publicUrl, path: data.path };
 }
 
 export async function removeImage(path: string): Promise<void> {
-  if (!path) return;
-  try {
-    await supabase.storage.from("event-images").remove([path]);
-  } catch {}
+  const { error } = await supabase.storage.from("event-images").remove([path]);
+  if (error) throw error;
 }
 
-export function extractPathFromUrl(url: string): string {
-  if (!url) return "";
+export function extractPathFromUrl(url: string): string | null {
   try {
-    const parts = url.split("/event-images/");
-    if (parts.length > 1) return parts[1];
-  } catch {}
-  return "";
+    const urlObj = new URL(url);
+    const parts = urlObj.pathname.split("/");
+    const idx = parts.indexOf("event-images");
+    if (idx === -1) return null;
+    return parts.slice(idx + 1).join("/");
+  } catch {
+    return null;
+  }
 }

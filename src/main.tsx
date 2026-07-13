@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import {
   BrowserRouter,
   Routes,
   Route,
   Navigate,
-  useParams,
   useLocation,
-  useOutletContext,
+  useParams,
+  useNavigate,
 } from "react-router-dom";
 import {
   QueryClient,
@@ -15,60 +15,43 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { supabase, UserEvent } from "./lib/supabase";
+import { supabase, type UserEvent } from "./lib/supabase";
 import { GuestAuthProvider } from "./lib/guest-auth";
 
-/* ──────────────────────────────────────────────────────────────
-   Eager imports (layouts)
-   ────────────────────────────────────────────────────────────── */
+// ─── Eager imports ───────────────────────────────────────────────────────────
 import EventLayout from "./routes/event/event-layout";
 import GuestLayout from "./routes/guest/guest-layout";
-import RustyLayout from "./routes/rusty/rusty-layout";
+import { RustyLayout } from "./routes/rusty/rusty-layout";
 
-/* ──────────────────────────────────────────────────────────────
-   Lazy imports (page components)
-   ────────────────────────────────────────────────────────────── */
+// ─── Lazy imports: top-level pages ───────────────────────────────────────────
 const Landing = React.lazy(() => import("./routes/landing"));
 const Auth = React.lazy(() => import("./routes/auth"));
 const Dashboard = React.lazy(() => import("./routes/dashboard"));
 
-// Account page – no separate file exists, so we define a minimal
-// inline component here.
-function Account() {
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="max-w-md w-full mx-auto p-8 text-center">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">Account</h1>
-        <p className="text-sm text-gray-500">Account settings coming soon.</p>
-      </div>
-    </div>
-  );
-}
-
-// Event editor routes
+// ─── Lazy imports: event editor sub-routes ───────────────────────────────────
 const CoverEditor = React.lazy(() => import("./routes/event/cover-editor"));
 const LoginEditor = React.lazy(() => import("./routes/event/login-editor"));
 const HomeEditor = React.lazy(() => import("./routes/event/home-editor"));
 const ThemeEditor = React.lazy(() => import("./routes/event/theme-editor"));
 const Branding = React.lazy(() => import("./routes/event/branding"));
 const Guests = React.lazy(() => import("./routes/event/guests"));
-const RsvpManager = React.lazy(() => import("./routes/event/rsvp"));
+const RsvpEditor = React.lazy(() => import("./routes/event/rsvp"));
 const Timeline = React.lazy(() => import("./routes/event/timeline"));
 const Sharing = React.lazy(() => import("./routes/event/sharing"));
 const Analytics = React.lazy(() => import("./routes/event/analytics"));
 const Settings = React.lazy(() => import("./routes/event/settings"));
 
-// Guest-facing cover & login (default template)
-const Cover = React.lazy(() => import("./routes/guest/cover"));
+// ─── Lazy imports: default (non-rusty) guest pages ───────────────────────────
+const GuestCover = React.lazy(() => import("./routes/guest/cover"));
 const GuestLogin = React.lazy(() => import("./routes/guest/guest-login"));
+const GuestHome = React.lazy(() => import("./routes/guest/home"));
+const GuestRsvp = React.lazy(() => import("./routes/guest/rsvp"));
+const GuestInfo = React.lazy(() => import("./routes/rusty/rusty-info"));
+const GuestMessage = React.lazy(() => import("./routes/rusty/rusty-message"));
+const GuestWishes = React.lazy(() => import("./routes/guest/wishes"));
+const GuestContact = React.lazy(() => import("./routes/guest/contact"));
 
-// Guest-facing child pages (default template)
-const Home = React.lazy(() => import("./routes/guest/home"));
-const Rsvp = React.lazy(() => import("./routes/guest/rsvp"));
-const Wishes = React.lazy(() => import("./routes/guest/wishes"));
-const Contact = React.lazy(() => import("./routes/guest/contact"));
-
-// Rusty template components
+// ─── Lazy imports: rusty guest pages ─────────────────────────────────────────
 const RustyCover = React.lazy(() => import("./routes/rusty/rusty-cover"));
 const RustyLogin = React.lazy(() => import("./routes/rusty/rusty-login"));
 const RustyHome = React.lazy(() => import("./routes/rusty/rusty-home"));
@@ -76,392 +59,383 @@ const RustyRsvp = React.lazy(() => import("./routes/rusty/rusty-rsvp"));
 const RustyInfo = React.lazy(() => import("./routes/rusty/rusty-info"));
 const RustyMessage = React.lazy(() => import("./routes/rusty/rusty-message"));
 
-/* ──────────────────────────────────────────────────────────────
-   QueryClient
-   ────────────────────────────────────────────────────────────── */
+// ─── QueryClient ────────────────────────────────────────────────────────────
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30000, retry: 1 } },
+  defaultOptions: {
+    queries: { staleTime: 30_000, refetchOnWindowFocus: false, retry: 1 },
+  },
 });
 
-/* ──────────────────────────────────────────────────────────────
-   normalizeEvent – ensures all config sub-objects exist
-   ────────────────────────────────────────────────────────────── */
-function normalizeEvent(data: any): UserEvent {
-  return {
-    ...data,
-    cover_config: data.cover_config || {},
-    login_config: data.login_config || {},
-    theme: data.theme || {},
-    logo_config: data.logo_config || {},
-    content: data.content || {},
-    sharing_config: data.sharing_config || {},
-    draft_cover_config: data.draft_cover_config || data.cover_config || {},
-    draft_login_config: data.draft_login_config || data.login_config || {},
-    draft_theme: data.draft_theme || data.theme || {},
-    draft_logo_config: data.draft_logo_config || data.logo_config || {},
-    draft_content: data.draft_content || data.content || {},
-    draft_sharing_config: data.draft_sharing_config || data.sharing_config || {},
-  };
-}
-
-/* ──────────────────────────────────────────────────────────────
-   Shared loading / error components
-   ────────────────────────────────────────────────────────────── */
+// ─── Loading spinner ─────────────────────────────────────────────────────────
 function FullScreenSpinner() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="w-10 h-10 rounded-full border-2 border-slate-300 border-t-slate-700 animate-spin" />
     </div>
   );
 }
 
+// ─── EventNotFound ──────────────────────────────────────────────────────────
 function EventNotFound() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-gray-50 px-6">
-      <h1 className="text-2xl font-bold text-gray-900">Event Not Found</h1>
-      <p className="text-sm text-gray-500">
-        The event you're looking for doesn't exist or may have been removed.
-      </p>
-      <a href="/" className="text-sm text-gray-700 underline hover:text-gray-900">
-        Go to homepage
-      </a>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-6">
+      <div className="text-center max-w-sm">
+        <h1 className="text-3xl font-semibold text-slate-900 mb-3">Event Not Found</h1>
+        <p className="text-sm text-slate-500 mb-6">
+          The event you're looking for doesn't exist or may have been removed.
+        </p>
+        <a
+          href="/"
+          className="inline-flex items-center px-5 py-2.5 text-sm font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors"
+        >
+          Go to homepage
+        </a>
+      </div>
     </div>
   );
 }
 
-/* ──────────────────────────────────────────────────────────────
-   ProtectedRoute – checks auth, redirects to /login if not
-   authenticated.
-   ────────────────────────────────────────────────────────────── */
+// ─── ProtectedRoute ─────────────────────────────────────────────────────────
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<"loading" | "authed" | "unauthed">(
-    "loading"
-  );
+  const [checking, setChecking] = useState(true);
+  const [authenticated, setAuthenticated] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    let mounted = true;
+    let cancelled = false;
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!mounted) return;
-      setState(user ? "authed" : "unauthed");
+      if (cancelled) return;
+      if (user) {
+        setAuthenticated(true);
+      } else {
+        setAuthenticated(false);
+        navigate("/login", { replace: true });
+      }
+      setChecking(false);
     });
     return () => {
-      mounted = false;
+      cancelled = true;
     };
-  }, []);
+  }, [navigate]);
 
-  if (state === "loading") return <FullScreenSpinner />;
-  if (state === "unauthed") return <Navigate to="/login" replace />;
+  if (checking) return <FullScreenSpinner />;
+  if (!authenticated) return null;
   return <>{children}</>;
 }
 
-/* ──────────────────────────────────────────────────────────────
-   useResolveSlug – resolves a slug to a UserEvent.
+// ─── Account page (inline) ──────────────────────────────────────────────────
+function AccountPage() {
+  const [email, setEmail] = useState<string | null>(null);
+  const navigate = useNavigate();
 
-   1. Query user_events where slug = $slug.
-   2. If not found, query event_slug_redirects where slug = $slug
-      to get the event_id, then fetch the event by id.
-   3. If still not found, returns null.
-   ────────────────────────────────────────────────────────────── */
-function useResolveSlug(slug: string | undefined) {
-  return useQuery<UserEvent | null>({
-    queryKey: ["slug-event", slug],
-    queryFn: async () => {
-      if (!slug) return null;
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setEmail(user?.email ?? null);
+    });
+  }, []);
 
-      // 1. Try user_events by slug
-      const { data: bySlug, error: err1 } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("slug", slug)
-        .maybeSingle();
-      if (err1) throw err1;
-      if (bySlug) return normalizeEvent(bySlug);
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/", { replace: true });
+  };
 
-      // 2. Try event_slug_redirects for old slugs
-      const { data: redirect, error: err2 } = await supabase
-        .from("event_slug_redirects")
-        .select("event_id")
-        .eq("slug", slug)
-        .maybeSingle();
-      if (err2) throw err2;
-      if (redirect) {
-        const { data: byId, error: err3 } = await supabase
-          .from("user_events")
-          .select("*")
-          .eq("id", redirect.event_id)
-          .maybeSingle();
-        if (err3) throw err3;
-        if (byId) return normalizeEvent(byId);
-      }
-
-      // 3. Not found
-      return null;
-    },
-    enabled: !!slug,
-    staleTime: 60000,
-  });
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6">
+      <div className="w-full max-w-sm bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+        <h1 className="text-2xl font-semibold text-slate-900 mb-1">Account</h1>
+        <p className="text-sm text-slate-500 mb-6">Manage your account settings</p>
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Email</p>
+            <p className="text-sm text-slate-900">{email ?? "Loading…"}</p>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="w-full px-4 py-2.5 text-sm font-medium text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors"
+          >
+            Sign out
+          </button>
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="w-full px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
+          >
+            Go to dashboard
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-/* ──────────────────────────────────────────────────────────────
-   useFetchEvent – fetches a single event by UUID eventId.
-   Used by the TemplateCoverRouter / TemplateLoginRouter /
-   TemplateHomeRouter to determine template_id.
-   ────────────────────────────────────────────────────────────── */
-function useFetchEvent(eventId: string | undefined) {
-  return useQuery<UserEvent | null>({
+// ═══════════════════════════════════════════════════════════════════════════
+// SLUG RESOLUTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function resolveSlugToEvent(
+  slug: string,
+): Promise<{ event: UserEvent | null; notFound: boolean }> {
+  // 1. Try user_events.slug
+  const { data: direct, error: err1 } = await supabase
+    .from("user_events")
+    .select("*")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (err1) throw err1;
+  if (direct) return { event: direct as UserEvent, notFound: false };
+
+  // 2. Try event_slug_redirects
+  const { data: redirect, error: err2 } = await supabase
+    .from("event_slug_redirects")
+    .select("event_id")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (err2) throw err2;
+  if (redirect) {
+    const { data: byId, error: err3 } = await supabase
+      .from("user_events")
+      .select("*")
+      .eq("id", redirect.event_id)
+      .maybeSingle();
+    if (err3) throw err3;
+    if (byId) return { event: byId as UserEvent, notFound: false };
+  }
+
+  return { event: null, notFound: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EVENT FETCH HOOK (shared by UUID-based template routers)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function usePublicEvent(eventId: string | undefined) {
+  return useQuery<UserEvent | null, Error>({
     queryKey: ["public-event", eventId],
     queryFn: async () => {
-      if (!eventId) return null;
+      if (!eventId) throw new Error("Event ID is required");
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
         .eq("id", eventId)
         .maybeSingle();
       if (error) throw error;
-      return data ? normalizeEvent(data) : null;
+      return data as UserEvent | null;
     },
     enabled: !!eventId,
-    staleTime: 30000,
   });
 }
 
-/* ──────────────────────────────────────────────────────────────
-   TemplateCoverRouter – renders cover based on template_id.
-   Used for UUID route  /:eventId
-   ────────────────────────────────────────────────────────────── */
+// ═══════════════════════════════════════════════════════════════════════════
+// TEMPLATE-AWARE ROUTER COMPONENTS (UUID-based: /:eventId)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Renders the cover page based on the event's template_id.
+ * Used for UUID routes: /:eventId
+ */
 function TemplateCoverRouter() {
   const { eventId } = useParams<{ eventId: string }>();
-  const { data: event, isLoading, error } = useFetchEvent(eventId);
+  const { data: event, isLoading, error } = usePublicEvent(eventId);
 
   if (isLoading) return <FullScreenSpinner />;
   if (error || !event) return <EventNotFound />;
 
-  if (event.template_id === "rusty") return <RustyCover />;
-  return <Cover />;
+  if (event.template_id === "rusty") {
+    return (
+      <Suspense fallback={<FullScreenSpinner />}>
+        <RustyCover />
+      </Suspense>
+    );
+  }
+  return (
+    <Suspense fallback={<FullScreenSpinner />}>
+      <GuestCover />
+    </Suspense>
+  );
 }
 
-/* ──────────────────────────────────────────────────────────────
-   TemplateLoginRouter – renders login based on template_id.
-   Used for UUID route  /:eventId/login
-   ────────────────────────────────────────────────────────────── */
+/**
+ * Renders the login page based on the event's template_id.
+ * Used for UUID routes: /:eventId/login
+ */
 function TemplateLoginRouter() {
   const { eventId } = useParams<{ eventId: string }>();
-  const { data: event, isLoading, error } = useFetchEvent(eventId);
+  const { data: event, isLoading, error } = usePublicEvent(eventId);
 
   if (isLoading) return <FullScreenSpinner />;
   if (error || !event) return <EventNotFound />;
 
-  if (event.template_id === "rusty") return <RustyLogin />;
-  return <GuestLogin />;
+  if (event.template_id === "rusty") {
+    return (
+      <Suspense fallback={<FullScreenSpinner />}>
+        <RustyLogin />
+      </Suspense>
+    );
+  }
+  return (
+    <Suspense fallback={<FullScreenSpinner />}>
+      <GuestLogin />
+    </Suspense>
+  );
 }
 
-/* ──────────────────────────────────────────────────────────────
-   TemplateHomeRouter – renders the guest layout based on
-   template_id.  The layout provides the event via Outlet
-   context and the nested child routes render inside it.
-
-   Used for UUID routes:
-     /:eventId/home        (index)
-     /:eventId/home/rsvp
-     /:eventId/home/info
-     /:eventId/home/message
-     /:eventId/home/wishes
-     /:eventId/home/contact
-   ────────────────────────────────────────────────────────────── */
+/**
+ * Renders the home layout based on the event's template_id, with nested
+ * child routes (rsvp, info, message, wishes, contact).
+ * Used for UUID routes: /:eventId/home
+ */
 function TemplateHomeRouter() {
   const { eventId } = useParams<{ eventId: string }>();
-  const { data: event, isLoading, error } = useFetchEvent(eventId);
+  const { data: event, isLoading, error } = usePublicEvent(eventId);
 
   if (isLoading) return <FullScreenSpinner />;
   if (error || !event) return <EventNotFound />;
 
-  if (event.template_id === "rusty") return <RustyLayout lang="en" />;
-  return <GuestLayout />;
-}
-
-/* ──────────────────────────────────────────────────────────────
-   TemplateChildRouter – takes the resolved event (from outlet
-   context provided by the layout) and renders the appropriate
-   child component based on template_id and the current route.
-
-   Works for BOTH:
-     /e/:slug/home/:child
-     /:eventId/home/:child
-   because the slug routers render the UUID-based routes with a
-   synthetic location (see below), so eventId is always in params.
-   ────────────────────────────────────────────────────────────── */
-function TemplateChildRouter() {
-  const { child } = useParams<{ child: string }>();
-  const ctx = useOutletContext<{ event: UserEvent; lang?: "en" | "bm" }>();
-  const event = ctx?.event;
-
-  if (!event) return <EventNotFound />;
-
-  const isRusty = event.template_id === "rusty";
-
-  switch (child) {
-    case "rsvp":
-      return isRusty ? <RustyRsvp /> : <Rsvp />;
-    case "wishes":
-      return isRusty ? <RustyMessage /> : <Wishes />;
-    case "contact":
-      return isRusty ? <RustyInfo /> : <Contact />;
-    case "info":
-      return isRusty ? <RustyInfo /> : <Home />;
-    case "message":
-      return isRusty ? <RustyMessage /> : <Wishes />;
-    default:
-      return <EventNotFound />;
+  if (event.template_id === "rusty") {
+    return (
+      <Suspense fallback={<FullScreenSpinner />}>
+        <Routes>
+          <Route element={<RustyLayout lang="en" />}>
+            <Route index element={<RustyHome />} />
+            <Route path="rsvp" element={<RustyRsvp />} />
+            <Route path="info" element={<RustyInfo />} />
+            <Route path="message" element={<RustyMessage />} />
+            <Route path="*" element={<Navigate to="" replace />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    );
   }
-}
-
-/* ──────────────────────────────────────────────────────────────
-   HomeIndex – renders the home page content for the home index
-   route (/:eventId/home with no child path).
-   ────────────────────────────────────────────────────────────── */
-function HomeIndex() {
-  const ctx = useOutletContext<{ event: UserEvent; lang?: "en" | "bm" }>();
-  const event = ctx?.event;
-
-  if (!event) return <EventNotFound />;
-
-  if (event.template_id === "rusty") return <RustyHome />;
-  return <Home />;
-}
-
-/* ──────────────────────────────────────────────────────────────
-   Slug routers – resolve the slug, pre-populate the react-query
-   cache, then render the UUID-based routes against a synthetic
-   location so that all existing components (which rely on
-   useParams eventId) work unchanged.
-
-   The browser URL stays as /e/:slug/...  – the synthetic location
-   only affects route matching inside the nested <Routes>.
-   ────────────────────────────────────────────────────────────── */
-
-function SlugCoverRouter() {
-  const { slug } = useParams<{ slug: string }>();
-  const qc = useQueryClient();
-  const { data: event, isLoading, error } = useResolveSlug(slug);
-
-  useEffect(() => {
-    if (event) {
-      qc.setQueryData(["public-event", event.id], event);
-    }
-  }, [event, qc]);
-
-  if (isLoading) return <FullScreenSpinner />;
-  if (error || !event) return <EventNotFound />;
-
-  const syntheticLocation = {
-    pathname: `/${event.id}`,
-    search: "",
-    hash: "",
-    state: null,
-    key: "slug-cover",
-  };
 
   return (
-    <Routes location={syntheticLocation}>
-      <Route path="/:eventId" element={<TemplateCoverRouter />} />
-    </Routes>
+    <Suspense fallback={<FullScreenSpinner />}>
+      <Routes>
+        <Route element={<GuestLayout />}>
+          <Route index element={<GuestHome />} />
+          <Route path="rsvp" element={<GuestRsvp />} />
+          <Route path="info" element={<GuestInfo />} />
+          <Route path="message" element={<GuestMessage />} />
+          <Route path="wishes" element={<GuestWishes />} />
+          <Route path="contact" element={<GuestContact />} />
+          <Route path="*" element={<Navigate to="" replace />} />
+        </Route>
+      </Routes>
+    </Suspense>
   );
 }
 
-function SlugLoginRouter() {
-  const { slug } = useParams<{ slug: string }>();
-  const qc = useQueryClient();
-  const { data: event, isLoading, error } = useResolveSlug(slug);
+// ═══════════════════════════════════════════════════════════════════════════
+// SLUG-BASED ROUTER COMPONENTS (/e/:slug)
+// ═══════════════════════════════════════════════════════════════════════════
 
-  useEffect(() => {
-    if (event) {
-      qc.setQueryData(["public-event", event.id], event);
-    }
-  }, [event, qc]);
-
-  if (isLoading) return <FullScreenSpinner />;
-  if (error || !event) return <EventNotFound />;
-
-  const syntheticLocation = {
-    pathname: `/${event.id}/login`,
-    search: "",
-    hash: "",
-    state: null,
-    key: "slug-login",
-  };
-
-  return (
-    <Routes location={syntheticLocation}>
-      <Route path="/:eventId/login" element={<TemplateLoginRouter />} />
-    </Routes>
-  );
-}
-
-function SlugHomeRouter() {
+/**
+ * Resolves a slug to an event, pre-populates the react-query cache, then
+ * renders nested <Routes> using a synthetic location that replaces
+ * /e/:slug with /${event.id} so the UUID-based components work unchanged.
+ */
+function SlugRouter({ children }: { children: (eventId: string) => React.ReactNode }) {
   const { slug } = useParams<{ slug: string }>();
   const location = useLocation();
   const qc = useQueryClient();
-  const { data: event, isLoading, error } = useResolveSlug(slug);
 
-  useEffect(() => {
-    if (event) {
-      qc.setQueryData(["public-event", event.id], event);
-    }
-  }, [event, qc]);
+  const { data: resolved, isLoading, error } = useQuery({
+    queryKey: ["slug-resolve", slug],
+    queryFn: () => resolveSlugToEvent(slug!),
+    enabled: !!slug,
+    staleTime: 5 * 60 * 1000,
+  });
 
   if (isLoading) return <FullScreenSpinner />;
-  if (error || !event) return <EventNotFound />;
+  if (error) return <EventNotFound />;
+  if (resolved?.notFound || !resolved?.event) return <EventNotFound />;
 
-  // Extract suffix after /e/:slug/home
-  const slugPrefix = location.pathname.match(/^\/e\/[^/]+\/home/);
-  const suffix = slugPrefix
-    ? location.pathname.slice(slugPrefix[0].length)
-    : "";
-  // suffix is "" for index, "/rsvp" for rsvp, etc.
-  // Synthetic path: /:eventId/home + suffix
-  const syntheticPath = `/${event.id}/home${suffix}`;
+  const event = resolved.event;
 
-  const syntheticLocation = {
-    ...location,
-    pathname: syntheticPath,
-  };
+  // Pre-populate the cache so UUID-based child components find the event
+  // without an extra fetch.
+  qc.setQueryData(["public-event", event.id], event);
+
+  // Build a synthetic location that swaps /e/:slug → /${event.id}
+  const slugPrefix = `/e/${slug}`;
+  const syntheticPathname =
+    location.pathname === slugPrefix
+      ? `/${event.id}`
+      : `/${event.id}${location.pathname.slice(slugPrefix.length)}`;
+
+  const syntheticLocation = { ...location, pathname: syntheticPathname };
 
   return (
     <Routes location={syntheticLocation}>
-      <Route path="/:eventId/home" element={<TemplateHomeRouter />}>
-        <Route index element={<HomeIndex />} />
-        <Route path="rsvp" element={<TemplateChildRouter />} />
-        <Route path="info" element={<TemplateChildRouter />} />
-        <Route path="message" element={<TemplateChildRouter />} />
-        <Route path="wishes" element={<TemplateChildRouter />} />
-        <Route path="contact" element={<TemplateChildRouter />} />
-        <Route path="*" element={<Navigate to="" replace />} />
-      </Route>
+      {children(event.id)}
     </Routes>
   );
 }
 
-/* ──────────────────────────────────────────────────────────────
-   Suspense wrapper for lazy-loaded routes
-   ────────────────────────────────────────────────────────────── */
-function LazyFallback() {
-  return <FullScreenSpinner />;
+/**
+ * SlugCoverRouter — resolves slug, renders template-appropriate cover.
+ * Route: /e/:slug
+ */
+function SlugCoverRouter() {
+  return (
+    <SlugRouter>
+      {(eventId) => (
+        <>
+          <Route path={`/${eventId}`} element={<TemplateCoverRouter />} />
+          <Route path="*" element={<Navigate to={`/${eventId}`} replace />} />
+        </>
+      )}
+    </SlugRouter>
+  );
 }
 
-/* ──────────────────────────────────────────────────────────────
-   App routes
-   ────────────────────────────────────────────────────────────── */
-function AppRoutes() {
+/**
+ * SlugLoginRouter — resolves slug, renders template-appropriate login.
+ * Route: /e/:slug/login
+ */
+function SlugLoginRouter() {
   return (
-    <React.Suspense fallback={<LazyFallback />}>
+    <SlugRouter>
+      {(eventId) => (
+        <>
+          <Route path={`/${eventId}/login`} element={<TemplateLoginRouter />} />
+          <Route path="*" element={<Navigate to={`/${eventId}/login`} replace />} />
+        </>
+      )}
+    </SlugRouter>
+  );
+}
+
+/**
+ * SlugHomeRouter — resolves slug, renders template-appropriate home with
+ * nested child routes (rsvp, info, message, wishes, contact).
+ * Route: /e/:slug/home
+ */
+function SlugHomeRouter() {
+  return (
+    <SlugRouter>
+      {(eventId) => (
+        <>
+          <Route path={`/${eventId}/home`} element={<TemplateHomeRouter />} />
+          <Route path={`/${eventId}/home/*`} element={<TemplateHomeRouter />} />
+          <Route path="*" element={<Navigate to={`/${eventId}/home`} replace />} />
+        </>
+      )}
+    </SlugRouter>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROOT APP
+// ═══════════════════════════════════════════════════════════════════════════
+
+function App() {
+  return (
+    <Suspense fallback={<FullScreenSpinner />}>
       <Routes>
-        {/* Landing */}
+        {/* Top-level pages */}
         <Route path="/" element={<Landing />} />
-
-        {/* Auth */}
         <Route path="/login" element={<Auth />} />
-
-        {/* Protected routes */}
         <Route
           path="/dashboard"
           element={
@@ -474,12 +448,12 @@ function AppRoutes() {
           path="/account"
           element={
             <ProtectedRoute>
-              <Account />
+              <AccountPage />
             </ProtectedRoute>
           }
         />
 
-        {/* Event editor (dashboard side) */}
+        {/* Event editor (eager EventLayout with nested lazy sub-routes) */}
         <Route path="/event/:eventId" element={<EventLayout />}>
           <Route index element={<Navigate to="cover" replace />} />
           <Route path="cover" element={<CoverEditor />} />
@@ -488,7 +462,7 @@ function AppRoutes() {
           <Route path="theme" element={<ThemeEditor />} />
           <Route path="branding" element={<Branding />} />
           <Route path="guests" element={<Guests />} />
-          <Route path="rsvp" element={<RsvpManager />} />
+          <Route path="rsvp" element={<RsvpEditor />} />
           <Route path="timeline" element={<Timeline />} />
           <Route path="sharing" element={<Sharing />} />
           <Route path="analytics" element={<Analytics />} />
@@ -503,37 +477,28 @@ function AppRoutes() {
         {/* UUID-based guest routes */}
         <Route path="/:eventId" element={<TemplateCoverRouter />} />
         <Route path="/:eventId/login" element={<TemplateLoginRouter />} />
-        <Route path="/:eventId/home" element={<TemplateHomeRouter />}>
-          <Route index element={<HomeIndex />} />
-          <Route path="rsvp" element={<TemplateChildRouter />} />
-          <Route path="info" element={<TemplateChildRouter />} />
-          <Route path="message" element={<TemplateChildRouter />} />
-          <Route path="wishes" element={<TemplateChildRouter />} />
-          <Route path="contact" element={<TemplateChildRouter />} />
-          <Route path="*" element={<Navigate to="" replace />} />
-        </Route>
+        <Route path="/:eventId/home/*" element={<TemplateHomeRouter />} />
 
-        {/* Catch-all */}
+        {/* Fallback — never redirect deep event links to homepage; only
+            unmatched top-level paths fall through to "/". */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </React.Suspense>
+    </Suspense>
   );
 }
 
-/* ──────────────────────────────────────────────────────────────
-   Root
-   ────────────────────────────────────────────────────────────── */
-const root = document.getElementById("root");
-if (!root) throw new Error("Root element not found");
+// ═══════════════════════════════════════════════════════════════════════════
+// ENTRY POINT
+// ═══════════════════════════════════════════════════════════════════════════
 
-ReactDOM.createRoot(root).render(
+ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <GuestAuthProvider>
-          <AppRoutes />
-        </GuestAuthProvider>
-      </BrowserRouter>
+      <GuestAuthProvider>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </GuestAuthProvider>
     </QueryClientProvider>
-  </React.StrictMode>
+  </React.StrictMode>,
 );

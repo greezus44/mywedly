@@ -1,16 +1,16 @@
 import { useMemo } from "react";
 import { useOutletContext, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, UserEvent, EventGuest, EventRsvp, EventMessage } from "../../lib/supabase";
-import { Card, Badge, Skeleton, ErrorState, EmptyState } from "../../components/ui/index";
-import { cn, formatDate, formatTime, getRsvpStatus, formatDeadline } from "../../lib/utils";
-import { Users, Check, X, Clock, MessageSquare, Calendar, TrendingUp } from "lucide-react";
+import { supabase, type UserEvent, type EventGuest, type EventRsvp, type EventMessage } from "../../lib/supabase";
+import { Card, Badge, Skeleton, ErrorState, EmptyState } from "../../components/ui";
+import { Users, Check, X, Clock, MessageSquare, CalendarClock, TrendingUp } from "lucide-react";
+import { getRsvpStatus, formatDeadline, formatDate } from "../../lib/utils";
 
 export default function AnalyticsPage() {
   const { event } = useOutletContext<{ event: UserEvent | null }>();
   const { eventId } = useParams<{ eventId: string }>();
 
-  const { data: guests, isLoading: guestsLoading, isError: guestsError, refetch: refetchGuests } = useQuery<EventGuest[]>({
+  const { data: guests, isLoading: guestsLoading } = useQuery<EventGuest[]>({
     queryKey: ["guests", eventId],
     queryFn: async () => {
       if (!eventId) return [];
@@ -44,105 +44,75 @@ export default function AnalyticsPage() {
   });
 
   const stats = useMemo(() => {
-    const totalGuests = guests?.length || 0;
+    const total = guests?.length || 0;
     const attending = guests?.filter((g) => g.rsvp_status === "attending").length || 0;
     const declined = guests?.filter((g) => g.rsvp_status === "declined").length || 0;
-    const pending = guests?.filter((g) => !g.rsvp_status || g.rsvp_status === "pending").length || 0;
-    const totalRsvps = rsvps?.length || 0;
-    const messagesCount = messages?.length || 0;
-    return { totalGuests, attending, declined, pending, totalRsvps, messagesCount };
-  }, [guests, rsvps, messages]);
+    const pending = guests?.filter((g) => g.rsvp_status === "pending").length || 0;
+    const messageCount = messages?.length || 0;
+    return { total, attending, declined, pending, messageCount };
+  }, [guests, messages]);
 
   const rsvpBreakdown = useMemo(() => {
-    const total = stats.totalRsvps || stats.totalGuests || 1;
+    const total = stats.total || 1;
     return {
-      attending: { count: stats.attending, pct: (stats.attending / total) * 100 },
-      declined: { count: stats.declined, pct: (stats.declined / total) * 100 },
-      pending: { count: stats.pending, pct: (stats.pending / total) * 100 },
+      attendingPct: (stats.attending / total) * 100,
+      declinedPct: (stats.declined / total) * 100,
+      pendingPct: (stats.pending / total) * 100,
     };
   }, [stats]);
 
-  const rsvpStatus = getRsvpStatus(event?.rsvp_deadline || event?.draft_rsvp_deadline || null);
+  const deadlineStatus = getRsvpStatus(event?.draft_rsvp_deadline || event?.rsvp_deadline || null);
 
-  if (!event) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Skeleton className="w-full h-32" />
-      </div>
-    );
-  }
+  if (!event) return <div className="p-6"><Skeleton className="h-8 w-48 mb-4" /><Skeleton className="h-96 w-full" /></div>;
 
-  if (guestsError) {
-    return <ErrorState message="Failed to load analytics" onRetry={() => refetchGuests()} />;
-  }
+  const isLoading = guestsLoading || rsvpsLoading || messagesLoading;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight">Analytics</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Overview of your event performance</p>
+    <div className="p-6">
+      <h1 className="text-xl font-semibold text-slate-900 mb-6">Analytics</h1>
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <StatCard icon={<Users className="w-5 h-5" />} label="Total Guests" value={stats.total} color="text-slate-900" bg="bg-slate-50" loading={guestsLoading} />
+        <StatCard icon={<Check className="w-5 h-5" />} label="Attending" value={stats.attending} color="text-green-700" bg="bg-green-50" loading={guestsLoading} />
+        <StatCard icon={<X className="w-5 h-5" />} label="Declined" value={stats.declined} color="text-red-700" bg="bg-red-50" loading={guestsLoading} />
+        <StatCard icon={<Clock className="w-5 h-5" />} label="Pending" value={stats.pending} color="text-amber-700" bg="bg-amber-50" loading={guestsLoading} />
+        <StatCard icon={<MessageSquare className="w-5 h-5" />} label="Messages" value={stats.messageCount} color="text-blue-700" bg="bg-blue-50" loading={messagesLoading} />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <StatCard icon={<Users className="w-4 h-4" />} label="Total Guests" value={stats.totalGuests} />
-        <StatCard icon={<Check className="w-4 h-4" />} label="Attending" value={stats.attending} color="text-green-600" />
-        <StatCard icon={<X className="w-4 h-4" />} label="Declined" value={stats.declined} color="text-red-600" />
-        <StatCard icon={<Clock className="w-4 h-4" />} label="Pending" value={stats.pending} color="text-yellow-600" />
-        <StatCard icon={<MessageSquare className="w-4 h-4" />} label="Messages" value={stats.messagesCount} color="text-blue-600" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
-            <TrendingUp className="w-5 h-5 text-gray-400" />
-            <h2 className="text-base font-semibold text-gray-900">RSVP Breakdown</h2>
+            <TrendingUp className="w-5 h-5 text-slate-400" />
+            <h2 className="text-sm font-semibold text-slate-900">RSVP Breakdown</h2>
           </div>
-          {guestsLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-6 w-full" />
-              <Skeleton className="h-6 w-full" />
-              <Skeleton className="h-6 w-full" />
-            </div>
-          ) : stats.totalGuests === 0 ? (
-            <EmptyState title="No data yet" description="Add guests to see RSVP breakdown" />
+          {isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : stats.total === 0 ? (
+            <EmptyState title="No data yet" description="Guest RSVPs will show here." />
           ) : (
             <div className="space-y-4">
-              <BreakdownBar label="Attending" count={rsvpBreakdown.attending.count} pct={rsvpBreakdown.attending.pct} color="bg-green-500" />
-              <BreakdownBar label="Declined" count={rsvpBreakdown.declined.count} pct={rsvpBreakdown.declined.pct} color="bg-red-500" />
-              <BreakdownBar label="Pending" count={rsvpBreakdown.pending.count} pct={rsvpBreakdown.pending.pct} color="bg-yellow-500" />
+              <ProgressBar label="Attending" value={stats.attending} pct={rsvpBreakdown.attendingPct} color="bg-green-500" />
+              <ProgressBar label="Declined" value={stats.declined} pct={rsvpBreakdown.declinedPct} color="bg-red-500" />
+              <ProgressBar label="Pending" value={stats.pending} pct={rsvpBreakdown.pendingPct} color="bg-amber-500" />
             </div>
           )}
         </Card>
 
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Calendar className="w-5 h-5 text-gray-400" />
-            <h2 className="text-base font-semibold text-gray-900">RSVP Deadline</h2>
+            <CalendarClock className="w-5 h-5 text-slate-400" />
+            <h2 className="text-sm font-semibold text-slate-900">RSVP Deadline</h2>
           </div>
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Status</span>
-              {rsvpStatus === "open" && <Badge variant="success">Open</Badge>}
-              {rsvpStatus === "closing-soon" && <Badge variant="warning">Closing Soon</Badge>}
-              {rsvpStatus === "closed" && <Badge variant="error">Closed</Badge>}
+            <div>
+              <div className="text-sm text-slate-500">Deadline</div>
+              <div className="text-lg font-medium text-slate-900">{formatDeadline(event?.draft_rsvp_deadline || event?.rsvp_deadline || null) || "No deadline set"}</div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Deadline</span>
-              <span className="text-sm font-medium text-gray-900">
-                {event.rsvp_deadline || event.draft_rsvp_deadline
-                  ? formatDeadline(event.rsvp_deadline || event.draft_rsvp_deadline || null)
-                  : "No deadline set"}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Total RSVPs</span>
-              <span className="text-sm font-medium text-gray-900">{stats.totalRsvps}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Response Rate</span>
-              <span className="text-sm font-medium text-gray-900">
-                {stats.totalGuests > 0 ? Math.round(((stats.attending + stats.declined) / stats.totalGuests) * 100) : 0}%
-              </span>
+            <div>
+              <div className="text-sm text-slate-500">Status</div>
+              <Badge variant={deadlineStatus === "open" ? "success" : deadlineStatus === "closing-soon" ? "warning" : deadlineStatus === "closed" ? "error" : "default"}>
+                {deadlineStatus.replace("-", " ")}
+              </Badge>
             </div>
           </div>
         </Card>
@@ -150,22 +120,20 @@ export default function AnalyticsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Recent Messages</h2>
-          {messagesLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
-            </div>
-          ) : !messages || messages.length === 0 ? (
-            <EmptyState icon={<MessageSquare className="w-10 h-10" />} title="No messages yet" description="Guest messages will appear here" />
+          <h2 className="text-sm font-semibold text-slate-900 mb-4">Recent RSVPs</h2>
+          {rsvpsLoading ? (
+            <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+          ) : !rsvps || rsvps.length === 0 ? (
+            <EmptyState icon={<MessageSquare className="w-10 h-10" />} title="No RSVPs yet" />
           ) : (
-            <div className="space-y-3">
-              {messages.slice(0, 5).map((m) => (
-                <div key={m.id} className="border border-gray-100 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-900">{m.guest_name}</span>
-                    <span className="text-xs text-gray-400">{formatDate(m.created_at)}</span>
+            <div className="space-y-2">
+              {rsvps.slice(0, 5).map((r) => (
+                <div key={r.id} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900">{r.guest_name}</div>
+                    <div className="text-xs text-slate-500">{formatDate(r.submitted_at)}</div>
                   </div>
-                  <p className="text-sm text-gray-600 line-clamp-2">{m.message}</p>
+                  <Badge variant={r.status === "attending" ? "success" : r.status === "declined" ? "error" : "warning"}>{r.status}</Badge>
                 </div>
               ))}
             </div>
@@ -173,83 +141,53 @@ export default function AnalyticsPage() {
         </Card>
 
         <Card className="p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Recent RSVPs</h2>
-          {rsvpsLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
-            </div>
-          ) : !rsvps || rsvps.length === 0 ? (
-            <EmptyState icon={<Calendar className="w-10 h-10" />} title="No RSVPs yet" description="RSVP responses will appear here" />
+          <h2 className="text-sm font-semibold text-slate-900 mb-4">Recent Messages</h2>
+          {messagesLoading ? (
+            <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+          ) : !messages || messages.length === 0 ? (
+            <EmptyState icon={<MessageSquare className="w-10 h-10" />} title="No messages yet" />
           ) : (
-            <div className="space-y-3">
-              {rsvps.slice(0, 5).map((r) => (
-                <div key={r.id} className="border border-gray-100 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-900">{r.guest_name}</span>
-                    {r.status === "attending" && <Badge variant="success">Attending</Badge>}
-                    {r.status === "declined" && <Badge variant="error">Declined</Badge>}
-                    {(r.status === "maybe") && <Badge variant="warning">Pending</Badge>}
+            <div className="space-y-2">
+              {messages.slice(0, 5).map((m) => (
+                <div key={m.id} className="py-2 border-b border-slate-50 last:border-0">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium text-slate-900">{m.guest_name}</div>
+                    <div className="text-xs text-slate-500">{formatDate(m.created_at)}</div>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-gray-400">
-                    <span>{r.plus_ones > 0 ? `+${r.plus_ones} guest${r.plus_ones > 1 ? "s" : ""}` : "Solo"}</span>
-                    <span>{r.submitted_at ? formatDate(r.submitted_at) : ""}</span>
-                  </div>
+                  <p className="text-sm text-slate-600 mt-1 line-clamp-2">{m.message}</p>
                 </div>
               ))}
             </div>
           )}
         </Card>
       </div>
-
-      {stats.totalGuests > 0 && (
-        <Card className="p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Summary</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Total Invited</p>
-              <p className="text-lg font-bold text-gray-900">{stats.totalGuests}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Confirmed Attending</p>
-              <p className="text-lg font-bold text-green-600">{stats.attending}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Total Plus Ones</p>
-              <p className="text-lg font-bold text-gray-900">
-                {guests?.reduce((sum, g) => sum + (g.plus_ones || 0), 0) || 0}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-1">Total Expected</p>
-              <p className="text-lg font-bold text-gray-900">
-                {stats.attending + (guests?.reduce((sum, g) => sum + (g.plus_ones || 0), 0) || 0)}
-              </p>
-            </div>
-          </div>
-        </Card>
-      )}
     </div>
   );
 }
 
-function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color?: string }) {
+function StatCard({ icon, label, value, color, bg, loading }: { icon: React.ReactNode; label: string; value: number; color: string; bg: string; loading: boolean }) {
   return (
     <Card className="p-4">
-      <div className="flex items-center gap-2 text-gray-400 mb-2">{icon}<span className="text-xs font-medium text-gray-500">{label}</span></div>
-      <p className={cn("text-2xl font-bold", color || "text-gray-900")}>{value}</p>
+      <div className="flex items-center gap-3">
+        <div className={`p-2 rounded-lg ${bg} ${color}`}>{icon}</div>
+        <div>
+          {loading ? <Skeleton className="h-7 w-12" /> : <div className="text-2xl font-bold text-slate-900">{value}</div>}
+          <div className="text-xs text-slate-500">{label}</div>
+        </div>
+      </div>
     </Card>
   );
 }
 
-function BreakdownBar({ label, count, pct, color }: { label: string; count: number; pct: number; color: string }) {
+function ProgressBar({ label, value, pct, color }: { label: string; value: number; pct: number; color: string }) {
   return (
     <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-sm font-medium text-gray-700">{label}</span>
-        <span className="text-sm text-gray-500">{count} ({Math.round(pct)}%)</span>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm text-slate-700">{label}</span>
+        <span className="text-sm font-medium text-slate-900">{value} ({pct.toFixed(0)}%)</span>
       </div>
-      <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
-        <div className={cn("h-full rounded-full transition-all duration-500", color)} style={{ width: `${Math.max(pct, 0)}%` }} />
+      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );

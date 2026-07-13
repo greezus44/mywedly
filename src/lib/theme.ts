@@ -1,192 +1,126 @@
-import { ThemeConfig, CoverConfig, LoginConfig, LogoConfig, EventContent, SharingConfig } from "./supabase";
+import type { ThemeConfig } from "./supabase";
 
 export const DEFAULT_THEME: ThemeConfig = {
-  preset: "minimal",
+  preset: "classic",
+  primaryColor: "#0f172a",
+  secondaryColor: "#334155",
+  accentColor: "#0ea5e9",
   bgColor: "#ffffff",
-  primaryColor: "#000000",
-  accentColor: "#666666",
-  headingColor: "#000000",
-  bodyColor: "#333333",
-  buttonBgColor: "#000000",
-  buttonTextColor: "#ffffff",
+  bgSubtleColor: "#f8fafc",
+  textColor: "#1e293b",
+  textMutedColor: "#64748b",
+  borderColor: "#e2e8f0",
   headingFont: "Inter",
   bodyFont: "Inter",
-  scriptFont: "Inter",
-  buttonRadius: 10,
-  sectionPadding: 80,
-  maxWidth: 900,
+  scriptFont: "Cormorant Garamond",
+  buttonRadius: 8,
+  sectionPadding: 64,
+  maxWidth: 1200,
   applyToAll: false,
 };
 
 export const RUSTY_THEME: ThemeConfig = {
   preset: "rusty",
-  bgColor: "#F5ECD7",
   primaryColor: "#B8962E",
-  accentColor: "#C4A44A",
-  headingColor: "#A07820",
-  bodyColor: "#8B7355",
-  buttonBgColor: "#B8962E",
-  buttonTextColor: "#FFFFFF",
-  headingFont: '"Cormorant Garamond"',
+  secondaryColor: "#C4A44A",
+  accentColor: "#A07820",
+  bgColor: "#F5ECD7",
+  bgSubtleColor: "#FAF3E0",
+  textColor: "#3D3528",
+  textMutedColor: "#8B7355",
+  borderColor: "#D4C695",
+  headingFont: "Cormorant Garamond",
   bodyFont: "Inter",
-  scriptFont: '"Cormorant Garamond"',
-  buttonRadius: 12,
-  sectionPadding: 64,
-  maxWidth: 480,
+  scriptFont: "Cormorant Garamond",
+  buttonRadius: 4,
+  sectionPadding: 80,
+  maxWidth: 800,
   applyToAll: true,
 };
 
-export const RUSTY_COVER_CONFIG: CoverConfig = {
-  bgImage: "",
+export const RUSTY_COVER_CONFIG = {
   bgColor: "#F5ECD7",
-  overlayColor: "#000000",
-  overlayOpacity: 0,
-  textColor: "#A07820",
+  textColor: "#3D3528",
   buttonColor: "#B8962E",
   buttonText: "Enter",
-  font: '"Cormorant Garamond"',
-  scriptFont: '"Cormorant Garamond"',
-  customText: "The Wedding Of",
-  showDate: false,
+  scriptFont: "Cormorant Garamond",
+  customText: "Together with their families",
+  showDate: true,
   showCountdown: false,
 };
 
-export const RUSTY_LOGIN_CONFIG: LoginConfig = {
-  title: "Welcome",
-  subtitle: "Please enter your name to continue",
-  welcomeMessage: "We're delighted to have you join us",
-  inputPlaceholder: "Enter your full name",
-  buttonText: "Continue",
-  bgColor: "#F5ECD7",
-  cardBgColor: "#FAF3E0",
-  textColor: "#A07820",
-  inputBgColor: "#FFFFFF",
+export const RUSTY_LOGIN_CONFIG = {
+  bgColor: "#FAF3E0",
+  textColor: "#3D3528",
   buttonColor: "#B8962E",
-  borderColor: "#C4A44A",
-  headingFont: '"Cormorant Garamond"',
-  headingFontSize: 28,
-  headingWeight: "500",
-  font: "Inter",
-  bgImage: "",
-  overlayOpacity: 0,
-  showLogo: false,
-};
-
-export const RUSTY_CONTENT: EventContent = {
-  story: "",
-  story_image: "",
-  gallery: [],
-  sections: [],
-  invitation_title: "Our Wedding",
-  invitation_subtitle: "We invite you to celebrate with us",
-  invitation_body: "Together with our families, we joyfully invite you to share in our celebration of love.",
-  invitation_text: "Your presence would be an honour",
-  rsvp_button_text: "RSVP Now",
-};
-
-export const DEFAULT_COVER_CONFIG: CoverConfig = {
-  bgImage: "",
-  bgColor: "#000000",
-  overlayColor: "#000000",
-  overlayOpacity: 0.4,
-  textColor: "#ffffff",
-  buttonColor: "#ffffff",
-  buttonText: "Enter Event",
-  font: "Inter",
-  scriptFont: "Inter",
-  customText: "",
-  showDate: true,
-  showCountdown: true,
-};
-
-export const DEFAULT_LOGIN_CONFIG: LoginConfig = {
-  title: "Welcome",
-  subtitle: "Please enter your name to continue",
-  welcomeMessage: "We're glad you're here",
+  buttonText: "Continue",
+  heading: "Welcome",
+  subheading: "Please enter your name to continue",
   inputPlaceholder: "Your full name",
-  buttonText: "Sign In",
-  bgColor: "#ffffff",
-  cardBgColor: "#ffffff",
-  textColor: "#000000",
-  inputBgColor: "#f5f5f5",
-  buttonColor: "#000000",
-  borderColor: "#eaeaea",
-  headingFont: "Inter",
-  headingFontSize: 28,
-  headingWeight: "700",
-  font: "Inter",
-  bgImage: "",
-  overlayOpacity: 0.3,
-  showLogo: true,
 };
 
-export const DEFAULT_LOGO_CONFIG: LogoConfig = {
-  enabled: false,
-  image: "",
-  text: "E",
-  fontSize: 32,
-  color: "#000000",
-};
-
-export const DEFAULT_CONTENT: EventContent = {
-  story: "We invite you to join us for a special celebration.",
-  story_image: "",
-  gallery: [],
-  sections: [],
-  invitation_title: "",
-  invitation_subtitle: "",
-  invitation_body: "",
-  invitation_text: "",
+export const RUSTY_CONTENT = {
+  invitation_title: "You're Invited",
+  invitation_subtitle: "We would be honoured by your presence",
+  invitation_body: "As we celebrate this sacred union, we invite you to join us for a day filled with love, joy, and cherished moments.",
+  invitation_text: "Your presence is the greatest gift we could ask for.",
   rsvp_button_text: "RSVP",
+  story: "Our journey began with a simple hello, and through every season, our love has grown deeper and stronger. We are excited to begin this new chapter together, surrounded by the people we love most.",
 };
 
-export const DEFAULT_SHARING_CONFIG: SharingConfig = {
-  showShareButtons: true,
-  shareMessage: "You're invited! Join us for our special event.",
-  whatsappText: "You're invited! Join us for our special event.",
-  facebookText: "You're invited! Join us for our special event.",
-  emailSubject: "You're invited!",
-  emailBody: "Join us for our special event.",
-  qrColor: "#000000",
-  qrBgColor: "#ffffff",
+export const THEME_PRESETS: Record<string, ThemeConfig> = {
+  classic: DEFAULT_THEME,
+  rusty: RUSTY_THEME,
+  ocean: {
+    ...DEFAULT_THEME,
+    preset: "ocean",
+    primaryColor: "#0c4a6e",
+    secondaryColor: "#075985",
+    accentColor: "#0ea5e9",
+    bgColor: "#f0f9ff",
+    bgSubtleColor: "#e0f2fe",
+  },
+  forest: {
+    ...DEFAULT_THEME,
+    preset: "forest",
+    primaryColor: "#14532d",
+    secondaryColor: "#166534",
+    accentColor: "#16a34a",
+    bgColor: "#f0fdf4",
+    bgSubtleColor: "#dcfce7",
+  },
+  rose: {
+    ...DEFAULT_THEME,
+    preset: "rose",
+    primaryColor: "#881337",
+    secondaryColor: "#9f1239",
+    accentColor: "#e11d48",
+    bgColor: "#fff1f2",
+    bgSubtleColor: "#ffe4e6",
+  },
 };
 
-export const THEME_PRESETS: { id: string; name: string; config: Partial<ThemeConfig> }[] = [
-  { id: "minimal", name: "Minimal", config: { bgColor: "#ffffff", primaryColor: "#000000", accentColor: "#666666", headingColor: "#000000", bodyColor: "#333333", buttonBgColor: "#000000", buttonTextColor: "#ffffff" } },
-  { id: "midnight", name: "Midnight", config: { bgColor: "#0a0a0a", primaryColor: "#ffffff", accentColor: "#999999", headingColor: "#ffffff", bodyColor: "#cccccc", buttonBgColor: "#ffffff", buttonTextColor: "#000000" } },
-  { id: "rusty", name: "Rusty", config: { bgColor: "#F5ECD7", primaryColor: "#B8962E", accentColor: "#C4A44A", headingColor: "#A07820", bodyColor: "#8B7355", buttonBgColor: "#B8962E", buttonTextColor: "#FFFFFF", headingFont: '"Cormorant Garamond"', scriptFont: '"Cormorant Garamond"' } },
-  { id: "sage", name: "Sage", config: { bgColor: "#f4f6f2", primaryColor: "#3a4d3a", accentColor: "#6b8e6b", headingColor: "#2a3a2a", bodyColor: "#4a5a4a", buttonBgColor: "#3a4d3a", buttonTextColor: "#ffffff" } },
-  { id: "rose", name: "Rose", config: { bgColor: "#fdf5f5", primaryColor: "#8b3a3a", accentColor: "#b06060", headingColor: "#6b2a2a", bodyColor: "#5a4a4a", buttonBgColor: "#8b3a3a", buttonTextColor: "#ffffff" } },
-  { id: "navy", name: "Navy", config: { bgColor: "#f0f3f8", primaryColor: "#1a2a4a", accentColor: "#4a6a9a", headingColor: "#1a2a4a", bodyColor: "#3a4a5a", buttonBgColor: "#1a2a4a", buttonTextColor: "#ffffff" } },
-  { id: "stone", name: "Stone", config: { bgColor: "#f5f5f0", primaryColor: "#4a4a4a", accentColor: "#8a8a8a", headingColor: "#3a3a3a", bodyColor: "#5a5a5a", buttonBgColor: "#4a4a4a", buttonTextColor: "#ffffff" } },
+export const FONT_OPTIONS = [
+  { value: "Inter", label: "Inter (Sans)" },
+  { value: "Cormorant Garamond", label: "Cormorant Garamond (Serif)" },
 ];
 
-export const FONT_OPTIONS = ["Inter", "Georgia", "Cormorant Garamond", "Times New Roman", "Helvetica", "Arial", "Courier New", "Verdana"];
-
-export const FONT_WEIGHTS = [
-  { value: "300", label: "Light" },
-  { value: "400", label: "Regular" },
-  { value: "500", label: "Medium" },
-  { value: "600", label: "Semibold" },
-  { value: "700", label: "Bold" },
-  { value: "800", label: "Extra Bold" },
-];
-
-export function themeToCssVars(theme: ThemeConfig): Record<string, string> {
+export function themeToCssVars(theme: ThemeConfig | null): Record<string, string> {
+  const t = theme || DEFAULT_THEME;
   return {
-    "--bg-color": theme.bgColor,
-    "--primary-color": theme.primaryColor,
-    "--accent-color": theme.accentColor,
-    "--heading-color": theme.headingColor,
-    "--body-color": theme.bodyColor,
-    "--button-bg": theme.buttonBgColor,
-    "--button-text": theme.buttonTextColor,
-    "--heading-font": theme.headingFont,
-    "--body-font": theme.bodyFont,
-    "--script-font": theme.scriptFont,
-    "--button-radius": `${theme.buttonRadius}px`,
-    "--section-padding": `${theme.sectionPadding}px`,
-    "--max-width": `${theme.maxWidth}px`,
+    "--color-primary": t.primaryColor || DEFAULT_THEME.primaryColor!,
+    "--color-primary-light": t.secondaryColor || DEFAULT_THEME.secondaryColor!,
+    "--color-bg": t.bgColor || DEFAULT_THEME.bgColor!,
+    "--color-bg-subtle": t.bgSubtleColor || DEFAULT_THEME.bgSubtleColor!,
+    "--color-text": t.textColor || DEFAULT_THEME.textColor!,
+    "--color-text-muted": t.textMutedColor || DEFAULT_THEME.textMutedColor!,
+    "--color-border": t.borderColor || DEFAULT_THEME.borderColor!,
+    "--color-accent": t.accentColor || DEFAULT_THEME.accentColor!,
+    "--font-heading": `"${t.headingFont || "Inter"}", sans-serif`,
+    "--font-body": `"${t.bodyFont || "Inter"}", sans-serif`,
+    "--font-script": `"${t.scriptFont || "Cormorant Garamond"}", serif`,
+    "--radius": `${t.buttonRadius ?? 8}px`,
+    "--max-width": `${t.maxWidth ?? 1200}px`,
   };
 }
 
@@ -201,5 +135,5 @@ export function slugify(text: string): string {
 }
 
 export function isValidSlug(slug: string): boolean {
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
+  return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) && slug.length >= 2 && slug.length <= 50;
 }

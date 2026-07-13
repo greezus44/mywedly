@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { useState, useRef, useEffect, type ReactNode } from "react";
+import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 interface DatePickerProps {
@@ -12,57 +12,111 @@ interface DatePickerProps {
 export function DatePicker({ value, onChange, label, placeholder = "Select date" }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const displayDate = value ? new Date(value) : new Date();
-  const [viewMonth, setViewMonth] = useState(displayDate.getMonth());
-  const [viewYear, setViewYear] = useState(displayDate.getFullYear());
 
   useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  }, []);
 
-  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const dayNames = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-  const days = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const current = value ? new Date(value) : new Date();
+  const [viewMonth, setViewMonth] = useState(current.getMonth());
+  const [viewYear, setViewYear] = useState(current.getFullYear());
+
+  const monthName = new Date(viewYear, viewMonth, 1).toLocaleString("en-US", { month: "long" });
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const firstDay = new Date(viewYear, viewMonth, 1).getDay();
-  const todayStr = new Date().toISOString().split("T")[0];
 
-  const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); } else setViewMonth(viewMonth - 1); };
-  const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); } else setViewMonth(viewMonth + 1); };
-  const selectDate = (day: number) => { onChange(new Date(viewYear, viewMonth, day).toISOString().split("T")[0]); setOpen(false); };
-  const formatDateDisplay = (val: string | null) => { if (!val) return placeholder; const d = new Date(val); return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); };
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(viewYear - 1); }
+    else setViewMonth(viewMonth - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(viewYear + 1); }
+    else setViewMonth(viewMonth + 1);
+  };
+
+  const selectDay = (day: number) => {
+    const date = new Date(viewYear, viewMonth, day);
+    onChange(date.toISOString().split("T")[0]);
+    setOpen(false);
+  };
+
+  const displayValue = value ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
 
   return (
     <div className="relative" ref={ref}>
-      {label && <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>}
-      <button type="button" onClick={() => setOpen(!open)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-900 transition-colors hover:border-gray-400 focus:outline-none focus:border-gray-900">
-        <Calendar className="w-4 h-4 text-gray-400" />
-        <span className={cn(!value && "text-gray-400")}>{formatDateDisplay(value)}</span>
+      {label && <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-900 hover:border-slate-300 transition-colors"
+      >
+        <Calendar className="w-4 h-4 text-slate-400" />
+        <span className={cn(!displayValue && "text-slate-400")}>{displayValue || placeholder}</span>
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg p-4 w-72">
-          <div className="flex items-center justify-between mb-4">
-            <button type="button" onClick={prevMonth} className="p-1 rounded hover:bg-gray-100"><ChevronLeft className="w-4 h-4" /></button>
-            <span className="text-sm font-semibold">{monthNames[viewMonth]} {viewYear}</span>
-            <button type="button" onClick={nextMonth} className="p-1 rounded hover:bg-gray-100"><ChevronRight className="w-4 h-4" /></button>
+        <div className="absolute z-50 mt-1 bg-white rounded-lg border border-slate-200 shadow-lg p-3 w-72">
+          <div className="flex items-center justify-between mb-3">
+            <button type="button" onClick={prevMonth} className="p-1 hover:bg-slate-100 rounded"><ChevronLeft className="w-4 h-4" /></button>
+            <span className="text-sm font-medium">{monthName} {viewYear}</span>
+            <button type="button" onClick={nextMonth} className="p-1 hover:bg-slate-100 rounded"><ChevronRight className="w-4 h-4" /></button>
           </div>
-          <div className="grid grid-cols-7 gap-1 mb-2">{dayNames.map(d => <div key={d} className="text-center text-xs text-gray-400 font-medium py-1">{d}</div>)}</div>
-          <div className="grid grid-cols-7 gap-1">
-            {Array.from({ length: firstDay }).map((_, i) => <div key={`e-${i}`} />)}
-            {Array.from({ length: days }).map((_, i) => {
+          <div className="grid grid-cols-7 gap-1 text-xs">
+            {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+              <div key={i} className="text-center text-slate-400 font-medium py-1">{d}</div>
+            ))}
+            {Array.from({ length: firstDay }).map((_, i) => (
+              <div key={`empty-${i}`} />
+            ))}
+            {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1;
-              const dateStr = new Date(viewYear, viewMonth, day).toISOString().split("T")[0];
-              return <button key={day} type="button" onClick={() => selectDate(day)} className={cn("aspect-square flex items-center justify-center rounded text-sm transition-colors", value === dateStr ? "bg-black text-white" : "hover:bg-gray-100", todayStr === dateStr && value !== dateStr && "ring-1 ring-gray-900")}>{day}</button>;
+              const isSelected = value && new Date(value).toDateString() === new Date(viewYear, viewMonth, day).toDateString();
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => selectDay(day)}
+                  className={cn(
+                    "w-8 h-8 rounded text-center hover:bg-slate-100 transition-colors",
+                    isSelected && "bg-slate-900 text-white hover:bg-slate-800"
+                  )}
+                >
+                  {day}
+                </button>
+              );
             })}
           </div>
-          <div className="flex justify-between mt-3 pt-3 border-t border-gray-100">
-            <button type="button" onClick={() => { onChange(todayStr); setOpen(false); }} className="text-xs text-gray-600 hover:text-black">Today</button>
-            <button type="button" onClick={() => { onChange(null); setOpen(false); }} className="text-xs text-gray-600 hover:text-black">Clear</button>
-          </div>
+          {value && (
+            <button
+              type="button"
+              onClick={() => { onChange(null); setOpen(false); }}
+              className="mt-2 w-full text-xs text-slate-500 hover:text-slate-700 flex items-center justify-center gap-1"
+            >
+              <X className="w-3 h-3" /> Clear
+            </button>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+export function Modal({ open, onClose, title, children }: { open: boolean; onClose: () => void; title?: string; children: ReactNode }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 animate-fade-in" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto animate-scale-in" onClick={(e) => e.stopPropagation()}>
+        {title && (
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+            <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5 text-slate-500" /></button>
+          </div>
+        )}
+        <div className="p-5">{children}</div>
+      </div>
     </div>
   );
 }

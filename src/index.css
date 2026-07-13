@@ -2,7 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
-* { -webkit-font-smoothing: antialiased; }
-body { font-family: Inter, system-ui, sans-serif; }
+:root {
+  --color-primary: #0f172a;
+  --color-primary-light: #334155;
+  --color-bg: #ffffff;
+  --color-bg-subtle: #f8fafc;
+  --color-border: #e2e8f0;
+  --color-text: #1e293b;
+  --color-text-muted: #64748b;
+  --color-accent: #0ea5e9;
+  --color-accent-dark: #0284c7;
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-error: #dc2626;
+  --font-heading: "Inter", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-script: "Cormorant Garamond", serif;
+  --radius: 8px;
+  --max-width: 1200px;
+}
 
-.rusty-page { background-color: #F5ECD7; min-height: 100vh; }
+body {
+  font-family: var(--font-body);
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

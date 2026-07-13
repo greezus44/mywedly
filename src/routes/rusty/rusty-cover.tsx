@@ -1,144 +1,134 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, UserEvent, CoverConfig } from "../../lib/supabase";
-import { RUSTY_COVER_CONFIG } from "../../lib/theme";
+import { ArrowRight } from "lucide-react";
+import { supabase, type UserEvent } from "../../lib/supabase";
+import { RUSTY_COVER_CONFIG, RUSTY_THEME } from "../../lib/theme";
 import { formatDate } from "../../lib/utils";
-import type { CSSProperties } from "react";
-
-function normalizeEvent(data: any): UserEvent {
-  return {
-    ...data,
-    cover_config: data.cover_config || {},
-    login_config: data.login_config || {},
-    theme: data.theme || {},
-    logo_config: data.logo_config || {},
-    content: data.content || {},
-    sharing_config: data.sharing_config || {},
-    draft_cover_config: data.draft_cover_config || data.cover_config || {},
-    draft_login_config: data.draft_login_config || data.login_config || {},
-    draft_theme: data.draft_theme || data.theme || {},
-    draft_logo_config: data.draft_logo_config || data.logo_config || {},
-    draft_content: data.draft_content || data.content || {},
-    draft_sharing_config: data.draft_sharing_config || data.sharing_config || {},
-  };
-}
+import { fetchPublicEvent } from "./rusty-layout";
 
 export default function RustyCover() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
+  const [mounted, setMounted] = useState(false);
 
-  const { data: event, isLoading, error } = useQuery<UserEvent | null>({
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 100);
+    return () => clearTimeout(t);
+  }, []);
+
+  const { data: event, isLoading, error } = useQuery<UserEvent | null, Error>({
     queryKey: ["public-event", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("id", eventId)
-        .maybeSingle();
-      if (error) throw error;
-      return data ? normalizeEvent(data) : null;
-    },
-    staleTime: 30000,
+    queryFn: () => fetchPublicEvent(eventId!),
+    enabled: !!eventId,
   });
+
+  if (!eventId) return null;
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F5ECD7] flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-[#B8962E] border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-rusty-bg">
+        <div className="w-12 h-12 rounded-full border-2 border-rusty-gold-dark border-t-transparent animate-spin" />
       </div>
     );
   }
 
-  if (error || !event || !eventId) {
+  if (error || !event) {
     return (
-      <div className="min-h-screen bg-[#F5ECD7] flex flex-col items-center justify-center gap-3 px-6">
-        <p className="text-sm text-[#8B7355]">This invitation is no longer available.</p>
+      <div className="min-h-screen flex items-center justify-center bg-rusty-bg px-6">
+        <div className="text-center">
+          <p className="font-serif text-2xl text-rusty-text mb-2">Invitation Not Found</p>
+          <p className="text-sm text-rusty-text-light">The invitation you are looking for may no longer be available.</p>
+        </div>
       </div>
     );
   }
 
-  const config: CoverConfig = { ...RUSTY_COVER_CONFIG, ...event.cover_config };
+  const config = event.cover_config || RUSTY_COVER_CONFIG;
+  const theme = event.theme || RUSTY_THEME;
+  const bgColor = config.bgColor || theme.bgColor || RUSTY_COVER_CONFIG.bgColor!;
+  const textColor = config.textColor || theme.textColor || "#3D3528";
+  const buttonColor = config.buttonColor || theme.primaryColor || RUSTY_COVER_CONFIG.buttonColor!;
+  const buttonText = config.buttonText || RUSTY_COVER_CONFIG.buttonText!;
+  const scriptFont = config.scriptFont || theme.scriptFont || "Cormorant Garamond";
+  const headingFont = theme.headingFont || "Cormorant Garamond";
 
-  const handleEnter = () => navigate(`/${eventId}/login`);
-
-  const bgStyle: CSSProperties = config.bgImage
-    ? { backgroundImage: `url(${config.bgImage})`, backgroundSize: "cover", backgroundPosition: "center" }
-    : { backgroundColor: config.bgColor };
+  const handleEnter = () => {
+    navigate(`/${eventId}/login`);
+  };
 
   return (
     <div
-      className="relative min-h-screen flex flex-col items-center justify-center text-center px-6 py-16 animate-fade-in"
-      style={{ ...bgStyle, color: config.textColor }}
+      className="min-h-screen relative flex flex-col items-center justify-center overflow-hidden"
+      style={{ backgroundColor: bgColor }}
     >
-      {config.bgImage && (
-        <div
-          className="absolute inset-0"
-          style={{ backgroundColor: config.overlayColor, opacity: config.overlayOpacity }}
-        />
-      )}
+      <div className="absolute left-8 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-rusty-gold-dark/30 to-transparent" />
+      <div className="absolute right-8 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-rusty-gold-dark/30 to-transparent" />
 
-      <div className="relative z-10 flex flex-col items-center max-w-md w-full">
-        <div className="flex items-center gap-3 mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "0.2s", animationFillMode: "forwards" }}>
-          <span className="h-px w-10 bg-[#C4A44A]" />
-          <span
-            className="text-xs uppercase tracking-[0.35em] text-[#C4A44A]"
-            style={{ fontFamily: config.scriptFont }}
+      <div
+        className={`relative z-10 text-center px-8 max-w-lg transition-all duration-1000 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}
+      >
+        {config.customText && (
+          <p
+            className="text-base md:text-lg italic mb-6 animate-fade-in"
+            style={{ color: textColor, fontFamily: `"${scriptFont}", serif` }}
           >
-            {config.customText || "The Wedding Of"}
-          </span>
-          <span className="h-px w-10 bg-[#C4A44A]" />
-        </div>
+            {config.customText}
+          </p>
+        )}
 
-        <div className="flex items-center gap-4 mb-8 opacity-0 animate-fade-in" style={{ animationDelay: "0.4s", animationFillMode: "forwards" }}>
-          <span className="h-px w-16 bg-[#C4A44A]/40" />
-          <span className="text-[10px] text-[#C4A44A]">✦</span>
-          <span className="h-px w-16 bg-[#C4A44A]/40" />
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <span className="h-px w-16 bg-rusty-gold-dark/40" />
+          <span className="w-2 h-2 rotate-45 border border-rusty-gold-dark/60" />
+          <span className="h-px w-16 bg-rusty-gold-dark/40" />
         </div>
 
         <h1
-          className="text-4xl sm:text-5xl font-medium leading-tight mb-2 opacity-0 animate-fade-in"
-          style={{
-            fontFamily: config.font,
-            color: config.textColor,
-            animationDelay: "0.6s",
-            animationFillMode: "forwards",
-          }}
+          className="text-4xl md:text-6xl font-medium leading-tight mb-2 animate-fade-in-up"
+          style={{ color: textColor, fontFamily: `"${headingFont}", serif` }}
         >
           {event.name}
         </h1>
 
-        {config.showDate && (event.draft_event_date || event.event_date) && (
+        {config.showDate && event.event_date && (
           <p
-            className="text-sm mt-4 mb-8 opacity-0 animate-fade-in text-[#A07820]"
-            style={{ animationDelay: "0.8s", animationFillMode: "forwards" }}
+            className="text-sm md:text-base tracking-[0.2em] uppercase mt-4 mb-8 animate-fade-in-up"
+            style={{ color: textColor, opacity: 0.8 }}
           >
-            {formatDate(event.draft_event_date || event.event_date)}
+            {formatDate(event.event_date)}
           </p>
         )}
 
-        <div className="flex items-center gap-4 mb-10 opacity-0 animate-fade-in" style={{ animationDelay: "1s", animationFillMode: "forwards" }}>
-          <span className="h-px w-16 bg-[#C4A44A]/40" />
-          <span className="text-[10px] text-[#C4A44A]">✦</span>
-          <span className="h-px w-16 bg-[#C4A44A]/40" />
-        </div>
+        {event.venue && (
+          <p
+            className="text-sm italic mb-10 animate-fade-in"
+            style={{ color: textColor, opacity: 0.7, fontFamily: `"${scriptFont}", serif` }}
+          >
+            {event.venue}
+          </p>
+        )}
 
         <button
           onClick={handleEnter}
-          className="opacity-0 animate-fade-in group"
-          style={{ animationDelay: "1.2s", animationFillMode: "forwards" }}
+          className="group inline-flex items-center gap-2 px-10 py-3 text-sm tracking-[0.2em] uppercase transition-all duration-300 hover:gap-4 animate-fade-in-up"
+          style={{
+            backgroundColor: buttonColor,
+            color: "#FAF3E0",
+            borderRadius: "2px",
+          }}
         >
-          <span
-            className="inline-block px-12 py-3 text-sm tracking-[0.2em] uppercase transition-all duration-300 hover:tracking-[0.3em] border"
-            style={{
-              backgroundColor: config.buttonColor,
-              color: "#FFFFFF",
-              borderColor: config.buttonColor,
-              borderRadius: "2px",
-            }}
-          >
-            {config.buttonText || "Enter"}
-          </span>
+          {buttonText}
+          <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
         </button>
+      </div>
+
+      <div className="absolute bottom-6 left-0 right-0 text-center">
+        <p
+          className="text-[10px] tracking-[0.3em] uppercase opacity-50"
+          style={{ color: textColor }}
+        >
+          {event.event_type} Invitation
+        </p>
       </div>
     </div>
   );
