@@ -1,102 +1,73 @@
-import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
+import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
 const baseFieldClasses =
-  "w-full rounded-md border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted transition-colors focus:outline-none focus:ring-2 focus:ring-dash-primary focus:border-transparent disabled:cursor-not-allowed disabled:opacity-50";
+  "w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted focus:border-dash-primary focus:outline-none focus:ring-1 focus:ring-dash-primary disabled:cursor-not-allowed disabled:opacity-50 transition-colors";
 
-const errorBorderClass = "border-dash-danger";
-const normalBorderClass = "border-dash-border";
+interface FieldWrapperProps {
+  label?: string;
+  error?: string;
+  children: ReactNode;
+  className?: string;
+}
 
-/* ----------------------------------- Input ----------------------------------- */
+function FieldWrapper({ label, error, children, className }: FieldWrapperProps) {
+  return (
+    <div className={cn("flex flex-col gap-1", className)}>
+      {label && (
+        <label className="text-sm font-medium text-dash-text">{label}</label>
+      )}
+      {children}
+      {error && <p className="text-xs text-dash-danger">{error}</p>}
+    </div>
+  );
+}
 
-export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, id, ...props }, ref) => {
-    const inputId = id || props.name;
+  ({ label, error, className, ...props }, ref) => {
     return (
-      <div className="w-full">
-        {label && (
-          <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-dash-text">
-            {label}
-          </label>
-        )}
-        <input
-          ref={ref}
-          id={inputId}
-          className={cn(baseFieldClasses, error ? errorBorderClass : normalBorderClass, className)}
-          aria-invalid={error ? true : undefined}
-          {...props}
-        />
-        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
-      </div>
+      <FieldWrapper label={label} error={error}>
+        <input ref={ref} className={cn(baseFieldClasses, className)} {...props} />
+      </FieldWrapper>
     );
   }
 );
 Input.displayName = "Input";
 
-/* --------------------------------- Textarea ---------------------------------- */
-
-export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   error?: string;
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, label, error, id, ...props }, ref) => {
-    const textareaId = id || props.name;
+  ({ label, error, className, ...props }, ref) => {
     return (
-      <div className="w-full">
-        {label && (
-          <label htmlFor={textareaId} className="mb-1.5 block text-sm font-medium text-dash-text">
-            {label}
-          </label>
-        )}
-        <textarea
-          ref={ref}
-          id={textareaId}
-          className={cn(baseFieldClasses, "min-h-[80px] resize-y", error ? errorBorderClass : normalBorderClass, className)}
-          aria-invalid={error ? true : undefined}
-          {...props}
-        />
-        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
-      </div>
+      <FieldWrapper label={label} error={error}>
+        <textarea ref={ref} className={cn(baseFieldClasses, "min-h-[80px] resize-y", className)} {...props} />
+      </FieldWrapper>
     );
   }
 );
 Textarea.displayName = "Textarea";
 
-/* ---------------------------------- Select ----------------------------------- */
-
-export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   error?: string;
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, label, error, id, children, ...props }, ref) => {
-    const selectId = id || props.name;
+  ({ label, error, className, children, ...props }, ref) => {
     return (
-      <div className="w-full">
-        {label && (
-          <label htmlFor={selectId} className="mb-1.5 block text-sm font-medium text-dash-text">
-            {label}
-          </label>
-        )}
-        <select
-          ref={ref}
-          id={selectId}
-          className={cn(baseFieldClasses, "cursor-pointer", error ? errorBorderClass : normalBorderClass, className)}
-          aria-invalid={error ? true : undefined}
-          {...props}
-        >
+      <FieldWrapper label={label} error={error}>
+        <select ref={ref} className={cn(baseFieldClasses, "cursor-pointer", className)} {...props}>
           {children}
         </select>
-        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
-      </div>
+      </FieldWrapper>
     );
   }
 );

@@ -1,23 +1,42 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { type UserEvent, type SubEvent, supabase } from "../../lib/supabase";
+import { supabase, type UserEvent, type SubEvent, type Json } from "../../lib/supabase";
 import { RichTextContent } from "../../lib/sanitize";
 import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
 
-interface HomeContent { section1?: string; section2?: string; section3?: string; [k: string]: any }
+interface EventContent {
+  section1?: string;
+  section2?: string;
+  section3?: string;
+  welcome?: string;
+  home?: string;
+}
+
+function parseContent(content: Json | null | undefined): EventContent {
+  if (content && typeof content === "object" && !Array.isArray(content)) {
+    return content as EventContent;
+  }
+  return {};
+}
+
+function useCountdown(targetDate: string | null | undefined) {
+  const [countdown, setCountdown] = useState(() => getCountdown(targetDate));
+  useEffect(() => {
+    setCountdown(getCountdown(targetDate));
+    const id = setInterval(() => setCountdown(getCountdown(targetDate)), 1000);
+    return () => clearInterval(id);
+  }, [targetDate]);
+  return countdown;
+}
 
 export default function RustyHome() {
   const { event } = useOutletContext<{ event: UserEvent }>();
-  const [countdown, setCountdown] = useState(() => getCountdown(event.event_date));
-
-  useEffect(() => {
-    const interval = setInterval(() => setCountdown(getCountdown(event.event_date)), 1000);
-    return () => clearInterval(interval);
-  }, [event.event_date]);
+  const content = parseContent(event.content);
+  const countdown = useCountdown(event.event_date);
 
   const { data: subEvents } = useQuery({
-    queryKey: ["rusty_sub_events", event.id],
+    queryKey: ["sub_events", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sub_events")
@@ -25,54 +44,57 @@ export default function RustyHome() {
         .eq("parent_event_id", event.id)
         .order("display_order", { ascending: true });
       if (error) throw error;
-      return data as SubEvent[];
+      return (data ?? []) as SubEvent[];
     },
   });
 
-  const content = (event.content ?? {}) as HomeContent;
-  const countdownItems = [
-    { label: "Days", value: countdown.days },
-    { label: "Hours", value: countdown.hours },
-    { label: "Min", value: countdown.minutes },
-    { label: "Sec", value: countdown.seconds },
-  ];
+  const events = subEvents ?? [];
 
   return (
-    <div className="space-y-10">
-      <div className="text-center">
-        <h1 className="font-event text-3xl md:text-4xl text-event-heading">{event.name}</h1>
-        {event.event_date && !countdown.isPast && (
+    <div className="space-y-8">
+      <div className="event-card text-center">
+        <h1 className="text-3xl font-bold sm:text-4xl">{event.name}</h1>
+        {event.event_date && <p className="mt-2 text-lg">{formatDate(event.event_date)}</p>}
+        {event.event_time && <p className="text-sm opacity-70">{formatTime12(event.event_time)}</p>}
+        {event.venue && <p className="mt-2 font-medium">{event.venue}</p>}
+        {event.address && <p className="text-sm opacity-70">{event.address}</p>}
+
+        {!countdown.isPast && event.event_date && (
           <div className="mt-6 flex justify-center gap-6">
-            {countdownItems.map((item) => (
-              <div key={item.label} className="text-center">
-                <div className="text-3xl font-bold text-event-primary">{String(item.value).padStart(2, "0")}</div>
-                <div className="text-xs text-event-muted">{item.label}</div>
+            {[
+              { label: "Days", value: countdown.days },
+              { label: "Hours", value: countdown.hours },
+              { label: "Mins", value: countdown.minutes },
+              { label: "Secs", value: countdown.seconds },
+            ].map((item) => (
+              <div key={item.label}>
+                <div className="text-3xl font-bold">{item.value}</div>
+                <div className="text-xs uppercase tracking-wide opacity-70">{item.label}</div>
               </div>
             ))}
           </div>
         )}
-        {event.event_date && countdown.isPast && (
-          <p className="mt-4 font-event-body text-lg text-event-muted">The event day has arrived!</p>
-        )}
       </div>
 
-      {content.section1 && <RichTextContent html={content.section1} className="max-w-2xl mx-auto" />}
-      {content.section2 && <RichTextContent html={content.section2} className="max-w-2xl mx-auto" />}
-      {content.section3 && <RichTextContent html={content.section3} className="max-w-2xl mx-auto" />}
+      {(content.section1 || content.welcome || content.home) && (
+        <div className="event-card">
+          <RichTextContent html={content.section1 || content.welcome || content.home || ""} />
+        </div>
+      )}
+      {content.section2 && <div className="event-card"><RichTextContent html={content.section2} /></div>}
+      {content.section3 && <div className="event-card"><RichTextContent html={content.section3} /></div>}
 
-      {subEvents && subEvents.length > 0 && (
-        <div className="max-w-2xl mx-auto">
-          <h2 className="font-event text-2xl text-event-heading text-center mb-6">Events</h2>
-          <div className="space-y-4">
-            {subEvents.map((se) => (
-              <div key={se.id} className="event-card border-2 border-event-border">
-                <h3 className="font-event text-xl text-event-heading">{se.name}</h3>
-                <div className="mt-2 flex flex-wrap gap-4 text-sm text-event-muted">
-                  {se.date && <span>{formatDate(se.date)}</span>}
-                  {se.start_time && <span>{formatTime12(se.start_time)}{se.end_time ? ` – ${formatTime12(se.end_time)}` : ""}</span>}
-                  {se.venue && <span>{se.venue}</span>}
-                </div>
-                {se.description && <p className="mt-2 text-sm text-event-text">{se.description}</p>}
+      {events.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-2xl font-bold">Events</h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {events.map((ev) => (
+              <div key={ev.id} className="event-card space-y-1">
+                <h3 className="text-lg font-semibold">{ev.name}</h3>
+                {ev.date && <p className="text-sm">{formatDate(ev.date)}</p>}
+                {ev.time && <p className="text-sm opacity-70">{formatTime12(ev.time)}</p>}
+                {ev.venue && <p className="text-sm font-medium">{ev.venue}</p>}
+                {ev.address && <p className="text-sm opacity-70">{ev.address}</p>}
               </div>
             ))}
           </div>

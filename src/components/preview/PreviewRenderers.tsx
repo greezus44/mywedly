@@ -1,79 +1,168 @@
-import React from "react";
 import { RichTextContent } from "../../lib/sanitize";
-import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
+import { formatDate, formatTime12, getCountdown, cn } from "../../lib/utils";
 import type { UserEvent } from "../../lib/supabase";
 
-export function CoverPreview({ event }: { event: Partial<UserEvent> }) {
-  const coverConfig = (event.cover_config || {}) as Record<string, any>;
-  const heroImage = event.cover_image;
-  const title = event.name || "Your Event Title";
-  const subtitle = coverConfig.subtitle || "";
-  return (
-    <div className="relative min-h-[400px] rounded-lg overflow-hidden bg-event-bg">
-      {heroImage ? (
-        <>
-          <div className="absolute inset-0"><img src={heroImage} alt="Cover" className="w-full h-full object-cover" /><div className="absolute inset-0 bg-black/30" /></div>
-        </>
-      ) : (
-        <div className="absolute inset-0 bg-gradient-to-br from-event-bg to-event-surface" />
-      )}
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-[400px] p-8 text-center">
-        <h1 className="font-event text-3xl md:text-4xl text-white drop-shadow-lg mb-2">{title}</h1>
-        {subtitle && <p className="font-event-body text-lg text-white/90 drop-shadow">{subtitle}</p>}
-        {event.event_date && <p className="font-event-body text-sm text-white/80 mt-3">{formatDate(event.event_date)}</p>}
-      </div>
-    </div>
-  );
+interface PreviewProps {
+  event: Partial<UserEvent>;
 }
 
-export function LoginPreview({ event }: { event: Partial<UserEvent> }) {
-  const loginConfig = (event.login_config || {}) as Record<string, any>;
-  const hasPassword = loginConfig.passwordMode && loginConfig.passwordMode !== "none";
-  return (
-    <div className="event-themed min-h-[300px] rounded-lg p-8 flex flex-col items-center justify-center">
-      <h2 className="font-event text-xl text-event-heading mb-4">Enter your username to continue</h2>
-      <div className="w-full max-w-xs space-y-3">
-        <input type="text" placeholder="Enter your username" className="event-input" disabled />
-        {hasPassword && <input type="password" placeholder="Enter password" className="event-input" disabled />}
-        <button className="event-btn-primary w-full" disabled>Enter</button>
-      </div>
-    </div>
-  );
-}
+// ---------------------------------------------------------------------------
+// CoverPreview
+// ---------------------------------------------------------------------------
+export function CoverPreview({ event }: PreviewProps) {
+  const cover = event.cover_image || event.draft_cover_image;
+  const name = event.draft_name || event.name || "Our Wedding";
+  const date = event.draft_event_date || event.event_date;
+  const venue = event.draft_venue || event.venue;
+  const countdown = getCountdown(date);
 
-export function HomePreview({ event }: { event: Partial<UserEvent> }) {
-  const content = (event.content || {}) as Record<string, any>;
-  const countdown = getCountdown(event.event_date);
   return (
-    <div className="event-themed min-h-[300px] rounded-lg p-8">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="font-event text-2xl text-event-heading mb-4 text-center">{event.name}</h1>
-        {!countdown.isPast && event.event_date && (
-          <div className="flex justify-center gap-4 mb-6">
-            {[{ label: "Days", value: countdown.days }, { label: "Hours", value: countdown.hours }, { label: "Min", value: countdown.minutes }, { label: "Sec", value: countdown.seconds }].map((item) => (
-              <div key={item.label} className="text-center"><div className="text-2xl font-bold text-event-primary">{item.value}</div><div className="text-xs text-event-muted">{item.label}</div></div>
-            ))}
+    <div className="event-card relative overflow-hidden">
+      {cover ? (
+        <div className="relative h-64 w-full">
+          <img src={cover} alt={name} className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          <div className="absolute bottom-0 left-0 right-0 p-6 text-center">
+            <h1 className="text-2xl font-bold text-white drop-shadow">{name}</h1>
+            {date && <p className="mt-1 text-sm text-white/90">{formatDate(date)}</p>}
+            {venue && <p className="text-xs text-white/80">{venue}</p>}
           </div>
-        )}
-        {content.section1 && <RichTextContent html={content.section1} className="mb-4" />}
-        {content.section2 && <RichTextContent html={content.section2} className="mb-4" />}
-        {content.section3 && <RichTextContent html={content.section3} />}
-      </div>
+        </div>
+      ) : (
+        <div className="flex h-64 flex-col items-center justify-center gap-2 text-center">
+          <h1 className="text-2xl font-bold">{name}</h1>
+          {date && <p className="text-sm">{formatDate(date)}</p>}
+          {venue && <p className="text-xs text-dash-muted">{venue}</p>}
+        </div>
+      )}
+      {!countdown.isPast && date && (
+        <div className="mt-4 flex justify-center gap-4 text-center">
+          {[
+            { label: "Days", value: countdown.days },
+            { label: "Hours", value: countdown.hours },
+            { label: "Mins", value: countdown.minutes },
+            { label: "Secs", value: countdown.seconds },
+          ].map((item) => (
+            <div key={item.label}>
+              <div className="text-2xl font-bold">{item.value}</div>
+              <div className="text-xs uppercase tracking-wide text-dash-muted">{item.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-export function RsvpPreview({ event }: { event: Partial<UserEvent> }) {
+// ---------------------------------------------------------------------------
+// LoginPreview
+// ---------------------------------------------------------------------------
+export function LoginPreview({ event }: PreviewProps) {
+  const name = event.draft_name || event.name || "Our Wedding";
   return (
-    <div className="event-themed min-h-[300px] rounded-lg p-8">
-      <div className="max-w-md mx-auto">
-        <h2 className="font-event text-xl text-event-heading mb-4 text-center">RSVP</h2>
-        <div className="space-y-3">
-          <div className="flex gap-2"><button className="event-btn-primary flex-1" disabled>Attending</button><button className="event-btn-secondary flex-1" disabled>Not Attending</button></div>
-          <textarea placeholder="Message" className="event-input" rows={3} disabled />
-          <button className="event-btn-primary w-full" disabled>Submit RSVP</button>
-        </div>
+    <div className="event-card mx-auto max-w-sm">
+      <h2 className="mb-4 text-center text-xl font-semibold">Welcome to {name}</h2>
+      <p className="mb-4 text-center text-sm text-dash-muted">
+        Please enter your name to find your invitation.
+      </p>
+      <input
+        type="text"
+        placeholder="Your full name"
+        className="event-input mb-3"
+        readOnly
+      />
+      <button type="button" className="event-btn-primary w-full">
+        Find My Invitation
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// HomePreview
+// ---------------------------------------------------------------------------
+export function HomePreview({ event }: PreviewProps) {
+  const name = event.draft_name || event.name || "Our Wedding";
+  const date = event.draft_event_date || event.event_date;
+  const time = event.draft_event_time || event.event_time;
+  const venue = event.draft_venue || event.venue;
+  const address = event.draft_address || event.address;
+  const content = event.draft_content || event.content;
+
+  let welcomeHtml = "";
+  if (content && typeof content === "object" && !Array.isArray(content)) {
+    const c = content as Record<string, unknown>;
+    welcomeHtml = (c.welcome as string) || (c.home as string) || "";
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="event-card text-center">
+        <h1 className="text-3xl font-bold">{name}</h1>
+        {date && <p className="mt-2 text-lg">{formatDate(date)}</p>}
+        {time && <p className="text-sm text-dash-muted">{formatTime12(time)}</p>}
+        {venue && <p className="mt-2 font-medium">{venue}</p>}
+        {address && <p className="text-sm text-dash-muted">{address}</p>}
       </div>
+      {welcomeHtml && (
+        <div className="event-card">
+          <RichTextContent html={welcomeHtml} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RsvpPreview
+// ---------------------------------------------------------------------------
+export function RsvpPreview({ event }: PreviewProps) {
+  const name = event.draft_name || event.name || "Our Wedding";
+  const deadline = event.draft_rsvp_deadline || event.rsvp_deadline;
+  const closed = deadline ? new Date(deadline).getTime() < Date.now() : false;
+
+  return (
+    <div className="event-card mx-auto max-w-md">
+      <h2 className="mb-2 text-center text-xl font-semibold">RSVP</h2>
+      <p className="mb-4 text-center text-sm text-dash-muted">
+        {name}
+      </p>
+      {closed ? (
+        <p className={cn("text-center text-sm text-dash-muted")}>
+          RSVP is now closed.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <button type="button" className="event-btn-primary flex-1">
+              Joyfully Accepts
+            </button>
+            <button type="button" className="event-btn-secondary flex-1">
+              Regretfully Declines
+            </button>
+          </div>
+          <label className="text-sm font-medium">Number of guests</label>
+          <select className="event-input" disabled defaultValue="1">
+            <option value="1">1</option>
+            <option value="2">2</option>
+          </select>
+          <label className="text-sm font-medium">Dietary requirements</label>
+          <textarea
+            className="event-input min-h-[60px]"
+            placeholder="Any allergies or dietary needs?"
+            readOnly
+          />
+          <label className="text-sm font-medium">Message for the couple</label>
+          <textarea
+            className="event-input min-h-[60px]"
+            placeholder="Leave a message…"
+            readOnly
+          />
+          <button type="button" className="event-btn-primary w-full">
+            Submit RSVP
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,25 +1,34 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { ThemeConfig, DEFAULT_THEME, themeToEventCssVars } from "./theme";
+import { createContext, useContext, useMemo, type CSSProperties, type ReactNode } from "react";
+import { DEFAULT_THEME, themeToEventCssVars, type ThemeConfig } from "./theme";
 
 interface EventThemeContextValue {
   theme: ThemeConfig;
-  setTheme: (theme: ThemeConfig) => void;
 }
 
-const EventThemeContext = createContext<EventThemeContextValue | null>(null);
+const EventThemeContext = createContext<EventThemeContextValue>({
+  theme: DEFAULT_THEME,
+});
 
-export function EventThemeProvider({ children, initialTheme }: { children: ReactNode; initialTheme?: ThemeConfig }) {
-  const [theme, setTheme] = useState<ThemeConfig>(initialTheme || DEFAULT_THEME);
-  const cssVars = themeToEventCssVars(theme);
+export function useEventTheme(): ThemeConfig {
+  const ctx = useContext(EventThemeContext);
+  return ctx.theme;
+}
+
+interface EventThemeProviderProps {
+  theme?: ThemeConfig;
+  children: ReactNode;
+  className?: string;
+}
+
+export function EventThemeProvider({ theme = DEFAULT_THEME, children, className }: EventThemeProviderProps) {
+  const cssVars = useMemo(() => themeToEventCssVars(theme) as CSSProperties, [theme]);
+  const value = useMemo(() => ({ theme }), [theme]);
+
   return (
-    <EventThemeContext.Provider value={{ theme, setTheme }}>
-      <div className="event-themed" style={cssVars as React.CSSProperties}>{children}</div>
+    <EventThemeContext.Provider value={value}>
+      <div className={`event-themed ${className ?? ""}`} style={cssVars}>
+        {children}
+      </div>
     </EventThemeContext.Provider>
   );
-}
-
-export function useEventTheme() {
-  const ctx = useContext(EventThemeContext);
-  if (!ctx) throw new Error("useEventTheme must be used within EventThemeProvider");
-  return ctx;
 }

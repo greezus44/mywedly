@@ -1,20 +1,19 @@
 import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventRsvp } from "../../lib/supabase";
-import { LoadingSpinner, ErrorState, EmptyState, Card, Badge } from "../../components/ui";
-import { formatDateTime } from "../../lib/utils";
+import { formatDate } from "../../lib/utils";
+import {
+  Card,
+  Badge,
+  EmptyState,
+  ErrorState,
+  LoadingSpinner,
+} from "../../components/ui";
 
-const STATUS_VARIANTS: Record<string, "success" | "danger" | "warning" | "default"> = {
-  attending: "success", yes: "success",
-  not_attending: "danger", no: "danger",
-  maybe: "warning",
-  pending: "default",
-};
-
-export default function Rsvp() {
+export default function RsvpPage() {
   const { event } = useOutletContext<{ event: UserEvent }>();
 
-  const { data: rsvps, isLoading, error } = useQuery({
+  const { data: rsvps, isLoading, isError, refetch } = useQuery({
     queryKey: ["event_rsvps", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -27,70 +26,110 @@ export default function Rsvp() {
     },
   });
 
-  if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
-  if (error) return <ErrorState message="Failed to load RSVP responses." />;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+  if (isError) {
+    return <ErrorState message="Failed to load RSVPs." onRetry={() => refetch()} />;
+  }
 
-  const total = rsvps?.length ?? 0;
-  const attending = rsvps?.filter((r) => r.status === "attending" || r.status === "yes").length ?? 0;
-  const notAttending = rsvps?.filter((r) => r.status === "not_attending" || r.status === "no").length ?? 0;
-  const maybe = rsvps?.filter((r) => r.status === "maybe").length ?? 0;
-  const totalPlusOnes = rsvps?.reduce((sum, r) => sum + (r.plus_ones || 0), 0) ?? 0;
+  const rsvpList = rsvps ?? [];
+  const attending = rsvpList.filter(
+    (r) => r.status === "attending" || r.status === "yes"
+  );
+  const declined = rsvpList.filter(
+    (r) => r.status === "declined" || r.status === "no"
+  );
+  const pending = rsvpList.filter((r) => r.status === "pending");
+  const totalGuests = attending.reduce((sum, r) => sum + 1 + (r.plus_ones || 0), 0);
+
+  const stats = [
+    { label: "Total RSVPs", value: rsvpList.length, variant: "info" as const },
+    { label: "Attending", value: attending.length, variant: "success" as const },
+    { label: "Declined", value: declined.length, variant: "danger" as const },
+    { label: "Pending", value: pending.length, variant: "warning" as const },
+    { label: "Total Guests", value: totalGuests, variant: "info" as const },
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h2 className="text-xl font-bold text-dash-text">RSVP Responses</h2>
-        <p className="mt-1 text-sm text-dash-muted">View and track RSVP responses from your guests.</p>
+        <p className="text-sm text-dash-muted">View and track RSVP responses from your guests.</p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Card className="text-center">
-          <div className="text-3xl font-bold text-dash-primary">{total}</div>
-          <div className="mt-1 text-sm text-dash-muted">Total Responses</div>
-        </Card>
-        <Card className="text-center">
-          <div className="text-3xl font-bold text-green-600">{attending}</div>
-          <div className="mt-1 text-sm text-dash-muted">Attending</div>
-        </Card>
-        <Card className="text-center">
-          <div className="text-3xl font-bold text-red-600">{notAttending}</div>
-          <div className="mt-1 text-sm text-dash-muted">Not Attending</div>
-        </Card>
-        <Card className="text-center">
-          <div className="text-3xl font-bold text-amber-600">{totalPlusOnes}</div>
-          <div className="mt-1 text-sm text-dash-muted">Plus Ones</div>
-        </Card>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        {stats.map((stat) => (
+          <Card key={stat.label} className="text-center">
+            <div className="text-2xl font-bold text-dash-text">{stat.value}</div>
+            <div className="mt-1">
+              <Badge variant={stat.variant}>{stat.label}</Badge>
+            </div>
+          </Card>
+        ))}
       </div>
 
-      {/* Response list */}
-      {!rsvps || rsvps.length === 0 ? (
-        <EmptyState title="No RSVP responses yet" description="RSVP responses will appear here once guests start responding." />
+      {/* RSVP List */}
+      {rsvpList.length === 0 ? (
+        <EmptyState
+          title="No RSVP responses yet"
+          description="RSVP responses from your guests will appear here."
+          icon={<span className="text-4xl">📝</span>}
+        />
       ) : (
-        <div className="space-y-3">
-          {rsvps.map((rsvp) => (
-            <Card key={rsvp.id} className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-3">
-                  <h3 className="font-semibold text-dash-text">{rsvp.guest_name}</h3>
-                  <Badge variant={STATUS_VARIANTS[rsvp.status] || "default"}>
-                    {rsvp.status || "pending"}
-                  </Badge>
-                  {rsvp.plus_ones > 0 && (
-                    <Badge variant="info">+{rsvp.plus_ones} guest{rsvp.plus_ones > 1 ? "s" : ""}</Badge>
-                  )}
+        <Card>
+          <h3 className="mb-3 text-sm font-semibold text-dash-text">All Responses</h3>
+          <div className="space-y-3">
+            {rsvpList.map((r) => (
+              <div
+                key={r.id}
+                className="rounded-lg border border-dash-border bg-dash-bg p-4"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-dash-text">{r.guest_name}</span>
+                      <Badge
+                        variant={
+                          r.status === "attending" || r.status === "yes"
+                            ? "success"
+                            : r.status === "declined" || r.status === "no"
+                            ? "danger"
+                            : "warning"
+                        }
+                      >
+                        {r.status}
+                      </Badge>
+                      {r.plus_ones > 0 && (
+                        <span className="text-xs text-dash-muted">
+                          +{r.plus_ones} guest{r.plus_ones > 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
+                    {r.dietary && (
+                      <p className="mt-1 text-sm text-dash-muted">
+                        <span className="font-medium">Dietary:</span> {r.dietary}
+                      </p>
+                    )}
+                    {r.message && (
+                      <p className="mt-1 text-sm text-dash-muted">
+                        <span className="font-medium">Message:</span> {r.message}
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-xs text-dash-muted whitespace-nowrap">
+                    {formatDate(r.submitted_at)}
+                  </span>
                 </div>
-                {rsvp.dietary && <p className="mt-1 text-sm text-dash-muted">Dietary: {rsvp.dietary}</p>}
-                {rsvp.message && (
-                  <p className="mt-2 rounded-md bg-dash-bg px-3 py-2 text-sm text-dash-text italic">
-                    "{rsvp.message}"
-                  </p>
-                )}
-                <p className="mt-2 text-xs text-dash-muted">Submitted: {formatDateTime(rsvp.submitted_at)}</p>
               </div>
-            </Card>
-          ))}
-        </div>
+            ))}
+          </div>
+        </Card>
       )}
     </div>
   );

@@ -1,20 +1,56 @@
 import QRCode from "qrcode";
 
-export async function generateQrDataUrl(url: string): Promise<string> {
-  return QRCode.toDataURL(url, { width: 300, margin: 2, color: { dark: "#000000", light: "#ffffff" } });
+export async function generateQrDataUrl(
+  text: string,
+  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
+): Promise<string> {
+  return QRCode.toDataURL(text, {
+    width: options?.width ?? 256,
+    margin: options?.margin ?? 2,
+    color: {
+      dark: options?.color?.dark ?? "#000000",
+      light: options?.color?.light ?? "#ffffff",
+    },
+    errorCorrectionLevel: "M",
+  });
 }
 
-export async function downloadQrCode(url: string, filename = "qr-code.png"): Promise<void> {
-  const dataUrl = await generateQrDataUrl(url);
+export async function downloadQrCode(
+  text: string,
+  fileName = "qr-code.png",
+  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
+): Promise<void> {
+  const dataUrl = await generateQrDataUrl(text, options);
   const link = document.createElement("a");
-  link.href = dataUrl; link.download = filename; link.click();
+  link.href = dataUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
-export async function downloadQrSvg(url: string, filename = "qr-code.svg"): Promise<void> {
-  const svg = await QRCode.toString(url, { type: "svg", margin: 2 });
+export async function downloadQrSvg(
+  text: string,
+  fileName = "qr-code.svg",
+  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
+): Promise<void> {
+  const svg = await QRCode.toString(text, {
+    type: "svg",
+    width: options?.width ?? 256,
+    margin: options?.margin ?? 2,
+    color: {
+      dark: options?.color?.dark ?? "#000000",
+      light: options?.color?.light ?? "#ffffff",
+    },
+    errorCorrectionLevel: "M",
+  });
   const blob = new Blob([svg], { type: "image/svg+xml" });
-  const dataUrl = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href = dataUrl; link.download = filename; link.click();
-  URL.revokeObjectURL(dataUrl);
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

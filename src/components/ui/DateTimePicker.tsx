@@ -3,46 +3,37 @@ import { cn } from "../../lib/utils";
 import { DatePicker } from "./DatePicker";
 import { TimePicker } from "./TimePicker";
 
-export interface DateTimePickerProps {
+interface DateTimePickerProps {
   date: string | null;
   time: string | null;
-  onChange: (date: string | null, time: string | null) => void;
+  onDateChange: (value: string | null) => void;
+  onTimeChange: (value: string | null) => void;
   label?: string;
   className?: string;
 }
 
-type Tab = "date" | "time";
-
-export function DateTimePicker({ date, time, onChange, label, className }: DateTimePickerProps) {
-  const [tab, setTab] = useState<Tab>("date");
+export function DateTimePicker({
+  date,
+  time,
+  onDateChange,
+  onTimeChange,
+  label,
+  className,
+}: DateTimePickerProps) {
+  const [tab, setTab] = useState<"date" | "time">("date");
 
   return (
-    <div className={cn("w-full", className)}>
-      {label && (
-        <label className="mb-1.5 block text-sm font-medium text-dash-text">{label}</label>
-      )}
-
-      {/* Summary display */}
-      <div className="mb-2 flex items-center gap-2 rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm">
-        <span className={cn("flex-1", !date && "text-dash-muted")}>
-          {date || "No date"}
-        </span>
-        <span className="text-dash-border">|</span>
-        <span className={cn("flex-1 text-right", !time && "text-dash-muted")}>
-          {time || "No time"}
-        </span>
-      </div>
-
-      {/* Tabs */}
-      <div className="mb-3 inline-flex rounded-md border border-dash-border bg-dash-bg p-1">
+    <div className={cn("flex flex-col gap-1", className)}>
+      {label && <label className="text-sm font-medium text-dash-text">{label}</label>}
+      <div className="flex gap-1 border-b border-dash-border">
         <button
           type="button"
           onClick={() => setTab("date")}
           className={cn(
-            "rounded px-4 py-1.5 text-sm font-medium transition-colors",
+            "border-b-2 px-3 py-1.5 text-sm font-medium transition-colors",
             tab === "date"
-              ? "bg-dash-surface text-dash-text shadow-sm"
-              : "text-dash-muted hover:text-dash-text"
+              ? "border-dash-primary text-dash-primary"
+              : "border-transparent text-dash-muted hover:text-dash-text"
           )}
         >
           Date
@@ -51,29 +42,26 @@ export function DateTimePicker({ date, time, onChange, label, className }: DateT
           type="button"
           onClick={() => setTab("time")}
           className={cn(
-            "rounded px-4 py-1.5 text-sm font-medium transition-colors",
+            "border-b-2 px-3 py-1.5 text-sm font-medium transition-colors",
             tab === "time"
-              ? "bg-dash-surface text-dash-text shadow-sm"
-              : "text-dash-muted hover:text-dash-text"
+              ? "border-dash-primary text-dash-primary"
+              : "border-transparent text-dash-muted hover:text-dash-text"
           )}
         >
           Time
         </button>
       </div>
-
-      {/* Active panel */}
-      <div>
+      <div className="pt-1">
         {tab === "date" ? (
-          <DatePicker
-            value={date}
-            onChange={(d) => onChange(d, time)}
-          />
+          <DatePicker value={date} onChange={onDateChange} />
         ) : (
-          <TimePicker
-            value={time}
-            onChange={(t) => onChange(date, t)}
-          />
+          <TimePicker value={time} onChange={onTimeChange} />
         )}
+      </div>
+      <div className="flex gap-2 text-xs text-dash-muted">
+        <span>Date: {date || "—"}</span>
+        <span>•</span>
+        <span>Time: {time || "—"}</span>
       </div>
     </div>
   );

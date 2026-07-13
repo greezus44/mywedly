@@ -1,102 +1,94 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
 import { ImageUpload } from "../../components/ui/ImageUpload";
-import { Input } from "../../components/ui";
-import { Button } from "../../components/ui/Button";
+import { Input, Button, Card } from "../../components/ui";
 
 interface CoverConfig {
   subtitle?: string;
-  [key: string]: any;
 }
 
 export default function CoverEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
 
-  const [coverImage, setCoverImage] = useState<string | null>(event.draft_cover_image ?? event.cover_image ?? null);
-  const [coverConfig, setCoverConfig] = useState<CoverConfig>(
-    (event.draft_cover_config ?? event.cover_config ?? {}) as CoverConfig
-  );
+  const [coverImage, setCoverImage] = useState<string | null>(event.draft_cover_image ?? null);
+  const [coverConfig, setCoverConfig] = useState<CoverConfig>(() => {
+    const cfg = event.draft_cover_config ?? event.cover_config;
+    return (cfg as CoverConfig) ?? {};
+  });
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCoverImage(event.draft_cover_image ?? null);
+    const cfg = event.draft_cover_config ?? event.cover_config;
+    setCoverConfig((cfg as CoverConfig) ?? {});
+  }, [event]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("user_events")
         .update({
           draft_cover_image: coverImage,
-          draft_cover_config: coverConfig as Json,
+          draft_cover_config: coverConfig as unknown as Json,
         })
-        .eq("id", event.id)
-        .select()
-        .maybeSingle();
+        .eq("id", event.id);
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user_events", event.id] });
-    },
-    onError: () => {
-      // Error is surfaced via saveMutation.isError
+      setSavedMsg("Saved successfully");
+      setTimeout(() => setSavedMsg(null), 3000);
     },
   });
 
-  const previewEvent: Partial<UserEvent> = {
+  const previewEvent = {
     ...event,
-    cover_image: coverImage,
-    cover_config: coverConfig as Json,
-    name: event.draft_name ?? event.name,
-    event_date: event.draft_event_date ?? event.event_date,
+    draft_cover_image: coverImage,
+    draft_cover_config: coverConfig as unknown as Json,
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-dash-text">Cover Editor</h2>
-          <p className="mt-1 text-sm text-dash-muted">Customize the cover image and subtitle for your website.</p>
+          <h2 className="text-xl font-bold text-dash-text">Cover Page</h2>
+          <p className="text-sm text-dash-muted">Set the cover image and subtitle for your website.</p>
         </div>
-        <Button
-          loading={saveMutation.isPending}
-          onClick={() => saveMutation.mutate()}
-        >
+        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
           Save Changes
         </Button>
       </div>
-
       {saveMutation.isError && (
-        <div className="rounded-md border border-dash-danger/30 bg-red-50 px-4 py-3 text-sm text-dash-danger">
-          Failed to save. Please try again.
-        </div>
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save"}
+        </p>
       )}
-      {saveMutation.isSuccess && (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-          Changes saved successfully.
-        </div>
-      )}
+      {savedMsg && <p className="text-sm text-green-600">{savedMsg}</p>}
 
       <SplitEditor
         editor={
-          <div className="space-y-6">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-dash-text">Cover Image</label>
-              <ImageUpload
-                value={coverImage}
-                onChange={setCoverImage}
-                eventId={event.id}
-                aspect="aspect-video"
-              />
-            </div>
+          <Card className="space-y-4">
+            <ImageUpload
+              label="Cover Image"
+              value={coverImage}
+              onChange={setCoverImage}
+              eventId={event.id}
+              aspect="wide"
+            />
             <Input
               label="Subtitle"
-              value={coverConfig.subtitle || ""}
-              onChange={(e) => setCoverConfig({ ...coverConfig, subtitle: e.target.value })}
-              placeholder="e.g. Join us as we celebrate our special day"
+              value={coverConfig.subtitle ?? ""}
+              onChange={(e) =>
+                setCoverConfig({ ...coverConfig, subtitle: e.target.value })
+              }
+              placeholder="e.g. Join us for our special day"
             />
-          </div>
+          </Card>
         }
         preview={<CoverPreview event={previewEvent} />}
       />

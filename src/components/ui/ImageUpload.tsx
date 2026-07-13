@@ -1,15 +1,22 @@
-import { useState, useRef, useCallback, type DragEvent, type ChangeEvent } from "react";
+import { useCallback, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
-import { compressImage, uploadImage } from "../../lib/upload";
+import { compressImage, uploadImage, removeImage } from "../../lib/upload";
 
-export interface ImageUploadProps {
+interface ImageUploadProps {
   value: string | null;
   onChange: (url: string | null) => void;
   eventId: string;
   className?: string;
   label?: string;
-  aspect?: string;
+  aspect?: "square" | "wide" | "tall" | "auto";
 }
+
+const aspectClasses: Record<NonNullable<ImageUploadProps["aspect"]>, string> = {
+  square: "aspect-square",
+  wide: "aspect-video",
+  tall: "aspect-[3/4]",
+  auto: "min-h-[120px]",
+};
 
 export function ImageUpload({
   value,
@@ -17,13 +24,12 @@ export function ImageUpload({
   eventId,
   className,
   label,
-  aspect = "aspect-video",
+  aspect = "wide",
 }: ImageUploadProps) {
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -33,169 +39,112 @@ export function ImageUpload({
       }
       setError(null);
       setUploading(true);
-      setProgress(0);
-
-      // Simulate incremental progress while compression/upload runs
-      let progressInterval: ReturnType<typeof setInterval> | undefined;
-      progressInterval = setInterval(() => {
-        setProgress((p) => (p < 90 ? p + 10 : p));
-      }, 200);
-
       try {
-        await compressImage(file);
-        setProgress(90);
+        if (value) {
+          await removeImage(value).catch(() => {});
+        }
         const url = await uploadImage(file, eventId);
-        setProgress(100);
         onChange(url);
       } catch (err) {
-        console.error("Upload failed:", err);
-        setError(err instanceof Error ? err.message : "Failed to upload image");
+        setError(err instanceof Error ? err.message : "Upload failed");
       } finally {
-        if (progressInterval) clearInterval(progressInterval);
         setUploading(false);
-        // Reset progress after a brief delay so the user sees 100%
-        setTimeout(() => setProgress(0), 500);
       }
     },
-    [eventId, onChange]
+    [value, eventId, onChange]
   );
 
-  function handleDrop(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleFile(file);
-  }
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragging(false);
+      const file = e.dataTransfer.files?.[0];
+      if (file) handleFile(file);
+    },
+    [handleFile]
+  );
 
-  function handleDragOver(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setIsDragging(true);
-  }
-
-  function handleDragLeave(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setIsDragging(false);
-  }
-
-  function handleChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-    // Reset so selecting the same file again triggers change
-    e.target.value = "";
-  }
-
-  function handleRemove() {
+  const handleRemove = useCallback(async () => {
+    if (value) {
+      await removeImage(value).catch(() => {});
+    }
     onChange(null);
-    setError(null);
-  }
-
-  function handleBrowse() {
-    inputRef.current?.click();
-  }
+    if (inputRef.current) inputRef.current.value = "";
+  }, [value, onChange]);
 
   return (
-    <div className={cn("w-full", className)}>
-      {label && (
-        <label className="mb-1.5 block text-sm font-medium text-dash-text">{label}</label>
-      )}
-
+    <div className={cn("flex flex-col gap-2", className)}>
+      {label && <label className="text-sm font-medium text-dash-text">{label}</label>}
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-lg border-2 border-dashed transition-colors",
+          aspectClasses[aspect],
+          dragging ? "border-dash-primary bg-dash-bg" : "border-dash-border bg-dash-surface",
+          className
+        )}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+      >
+        {value ? (
+          <>
+            <img src={value} alt="Upload preview" className="h-full w-full object-cover" />
+            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity hover:opacity-100">
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-dash-text hover:bg-dash-bg"
+              >
+                Replace
+              </button>
+              <button
+                type="button"
+                onClick={handleRemove}
+                className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-dash-danger hover:bg-red-50"
+              >
+                Remove
+              </button>
+            </div>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="flex h-full w-full flex-col items-center justify-center gap-2 text-dash-muted hover:text-dash-text"
+          >
+            {uploading ? (
+              <>
+                <svg className="h-6 w-6 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="text-sm">Uploading…</span>
+              </>
+            ) : (
+              <>
+                <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                </svg>
+                <span className="text-sm">Click or drag to upload</span>
+              </>
+            )}
+          </button>
+        )}
+      </div>
+      {error && <p className="text-xs text-dash-danger">{error}</p>}
       <input
         ref={inputRef}
         type="file"
         accept="image/*"
-        onChange={handleChange}
         className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+        }}
       />
-
-      {value && !uploading ? (
-        <div className={cn("relative overflow-hidden rounded-lg border border-dash-border bg-dash-surface", aspect)}>
-          <img src={value} alt="Upload preview" className="h-full w-full object-cover" />
-          <button
-            type="button"
-            onClick={handleRemove}
-            className="absolute right-2 top-2 rounded-md bg-black/60 p-1.5 text-white transition-colors hover:bg-black/80"
-            aria-label="Remove image"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      ) : (
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={handleBrowse}
-          className={cn(
-            "flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed bg-dash-surface transition-colors",
-            aspect,
-            isDragging
-              ? "border-dash-primary bg-dash-primary/5"
-              : "border-dash-border hover:border-dash-primary"
-          )}
-        >
-          {uploading ? (
-            <div className="flex flex-col items-center gap-3 px-4">
-              <svg
-                className="h-8 w-8 animate-spin text-dash-primary"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-              <div className="w-full max-w-xs">
-                <div className="mb-1 text-center text-xs text-dash-muted">
-                  Uploading... {progress}%
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-dash-border">
-                  <div
-                    className="h-full rounded-full bg-dash-primary transition-all duration-200"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2 px-4 text-center">
-              <svg
-                className="h-10 w-10 text-dash-muted"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
-              <p className="text-sm font-medium text-dash-text">
-                Drag and drop an image
-              </p>
-              <p className="text-xs text-dash-muted">
-                or click to browse
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {error && <p className="mt-1.5 text-xs text-dash-danger">{error}</p>}
     </div>
   );
 }

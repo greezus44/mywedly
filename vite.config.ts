@@ -7,18 +7,8 @@ export default defineConfig({
     port: 5173,
     host: true,
     allowedHosts: true,
-    fs: {
-      strict: false,
-      allow: [".."],
-      cachedChecks: false,
-    },
+    fs: { strict: false, allow: [".."], cachedChecks: false },
   },
-  optimizeDeps: {
-    esbuildOptions: {
-      target: "es2020",
-    },
-  },
-  build: {
-    target: "es2020",
-  },
+  optimizeDeps: { esbuildOptions: { target: "es2020" } },
+  build: { target: "es2020" },
 });

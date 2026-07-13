@@ -1,25 +1,30 @@
-import { type ReactNode, type ChangeEvent } from "react";
+import {
+  useEffect,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from "react";
 import { cn } from "../../lib/utils";
 
-/* Re-export form field components */
 export { Input, Textarea, Select } from "./Input";
-export type { InputProps, TextareaProps, SelectProps } from "./Input";
-
-/* Re-export date/time pickers */
+export { Button } from "./Button";
 export { TimePicker } from "./TimePicker";
-export type { TimePickerProps } from "./TimePicker";
 export { DatePicker } from "./DatePicker";
-export type { DatePickerProps } from "./DatePicker";
 export { DateTimePicker } from "./DateTimePicker";
-export type { DateTimePickerProps } from "./DateTimePicker";
 
-/* ----------------------------------- Card ----------------------------------- */
+// ---------------------------------------------------------------------------
+// Card
+// ---------------------------------------------------------------------------
+interface CardProps {
+  children: ReactNode;
+  className?: string;
+}
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
+export function Card({ children, className }: CardProps) {
   return (
     <div
       className={cn(
-        "rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm",
+        "rounded-xl border border-dash-border bg-dash-surface p-5 shadow-sm",
         className
       )}
     >
@@ -28,27 +33,27 @@ export function Card({ className, children }: { className?: string; children: Re
   );
 }
 
-/* ---------------------------------- Badge ----------------------------------- */
-
+// ---------------------------------------------------------------------------
+// Badge
+// ---------------------------------------------------------------------------
 type BadgeVariant = "default" | "success" | "warning" | "danger" | "info";
 
 const badgeVariants: Record<BadgeVariant, string> = {
   default: "bg-dash-bg text-dash-text border-dash-border",
-  success: "bg-green-100 text-green-800 border-green-200",
-  warning: "bg-amber-100 text-amber-800 border-amber-200",
-  danger: "bg-red-100 text-red-800 border-red-200",
-  info: "bg-sky-100 text-sky-800 border-sky-200",
+  success: "bg-green-50 text-green-700 border-green-200",
+  warning: "bg-amber-50 text-amber-700 border-amber-200",
+  danger: "bg-red-50 text-red-700 border-red-200",
+  info: "bg-sky-50 text-sky-700 border-sky-200",
 };
 
-export function Badge({
-  children,
-  className,
-  variant = "default",
-}: {
+interface BadgeProps {
+  variant?: BadgeVariant;
   children?: ReactNode;
   className?: string;
-  variant?: BadgeVariant;
-}) {
+}
+
+export function Badge({ variant = "default", children, className }: BadgeProps) {
+  if (!children) return null;
   return (
     <span
       className={cn(
@@ -62,195 +67,177 @@ export function Badge({
   );
 }
 
-/* ------------------------------- EmptyState --------------------------------- */
-
-export function EmptyState({
-  icon,
-  title,
-  description,
-  action,
-}: {
-  icon?: ReactNode;
+// ---------------------------------------------------------------------------
+// EmptyState
+// ---------------------------------------------------------------------------
+interface EmptyStateProps {
   title: string;
   description?: string;
+  icon?: ReactNode;
   action?: ReactNode;
-}) {
+  className?: string;
+}
+
+export function EmptyState({ title, description, icon, action, className }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      {icon && <div className="mb-4 text-dash-muted">{icon}</div>}
-      <h3 className="text-lg font-semibold text-dash-text">{title}</h3>
-      {description && (
-        <p className="mt-1 max-w-sm text-sm text-dash-muted">{description}</p>
-      )}
-      {action && <div className="mt-4">{action}</div>}
+    <div className={cn("flex flex-col items-center justify-center gap-3 py-12 text-center", className)}>
+      {icon && <div className="text-dash-muted">{icon}</div>}
+      <h3 className="text-base font-semibold text-dash-text">{title}</h3>
+      {description && <p className="max-w-sm text-sm text-dash-muted">{description}</p>}
+      {action && <div className="mt-2">{action}</div>}
     </div>
   );
 }
 
-/* ---------------------------------- Toggle ---------------------------------- */
-
-export function Toggle({
-  checked,
-  onChange,
-  label,
-}: {
+// ---------------------------------------------------------------------------
+// Toggle
+// ---------------------------------------------------------------------------
+interface ToggleProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label?: string;
-}) {
+  disabled?: boolean;
+  className?: string;
+}
+
+export function Toggle({ checked, onChange, label, disabled, className }: ToggleProps) {
   return (
-    <label className="inline-flex cursor-pointer items-center gap-3">
+    <label className={cn("inline-flex items-center gap-2", className)}>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-dash-primary focus:ring-offset-2",
+          "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50",
           checked ? "bg-dash-primary" : "bg-dash-border"
         )}
       >
         <span
           className={cn(
-            "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform",
-            checked ? "translate-x-5" : "translate-x-0.5"
+            "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+            checked ? "translate-x-4" : "translate-x-0.5"
           )}
         />
       </button>
-      {label && <span className="text-sm font-medium text-dash-text">{label}</span>}
+      {label && <span className="text-sm text-dash-text">{label}</span>}
     </label>
   );
 }
 
-/* ------------------------------- ColorInput --------------------------------- */
+// ---------------------------------------------------------------------------
+// ColorInput
+// ---------------------------------------------------------------------------
+interface ColorInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "onChange"> {
+  label?: string;
+  onChange?: (value: string) => void;
+}
 
-export function ColorInput({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
+export function ColorInput({ label, onChange, className, ...props }: ColorInputProps) {
   return (
-    <div className="w-full">
-      <label className="mb-1.5 block text-sm font-medium text-dash-text">{label}</label>
+    <div className="flex flex-col gap-1">
+      {label && <label className="text-sm font-medium text-dash-text">{label}</label>}
       <div className="flex items-center gap-2">
         <input
           type="color"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-10 w-12 shrink-0 cursor-pointer rounded-md border border-dash-border bg-dash-surface p-1"
+          onChange={(e) => onChange?.(e.target.value)}
+          className={cn("h-9 w-12 cursor-pointer rounded border border-dash-border bg-dash-surface p-0.5", className)}
+          {...props}
         />
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
-          placeholder="#000000"
-        />
+        {props.value && (
+          <span className="text-sm text-dash-muted">{String(props.value)}</span>
+        )}
       </div>
     </div>
   );
 }
 
-/* ------------------------------- RangeInput -------------------------------- */
+// ---------------------------------------------------------------------------
+// RangeInput
+// ---------------------------------------------------------------------------
+interface RangeInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "onChange"> {
+  label?: string;
+  onChange?: (value: string) => void;
+}
 
-export function RangeInput({
-  label,
-  value,
-  onChange,
-  min = 0,
-  max = 100,
-  step = 1,
-  unit,
-}: {
-  label: string;
-  value: number;
-  onChange: (value: number) => void;
-  min?: number;
-  max?: number;
-  step?: number;
-  unit?: string;
-}) {
+export function RangeInput({ label, onChange, className, ...props }: RangeInputProps) {
   return (
-    <div className="w-full">
-      <div className="mb-1.5 flex items-center justify-between">
-        <label className="text-sm font-medium text-dash-text">{label}</label>
-        <span className="text-sm text-dash-muted">
-          {value}
-          {unit}
-        </span>
-      </div>
+    <div className="flex flex-col gap-1">
+      {label && (
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-dash-text">{label}</label>
+          {props.value && <span className="text-xs text-dash-muted">{String(props.value)}</span>}
+        </div>
+      )}
       <input
         type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(Number(e.target.value))}
-        className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-dash-border accent-dash-primary"
+        onChange={(e) => onChange?.(e.target.value)}
+        className={cn("w-full cursor-pointer accent-dash-primary", className)}
+        {...props}
       />
     </div>
   );
 }
 
-/* ------------------------------- FormField ---------------------------------- */
-
-export function FormField({
-  label,
-  children,
-  hint,
-}: {
-  label: string;
-  children: ReactNode;
+// ---------------------------------------------------------------------------
+// FormField
+// ---------------------------------------------------------------------------
+interface FormFieldProps {
+  label?: string;
+  error?: string;
   hint?: string;
-}) {
+  children: ReactNode;
+  className?: string;
+}
+
+export function FormField({ label, error, hint, children, className }: FormFieldProps) {
   return (
-    <div className="w-full">
-      <label className="mb-1.5 block text-sm font-medium text-dash-text">{label}</label>
+    <div className={cn("flex flex-col gap-1", className)}>
+      {label && <label className="text-sm font-medium text-dash-text">{label}</label>}
       {children}
-      {hint && <p className="mt-1 text-xs text-dash-muted">{hint}</p>}
+      {hint && !error && <p className="text-xs text-dash-muted">{hint}</p>}
+      {error && <p className="text-xs text-dash-danger">{error}</p>}
     </div>
   );
 }
 
-/* -------------------------------- Skeleton ---------------------------------- */
-
-export function Skeleton({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn(
-        "animate-pulse rounded-md bg-dash-border",
-        className
-      )}
-    />
-  );
+// ---------------------------------------------------------------------------
+// Skeleton
+// ---------------------------------------------------------------------------
+interface SkeletonProps {
+  className?: string;
 }
 
-/* ------------------------------- ErrorState --------------------------------- */
+export function Skeleton({ className }: SkeletonProps) {
+  return <div className={cn("animate-pulse rounded-md bg-dash-border", className)} />;
+}
 
-export function ErrorState({
-  message,
-  onRetry,
-}: {
-  message: string;
+// ---------------------------------------------------------------------------
+// ErrorState
+// ---------------------------------------------------------------------------
+interface ErrorStateProps {
+  title?: string;
+  message?: string;
   onRetry?: () => void;
-}) {
+  className?: string;
+}
+
+export function ErrorState({ title = "Something went wrong", message, onRetry, className }: ErrorStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-dash-danger">
+    <div className={cn("flex flex-col items-center justify-center gap-3 py-12 text-center", className)}>
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       </div>
-      <p className="text-sm text-dash-text">{message}</p>
+      <h3 className="text-base font-semibold text-dash-text">{title}</h3>
+      {message && <p className="max-w-sm text-sm text-dash-muted">{message}</p>}
       {onRetry && (
         <button
           type="button"
           onClick={onRetry}
-          className="mt-4 rounded-md bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg transition-colors hover:bg-dash-primary-hover"
+          className="mt-2 rounded-lg border border-dash-border bg-dash-surface px-4 py-2 text-sm font-medium text-dash-text hover:bg-dash-bg"
         >
           Try again
         </button>
@@ -259,36 +246,38 @@ export function ErrorState({
   );
 }
 
-/* ----------------------------- LoadingSpinner ------------------------------- */
+// ---------------------------------------------------------------------------
+// LoadingSpinner
+// ---------------------------------------------------------------------------
+interface LoadingSpinnerProps {
+  size?: "sm" | "md" | "lg";
+  className?: string;
+}
 
-export function LoadingSpinner({ className }: { className?: string }) {
+const spinnerSizes = {
+  sm: "h-4 w-4",
+  md: "h-6 w-6",
+  lg: "h-8 w-8",
+};
+
+export function LoadingSpinner({ size = "md", className }: LoadingSpinnerProps) {
   return (
     <svg
-      className={cn("h-6 w-6 animate-spin text-dash-primary", className)}
+      className={cn("animate-spin text-dash-primary", spinnerSizes[size], className)}
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
       aria-hidden="true"
     >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-      />
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
   );
 }
 
-/* ---------------------------------- Modal ----------------------------------- */
-
+// ---------------------------------------------------------------------------
+// Modal
+// ---------------------------------------------------------------------------
 type ModalSize = "sm" | "md" | "lg" | "xl";
 
 const modalSizes: Record<ModalSize, string> = {
@@ -298,46 +287,55 @@ const modalSizes: Record<ModalSize, string> = {
   xl: "max-w-2xl",
 };
 
-export function Modal({
-  open,
-  onClose,
-  title,
-  children,
-  size = "md",
-}: {
+interface ModalProps {
   open: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
   size?: ModalSize;
-}) {
+  className?: string;
+}
+
+export function Modal({ open, onClose, title, children, size = "md", className }: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", handler);
+      document.body.style.overflow = "";
+    };
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Overlay */}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0 bg-black/40 animate-fadeIn"
         onClick={onClose}
         aria-hidden="true"
       />
-
-      {/* Panel */}
       <div
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative z-10 mx-4 w-full rounded-lg border border-dash-border bg-dash-surface shadow-xl",
-          modalSizes[size]
+          "relative z-10 w-full rounded-xl border border-dash-border bg-dash-surface shadow-xl animate-slideUp",
+          modalSizes[size],
+          className
         )}
       >
         {title && (
-          <div className="flex items-center justify-between border-b border-dash-border px-6 py-4">
-            <h2 className="text-lg font-semibold text-dash-text">{title}</h2>
+          <div className="flex items-center justify-between border-b border-dash-border px-5 py-3">
+            <h2 className="text-base font-semibold text-dash-text">{title}</h2>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md p-1 text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text"
+              className="rounded p-1 text-dash-muted hover:bg-dash-bg hover:text-dash-text"
+              aria-label="Close"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -345,8 +343,31 @@ export function Modal({
             </button>
           </div>
         )}
-        <div className="px-6 py-4">{children}</div>
+        <div className="px-5 py-4">{children}</div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ToggleButton (helper used in some editors)
+// ---------------------------------------------------------------------------
+interface ToggleButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  active?: boolean;
+}
+
+export function ToggleButton({ active, className, children, ...props }: ToggleButtonProps) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "rounded p-1.5 text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text",
+        active && "bg-dash-bg text-dash-primary",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </button>
   );
 }

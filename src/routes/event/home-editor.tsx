@@ -1,103 +1,100 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
-import { FormField } from "../../components/ui";
-import { Button } from "../../components/ui/Button";
+import { Button, Card } from "../../components/ui";
 
 interface HomeContent {
-  section1?: string;
-  section2?: string;
-  section3?: string;
-  [key: string]: any;
+  welcome?: string;
+  story?: string;
+  details?: string;
 }
 
 export default function HomeEditor() {
   const { event } = useOutletContext<{ event: UserEvent }>();
   const queryClient = useQueryClient();
 
-  const currentContent = (event.draft_content ?? event.content ?? {}) as HomeContent;
-
-  const [content, setContent] = useState<HomeContent>({
-    section1: currentContent.section1 || "",
-    section2: currentContent.section2 || "",
-    section3: currentContent.section3 || "",
+  const [content, setContent] = useState<HomeContent>(() => {
+    const c = event.draft_content ?? event.content;
+    return (c as HomeContent) ?? {};
   });
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const c = event.draft_content ?? event.content;
+    setContent((c as HomeContent) ?? {});
+  }, [event]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("user_events")
-        .update({ draft_content: content as Json })
-        .eq("id", event.id)
-        .select()
-        .maybeSingle();
+        .update({
+          draft_content: content as unknown as Json,
+        })
+        .eq("id", event.id);
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user_events", event.id] });
+      setSavedMsg("Saved successfully");
+      setTimeout(() => setSavedMsg(null), 3000);
     },
-    onError: () => {},
   });
 
-  const previewEvent: Partial<UserEvent> = {
+  const previewEvent = {
     ...event,
-    content: content as Json,
-    name: event.draft_name ?? event.name,
-    event_date: event.draft_event_date ?? event.event_date,
+    draft_content: content as unknown as Json,
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-dash-text">Home Page Editor</h2>
-          <p className="mt-1 text-sm text-dash-muted">Customize the welcome message and content sections.</p>
+          <h2 className="text-xl font-bold text-dash-text">Home Page</h2>
+          <p className="text-sm text-dash-muted">Edit the content sections of your home page.</p>
         </div>
-        <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
           Save Changes
         </Button>
       </div>
-
       {saveMutation.isError && (
-        <div className="rounded-md border border-dash-danger/30 bg-red-50 px-4 py-3 text-sm text-dash-danger">
-          Failed to save. Please try again.
-        </div>
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save"}
+        </p>
       )}
-      {saveMutation.isSuccess && (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-          Changes saved successfully.
-        </div>
-      )}
+      {savedMsg && <p className="text-sm text-green-600">{savedMsg}</p>}
 
       <SplitEditor
         editor={
-          <div className="space-y-6">
-            <FormField label="Section 1" hint="Welcome message or introduction.">
+          <div className="space-y-4">
+            <Card>
+              <h3 className="mb-3 text-sm font-semibold text-dash-text">Welcome Message</h3>
               <RichTextEditor
-                value={content.section1 || ""}
-                onChange={(html) => setContent({ ...content, section1: html })}
-                placeholder="Write your welcome message..."
+                value={content.welcome ?? ""}
+                onChange={(html) => setContent({ ...content, welcome: html })}
+                placeholder="Write a welcome message for your guests…"
               />
-            </FormField>
-            <FormField label="Section 2" hint="Additional content, story, or details.">
+            </Card>
+            <Card>
+              <h3 className="mb-3 text-sm font-semibold text-dash-text">Our Story</h3>
               <RichTextEditor
-                value={content.section2 || ""}
-                onChange={(html) => setContent({ ...content, section2: html })}
-                placeholder="Write additional content..."
+                value={content.story ?? ""}
+                onChange={(html) => setContent({ ...content, story: html })}
+                placeholder="Tell your love story…"
               />
-            </FormField>
-            <FormField label="Section 3" hint="Closing message or additional info.">
+            </Card>
+            <Card>
+              <h3 className="mb-3 text-sm font-semibold text-dash-text">Event Details</h3>
               <RichTextEditor
-                value={content.section3 || ""}
-                onChange={(html) => setContent({ ...content, section3: html })}
-                placeholder="Write closing content..."
+                value={content.details ?? ""}
+                onChange={(html) => setContent({ ...content, details: html })}
+                placeholder="Add any additional details about the event…"
               />
-            </FormField>
+            </Card>
           </div>
         }
         preview={<HomePreview event={previewEvent} />}

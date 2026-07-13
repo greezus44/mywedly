@@ -43,10 +43,7 @@ import RustyContact from "./routes/guest/rusty-contact";
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: {
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
+    queries: { retry: 1, refetchOnWindowFocus: false },
   },
 });
 
@@ -79,38 +76,18 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               </Route>
 
               <Route path="/e/:slug" element={<GuestCover />} />
-              <Route path="/e/:slug/home" element={<GuestLayout />}>
-                <Route index element={<GuestHome />} />
-              </Route>
-              <Route path="/e/:slug/events" element={<GuestLayout />}>
-                <Route index element={<GuestHome />} />
-              </Route>
-              <Route path="/e/:slug/rsvp" element={<GuestLayout />}>
-                <Route index element={<GuestRsvp />} />
-              </Route>
-              <Route path="/e/:slug/wishes" element={<GuestLayout />}>
-                <Route index element={<GuestWishes />} />
-              </Route>
-              <Route path="/e/:slug/contact" element={<GuestLayout />}>
-                <Route index element={<GuestContact />} />
-              </Route>
-              <Route path="/e/:slug/p/:pageSlug" element={<GuestLayout />}>
-                <Route index element={<GuestCustomPage />} />
-              </Route>
+              <Route path="/e/:slug/home" element={<GuestLayout />}><Route index element={<GuestHome />} /></Route>
+              <Route path="/e/:slug/events" element={<GuestLayout />}><Route index element={<GuestHome />} /></Route>
+              <Route path="/e/:slug/rsvp" element={<GuestLayout />}><Route index element={<GuestRsvp />} /></Route>
+              <Route path="/e/:slug/wishes" element={<GuestLayout />}><Route index element={<GuestWishes />} /></Route>
+              <Route path="/e/:slug/contact" element={<GuestLayout />}><Route index element={<GuestContact />} /></Route>
+              <Route path="/e/:slug/p/:pageSlug" element={<GuestLayout />}><Route index element={<GuestCustomPage />} /></Route>
 
               <Route path="/r/:slug" element={<RustyCover />} />
-              <Route path="/r/:slug/home" element={<RustyLayout />}>
-                <Route index element={<RustyHome />} />
-              </Route>
-              <Route path="/r/:slug/rsvp" element={<RustyLayout />}>
-                <Route index element={<RustyRsvp />} />
-              </Route>
-              <Route path="/r/:slug/wishes" element={<RustyLayout />}>
-                <Route index element={<RustyWishes />} />
-              </Route>
-              <Route path="/r/:slug/contact" element={<RustyLayout />}>
-                <Route index element={<RustyContact />} />
-              </Route>
+              <Route path="/r/:slug/home" element={<RustyLayout />}><Route index element={<RustyHome />} /></Route>
+              <Route path="/r/:slug/rsvp" element={<RustyLayout />}><Route index element={<RustyRsvp />} /></Route>
+              <Route path="/r/:slug/wishes" element={<RustyLayout />}><Route index element={<RustyWishes />} /></Route>
+              <Route path="/r/:slug/contact" element={<RustyLayout />}><Route index element={<RustyContact />} /></Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

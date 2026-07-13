@@ -1,11 +1,29 @@
-import React from "react";
+import { type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
-export function SplitEditor({ editor, preview, previewClassName }: { editor: React.ReactNode; preview: React.ReactNode; previewClassName?: string }) {
+interface SplitEditorProps {
+  editor: ReactNode;
+  preview: ReactNode;
+  className?: string;
+  editorClassName?: string;
+  previewClassName?: string;
+}
+
+export function SplitEditor({
+  editor,
+  preview,
+  className,
+  editorClassName,
+  previewClassName,
+}: SplitEditorProps) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div className="space-y-4">{editor}</div>
-      <div className={cn("rounded-xl border border-dash-border overflow-hidden", previewClassName)}>{preview}</div>
+    <div className={cn("grid grid-cols-1 gap-4 lg:grid-cols-2", className)}>
+      <div className={cn("overflow-y-auto scrollbar-thin", editorClassName)}>
+        {editor}
+      </div>
+      <div className={cn("overflow-y-auto scrollbar-thin", previewClassName)}>
+        {preview}
+      </div>
     </div>
   );
 }
