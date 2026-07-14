@@ -1,270 +1,230 @@
 import React from "react";
-import type { EventGuest } from "../../lib/supabase";
-import { Badge } from "../../components/ui";
 import { cn } from "../../lib/utils";
+import type { EventGuest } from "../../lib/supabase";
 
-export interface GuestFormData {
+export interface GuestFormValues {
   name: string;
-  email: string;
-  phone: string;
-  username: string;
-  group_id: string;
-  group_name: string;
-  side: string;
-  plus_ones: number;
-  dietary: string;
-  message: string;
-  table_number: string;
+  username: string | null;
+  email: string | null;
+  phone: string | null;
+  group_name: string | null;
+  side: string | null;
+  group_id: string | null;
   rsvp_status: string;
+  plus_ones: number;
+  dietary: string | null;
+  message: string | null;
+  table_number: number | null;
 }
 
-export function guestToForm(guest: EventGuest): GuestFormData {
+export function guestToForm(guest: EventGuest): GuestFormValues {
   return {
-    name: guest.name ?? "",
-    email: guest.email ?? "",
-    phone: guest.phone ?? "",
-    username: guest.username ?? "",
-    group_id: guest.group_id ?? "",
-    group_name: guest.group_name ?? "",
-    side: guest.side ?? "",
-    plus_ones: guest.plus_ones ?? 0,
-    dietary: guest.dietary ?? "",
-    message: guest.message ?? "",
-    table_number: guest.table_number?.toString() ?? "",
-    rsvp_status: guest.rsvp_status ?? "pending",
+    name: guest.name,
+    username: guest.username,
+    email: guest.email,
+    phone: guest.phone,
+    group_name: guest.group_name,
+    side: guest.side,
+    group_id: guest.group_id,
+    rsvp_status: guest.rsvp_status,
+    plus_ones: guest.plus_ones,
+    dietary: guest.dietary,
+    message: guest.message,
+    table_number: guest.table_number,
   };
 }
 
-export function formToGuest(form: GuestFormData): Record<string, unknown> {
-  return {
-    name: form.name.trim(),
-    email: form.email.trim(),
-    phone: form.phone.trim() || null,
-    username: form.username.trim() || null,
-    group_id: form.group_id || null,
-    group_name: form.group_name.trim() || null,
-    side: form.side || null,
-    plus_ones: form.plus_ones ?? 0,
-    dietary: form.dietary.trim() || null,
-    message: form.message.trim() || null,
-    table_number: form.table_number.trim() || null,
-    rsvp_status: form.rsvp_status || "pending",
-  };
+export const EMPTY_GUEST_FORM: GuestFormValues = {
+  name: "",
+  username: null,
+  email: null,
+  phone: null,
+  group_name: null,
+  side: null,
+  group_id: null,
+  rsvp_status: "pending",
+  plus_ones: 0,
+  dietary: null,
+  message: null,
+  table_number: null,
+};
+
+export const RSVP_STATUS_OPTIONS = [
+  { value: "pending", label: "Pending" },
+  { value: "attending", label: "Attending" },
+  { value: "declined", label: "Declined" },
+];
+
+export const SIDE_OPTIONS = [
+  { value: "", label: "None" },
+  { value: "bride", label: "Bride's side" },
+  { value: "groom", label: "Groom's side" },
+  { value: "both", label: "Both" },
+  { value: "other", label: "Other" },
+];
+
+export interface RsvpBadgeProps {
+  status: string;
+  className?: string;
 }
 
-export function RsvpBadge({ status }: { status: string }) {
-  const variant: "success" | "danger" | "warning" | "default" =
-    status === "attending"
-      ? "success"
-      : status === "declined"
-        ? "danger"
-        : status === "pending"
-          ? "warning"
-          : "default";
-  return <Badge variant={variant}>{status || "pending"}</Badge>;
-}
+const badgeStyles: Record<string, string> = {
+  attending: "bg-green-50 text-green-700 border-green-200",
+  declined: "bg-red-50 text-red-700 border-red-200",
+  pending: "bg-amber-50 text-amber-700 border-amber-200",
+};
 
-interface GuestFormProps {
-  form: GuestFormData;
-  onChange: (form: GuestFormData) => void;
+export const RsvpBadge: React.FC<RsvpBadgeProps> = ({ status, className }) => {
+  const style = badgeStyles[status] ?? badgeStyles.pending;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium capitalize",
+        style,
+        className,
+      )}
+    >
+      {status || "pending"}
+    </span>
+  );
+};
+
+export interface GuestFormProps {
+  values: GuestFormValues;
+  onChange: (values: GuestFormValues) => void;
   groups?: { id: string; name: string }[];
-  subEvents?: { id: string; name: string }[];
-  invitedEventIds?: Set<string>;
-  onToggleInvitedEvent?: (eventId: string) => void;
 }
 
-export function GuestForm({
-  form,
-  onChange,
-  groups,
-  subEvents,
-  invitedEventIds,
-  onToggleInvitedEvent,
-}: GuestFormProps) {
-  const update = (patch: Partial<GuestFormData>) => onChange({ ...form, ...patch });
+export const GuestForm: React.FC<GuestFormProps> = ({ values, onChange, groups }) => {
+  const update = <K extends keyof GuestFormValues>(key: K, value: GuestFormValues[K]) => {
+    onChange({ ...values, [key]: value });
+  };
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label className="mb-1.5 block text-sm font-medium text-dash-text">
+          Name <span className="text-dash-danger">*</span>
+        </label>
+        <input
+          type="text"
+          value={values.name}
+          onChange={(e) => update("name", e.target.value)}
+          className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+          placeholder="Jane Doe"
+          autoFocus
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label className="block text-sm font-medium text-dash-text mb-1.5">
-            Name <span className="text-dash-danger">*</span>
-          </label>
+          <label className="mb-1.5 block text-sm font-medium text-dash-text">Username</label>
           <input
             type="text"
-            value={form.name}
-            onChange={(e) => update({ name: e.target.value })}
-            placeholder="Guest name"
-            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
-            autoFocus
+            value={values.username ?? ""}
+            onChange={(e) => update("username", e.target.value || null)}
+            className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+            placeholder="jane.doe"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-dash-text mb-1.5">
-            Email
-          </label>
+          <label className="mb-1.5 block text-sm font-medium text-dash-text">Email</label>
           <input
             type="email"
-            value={form.email}
-            onChange={(e) => update({ email: e.target.value })}
-            placeholder="guest@example.com"
-            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
+            value={values.email ?? ""}
+            onChange={(e) => update("email", e.target.value || null)}
+            className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+            placeholder="jane@example.com"
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label className="block text-sm font-medium text-dash-text mb-1.5">
-            Phone
-          </label>
+          <label className="mb-1.5 block text-sm font-medium text-dash-text">Phone</label>
           <input
             type="tel"
-            value={form.phone}
-            onChange={(e) => update({ phone: e.target.value })}
-            placeholder="Phone number"
-            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
+            value={values.phone ?? ""}
+            onChange={(e) => update("phone", e.target.value || null)}
+            className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+            placeholder="+1 555 000 0000"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-dash-text mb-1.5">
-            Username
-          </label>
-          <input
-            type="text"
-            value={form.username}
-            onChange={(e) => update({ username: e.target.value })}
-            placeholder="Auto-generated if empty"
-            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-dash-text mb-1.5">
-            Guest Group
-          </label>
+          <label className="mb-1.5 block text-sm font-medium text-dash-text">Group</label>
           <select
-            value={form.group_id}
-            onChange={(e) => {
-              const group = groups?.find((g) => g.id === e.target.value);
-              update({
-                group_id: e.target.value,
-                group_name: group?.name ?? "",
-              });
-            }}
-            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
+            value={values.group_id ?? ""}
+            onChange={(e) => update("group_id", e.target.value || null)}
+            className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
           >
             <option value="">No group</option>
             {groups?.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-dash-text">Side</label>
+          <select
+            value={values.side ?? ""}
+            onChange={(e) => update("side", e.target.value || null)}
+            className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+          >
+            {SIDE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-dash-text mb-1.5">
-            Side
-          </label>
+          <label className="mb-1.5 block text-sm font-medium text-dash-text">RSVP Status</label>
           <select
-            value={form.side}
-            onChange={(e) => update({ side: e.target.value })}
-            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
+            value={values.rsvp_status}
+            onChange={(e) => update("rsvp_status", e.target.value)}
+            className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
           >
-            <option value="">No side</option>
-            <option value="bride">Bride's side</option>
-            <option value="groom">Groom's side</option>
-            <option value="both">Both</option>
-            <option value="other">Other</option>
+            {RSVP_STATUS_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
           </select>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-dash-text mb-1.5">
-            Plus Ones
-          </label>
+          <label className="mb-1.5 block text-sm font-medium text-dash-text">Plus ones</label>
           <input
             type="number"
             min={0}
-            value={form.plus_ones}
-            onChange={(e) => update({ plus_ones: Number(e.target.value) })}
-            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
+            value={values.plus_ones}
+            onChange={(e) => update("plus_ones", parseInt(e.target.value) || 0)}
+            className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-dash-text">Table number</label>
+          <input
+            type="number"
+            min={0}
+            value={values.table_number ?? ""}
+            onChange={(e) => update("table_number", e.target.value ? parseInt(e.target.value) : null)}
+            className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+            placeholder="e.g. 5"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-dash-text mb-1.5">
-            Table Number
-          </label>
+          <label className="mb-1.5 block text-sm font-medium text-dash-text">Dietary</label>
           <input
             type="text"
-            value={form.table_number}
-            onChange={(e) => update({ table_number: e.target.value })}
-            placeholder="e.g. 5"
-            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
+            value={values.dietary ?? ""}
+            onChange={(e) => update("dietary", e.target.value || null)}
+            className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+            placeholder="Vegetarian, gluten-free..."
           />
         </div>
       </div>
-
-      <div>
-        <label className="block text-sm font-medium text-dash-text mb-1.5">
-          Dietary Requirements
-        </label>
-        <textarea
-          value={form.dietary}
-          onChange={(e) => update({ dietary: e.target.value })}
-          placeholder="Any dietary needs"
-          className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary min-h-[60px]"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-dash-text mb-1.5">
-          Message
-        </label>
-        <textarea
-          value={form.message}
-          onChange={(e) => update({ message: e.target.value })}
-          placeholder="Optional message"
-          className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary min-h-[60px]"
-        />
-      </div>
-
-      {/* Invited Events as clickable chips */}
-      {subEvents && subEvents.length > 0 && onToggleInvitedEvent && (
-        <div>
-          <label className="block text-sm font-medium text-dash-text mb-1.5">
-            Invited Events
-          </label>
-          <p className="text-xs text-dash-muted mb-2">
-            Click to toggle which events this guest is invited to.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {subEvents.map((se) => {
-              const isInvited = invitedEventIds?.has(se.id) ?? true;
-              return (
-                <button
-                  key={se.id}
-                  type="button"
-                  onClick={() => onToggleInvitedEvent(se.id)}
-                  className={cn(
-                    "px-3 py-1.5 text-sm rounded-full border transition-colors",
-                    isInvited
-                      ? "bg-dash-primary text-dash-primary-fg border-transparent"
-                      : "bg-dash-surface text-dash-text border-dash-border hover:bg-dash-bg",
-                  )}
-                >
-                  {se.name}
-                  {isInvited && <span className="ml-1.5">✓</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
-}
+};

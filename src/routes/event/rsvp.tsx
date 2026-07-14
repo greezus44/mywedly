@@ -1,21 +1,20 @@
-import React, { useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import React, { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventRsvp } from "../../lib/supabase";
-import { Card, Badge, LoadingSpinner, ErrorState, EmptyState } from "../../components/ui";
-import { formatDate, cn } from "../../lib/utils";
+import { supabase, type EventRsvp } from "../../lib/supabase";
+import { useEventContext } from "./event-layout";
+import { Card, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
+import { formatDate, formatTime12 } from "../../lib/utils";
 
-const STATUS_VARIANTS: Record<string, "success" | "danger" | "warning" | "default"> = {
-  attending: "success",
-  declined: "danger",
-  pending: "warning",
+const STATUS_CONFIG: Record<string, { label: string; variant: "success" | "danger" | "warning" | "default" }> = {
+  attending: { label: "Attending", variant: "success" },
+  declined: { label: "Declined", variant: "danger" },
+  pending: { label: "Pending", variant: "warning" },
 };
 
-export function RsvpPage() {
-  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
-  const [filter, setFilter] = useState<string>("all");
+export const RsvpPage: React.FC = () => {
+  const { eventId } = useEventContext();
 
-  const { data: rsvps, isLoading, isError } = useQuery({
+  const { data: rsvps, isLoading, isError, refetch } = useQuery({
     queryKey: ["event-rsvps", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -24,140 +23,116 @@ export function RsvpPage() {
         .eq("event_id", eventId)
         .order("submitted_at", { ascending: false });
       if (error) throw error;
-      return data as EventRsvp[];
+      return (data ?? []) as EventRsvp[];
     },
   });
 
+  const stats = useMemo(() => {
+    const list = rsvps ?? [];
+    const attending = list.filter((r) => r.status === "attending");
+    const declined = list.filter((r) => r.status === "declined");
+    const pending = list.filter((r) => r.status === "pending" || !r.status);
+    const totalGuests = attending.reduce((sum, r) => sum + (r.guest_count || 0), 0);
+    return {
+      total: list.length,
+      attending: attending.length,
+      declined: declined.length,
+      pending: pending.length,
+      totalGuests,
+    };
+  }, [rsvps]);
+
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <LoadingSpinner className="h-8 w-8" />
-      </div>
-    );
+    return <LoadingSpinner size="md" label="Loading RSVPs..." />;
   }
 
   if (isError) {
-    return (
-      <div className="py-20">
-        <ErrorState message="Failed to load RSVP responses" />
-      </div>
-    );
+    return <ErrorState onRetry={() => refetch()} />;
   }
 
-  const allRsvps = rsvps ?? [];
-  const filtered =
-    filter === "all"
-      ? allRsvps
-      : allRsvps.filter((r) => (r.status || "pending") === filter);
-
-  const attending = allRsvps.filter((r) => r.status === "attending").length;
-  const declined = allRsvps.filter((r) => r.status === "declined").length;
-  const pending = allRsvps.filter(
-    (r) => !r.status || r.status === "pending",
-  ).length;
-  const totalPlusOnes = allRsvps.reduce((sum, r) => sum + (r.plus_ones ?? 0), 0);
-  const totalGuests = attending + totalPlusOnes;
-
   return (
-    <div className="mx-auto max-w-4xl px-4 sm:px-6 py-6 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-dash-text">RSVP Responses</h2>
-        <p className="text-sm text-dash-muted mt-1">
-          View and manage guest RSVP responses.
-        </p>
+        <h2 className="text-xl font-bold text-dash-text">RSVP Responses</h2>
+        <p className="text-sm text-dash-muted">View and track RSVP responses from your guests.</p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card className="text-center">
-          <div className="text-3xl font-bold text-green-600">{attending}</div>
-          <div className="text-sm text-dash-muted mt-1">Attending</div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <p className="text-sm text-dash-muted">Total Responses</p>
+          <p className="mt-1 text-3xl font-bold text-dash-text">{stats.total}</p>
         </Card>
-        <Card className="text-center">
-          <div className="text-3xl font-bold text-red-600">{declined}</div>
-          <div className="text-sm text-dash-muted mt-1">Declined</div>
+        <Card>
+          <p className="text-sm text-dash-muted">Attending</p>
+          <p className="mt-1 text-3xl font-bold text-green-600">{stats.attending}</p>
         </Card>
-        <Card className="text-center">
-          <div className="text-3xl font-bold text-amber-600">{pending}</div>
-          <div className="text-sm text-dash-muted mt-1">Pending</div>
+        <Card>
+          <p className="text-sm text-dash-muted">Declined</p>
+          <p className="mt-1 text-3xl font-bold text-red-600">{stats.declined}</p>
         </Card>
-        <Card className="text-center">
-          <div className="text-3xl font-bold text-dash-primary">{totalGuests}</div>
-          <div className="text-sm text-dash-muted mt-1">Total Guests</div>
+        <Card>
+          <p className="text-sm text-dash-muted">Total Guests</p>
+          <p className="mt-1 text-3xl font-bold text-dash-text">{stats.totalGuests}</p>
         </Card>
-      </div>
-
-      {/* Filter */}
-      <div className="flex gap-2">
-        {[
-          { key: "all", label: "All", count: allRsvps.length },
-          { key: "attending", label: "Attending", count: attending },
-          { key: "declined", label: "Declined", count: declined },
-          { key: "pending", label: "Pending", count: pending },
-        ].map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            onClick={() => setFilter(f.key)}
-            className={cn(
-              "px-3 py-1.5 text-sm rounded-md border transition-colors",
-              filter === f.key
-                ? "bg-dash-primary text-dash-primary-fg border-transparent"
-                : "bg-dash-surface text-dash-text border-dash-border hover:bg-dash-bg",
-            )}
-          >
-            {f.label} ({f.count})
-          </button>
-        ))}
       </div>
 
       {/* RSVP List */}
-      {filtered.length > 0 ? (
+      {(!rsvps || rsvps.length === 0) ? (
+        <EmptyState
+          title="No RSVP responses yet"
+          description="RSVP responses from your guests will appear here."
+        />
+      ) : (
         <div className="space-y-3">
-          {filtered.map((rsvp) => (
-            <Card key={rsvp.id}>
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-semibold text-dash-text">
-                      {rsvp.guest_name}
-                    </h3>
-                    <Badge variant={STATUS_VARIANTS[rsvp.status || "pending"] ?? "default"}>
-                      {rsvp.status || "pending"}
-                    </Badge>
-                    {rsvp.plus_ones > 0 && (
-                      <Badge>+{rsvp.plus_ones} guest{rsvp.plus_ones > 1 ? "s" : ""}</Badge>
+          {rsvps.map((rsvp) => {
+            const statusCfg = STATUS_CONFIG[rsvp.status] ?? STATUS_CONFIG.pending;
+            return (
+              <Card key={rsvp.id}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-semibold text-dash-text">
+                        {rsvp.guest_name || "Unknown Guest"}
+                      </h3>
+                      <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-dash-muted">
+                      {rsvp.guest_count > 0 && (
+                        <span>{rsvp.guest_count} guest{rsvp.guest_count !== 1 ? "s" : ""}</span>
+                      )}
+                      {rsvp.plus_ones > 0 && (
+                        <span>{rsvp.plus_ones} plus one{rsvp.plus_ones !== 1 ? "s" : ""}</span>
+                      )}
+                      {rsvp.submitted_at && (
+                        <span>Submitted {formatDate(rsvp.submitted_at)}</span>
+                      )}
+                    </div>
+                    {rsvp.dietary && (
+                      <div>
+                        <span className="text-xs font-medium uppercase text-dash-muted">Dietary:</span>
+                        <span className="ml-1 text-sm text-dash-text">{rsvp.dietary}</span>
+                      </div>
+                    )}
+                    {rsvp.dietary_notes && (
+                      <div>
+                        <span className="text-xs font-medium uppercase text-dash-muted">Dietary notes:</span>
+                        <span className="ml-1 text-sm text-dash-text">{rsvp.dietary_notes}</span>
+                      </div>
+                    )}
+                    {rsvp.message && (
+                      <div className="rounded-md border border-dash-border bg-dash-bg px-3 py-2">
+                        <span className="text-xs font-medium uppercase text-dash-muted">Message:</span>
+                        <p className="mt-1 text-sm text-dash-text">{rsvp.message}</p>
+                      </div>
                     )}
                   </div>
-                  {rsvp.dietary && (
-                    <p className="text-sm text-dash-muted mb-1">
-                      <strong>Dietary:</strong> {rsvp.dietary}
-                    </p>
-                  )}
-                  {rsvp.message && (
-                    <p className="text-sm text-dash-muted mb-1">
-                      <strong>Message:</strong> {rsvp.message}
-                    </p>
-                  )}
-                  <p className="text-xs text-dash-muted mt-2">
-                    {rsvp.submitted_at
-                      ? `Responded on ${formatDate(rsvp.submitted_at.slice(0, 10))}`
-                      : "No response date"}
-                  </p>
                 </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
-      ) : (
-        <Card>
-          <EmptyState
-            title="No RSVP responses"
-            description="RSVP responses from your guests will appear here."
-            icon={<span className="text-4xl">📝</span>}
-          />
-        </Card>
       )}
     </div>
   );
-}
+};

@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { supabase } from "./supabase";
 import type { EventGuest } from "./supabase";
 
@@ -13,115 +20,119 @@ interface GuestAuthContextValue {
   guest: EventGuest | null;
   eventId: string | null;
   loading: boolean;
-  signIn: (eventId: string, email: string) => Promise<{ error: string | null }>;
+  signIn: (eventId: string, username: string) => Promise<{ error: string | null }>;
   signOut: () => void;
 }
 
 const GuestAuthContext = createContext<GuestAuthContextValue | null>(null);
 
-function readStoredAuth(): StoredAuth | null {
+function readStored(): StoredAuth | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredAuth;
-    if (parsed.guestId && parsed.eventId) return parsed;
-    return null;
+    if (!parsed.guestId || !parsed.eventId) return null;
+    return parsed;
   } catch {
     return null;
   }
 }
 
-function writeStoredAuth(auth: StoredAuth | null) {
+function writeStored(auth: StoredAuth | null): void {
   try {
-    if (auth) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
-    }
+    if (auth) localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+    else localStorage.removeItem(STORAGE_KEY);
   } catch {
-    // ignore
+    // ignore storage errors (private mode, quota, etc.)
   }
 }
 
-interface GuestAuthProviderProps {
-  children: React.ReactNode;
-}
-
-export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
+export const GuestAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [guest, setGuest] = useState<EventGuest | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // hydrate from localStorage on mount
   useEffect(() => {
-    const stored = readStoredAuth();
+    const stored = readStored();
     if (!stored) {
       setLoading(false);
       return;
     }
-    setEventId(stored.eventId);
-
-    supabase
-      .from("event_guests")
-      .select("*")
-      .eq("id", stored.guestId)
-      .eq("event_id", stored.eventId)
-      .maybeSingle()
-      .then(({ data }) => {
-        setGuest(data as EventGuest | null);
-        setLoading(false);
-      })
-      .then(undefined, () => {
-        setLoading(false);
-      });
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("event_guests")
+          .select("*")
+          .eq("id", stored.guestId)
+          .eq("event_id", stored.eventId)
+          .maybeSingle();
+        if (cancelled) return;
+        if (error || !data) {
+          writeStored(null);
+          setGuest(null);
+          setEventId(null);
+        } else {
+          setGuest(data as EventGuest);
+          setEventId(stored.eventId);
+        }
+      } catch {
+        if (!cancelled) {
+          writeStored(null);
+          setGuest(null);
+          setEventId(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const signIn = useCallback(async (evId: string, email: string): Promise<{ error: string | null }> => {
-    try {
-      const { data, error } = await supabase
-        .from("event_guests")
-        .select("*")
-        .eq("event_id", evId)
-        .ilike("email", email)
-        .maybeSingle();
-
-      if (error) return { error: error.message };
-      if (!data) return { error: "No invitation found for this email address." };
-
-      const guestData = data as EventGuest;
-      setGuest(guestData);
-      setEventId(evId);
-      writeStoredAuth({ guestId: guestData.id, eventId: evId });
-      return { error: null };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Sign in failed";
-      return { error: message };
-    }
-  }, []);
+  const signIn = useCallback(
+    async (evId: string, username: string): Promise<{ error: string | null }> => {
+      if (!username.trim()) return { error: "Username is required" };
+      try {
+        const { data, error } = await supabase
+          .from("event_guests")
+          .select("*")
+          .eq("event_id", evId)
+          .ilike("username", username.trim())
+          .maybeSingle();
+        if (error) return { error: error.message };
+        if (!data) return { error: "Guest not found for this event" };
+        const g = data as EventGuest;
+        writeStored({ guestId: g.id, eventId: evId });
+        setGuest(g);
+        setEventId(evId);
+        return { error: null };
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : "Sign in failed" };
+      }
+    },
+    [],
+  );
 
   const signOut = useCallback(() => {
+    writeStored(null);
     setGuest(null);
     setEventId(null);
-    writeStoredAuth(null);
   }, []);
 
-  return (
-    <GuestAuthContext.Provider value={{ guest, eventId, loading, signIn, signOut }}>
-      {children}
-    </GuestAuthContext.Provider>
+  const value = useMemo<GuestAuthContextValue>(
+    () => ({ guest, eventId, loading, signIn, signOut }),
+    [guest, eventId, loading, signIn, signOut],
   );
-}
+
+  return <GuestAuthContext.Provider value={value}>{children}</GuestAuthContext.Provider>;
+};
 
 export function useGuestAuth(): GuestAuthContextValue {
   const ctx = useContext(GuestAuthContext);
-  if (!ctx) {
-    return {
-      guest: null,
-      eventId: null,
-      loading: false,
-      signIn: async () => ({ error: "GuestAuthProvider not mounted" }),
-      signOut: () => {},
-    };
-  }
+  if (!ctx) throw new Error("useGuestAuth must be used within a GuestAuthProvider");
   return ctx;
 }
 

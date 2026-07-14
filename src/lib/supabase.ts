@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -87,12 +87,12 @@ export interface EventGuest {
   event_id: string;
   name: string;
   username: string | null;
-  email: string;
+  email: string | null;
   phone: string | null;
   group_name: string | null;
   side: string | null;
   group_id: string | null;
-  token: string;
+  token: string | null;
   rsvp_status: string;
   rsvp_submitted_at: string | null;
   plus_ones: number;
@@ -165,7 +165,7 @@ export interface CustomPage {
   event_id: string;
   slug: string;
   title: string;
-  body: string;
+  body: string | null;
   cover_image_url: string | null;
   inline_image_url: string | null;
   sort_order: number;
@@ -199,7 +199,7 @@ export interface SharingEvent {
   event_id: string;
   event_type: string;
   guest_id: string | null;
-  source: string;
+  source: string | null;
   device_type: string | null;
   metadata: Json;
   created_at: string;

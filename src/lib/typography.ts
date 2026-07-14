@@ -41,8 +41,5 @@ export function getTypographyStyle(value: unknown): React.CSSProperties {
 }
 
 export function resolveTypography(value: unknown, fallback = ""): { text: string; style: React.CSSProperties } {
-  return {
-    text: getTypographyText(value, fallback),
-    style: getTypographyStyle(value),
-  };
+  return { text: getTypographyText(value, fallback), style: getTypographyStyle(value) };
 }

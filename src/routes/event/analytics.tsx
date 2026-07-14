@@ -1,15 +1,15 @@
-import React from "react";
-import { useOutletContext } from "react-router-dom";
+import React, { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type SharingEvent, type EventRsvp } from "../../lib/supabase";
-import { Card, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
+import { supabase, type SharingEvent, type EventRsvp } from "../../lib/supabase";
+import { useEventContext } from "./event-layout";
+import { Card, LoadingSpinner, ErrorState } from "../../components/ui";
 import { formatDate } from "../../lib/utils";
 
-export function AnalyticsPage() {
-  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
+export const AnalyticsPage: React.FC = () => {
+  const { eventId } = useEventContext();
 
-  const { data: sharingEvents, isLoading: sharingLoading, isError: sharingError } = useQuery({
-    queryKey: ["analytics-sharing", eventId],
+  const { data: sharingEvents, isLoading: sharingLoading, isError: sharingError, refetch: refetchSharing } = useQuery({
+    queryKey: ["sharing-events", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sharing_events")
@@ -17,12 +17,12 @@ export function AnalyticsPage() {
         .eq("event_id", eventId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as SharingEvent[];
+      return (data ?? []) as SharingEvent[];
     },
   });
 
-  const { data: rsvps, isLoading: rsvpsLoading, isError: rsvpsError } = useQuery({
-    queryKey: ["analytics-rsvps", eventId],
+  const { data: rsvps, isLoading: rsvpLoading, isError: rsvpError } = useQuery({
+    queryKey: ["event-rsvps-analytics", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_rsvps")
@@ -30,171 +30,178 @@ export function AnalyticsPage() {
         .eq("event_id", eventId)
         .order("submitted_at", { ascending: false });
       if (error) throw error;
-      return data as EventRsvp[];
+      return (data ?? []) as EventRsvp[];
     },
   });
 
-  const isLoading = sharingLoading || rsvpsLoading;
-  const isError = sharingError || rsvpsError;
+  const stats = useMemo(() => {
+    const totalVisits = sharingEvents?.length ?? 0;
+    const uniqueGuests = new Set(
+      (sharingEvents ?? []).filter((e) => e.guest_id).map((e) => e.guest_id),
+    ).size;
+    const bySource: Record<string, number> = {};
+    for (const e of sharingEvents ?? []) {
+      const src = e.source ?? "unknown";
+      bySource[src] = (bySource[src] ?? 0) + 1;
+    }
+    const byDevice: Record<string, number> = {};
+    for (const e of sharingEvents ?? []) {
+      const dev = e.device_type ?? "unknown";
+      byDevice[dev] = (byDevice[dev] ?? 0) + 1;
+    }
 
-  if (isLoading) {
+    const rsvpList = rsvps ?? [];
+    const totalRsvps = rsvpList.length;
+    const attending = rsvpList.filter((r) => r.status === "attending").length;
+    const declined = rsvpList.filter((r) => r.status === "declined").length;
+    const pending = rsvpList.filter((r) => r.status === "pending" || !r.status).length;
+    const totalGuests = rsvpList.reduce((sum, r) => sum + (r.guest_count || 0), 0);
+
+    return {
+      totalVisits,
+      uniqueGuests,
+      bySource,
+      byDevice,
+      totalRsvps,
+      attending,
+      declined,
+      pending,
+      totalGuests,
+    };
+  }, [sharingEvents, rsvps]);
+
+  const recentVisits = useMemo(() => {
+    return (sharingEvents ?? []).slice(0, 10);
+  }, [sharingEvents]);
+
+  if (sharingLoading || rsvpLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <LoadingSpinner className="h-8 w-8" />
+      <div className="flex items-center justify-center py-12">
+        <LoadingSpinner size="md" label="Loading analytics..." />
       </div>
     );
   }
 
-  if (isError) {
+  if (sharingError || rsvpError) {
     return (
-      <div className="py-20">
-        <ErrorState message="Failed to load analytics data" />
-      </div>
+      <ErrorState
+        title="Failed to load analytics"
+        message="We couldn't load your analytics data."
+        onRetry={() => {
+          refetchSharing();
+        }}
+      />
     );
   }
-
-  // Compute stats
-  const totalVisits = sharingEvents?.length ?? 0;
-  const uniqueVisitors = new Set(
-    (sharingEvents ?? []).map((e) => e.guest_id).filter(Boolean),
-  ).size;
-  const sourceCounts: Record<string, number> = {};
-  for (const e of sharingEvents ?? []) {
-    const src = e.source || "direct";
-    sourceCounts[src] = (sourceCounts[src] ?? 0) + 1;
-  }
-
-  const totalRsvps = rsvps?.length ?? 0;
-  const attending = (rsvps ?? []).filter((r) => r.status === "attending").length;
-  const declined = (rsvps ?? []).filter((r) => r.status === "declined").length;
-  const pending = (rsvps ?? []).filter(
-    (r) => r.status === "pending" || !r.status,
-  ).length;
-  const totalPlusOnes = (rsvps ?? []).reduce((sum, r) => sum + (r.plus_ones ?? 0), 0);
-
-  const recentVisits = (sharingEvents ?? []).slice(0, 10);
-  const recentRsvps = (rsvps ?? []).slice(0, 10);
 
   return (
-    <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-dash-text">Analytics</h2>
-        <p className="text-sm text-dash-muted mt-1">
-          Track visits and RSVP responses for your website.
-        </p>
+        <h2 className="text-xl font-bold text-dash-text">Analytics</h2>
+        <p className="text-sm text-dash-muted">Track visits and RSVP responses.</p>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="text-center">
-          <div className="text-3xl font-bold text-dash-primary">{totalVisits}</div>
-          <div className="text-sm text-dash-muted mt-1">Total Visits</div>
+      {/* Stat Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <p className="text-sm text-dash-muted">Total Visits</p>
+          <p className="mt-1 text-3xl font-bold text-dash-text">{stats.totalVisits}</p>
         </Card>
-        <Card className="text-center">
-          <div className="text-3xl font-bold text-dash-primary">{uniqueVisitors}</div>
-          <div className="text-sm text-dash-muted mt-1">Unique Guests</div>
+        <Card>
+          <p className="text-sm text-dash-muted">Unique Guests Visited</p>
+          <p className="mt-1 text-3xl font-bold text-dash-text">{stats.uniqueGuests}</p>
         </Card>
-        <Card className="text-center">
-          <div className="text-3xl font-bold text-green-600">{attending}</div>
-          <div className="text-sm text-dash-muted mt-1">Attending</div>
+        <Card>
+          <p className="text-sm text-dash-muted">Total RSVPs</p>
+          <p className="mt-1 text-3xl font-bold text-dash-text">{stats.totalRsvps}</p>
         </Card>
-        <Card className="text-center">
-          <div className="text-3xl font-bold text-red-600">{declined}</div>
-          <div className="text-sm text-dash-muted mt-1">Declined</div>
+        <Card>
+          <p className="text-sm text-dash-muted">Total Guests Attending</p>
+          <p className="mt-1 text-3xl font-bold text-dash-text">{stats.totalGuests}</p>
         </Card>
       </div>
 
-      {/* RSVP Summary */}
+      {/* RSVP Breakdown */}
       <Card>
-        <h3 className="text-sm font-semibold text-dash-text mb-4">RSVP Summary</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div>
-            <div className="text-lg font-semibold text-dash-text">{totalRsvps}</div>
-            <div className="text-xs text-dash-muted">Total Responses</div>
+        <h3 className="mb-4 text-sm font-semibold text-dash-text">RSVP Breakdown</h3>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+            <p className="text-sm text-green-700">Attending</p>
+            <p className="mt-1 text-2xl font-bold text-green-800">{stats.attending}</p>
           </div>
-          <div>
-            <div className="text-lg font-semibold text-green-600">{attending}</div>
-            <div className="text-xs text-dash-muted">Attending</div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+            <p className="text-sm text-red-700">Declined</p>
+            <p className="mt-1 text-2xl font-bold text-red-800">{stats.declined}</p>
           </div>
-          <div>
-            <div className="text-lg font-semibold text-red-600">{declined}</div>
-            <div className="text-xs text-dash-muted">Declined</div>
-          </div>
-          <div>
-            <div className="text-lg font-semibold text-dash-text">{totalPlusOnes}</div>
-            <div className="text-xs text-dash-muted">Plus Ones</div>
+          <div className="rounded-lg border border-dash-border bg-dash-bg p-4">
+            <p className="text-sm text-dash-muted">Pending</p>
+            <p className="mt-1 text-2xl font-bold text-dash-text">{stats.pending}</p>
           </div>
         </div>
       </Card>
 
+      {/* Visit Sources & Devices */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <h3 className="mb-4 text-sm font-semibold text-dash-text">Visit Sources</h3>
+          {Object.keys(stats.bySource).length === 0 ? (
+            <p className="text-sm text-dash-muted">No visit data yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {Object.entries(stats.bySource).map(([source, count]) => (
+                <div key={source} className="flex items-center justify-between">
+                  <span className="text-sm capitalize text-dash-text">{source}</span>
+                  <span className="text-sm font-medium text-dash-muted">{count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+        <Card>
+          <h3 className="mb-4 text-sm font-semibold text-dash-text">Device Types</h3>
+          {Object.keys(stats.byDevice).length === 0 ? (
+            <p className="text-sm text-dash-muted">No device data yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {Object.entries(stats.byDevice).map(([device, count]) => (
+                <div key={device} className="flex items-center justify-between">
+                  <span className="text-sm capitalize text-dash-text">{device}</span>
+                  <span className="text-sm font-medium text-dash-muted">{count}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
       {/* Recent Visits */}
       <Card>
-        <h3 className="text-sm font-semibold text-dash-text mb-4">Recent Visits</h3>
-        {recentVisits.length > 0 ? (
+        <h3 className="mb-4 text-sm font-semibold text-dash-text">Recent Visits</h3>
+        {recentVisits.length === 0 ? (
+          <p className="text-sm text-dash-muted">No visits recorded yet.</p>
+        ) : (
           <div className="space-y-2">
             {recentVisits.map((visit) => (
               <div
                 key={visit.id}
-                className="flex items-center justify-between py-2 border-b border-dash-border last:border-0"
+                className="flex items-center justify-between rounded-md border border-dash-border bg-dash-bg px-3 py-2"
               >
-                <div className="flex items-center gap-3">
-                  <Badge variant="primary">{visit.source || "direct"}</Badge>
-                  <span className="text-sm text-dash-muted">
-                    {visit.device_type || "Unknown device"}
-                  </span>
-                </div>
-                <span className="text-xs text-dash-muted">
-                  {formatDate(visit.created_at?.slice(0, 10))}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState title="No visits yet" description="Visits will appear here once guests view your site." />
-        )}
-      </Card>
-
-      {/* Recent RSVPs */}
-      <Card>
-        <h3 className="text-sm font-semibold text-dash-text mb-4">Recent RSVPs</h3>
-        {recentRsvps.length > 0 ? (
-          <div className="space-y-2">
-            {recentRsvps.map((rsvp) => (
-              <div
-                key={rsvp.id}
-                className="flex items-center justify-between py-2 border-b border-dash-border last:border-0"
-              >
-                <div className="flex items-center gap-3">
+                <div>
                   <span className="text-sm font-medium text-dash-text">
-                    {rsvp.guest_name}
+                    {visit.source ?? "Direct"}
                   </span>
-                  <Badge
-                    variant={
-                      rsvp.status === "attending"
-                        ? "success"
-                        : rsvp.status === "declined"
-                          ? "danger"
-                          : "warning"
-                    }
-                  >
-                    {rsvp.status || "pending"}
-                  </Badge>
-                  {rsvp.plus_ones > 0 && (
-                    <span className="text-xs text-dash-muted">
-                      +{rsvp.plus_ones} guest{rsvp.plus_ones > 1 ? "s" : ""}
-                    </span>
-                  )}
+                  <span className="ml-2 text-xs text-dash-muted">
+                    {visit.device_type ?? "unknown"}
+                  </span>
                 </div>
                 <span className="text-xs text-dash-muted">
-                  {formatDate(rsvp.submitted_at?.slice(0, 10))}
+                  {formatDate(visit.created_at)}
                 </span>
               </div>
             ))}
           </div>
-        ) : (
-          <EmptyState title="No RSVPs yet" description="RSVP responses will appear here once guests respond." />
         )}
       </Card>
     </div>
   );
-}
+};

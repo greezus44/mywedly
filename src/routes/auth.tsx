@@ -1,20 +1,21 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
-import { Card } from "../components/ui";
+import { LoadingSpinner } from "../components/ui";
 import { cn } from "../lib/utils";
 
-export function AuthPage() {
+export const AuthPage: React.FC = () => {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -24,72 +25,72 @@ export function AuthPage() {
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: { full_name: fullName || undefined },
+          },
         });
         if (signUpError) throw signUpError;
         if (data.user) {
-          navigate("/dashboard");
+          // If email confirmation is disabled, session is created immediately
+          if (data.session) {
+            navigate("/dashboard");
+            return;
+          }
+          setError("Check your email to confirm your account, then sign in.");
+          setMode("signin");
         }
       } else {
-        const { data, error: signInError } =
-          await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
         if (signInError) throw signInError;
         if (data.user) {
           navigate("/dashboard");
         }
       }
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Authentication failed";
-      setError(message);
+      setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-dash-bg px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <a href="/" className="inline-flex items-center gap-2 text-2xl font-bold text-dash-text">
-            <span className="text-dash-primary">My</span>Wedly
-          </a>
-          <p className="mt-2 text-sm text-dash-muted">
-            {mode === "signin" ? "Sign in to your account" : "Create your account"}
-          </p>
+        <div className="mb-8 text-center">
+          <Link to="/" className="inline-flex items-center gap-2 text-lg font-bold text-dash-text">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-dash-primary text-dash-primary-fg">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15.5c0-.9-.4-1.7-1-2.3V8a3 3 0 00-3-3h-1V3h-2v2h-4V3H8v2H7a3 3 0 00-3 3v5.2c-.6.6-1 1.4-1 2.3v4a1 1 0 001 1h1v2h2v-2h10v2h2v-2h1a1 1 0 001-1v-4z" />
+              </svg>
+            </span>
+            MyWedly
+          </Link>
         </div>
 
-        <Card>
-          <div className="flex gap-1 p-1 rounded-md bg-dash-bg mb-6">
-            <button
-              type="button"
-              onClick={() => { setMode("signin"); setError(null); }}
-              className={cn(
-                "flex-1 px-3 py-1.5 text-sm rounded transition-colors font-medium",
-                mode === "signin"
-                  ? "bg-dash-surface text-dash-text shadow-sm"
-                  : "text-dash-muted hover:text-dash-text",
-              )}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => { setMode("signup"); setError(null); }}
-              className={cn(
-                "flex-1 px-3 py-1.5 text-sm rounded transition-colors font-medium",
-                mode === "signup"
-                  ? "bg-dash-surface text-dash-text shadow-sm"
-                  : "text-dash-muted hover:text-dash-text",
-              )}
-            >
-              Sign Up
-            </button>
-          </div>
+        <div className="rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm">
+          <h1 className="text-2xl font-bold text-dash-text">
+            {mode === "signin" ? "Welcome back" : "Create your account"}
+          </h1>
+          <p className="mt-1 text-sm text-dash-muted">
+            {mode === "signin"
+              ? "Sign in to manage your invitation websites"
+              : "Start building your invitation website today"}
+          </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            {mode === "signup" && (
+              <Input
+                label="Full name"
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Jane Doe"
+                autoComplete="name"
+              />
+            )}
             <Input
               label="Email"
               type="email"
@@ -106,29 +107,32 @@ export function AuthPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
               minLength={6}
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
             />
 
             {error && (
-              <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              <div className="rounded-md border border-dash-danger/30 bg-dash-danger/5 px-3 py-2 text-sm text-dash-danger">
                 {error}
               </div>
             )}
 
-            <Button type="submit" className="w-full" loading={loading}>
-              {mode === "signin" ? "Sign In" : "Create Account"}
+            <Button type="submit" className="w-full" disabled={loading} loading={loading}>
+              {mode === "signin" ? "Sign in" : "Sign up"}
             </Button>
           </form>
 
-          <p className="mt-4 text-center text-xs text-dash-muted">
+          <div className="mt-4 text-center text-sm text-dash-muted">
             {mode === "signin" ? (
               <>
                 Don't have an account?{" "}
                 <button
                   type="button"
-                  onClick={() => { setMode("signup"); setError(null); }}
-                  className="text-dash-primary hover:underline font-medium"
+                  onClick={() => {
+                    setMode("signup");
+                    setError(null);
+                  }}
+                  className="font-medium text-dash-primary hover:underline"
                 >
                   Sign up
                 </button>
@@ -138,16 +142,25 @@ export function AuthPage() {
                 Already have an account?{" "}
                 <button
                   type="button"
-                  onClick={() => { setMode("signin"); setError(null); }}
-                  className="text-dash-primary hover:underline font-medium"
+                  onClick={() => {
+                    setMode("signin");
+                    setError(null);
+                  }}
+                  className="font-medium text-dash-primary hover:underline"
                 >
                   Sign in
                 </button>
               </>
             )}
-          </p>
-        </Card>
+          </div>
+        </div>
+
+        <p className="mt-4 text-center text-xs text-dash-muted">
+          By continuing, you agree to our{" "}
+          <a href="#" className="underline">Terms</a> and{" "}
+          <a href="#" className="underline">Privacy Policy</a>.
+        </p>
       </div>
     </div>
   );
-}
+};

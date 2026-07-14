@@ -1,125 +1,127 @@
-import React, { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
-import { useQueryClient, useMutation } from "@tanstack/react-query";
-import { supabase, type UserEvent, type Json } from "../../lib/supabase";
+import React, { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase, type Json } from "../../lib/supabase";
+import { useEventContext } from "./event-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { LoginPreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
+import { Input, Textarea, FormField } from "../../components/ui";
 
 interface LoginConfig {
-  title: string;
+  heading: string;
   subtitle: string;
-  helperText: string;
-  requireName: boolean;
+  usernamePlaceholder: string;
+  buttonText: string;
 }
 
-const DEFAULT_CONFIG: LoginConfig = {
-  title: "Welcome",
-  subtitle: "Please sign in with your email to view the invitation",
-  helperText: "",
-  requireName: false,
-};
-
-function parseConfig(json: Json | null | undefined): LoginConfig {
-  if (!json || typeof json !== "object" || Array.isArray(json)) return DEFAULT_CONFIG;
-  const obj = json as Record<string, unknown>;
+function parseLoginConfig(raw: Json | null | undefined): LoginConfig {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {
+      heading: "Welcome",
+      subtitle: "Please sign in to view the invitation",
+      usernamePlaceholder: "Enter your username",
+      buttonText: "Enter",
+    };
+  }
+  const obj = raw as Record<string, unknown>;
   return {
-    title: typeof obj.title === "string" ? obj.title : DEFAULT_CONFIG.title,
-    subtitle: typeof obj.subtitle === "string" ? obj.subtitle : DEFAULT_CONFIG.subtitle,
-    helperText: typeof obj.helperText === "string" ? obj.helperText : DEFAULT_CONFIG.helperText,
-    requireName: typeof obj.requireName === "boolean" ? obj.requireName : DEFAULT_CONFIG.requireName,
+    heading: typeof obj.heading === "string" ? obj.heading : "Welcome",
+    subtitle: typeof obj.subtitle === "string" ? obj.subtitle : "Please sign in to view the invitation",
+    usernamePlaceholder: typeof obj.usernamePlaceholder === "string" ? obj.usernamePlaceholder : "Enter your username",
+    buttonText: typeof obj.buttonText === "string" ? obj.buttonText : "Enter",
   };
 }
 
-export function LoginEditor() {
-  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
+export const LoginEditor: React.FC = () => {
+  const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
-  const [config, setConfig] = useState<LoginConfig>(parseConfig(event.draft_login_config));
-  const [savedMsg, setSavedMsg] = useState(false);
 
-  useEffect(() => {
-    setConfig(parseConfig(event.draft_login_config));
-  }, [event.draft_login_config]);
+  const [config, setConfig] = useState<LoginConfig>(() => parseLoginConfig(event.draft_login_config));
+  const [saved, setSaved] = useState(false);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_login_config: config as unknown as Json })
+        .update({
+          draft_login_config: config as unknown as Json,
+        })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSavedMsg(true);
-      setTimeout(() => setSavedMsg(false), 2000);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  const previewEvent = {
-    name: event.draft_name,
-    event_type: event.draft_event_type,
-    content: {
-      loginTitle: config.title,
-      loginSubtitle: config.subtitle,
-    } as unknown as Json,
+  const handleSave = () => {
+    saveMutation.mutate();
   };
 
   return (
-    <SplitEditor
-      editor={
-        <div className="p-5 space-y-5">
-          <h2 className="text-lg font-semibold text-dash-text">Login Editor</h2>
-          <p className="text-sm text-dash-muted">
-            Customize what guests see on the login page before they access your invitation.
-          </p>
-
-          <Input
-            label="Title"
-            value={config.title}
-            onChange={(e) => setConfig({ ...config, title: e.target.value })}
-            placeholder="Welcome"
-          />
-          <Textarea
-            label="Subtitle"
-            value={config.subtitle}
-            onChange={(e) => setConfig({ ...config, subtitle: e.target.value })}
-            placeholder="Please sign in with your email to view the invitation"
-          />
-          <Textarea
-            label="Helper Text"
-            value={config.helperText}
-            onChange={(e) => setConfig({ ...config, helperText: e.target.value })}
-            placeholder="Additional instructions for your guests"
-          />
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="requireName"
-              checked={config.requireName}
-              onChange={(e) => setConfig({ ...config, requireName: e.target.checked })}
-              className="rounded border-dash-border"
-            />
-            <label htmlFor="requireName" className="text-sm text-dash-text">
-              Require guest name in addition to email
-            </label>
-          </div>
-
-          <div className="flex items-center gap-3 pt-2">
-            <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-              Save Changes
-            </Button>
-            {saveMutation.isError && (
-              <span className="text-sm text-dash-danger">
-                {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
-              </span>
-            )}
-            {savedMsg && <span className="text-sm text-green-600">Saved!</span>}
-          </div>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-dash-text">Login Editor</h2>
+          <p className="text-sm text-dash-muted">Customize the guest login page.</p>
         </div>
-      }
-      preview={<LoginPreview event={previewEvent} />}
-    />
+        <Button onClick={handleSave} loading={saveMutation.isPending} disabled={saveMutation.isPending}>
+          {saved ? "Saved!" : "Save Changes"}
+        </Button>
+      </div>
+
+      {saveMutation.isError && (
+        <p className="text-sm text-dash-danger">
+          Error: {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+        </p>
+      )}
+
+      <SplitEditor
+        editor={
+          <div className="space-y-4">
+            <FormField label="Heading">
+              <Input
+                value={config.heading}
+                onChange={(e) => setConfig((prev) => ({ ...prev, heading: e.target.value }))}
+                placeholder="Welcome"
+              />
+            </FormField>
+            <FormField label="Subtitle">
+              <Textarea
+                value={config.subtitle}
+                onChange={(e) => setConfig((prev) => ({ ...prev, subtitle: e.target.value }))}
+                placeholder="Please sign in to view the invitation"
+              />
+            </FormField>
+            <FormField label="Username placeholder">
+              <Input
+                value={config.usernamePlaceholder}
+                onChange={(e) => setConfig((prev) => ({ ...prev, usernamePlaceholder: e.target.value }))}
+                placeholder="Enter your username"
+              />
+            </FormField>
+            <FormField label="Button text">
+              <Input
+                value={config.buttonText}
+                onChange={(e) => setConfig((prev) => ({ ...prev, buttonText: e.target.value }))}
+                placeholder="Enter"
+              />
+            </FormField>
+          </div>
+        }
+        preview={
+          <div className="p-4">
+            <LoginPreview
+              loginConfig={config}
+              eventName={event.draft_name}
+              coverImage={event.draft_cover_image}
+            />
+          </div>
+        }
+        editorRatio={0.45}
+      />
+    </div>
   );
-}
+};

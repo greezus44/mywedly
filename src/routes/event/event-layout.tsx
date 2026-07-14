@@ -1,54 +1,54 @@
-import React, { createContext, useContext } from "react";
-import { NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
+import React, { useCallback } from "react";
+import { NavLink, Outlet, useParams, useNavigate, useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
-import { Button } from "../../components/ui/Button";
-import { LoadingSpinner, ErrorState, Badge } from "../../components/ui";
 import { cn } from "../../lib/utils";
+import { Button } from "../../components/ui/Button";
+import { LoadingSpinner, ErrorState } from "../../components/ui";
 
-interface EventContextValue {
+export interface EventContext {
   event: UserEvent;
   eventId: string;
 }
 
-const EventContext = createContext<EventContextValue | null>(null);
-
-export function useEventContext(): EventContextValue {
-  const ctx = useContext(EventContext);
-  if (!ctx) {
-    throw new Error("useEventContext must be used within EventLayout");
-  }
-  return ctx;
+export function useEventContext(): EventContext {
+  return useOutletContext<EventContext>();
 }
 
 const NAV_TABS = [
-  { to: "", label: "Cover", end: true },
-  { to: "login", label: "Login" },
-  { to: "home", label: "Home" },
-  { to: "events", label: "Events" },
-  { to: "guests", label: "Guests" },
-  { to: "groups", label: "Guest Groups" },
-  { to: "rsvp", label: "RSVP" },
-  { to: "schedule", label: "Schedule" },
-  { to: "pages", label: "Pages" },
-  { to: "theme", label: "Theme" },
-  { to: "sharing", label: "Sharing" },
-  { to: "analytics", label: "Analytics" },
-  { to: "settings", label: "Settings" },
+  { label: "Cover", to: "" },
+  { label: "Login", to: "login" },
+  { label: "Home", to: "home" },
+  { label: "Events", to: "events" },
+  { label: "Guests", to: "guests" },
+  { label: "Guest Groups", to: "groups" },
+  { label: "RSVP", to: "rsvp" },
+  { label: "Schedule", to: "schedule" },
+  { label: "Pages", to: "pages" },
+  { label: "Theme", to: "theme" },
+  { label: "Share", to: "share" },
+  { label: "Analytics", to: "analytics" },
+  { label: "Settings", to: "settings" },
 ];
 
-export function EventLayout() {
+export const EventLayout: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: event, isLoading, isError, error } = useQuery({
+  const {
+    data: event,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["event", eventId],
     queryFn: async () => {
+      if (!eventId) throw new Error("Missing event ID");
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("id", eventId!)
+        .eq("id", eventId)
         .maybeSingle();
       if (error) throw error;
       if (!data) throw new Error("Event not found");
@@ -59,8 +59,8 @@ export function EventLayout() {
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      if (!event) throw new Error("No event loaded");
-      const update: Record<string, unknown> = {
+      if (!eventId || !event) throw new Error("No event");
+      const updates: Record<string, unknown> = {
         name: event.draft_name,
         event_type: event.draft_event_type,
         event_date: event.draft_event_date,
@@ -68,98 +68,115 @@ export function EventLayout() {
         venue: event.draft_venue,
         address: event.draft_address,
         cover_image: event.draft_cover_image,
-        cover_config: event.draft_cover_config as Json,
-        theme: event.draft_theme as Json,
-        logo_config: event.draft_logo_config as Json,
-        content: event.draft_content as Json,
-        login_config: event.draft_login_config as Json,
-        sharing_config: event.draft_sharing_config as Json,
+        cover_config: event.draft_cover_config,
+        theme: event.draft_theme,
+        logo_config: event.draft_logo_config,
+        content: event.draft_content,
+        login_config: event.draft_login_config,
+        sharing_config: event.draft_sharing_config,
         slug: event.draft_slug,
         rsvp_deadline: event.draft_rsvp_deadline,
         is_published: true,
         published_at: new Date().toISOString(),
       };
-      const { data, error: updateError } = await supabase
+      const { error } = await supabase
         .from("user_events")
-        .update(update)
-        .eq("id", event.id)
-        .select()
-        .maybeSingle();
-      if (updateError) throw updateError;
-      return data as UserEvent;
+        .update(updates)
+        .eq("id", eventId);
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
     },
   });
 
-  // CRITICAL: While loading, render spinner and DO NOT render <Outlet>
+  const handlePublish = useCallback(() => {
+    publishMutation.mutate();
+  }, [publishMutation]);
+
+  // CRITICAL: While loading, render a loading spinner and DO NOT render <Outlet>
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-dash-bg">
-        <LoadingSpinner className="h-8 w-8" />
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <LoadingSpinner size="lg" label="Loading event..." />
       </div>
     );
   }
 
-  // CRITICAL: On error, render error message and DO NOT render <Outlet>
+  // CRITICAL: If error, render an error message and DO NOT render <Outlet>
   if (isError || !event) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-dash-bg">
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
         <ErrorState
-          message={error instanceof Error ? error.message : "Failed to load event"}
-          onRetry={() => navigate("/dashboard")}
+          title="Event not found"
+          message="This event may have been deleted or you don't have access."
+          onRetry={() => {
+            refetch();
+            navigate("/dashboard");
+          }}
+          className="max-w-md"
         />
       </div>
     );
   }
 
-  // Only render Outlet when event is successfully loaded — context is never null
+  // CRITICAL: Only when the event is successfully loaded, render <Outlet> with non-null context
   return (
-    <div className="min-h-screen bg-dash-bg flex flex-col">
-      {/* Top bar */}
-      <header className="border-b border-dash-border bg-dash-surface sticky top-0 z-30">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="flex h-16 items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
+    <div className="min-h-screen bg-dash-bg">
+      {/* Header */}
+      <header className="sticky top-0 z-40 border-b border-dash-border bg-dash-surface/95 backdrop-blur">
+        <div className="mx-auto max-w-7xl px-4">
+          <div className="flex h-14 items-center justify-between">
+            <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={() => navigate("/dashboard")}
-                className="text-dash-muted hover:text-dash-text flex-shrink-0"
-                title="Back to dashboard"
+                className="rounded-md p-1.5 text-dash-muted hover:bg-dash-bg hover:text-dash-text"
+                aria-label="Back to dashboard"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
               </button>
-              <h1 className="text-lg font-semibold text-dash-text truncate">
-                {event.draft_name || "Untitled"}
+              <h1 className="text-base font-semibold text-dash-text truncate max-w-[200px] sm:max-w-xs">
+                {event.draft_name || event.name || "Untitled Event"}
               </h1>
-              <Badge variant={event.is_published ? "success" : "warning"}>
-                {event.is_published ? "Published" : "Draft"}
-              </Badge>
+              {event.is_published ? (
+                <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 border border-green-200">
+                  Published
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full bg-dash-bg px-2 py-0.5 text-xs font-medium text-dash-muted border border-dash-border">
+                  Draft
+                </span>
+              )}
             </div>
-            <Button
-              size="sm"
-              onClick={() => publishMutation.mutate()}
-              loading={publishMutation.isPending}
-            >
-              {event.is_published ? "Republish" : "Publish"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={handlePublish}
+                loading={publishMutation.isPending}
+                disabled={publishMutation.isPending}
+              >
+                {event.is_published ? "Update Live" : "Publish"}
+              </Button>
+            </div>
           </div>
 
-          {/* Nav tabs */}
-          <nav className="flex gap-1 overflow-x-auto scrollbar-thin -mb-px pb-px">
+          {/* Nav Tabs */}
+          <nav className="flex gap-1 overflow-x-auto pb-1">
             {NAV_TABS.map((tab) => (
               <NavLink
                 key={tab.to}
                 to={tab.to}
-                end={tab.end}
+                end={tab.to === ""}
                 className={({ isActive }) =>
                   cn(
-                    "px-3 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors",
+                    "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                     isActive
-                      ? "border-dash-primary text-dash-primary"
-                      : "border-transparent text-dash-muted hover:text-dash-text",
+                      ? "bg-dash-primary text-dash-primary-fg"
+                      : "text-dash-muted hover:bg-dash-bg hover:text-dash-text",
                   )
                 }
               >
@@ -170,12 +187,10 @@ export function EventLayout() {
         </div>
       </header>
 
-      {/* Content */}
-      <div className="flex-1">
-        <EventContext.Provider value={{ event, eventId: eventId! }}>
-          <Outlet context={{ event, eventId: eventId! }} />
-        </EventContext.Provider>
-      </div>
+      {/* Main Content */}
+      <main className="mx-auto max-w-7xl px-4 py-6">
+        <Outlet context={{ event, eventId: eventId! }} />
+      </main>
     </div>
   );
-}
+};

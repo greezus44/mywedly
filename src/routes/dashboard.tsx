@@ -1,97 +1,103 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../lib/supabase";
 import { slugify } from "../lib/theme";
 import { Button } from "../components/ui/Button";
-import { Input, Textarea } from "../components/ui/Input";
-import {
-  Card,
-  Badge,
-  Modal,
-  EmptyState,
-  LoadingSpinner,
-  ErrorState,
-} from "../components/ui";
-import { formatDate } from "../lib/utils";
+import { Input } from "../components/ui/Input";
+import { Card, Modal, LoadingSpinner, ErrorState, EmptyState, Badge } from "../components/ui";
+import { formatDateShort } from "../lib/utils";
 
-export function DashboardPage() {
+export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showCreate, setShowCreate] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState("Wedding");
+  const [createError, setCreateError] = useState<string | null>(null);
 
-  const { data: session } = useQuery({
-    queryKey: ["session"],
+  const { data: sessionData } = useQuery({
+    queryKey: ["auth-session"],
     queryFn: async () => {
       const { data, error } = await supabase.auth.getSession();
       if (error) throw error;
-      return data.session;
+      return data;
     },
   });
 
-  const userId = session?.user?.id ?? "";
+  const userId = sessionData?.session?.user?.id;
 
-  const { data: events, isLoading, isError, error } = useQuery({
+  const { data: events, isLoading, isError, refetch } = useQuery({
     queryKey: ["user-events", userId],
     queryFn: async () => {
+      if (!userId) return [];
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
         .eq("creator_id", userId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as UserEvent[];
+      return (data ?? []) as UserEvent[];
     },
     enabled: !!userId,
   });
 
   const createMutation = useMutation({
-    mutationFn: async (input: { name: string; eventType: string }) => {
+    mutationFn: async () => {
+      if (!userId) throw new Error("Not authenticated");
+      const name = newName.trim() || "Untitled Event";
+      const slug = slugify(name);
       const { data, error } = await supabase
         .from("user_events")
         .insert({
           creator_id: userId,
-          name: input.name,
-          draft_name: input.name,
-          event_type: input.eventType,
-          draft_event_type: input.eventType,
+          name,
+          draft_name: name,
+          event_type: newType,
+          draft_event_type: newType,
+          draft_slug: slug,
           is_published: false,
-          is_archived: false,
-          slug: slugify(input.name),
-          draft_slug: slugify(input.name),
         })
         .select()
         .single();
       if (error) throw error;
       return data as UserEvent;
     },
-    onSuccess: () => {
+    onSuccess: (event) => {
       queryClient.invalidateQueries({ queryKey: ["user-events", userId] });
-      setShowCreate(false);
+      setCreateOpen(false);
       setNewName("");
       setNewType("Wedding");
+      setCreateError(null);
+      navigate(`/event/${event.id}`);
+    },
+    onError: (err: unknown) => {
+      setCreateError(err instanceof Error ? err.message : "Failed to create website");
     },
   });
 
-  function handleCreate() {
-    if (!newName.trim()) return;
-    createMutation.mutate({ name: newName.trim(), eventType: newType });
-  }
+  const handleCreate = () => {
+    setCreateError(null);
+    createMutation.mutate();
+  };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-dash-bg">
-        <LoadingSpinner className="h-8 w-8" />
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <LoadingSpinner size="lg" label="Loading your websites..." />
       </div>
     );
   }
 
   if (isError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-dash-bg">
-        <ErrorState message={error instanceof Error ? error.message : "Failed to load events"} />
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
+        <ErrorState
+          title="Failed to load"
+          message="We couldn't load your invitation websites."
+          onRetry={() => refetch()}
+          className="max-w-md"
+        />
       </div>
     );
   }
@@ -100,130 +106,107 @@ export function DashboardPage() {
     <div className="min-h-screen bg-dash-bg">
       {/* Header */}
       <header className="border-b border-dash-border bg-dash-surface">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="flex h-16 items-center justify-between">
-            <a href="/" className="flex items-center gap-2 text-lg font-bold text-dash-text">
-              <span className="text-dash-primary">My</span>Wedly
-            </a>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                await supabase.auth.signOut();
-                navigate("/");
-              }}
-            >
-              Sign Out
-            </Button>
-          </div>
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+          <Link to="/" className="flex items-center gap-2 text-lg font-bold text-dash-text">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-dash-primary text-dash-primary-fg">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 15.5c0-.9-.4-1.7-1-2.3V8a3 3 0 00-3-3h-1V3h-2v2h-4V3H8v2H7a3 3 0 00-3 3v5.2c-.6.6-1 1.4-1 2.3v4a1 1 0 001 1h1v2h2v-2h10v2h2v-2h1a1 1 0 001-1v-4z" />
+              </svg>
+            </span>
+            MyWedly
+          </Link>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              await supabase.auth.signOut();
+              navigate("/");
+            }}
+          >
+            Sign out
+          </Button>
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-dash-text">Your Websites</h1>
-            <p className="text-sm text-dash-muted mt-1">
-              Manage your invitation websites
+            <p className="mt-1 text-sm text-dash-muted">
+              Manage your invitation websites and create new ones.
             </p>
           </div>
-          <Button onClick={() => setShowCreate(true)}>Create Website</Button>
+          <Button onClick={() => setCreateOpen(true)}>Create Website</Button>
         </div>
 
-        {events && events.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {events.map((ev) => (
-              <button
-                key={ev.id}
-                onClick={() => navigate(`/event/${ev.id}`)}
-                className="text-left"
-              >
-                <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
-                  {ev.draft_cover_image ? (
-                    <div className="mb-4 -m-2 mb-2 rounded overflow-hidden h-32">
-                      <img
-                        src={ev.draft_cover_image}
-                        alt={ev.draft_name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className="mb-4 -m-2 mb-2 rounded overflow-hidden h-32 bg-dash-bg flex items-center justify-center">
-                      <span className="text-3xl">💌</span>
-                    </div>
-                  )}
-                  <h3 className="font-semibold text-dash-text mb-1">
-                    {ev.draft_name || "Untitled"}
-                  </h3>
-                  <p className="text-xs text-dash-muted mb-3">
-                    {formatDate(ev.draft_event_date) || "Date not set"}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={ev.is_published ? "success" : "warning"}>
-                      {ev.is_published ? "Published" : "Draft"}
-                    </Badge>
-                    {ev.draft_event_type && (
-                      <Badge>{ev.draft_event_type}</Badge>
+        {(!events || events.length === 0) && (
+          <EmptyState
+            title="No websites yet"
+            description="Create your first invitation website to get started."
+            icon={
+              <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+              </svg>
+            }
+            action={<Button onClick={() => setCreateOpen(true)}>Create Website</Button>}
+          />
+        )}
+
+        {events && events.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {events.map((event) => (
+              <Link key={event.id} to={`/event/${event.id}`}>
+                <Card hover className="h-full cursor-pointer">
+                  <div className="mb-3 flex items-start justify-between">
+                    <h3 className="text-lg font-semibold text-dash-text">
+                      {event.draft_name || event.name || "Untitled"}
+                    </h3>
+                    {event.is_published ? (
+                      <Badge variant="success">Published</Badge>
+                    ) : (
+                      <Badge variant="default">Draft</Badge>
                     )}
                   </div>
+                  <p className="text-sm text-dash-muted">{event.draft_event_type || event.event_type}</p>
+                  {event.draft_event_date && (
+                    <p className="mt-2 text-sm text-dash-muted">
+                      {formatDateShort(event.draft_event_date)}
+                    </p>
+                  )}
+                  {event.draft_venue && (
+                    <p className="mt-1 truncate text-sm text-dash-muted">{event.draft_venue}</p>
+                  )}
                 </Card>
-              </button>
+              </Link>
             ))}
           </div>
-        ) : (
-          <Card>
-            <EmptyState
-              title="No websites yet"
-              description="Create your first invitation website to get started."
-              icon={<span className="text-4xl">💌</span>}
-              action={<Button onClick={() => setShowCreate(true)}>Create Website</Button>}
-            />
-          </Card>
         )}
-      </div>
+      </main>
 
       {/* Create Modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Website">
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create Website">
         <div className="space-y-4">
           <Input
-            label="Website Name"
+            label="Event name"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="e.g. Jane & John's Wedding"
             autoFocus
           />
-          <div>
-            <label className="block text-sm font-medium text-dash-text mb-1.5">
-              Event Type
-            </label>
-            <select
-              value={newType}
-              onChange={(e) => setNewType(e.target.value)}
-              className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
-            >
-              <option value="Wedding">Wedding</option>
-              <option value="Birthday">Birthday</option>
-              <option value="Anniversary">Anniversary</option>
-              <option value="Engagement">Engagement</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-          {createMutation.isError && (
-            <p className="text-sm text-dash-danger">
-              {createMutation.error instanceof Error
-                ? createMutation.error.message
-                : "Failed to create website"}
-            </p>
+          <Input
+            label="Event type"
+            value={newType}
+            onChange={(e) => setNewType(e.target.value)}
+            placeholder="e.g. Wedding, Birthday, Anniversary"
+          />
+          {createError && (
+            <p className="text-sm text-dash-danger">{createError}</p>
           )}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setShowCreate(false)}>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button
-              onClick={handleCreate}
-              loading={createMutation.isPending}
-              disabled={!newName.trim()}
-            >
+            <Button onClick={handleCreate} loading={createMutation.isPending}>
               Create
             </Button>
           </div>
@@ -231,4 +214,4 @@ export function DashboardPage() {
       </Modal>
     </div>
   );
-}
+};

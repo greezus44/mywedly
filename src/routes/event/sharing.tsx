@@ -1,186 +1,226 @@
-import React, { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
-import { useQueryClient, useMutation } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
-import { slugify, isValidSlug } from "../../lib/theme";
+import React, { useState, useEffect, useCallback } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "../../lib/supabase";
+import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
-import { Card } from "../../components/ui";
+import { Card, Badge, FormField } from "../../components/ui";
+import { slugify, isValidSlug } from "../../lib/theme";
 import { generateQrDataUrl, downloadQrCode } from "../../lib/qr";
+import { cn } from "../../lib/utils";
 
-export function SharingPage() {
-  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
+export const SharingPage: React.FC = () => {
+  const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
-  const [slug, setSlug] = useState(event.draft_slug ?? "");
+
+  const [slug, setSlug] = useState(event.draft_slug || "");
   const [slugError, setSlugError] = useState<string | null>(null);
-  const [qrUrl, setQrUrl] = useState<string | null>(null);
-  const [savedMsg, setSavedMsg] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [qrCode, setQrCode] = useState<string | null>(null);
 
-  useEffect(() => {
-    setSlug(event.draft_slug ?? "");
-  }, [event.draft_slug]);
+  const publishedSlug = event.slug;
+  const isPublished = event.is_published && !!publishedSlug;
+  const draftUrl = slug ? `${window.location.origin}/e/${slug}` : "";
+  const publishedUrl = publishedSlug ? `${window.location.origin}/e/${publishedSlug}` : "";
 
-  // Generate QR code
+  // Generate QR code for the draft URL
   useEffect(() => {
-    if (event.slug) {
-      const shareUrl = `${window.location.origin}/e/${event.slug}`;
-      generateQrDataUrl(shareUrl, 256)
-        .then(setQrUrl)
-        .catch(() => setQrUrl(null));
-    } else {
-      setQrUrl(null);
+    if (!draftUrl) {
+      setQrCode(null);
+      return;
     }
-  }, [event.slug]);
+    let cancelled = false;
+    generateQrDataUrl(draftUrl, { width: 240 })
+      .then((url) => {
+        if (!cancelled) setQrCode(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrCode(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [draftUrl]);
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!isValidSlug(slug)) {
-        setSlugError("Slug can only contain lowercase letters, numbers, and hyphens.");
-        throw new Error("Invalid slug");
-      }
-      setSlugError(null);
+  const slugMutation = useMutation({
+    mutationFn: async (newSlug: string) => {
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_slug: slug })
+        .update({ draft_slug: newSlug })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSavedMsg(true);
-      setTimeout(() => setSavedMsg(false), 2000);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    },
+    onError: (err: unknown) => {
+      setSlugError(err instanceof Error ? err.message : "Failed to save slug");
     },
   });
 
-  const publishedUrl = event.slug
-    ? `${window.location.origin}/e/${event.slug}`
-    : null;
-  const draftUrl = slug ? `${window.location.origin}/e/${slug}` : null;
+  const handleSlugChange = (value: string) => {
+    const cleaned = slugify(value);
+    setSlug(cleaned);
+    if (cleaned && !isValidSlug(cleaned)) {
+      setSlugError("Slug must be 2-80 characters, lowercase letters, numbers, and hyphens only.");
+    } else {
+      setSlugError(null);
+    }
+  };
+
+  const handleSaveSlug = () => {
+    if (!slug || !isValidSlug(slug)) {
+      setSlugError("Please enter a valid slug.");
+      return;
+    }
+    slugMutation.mutate(slug);
+  };
+
+  const handleCopyLink = useCallback(async () => {
+    const url = isPublished ? publishedUrl : draftUrl;
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // fallback
+      const textArea = document.createElement("textarea");
+      textArea.value = url;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, [isPublished, publishedUrl, draftUrl]);
+
+  const handleDownloadQr = () => {
+    if (!draftUrl) return;
+    downloadQrCode(draftUrl, `${slug || "invitation"}-qr.png`, { width: 480 });
+  };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 py-6 space-y-6">
+    <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-dash-text">Sharing</h2>
-        <p className="text-sm text-dash-muted mt-1">
+        <h2 className="text-xl font-bold text-dash-text">Share</h2>
+        <p className="text-sm text-dash-muted">
           Manage your website URL and share your invitation with guests.
         </p>
       </div>
 
       {/* Slug Editor */}
       <Card>
-        <h3 className="text-sm font-semibold text-dash-text mb-3">Website URL</h3>
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-dash-muted whitespace-nowrap">
-              {window.location.origin}/e/
-            </span>
+        <h3 className="mb-1 text-sm font-semibold text-dash-text">Website URL</h3>
+        <p className="mb-4 text-sm text-dash-muted">
+          Set a custom URL for your invitation website. This will be used in the published link.
+        </p>
+        <div className="flex items-center gap-2">
+          <div className="flex h-10 flex-1 items-center rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-muted">
+            {window.location.origin}/e/
+          </div>
+          <div className="flex-1">
             <Input
               value={slug}
-              onChange={(e) => {
-                setSlug(e.target.value);
-                setSlugError(null);
-              }}
-              placeholder="my-wedly-site"
-              className="flex-1"
+              onChange={(e) => handleSlugChange(e.target.value)}
+              placeholder="my-wedding"
+              error={slugError ?? undefined}
             />
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setSlug(slugify(event.draft_name || "my-event"))}
-            >
-              Auto-generate
-            </Button>
+          <Button
+            onClick={handleSaveSlug}
+            loading={slugMutation.isPending}
+            disabled={slugMutation.isPending || !slug || !isValidSlug(slug)}
+          >
+            {saved ? "Saved!" : "Save"}
+          </Button>
+        </div>
+        {slug && (
+          <div className="mt-3 flex items-center gap-2">
+            <Badge variant={isPublished ? "success" : "default"}>
+              {isPublished ? "Published" : "Draft"}
+            </Badge>
+            <code className="text-sm text-dash-muted">
+              {isPublished ? publishedUrl : draftUrl}
+            </code>
           </div>
-          {slugError && <p className="text-xs text-dash-danger">{slugError}</p>}
-          <div className="flex items-center gap-3 pt-1">
-            <Button
-              onClick={() => saveMutation.mutate()}
-              loading={saveMutation.isPending}
-              disabled={!slug || slug === event.draft_slug}
-            >
-              Save URL
+        )}
+      </Card>
+
+      {/* QR Code */}
+      <Card>
+        <h3 className="mb-1 text-sm font-semibold text-dash-text">QR Code</h3>
+        <p className="mb-4 text-sm text-dash-muted">
+          Scan to open the invitation website on a mobile device.
+        </p>
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+          {qrCode ? (
+            <div className="rounded-lg border border-dash-border bg-white p-3">
+              <img src={qrCode} alt="QR Code" className="h-48 w-48" />
+            </div>
+          ) : (
+            <div className="flex h-48 w-48 items-center justify-center rounded-lg border border-dash-border bg-dash-bg text-sm text-dash-muted">
+              Enter a slug to generate QR code
+            </div>
+          )}
+          <div className="space-y-2">
+            <Button variant="secondary" onClick={handleDownloadQr} disabled={!qrCode}>
+              Download QR Code
             </Button>
-            {saveMutation.isError && (
-              <span className="text-sm text-dash-danger">
-                {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
-              </span>
-            )}
-            {savedMsg && <span className="text-sm text-green-600">Saved!</span>}
+            <p className="text-sm text-dash-muted">
+              The QR code links to your draft URL. After publishing, it will use the published URL.
+            </p>
           </div>
         </div>
       </Card>
 
-      {/* Published URL */}
-      {publishedUrl && (
-        <Card>
-          <h3 className="text-sm font-semibold text-dash-text mb-3">
-            Published URL
-          </h3>
-          <div className="flex items-center gap-2">
-            <Input value={publishedUrl} readOnly className="flex-1" />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                navigator.clipboard.writeText(publishedUrl);
-              }}
-            >
-              Copy
-            </Button>
-          </div>
-          <p className="text-xs text-dash-muted mt-2">
-            This is the URL your guests will visit. Available after publishing.
-          </p>
-        </Card>
-      )}
+      {/* Copy Link */}
+      <Card>
+        <h3 className="mb-1 text-sm font-semibold text-dash-text">Copy Link</h3>
+        <p className="mb-4 text-sm text-dash-muted">
+          Share this link directly with your guests.
+        </p>
+        <div className="flex items-center gap-2">
+          <Input
+            value={isPublished ? publishedUrl : draftUrl}
+            readOnly
+            placeholder="Set a slug to generate your link"
+          />
+          <Button
+            variant="secondary"
+            onClick={handleCopyLink}
+            disabled={!draftUrl && !publishedUrl}
+          >
+            {copied ? "Copied!" : "Copy"}
+          </Button>
+        </div>
+      </Card>
 
-      {/* Draft URL */}
-      {draftUrl && !publishedUrl && (
-        <Card>
-          <h3 className="text-sm font-semibold text-dash-text mb-3">
-            Preview URL
-          </h3>
-          <div className="flex items-center gap-2">
-            <Input value={draftUrl} readOnly className="flex-1" />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => navigator.clipboard.writeText(draftUrl)}
-            >
-              Copy
+      {/* Open Guest Page */}
+      <Card>
+        <h3 className="mb-1 text-sm font-semibold text-dash-text">Guest Page</h3>
+        <p className="mb-4 text-sm text-dash-muted">
+          Open the live guest-facing website in a new tab.
+        </p>
+        {isPublished && publishedUrl ? (
+          <a href={publishedUrl} target="_blank" rel="noopener noreferrer">
+            <Button>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+              Open Guest Page
             </Button>
+          </a>
+        ) : (
+          <div className="rounded-md border border-dash-border bg-dash-bg px-4 py-3 text-sm text-dash-muted">
+            Publish your invitation website to enable the Guest Page.
           </div>
-          <p className="text-xs text-dash-muted mt-2">
-            This URL will be active once you publish your website.
-          </p>
-        </Card>
-      )}
-
-      {/* QR Code */}
-      {qrUrl && (
-        <Card>
-          <h3 className="text-sm font-semibold text-dash-text mb-3">QR Code</h3>
-          <div className="flex flex-col items-center gap-4">
-            <img src={qrUrl} alt="QR Code" className="w-48 h-48" />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                if (publishedUrl) {
-                  downloadQrCode(publishedUrl, `${event.slug || "event"}-qr.png`, 512);
-                }
-              }}
-            >
-              Download QR Code
-            </Button>
-          </div>
-          <p className="text-xs text-dash-muted mt-3 text-center">
-            Share this QR code with guests for easy access to your invitation.
-          </p>
-        </Card>
-      )}
+        )}
+      </Card>
     </div>
   );
-}
+};
