@@ -1,76 +1,82 @@
-import { useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
-export interface SplitEditorProps {
+interface SplitEditorProps {
+  /** Left panel: the editor form / controls */
   editor: ReactNode;
+  /** Right panel: the live preview */
   preview: ReactNode;
+  /** Ratio of the editor panel (out of 12). Default 5. */
+  editorRatio?: number;
   className?: string;
-  editorClassName?: string;
-  previewClassName?: string;
+  /** Optional header rendered above the editor panel */
+  editorHeader?: ReactNode;
+  /** Optional header rendered above the preview panel */
+  previewHeader?: ReactNode;
 }
 
+// Pre-computed Tailwind classes for each possible ratio (avoids JIT purge issues)
+const editorColClasses: Record<number, string> = {
+  3: "lg:col-span-3",
+  4: "lg:col-span-4",
+  5: "lg:col-span-5",
+  6: "lg:col-span-6",
+  7: "lg:col-span-7",
+  8: "lg:col-span-8",
+  9: "lg:col-span-9",
+};
+
+const previewColClasses: Record<number, string> = {
+  3: "lg:col-span-3",
+  4: "lg:col-span-4",
+  5: "lg:col-span-5",
+  6: "lg:col-span-6",
+  7: "lg:col-span-7",
+  8: "lg:col-span-8",
+  9: "lg:col-span-9",
+};
+
+/**
+ * Two-column editor/preview layout. On small screens, stacks vertically
+ * with the editor on top and the preview below.
+ */
 export function SplitEditor({
   editor,
   preview,
+  editorRatio = 5,
   className,
-  editorClassName,
-  previewClassName,
+  editorHeader,
+  previewHeader,
 }: SplitEditorProps) {
-  const [mobileTab, setMobileTab] = useState<"editor" | "preview">("editor");
+  const previewRatio = 12 - editorRatio;
+  const editorClass = editorColClasses[editorRatio] ?? "lg:col-span-5";
+  const previewClass = previewColClasses[previewRatio] ?? "lg:col-span-7";
 
   return (
-    <div className={cn("flex h-full flex-col lg:flex-row", className)}>
-      {/* Mobile tab switcher */}
-      <div className="flex border-b border-dash-border lg:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileTab("editor")}
-          className={cn(
-            "flex-1 px-4 py-2 text-sm font-medium transition-colors",
-            mobileTab === "editor"
-              ? "border-b-2 border-dash-primary text-dash-primary"
-              : "text-dash-muted hover:text-dash-text"
-          )}
-        >
-          ✏️ Editor
-        </button>
-        <button
-          type="button"
-          onClick={() => setMobileTab("preview")}
-          className={cn(
-            "flex-1 px-4 py-2 text-sm font-medium transition-colors",
-            mobileTab === "preview"
-              ? "border-b-2 border-dash-primary text-dash-primary"
-              : "text-dash-muted hover:text-dash-text"
-          )}
-        >
-          👁️ Preview
-        </button>
-      </div>
-
+    <div className={cn("grid grid-cols-1 gap-4 lg:grid-cols-12", className)}>
       {/* Editor panel */}
-      <div
-        className={cn(
-          "overflow-auto border-dash-border p-4 lg:w-1/2 lg:border-r",
-          mobileTab !== "editor" && "hidden lg:block",
-          editorClassName
+      <div className={cn("flex flex-col rounded-lg border border-dash-border bg-dash-surface", editorClass)}>
+        {editorHeader && (
+          <div className="border-b border-dash-border px-4 py-3">
+            {editorHeader}
+          </div>
         )}
-      >
-        {editor}
+        <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
+          {editor}
+        </div>
       </div>
 
       {/* Preview panel */}
-      <div
-        className={cn(
-          "overflow-auto bg-dash-bg p-4 lg:w-1/2",
-          mobileTab !== "preview" && "hidden lg:block",
-          previewClassName
+      <div className={cn("flex flex-col rounded-lg border border-dash-border bg-dash-surface", previewClass)}>
+        {previewHeader && (
+          <div className="border-b border-dash-border px-4 py-3">
+            {previewHeader}
+          </div>
         )}
-      >
-        {preview}
+        <div className="flex-1 overflow-y-auto scrollbar-thin">
+          {preview}
+        </div>
       </div>
     </div>
   );
 }
-
-export default SplitEditor;

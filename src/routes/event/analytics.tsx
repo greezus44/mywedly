@@ -1,48 +1,48 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type EventRsvp, type EventGuest } from "../../lib/supabase";
+import { supabase, type SharingEvent } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
-import { Card, LoadingSpinner, ErrorState, Badge } from "../../components/ui";
+import { Card, Badge, LoadingSpinner, ErrorState, EmptyState } from "../../components/ui";
+import { formatDateTime } from "../../lib/utils";
 
 export function AnalyticsPage() {
-  const { eventId, event } = useEventContext();
+  const { eventId } = useEventContext();
 
-  const { data: guests, isLoading: guestsLoading, isError: guestsError, error: guestsErr, refetch: refetchGuests } = useQuery({
-    queryKey: ["analytics-guests", eventId],
+  const { data: events, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ["sharing-events", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("event_guests")
-        .select("id, name, username")
-        .eq("event_id", eventId);
-      if (error) throw error;
-      return data as Pick<EventGuest, "id" | "name" | "username">[];
-    },
-  });
-
-  const { data: rsvps, isLoading: rsvpsLoading, isError: rsvpsError, error: rsvpsErr, refetch: refetchRsvps } = useQuery({
-    queryKey: ["analytics-rsvps", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_rsvps")
+        .from("sharing_events")
         .select("*")
-        .eq("event_id", eventId);
+        .eq("wedding_id", eventId)
+        .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as EventRsvp[];
+      return data as SharingEvent[];
     },
+    enabled: !!eventId,
   });
 
-  const { data: pageViews } = useQuery({
-    queryKey: ["analytics-page-views", eventId],
+  const { data: stats } = useQuery({
+    queryKey: ["sharing-stats", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("event_page_views")
-        .select("id, viewed_at")
-        .eq("event_id", eventId);
+        .from("sharing_events")
+        .select("source, device_type")
+        .eq("wedding_id", eventId);
       if (error) throw error;
-      return data as { id: string; viewed_at: string }[];
+      return data as Pick<SharingEvent, "source" | "device_type">[];
     },
+    enabled: !!eventId,
   });
 
-  if (guestsLoading || rsvpsLoading) {
+  const totalVisits = events?.length ?? 0;
+  const uniqueSources = new Set(stats?.map((s) => s.source ?? "unknown") ?? []).size;
+  const deviceCounts = (stats ?? []).reduce<Record<string, number>>((acc, s) => {
+    const device = s.device_type ?? "unknown";
+    acc[device] = (acc[device] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  if (isLoading) {
     return (
       <div className="flex justify-center py-20">
         <LoadingSpinner />
@@ -50,91 +50,82 @@ export function AnalyticsPage() {
     );
   }
 
-  if (guestsError || rsvpsError) {
+  if (isError) {
     return (
       <ErrorState
         title="Failed to load analytics"
-        message={guestsErr instanceof Error ? guestsErr.message : rsvpsErr instanceof Error ? rsvpsErr.message : "An error occurred."}
-        onRetry={() => { refetchGuests(); refetchRsvps(); }}
+        message={error instanceof Error ? error.message : "An unexpected error occurred."}
+        onRetry={() => refetch()}
       />
     );
   }
 
-  const totalGuests = guests?.length ?? 0;
-  const rsvpList = rsvps ?? [];
-  const attending = rsvpList.filter((r) => r.status === "attending").length;
-  const notAttending = rsvpList.filter((r) => r.status === "not_attending").length;
-  const maybe = rsvpList.filter((r) => r.status === "maybe").length;
-  const noResponse = totalGuests - rsvpList.length;
-  const plusOnes = rsvpList.filter((r) => r.plus_one).length;
-  const totalAttendees = attending + plusOnes;
-  const views = pageViews?.length ?? 0;
-
-  const stats = [
-    { label: "Total Guests", value: totalGuests, color: "text-dash-text" },
-    { label: "Attending", value: attending, color: "text-green-600" },
-    { label: "Not Attending", value: notAttending, color: "text-red-600" },
-    { label: "Maybe", value: maybe, color: "text-amber-600" },
-    { label: "No Response", value: noResponse, color: "text-dash-muted" },
-    { label: "Plus Ones", value: plusOnes, color: "text-blue-600" },
-    { label: "Total Attendees", value: totalAttendees, color: "text-dash-primary" },
-    { label: "Page Views", value: views, color: "text-dash-text" },
-  ];
-
-  const responseRate = totalGuests > 0 ? Math.round((rsvpList.length / totalGuests) * 100) : 0;
-
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-dash-text">Analytics</h2>
-        <p className="text-sm text-dash-muted">
-          Track RSVPs and engagement for {event.draft_name || event.name || "your event"}.
-        </p>
+        <p className="text-sm text-dash-muted">Track visits and engagement for your invitation.</p>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <Card key={stat.label}>
-            <p className="text-sm text-dash-muted">{stat.label}</p>
-            <p className={`mt-1 text-3xl font-bold ${stat.color}`}>{stat.value}</p>
-          </Card>
-        ))}
-      </div>
-
-      {/* Response rate */}
-      <Card>
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Response Rate</h3>
-        <div className="flex items-center gap-3">
-          <div className="h-3 flex-1 overflow-hidden rounded-full bg-dash-bg">
-            <div
-              className="h-full rounded-full bg-dash-primary transition-all"
-              style={{ width: `${responseRate}%` }}
-            />
+      {/* Stat Cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <p className="text-sm text-dash-muted">Total Visits</p>
+          <p className="mt-1 text-3xl font-bold text-dash-text">{totalVisits}</p>
+        </Card>
+        <Card>
+          <p className="text-sm text-dash-muted">Unique Sources</p>
+          <p className="mt-1 text-3xl font-bold text-dash-text">{uniqueSources}</p>
+        </Card>
+        <Card>
+          <p className="text-sm text-dash-muted">Devices</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {Object.entries(deviceCounts).map(([device, count]) => (
+              <Badge key={device} variant="primary">
+                {device}: {count}
+              </Badge>
+            ))}
+            {Object.keys(deviceCounts).length === 0 && (
+              <span className="text-sm text-dash-muted">No data yet</span>
+            )}
           </div>
-          <span className="text-sm font-medium text-dash-text">{responseRate}%</span>
-        </div>
-        <p className="mt-2 text-xs text-dash-muted">
-          {rsvpList.length} of {totalGuests} guests have responded.
-        </p>
-      </Card>
+        </Card>
+      </div>
 
-      {/* RSVP breakdown */}
+      {/* Visit Log */}
       <Card>
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">RSVP Breakdown</h3>
-        <div className="space-y-2">
-          {[
-            { label: "Attending", count: attending, variant: "success" as const },
-            { label: "Not Attending", count: notAttending, variant: "danger" as const },
-            { label: "Maybe", count: maybe, variant: "warning" as const },
-            { label: "No Response", count: noResponse, variant: "default" as const },
-          ].map((item) => (
-            <div key={item.label} className="flex items-center justify-between">
-              <Badge variant={item.variant}>{item.label}</Badge>
-              <span className="text-sm font-medium text-dash-text">{item.count}</span>
-            </div>
-          ))}
-        </div>
+        <h3 className="mb-4 text-sm font-semibold text-dash-text">Recent Visits</h3>
+        {!events || events.length === 0 ? (
+          <EmptyState
+            title="No visits yet"
+            description="Once you publish and share your invitation, visits will appear here."
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-dash-border text-dash-muted">
+                <tr>
+                  <th className="pb-2 pr-4 font-medium">Date</th>
+                  <th className="pb-2 pr-4 font-medium">Source</th>
+                  <th className="pb-2 pr-4 font-medium">Device</th>
+                  <th className="pb-2 font-medium">Event Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.slice(0, 50).map((evt) => (
+                  <tr key={evt.id} className="border-b border-dash-border/50">
+                    <td className="py-2 pr-4 text-dash-text">{formatDateTime(evt.created_at)}</td>
+                    <td className="py-2 pr-4">
+                      <Badge variant="default">{evt.source ?? "unknown"}</Badge>
+                    </td>
+                    <td className="py-2 pr-4 text-dash-muted">{evt.device_type ?? "—"}</td>
+                    <td className="py-2 text-dash-muted">{evt.event_type ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );

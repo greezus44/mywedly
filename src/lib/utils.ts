@@ -1,124 +1,133 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+/** Merge Tailwind classes with conditional support, de-duplicating conflicts. */
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
+/** Format an ISO date string as a long human-readable date, e.g. "Saturday, 15 June 2024". */
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString("en-GB", {
     weekday: "long",
-    year: "numeric",
-    month: "long",
     day: "numeric",
+    month: "long",
+    year: "numeric",
   });
 }
 
+/** Format an ISO date string as a short date, e.g. "15 Jun 2024". */
 export function formatDateShort(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-US", {
-    month: "short",
+  return date.toLocaleDateString("en-GB", {
     day: "numeric",
+    month: "short",
     year: "numeric",
   });
 }
 
+/** Format an ISO datetime string as "15 Jun 2024, 3:30 PM". */
 export function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return "";
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  const datePart = formatDateShort(dateStr);
+  const timePart = formatTime12(date.toTimeString().slice(0, 5));
+  return `${datePart}, ${timePart}`;
 }
 
-export function formatTime12(timeStr: string | null | undefined): string {
-  if (!timeStr) return "";
-  // Accept "HH:MM" (24-hour) or already 12-hour strings
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-  if (!match) return timeStr;
+/** Convert a 24-hour "HH:MM" string to 12-hour "h:MM AM/PM". */
+export function to12Hour(time24: string | null | undefined): string {
+  if (!time24) return "";
+  const match = /^(\d{1,2}):(\d{2})$/.exec(time24);
+  if (!match) return "";
   let hours = parseInt(match[1], 10);
   const minutes = match[2];
   const period = hours >= 12 ? "PM" : "AM";
-  hours = hours % 12 || 12;
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
   return `${hours}:${minutes} ${period}`;
 }
 
-export function to12Hour(timeStr: string): { hour: number; minute: number; period: "AM" | "PM" } {
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-  if (!match) return { hour: 12, minute: 0, period: "AM" };
-  let hour = parseInt(match[1], 10);
-  const minute = parseInt(match[2], 10);
-  let period = (match[3] ?? "AM").toUpperCase() as "AM" | "PM";
-  // If no period given, assume 24-hour
-  if (!match[3]) {
-    period = hour >= 12 ? "PM" : "AM";
-    hour = hour % 12 || 12;
-  } else {
-    hour = hour % 12 || 12;
-  }
-  return { hour, minute, period };
+/** Convert a 12-hour "h:MM AM/PM" string to 24-hour "HH:MM". */
+export function to24Hour(time12: string | null | undefined): string {
+  if (!time12) return "";
+  const match = /(\d{1,2}):(\d{2})\s*(AM|PM)/i.exec(time12);
+  if (!match) return "";
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2];
+  const period = match[3].toUpperCase();
+  if (period === "AM" && hours === 12) hours = 0;
+  if (period === "PM" && hours !== 12) hours += 12;
+  return `${String(hours).padStart(2, "0")}:${minutes}`;
 }
 
-export function to24Hour(hour: number, minute: number, period: "AM" | "PM"): string {
-  let h = hour;
-  if (period === "PM" && h !== 12) h += 12;
-  if (period === "AM" && h === 12) h = 0;
-  return `${String(h).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+/** Format a "HH:MM" 24-hour string as 12-hour with AM/PM. */
+export function formatTime12(time24: string | null | undefined): string {
+  return to12Hour(time24);
 }
 
-export function roundTo5Min(minute: number): number {
-  return Math.round(minute / 5) * 5 % 60;
+/** Round a Date to the nearest 5-minute interval. */
+export function roundTo5Min(date: Date): Date {
+  const ms = 5 * 60 * 1000;
+  return new Date(Math.round(date.getTime() / ms) * ms);
 }
 
-export function getCountdown(targetDate: string | null | undefined): {
+/**
+ * Returns a countdown object for the given target date.
+ * Returns all-zero when the date has passed or is invalid.
+ */
+export function getCountdown(targetDate: string | Date | null | undefined): {
   days: number;
   hours: number;
   minutes: number;
   seconds: number;
   isPast: boolean;
 } {
-  if (!targetDate) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false };
-  const target = new Date(targetDate).getTime();
-  const now = Date.now();
-  const diff = target - now;
-  if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-  return { days, hours, minutes, seconds, isPast: false };
+  const zero = { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
+  if (!targetDate) return zero;
+  const target = new Date(targetDate);
+  if (isNaN(target.getTime())) return zero;
+
+  const now = new Date().getTime();
+  const diff = target.getTime() - now;
+  if (diff <= 0) return zero;
+
+  return {
+    days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+    hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
+    minutes: Math.floor((diff / (1000 * 60)) % 60),
+    seconds: Math.floor((diff / 1000) % 60),
+    isPast: false,
+  };
 }
 
+/** Check whether RSVP is closed based on a deadline. */
 export function isRsvpClosed(deadline: string | null | undefined): boolean {
   if (!deadline) return false;
-  const target = new Date(deadline).getTime();
-  return Date.now() > target;
+  const date = new Date(deadline);
+  if (isNaN(date.getTime())) return false;
+  return date.getTime() < Date.now();
 }
 
+/** Generate a URL-safe username from a display name. */
 export function generateUsername(name: string): string {
-  const base = name
+  return name
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9\s]/g, "")
-    .replace(/\s+/g, ".");
-  const suffix = Math.floor(Math.random() * 1000)
-    .toString()
-    .padStart(3, "0");
-  return `${base}.${suffix}`;
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 30);
 }
 
-export function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength - 1).trimEnd() + "\u2026";
+/** Truncate a string to `max` characters, appending an ellipsis if shortened. */
+export function truncate(str: string, max: number): string {
+  if (str.length <= max) return str;
+  return str.slice(0, max - 1).trimEnd() + "…";
 }

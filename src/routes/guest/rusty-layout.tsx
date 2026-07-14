@@ -1,20 +1,18 @@
-import { useState } from "react";
-import { useParams, useNavigate, NavLink, Outlet, Link, useOutletContext } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate, NavLink, Outlet, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type Json } from "../../lib/supabase";
-import { useGuestAuth } from "../../lib/guest-auth";
+import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { RUSTY_THEME } from "../../lib/theme";
-import { resolveGuestInvitations } from "../../lib/invitations";
+import type { Json } from "../../lib/supabase";
+import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { LoadingSpinner } from "../../components/ui";
 
-// Re-export the outlet context hook so rusty routes share the same context shape
+// Re-export the outlet context hook so child routes import from here.
 export { useGuestOutletContext } from "./guest-layout";
-
-interface NavPage {
-  slug: string;
-  title: string;
-  nav_label: string;
-}
+import { useOutletContext } from "react-router-dom";
+import type { GuestOutletContext } from "./guest-layout";
 
 export default function RustyLayout() {
   const { slug } = useParams<{ slug: string }>();
@@ -22,7 +20,7 @@ export default function RustyLayout() {
   const { guest, eventId, loading: authLoading } = useGuestAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const { data: event, isLoading: eventLoading } = useQuery({
+  const { data: event, isLoading, isError, error } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -37,43 +35,66 @@ export default function RustyLayout() {
     enabled: !!slug,
   });
 
-  const { data: navPages } = useQuery({
-    queryKey: ["guest-nav-pages", event?.id],
+  const { data: customPages } = useQuery({
+    queryKey: ["custom-pages-nav", event?.id],
     queryFn: async () => {
-      if (!event) return [] as NavPage[];
+      if (!event) return [];
       const { data, error } = await supabase
         .from("custom_pages")
-        .select("slug, title, nav_label")
+        .select("id, title, slug, show_in_nav, is_published")
         .eq("event_id", event.id)
         .eq("is_published", true)
         .eq("show_in_nav", true)
-        .order("sort_order", { ascending: true });
+        .order("title", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as NavPage[];
+      return (data ?? []) as CustomPage[];
     },
     enabled: !!event,
   });
 
-  const { data: invitedSubEventIds } = useQuery({
-    queryKey: ["guest-invitations", event?.id, guest?.id],
+  const { data: invitations } = useQuery({
+    queryKey: ["guest-invitations", guest?.id, event?.id],
     queryFn: async () => {
-      if (!event || !guest) return [] as string[];
-      const result = await resolveGuestInvitations(supabase, guest.id, event.id);
-      return result.invitations.filter((i) => i.isInvited).map((i) => i.subEventId);
+      if (!guest || !event) return { invitations: [], error: null };
+      return resolveGuestInvitations(supabase, guest.id, event.id);
     },
-    enabled: !!event && !!guest,
+    enabled: !!guest && !!event,
   });
 
-  // Redirect to rustic sign-in if not authenticated
-  const shouldRedirect = !authLoading && !eventLoading && !!event && (!guest || eventId !== event.id);
-  if (shouldRedirect) {
-    navigate(`/r/${slug}/signin`, { replace: true });
-  }
+  const invitedSubEventIds = invitations ? getInvitedSubEventIds(invitations) : [];
 
-  if (eventLoading || authLoading) {
+  // Redirect to rustic sign-in when not authenticated.
+  useEffect(() => {
+    if (!authLoading && !guest && event) {
+      navigate(`/r/${slug}/signin`, { replace: true });
+    }
+  }, [authLoading, guest, event, slug, navigate]);
+
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+
+  useEffect(() => {
+    if (menuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [menuOpen]);
+
+  if (isLoading || authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Something went wrong</h1>
+        <p className="text-dash-muted">{error instanceof Error ? error.message : "Please try again later."}</p>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
@@ -82,85 +103,91 @@ export default function RustyLayout() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
         <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
+        <p className="text-dash-muted">This invitation website could not be found or is no longer available.</p>
         <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
 
-  const context = {
-    event,
-    slug: slug!,
-    theme: event.theme,
-    invitedSubEventIds: invitedSubEventIds ?? [],
-  };
+  if (!guest || eventId !== event.id) {
+    return null;
+  }
 
-  const pages = navPages ?? [];
+  const navLinks = [
+    { label: "Home", to: `/r/${slug}/home` },
+    ...(invitedSubEventIds.length > 0 ? [{ label: "RSVP", to: `/r/${slug}/rsvp` }] : []),
+    { label: "Wishes", to: `/r/${slug}/wishes` },
+    { label: "Contact", to: `/r/${slug}/contact` },
+    ...(customPages ?? []).map((p) => ({ label: p.title, to: `/r/${slug}/p/${p.slug}` })),
+  ];
 
   return (
     <EventThemeProvider theme={RUSTY_THEME as unknown as Json}>
-      <div className="relative min-h-screen">
-        {/* Hamburger header */}
-        <header className="sticky top-0 z-30" style={{ backgroundColor: "var(--event-surface)", borderBottom: "1px solid var(--event-border)" }}>
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-            <Link to={`/r/${slug}/home`} className="text-sm font-semibold" style={{ color: "var(--event-heading)" }}>
-              {event.name || "Our Event"}
-            </Link>
-            <button
-              type="button"
-              onClick={() => setMenuOpen((v) => !v)}
-              className="rounded-md p-2 transition-colors"
-              style={{ color: "var(--event-text)" }}
-              aria-label="Menu"
-            >
-              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {menuOpen ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
-            </button>
-          </div>
-        </header>
+      {/* Floating hamburger button */}
+      <button
+        onClick={() => setMenuOpen(true)}
+        aria-label="Open navigation menu"
+        className="fixed left-4 top-4 z-40 flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-all hover:scale-105"
+        style={{
+          backgroundColor: "var(--event-surface)",
+          color: "var(--event-text)",
+          border: "1px solid var(--event-border)",
+        }}
+      >
+        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      </button>
 
-        {/* Slide-down menu */}
-        {menuOpen && (
-          <nav className="absolute left-0 right-0 top-full z-20 border-b shadow-lg" style={{ backgroundColor: "var(--event-surface)", borderColor: "var(--event-border)" }}>
-            <div className="mx-auto max-w-5xl px-4 py-3">
-              <div className="flex flex-col gap-1">
-                <MenuLink to={`/r/${slug}/home`} label="Home" onNavigate={() => setMenuOpen(false)} />
-                {(invitedSubEventIds ?? []).length > 0 && (
-                  <MenuLink to={`/r/${slug}/rsvp`} label="RSVP" onNavigate={() => setMenuOpen(false)} />
-                )}
-                <MenuLink to={`/r/${slug}/wishes`} label="Wishes" onNavigate={() => setMenuOpen(false)} />
-                <MenuLink to={`/r/${slug}/contact`} label="Contact" onNavigate={() => setMenuOpen(false)} />
-                {pages.map((p) => (
-                  <MenuLink key={p.slug} to={`/r/${slug}/p/${p.slug}`} label={p.nav_label || p.title} onNavigate={() => setMenuOpen(false)} />
-                ))}
-              </div>
+      {/* Full-screen navigation overlay */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-50 animate-fadeIn">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeMenu} />
+          <div
+            className="absolute left-0 top-0 h-full w-full max-w-sm overflow-y-auto shadow-2xl scrollbar-thin"
+            style={{ backgroundColor: "var(--event-bg)", borderRight: "1px solid var(--event-border)" }}
+          >
+            <div className="flex items-center justify-between p-5">
+              <h2 className="text-lg font-semibold" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>
+                {event.name || "Menu"}
+              </h2>
+              <button
+                onClick={closeMenu}
+                aria-label="Close navigation menu"
+                className="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:opacity-70"
+                style={{ color: "var(--event-text)", backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
-          </nav>
-        )}
+            <nav className="flex flex-col gap-1 px-3 pb-8">
+              {navLinks.map((link) => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  onClick={closeMenu}
+                  className={({ isActive }) =>
+                    `rounded-lg px-4 py-3 text-base font-medium transition-colors ${
+                      isActive ? "opacity-100" : "opacity-70 hover:opacity-100"
+                    }`
+                  }
+                  style={({ isActive }) => ({
+                    color: isActive ? "var(--event-primary)" : "var(--event-text)",
+                    backgroundColor: isActive ? "var(--event-surface-alt)" : "transparent",
+                  })}
+                >
+                  {link.label}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+        </div>
+      )}
 
-        {/* Page content */}
-        <main>
-          <Outlet context={context} />
-        </main>
-      </div>
+      {/* Page content */}
+      <Outlet context={{ event, slug: slug!, theme: event.theme, invitedSubEventIds } satisfies GuestOutletContext} />
     </EventThemeProvider>
-  );
-}
-
-function MenuLink({ to, label, onNavigate }: { to: string; label: string; onNavigate: () => void }) {
-  return (
-    <NavLink
-      to={to}
-      onClick={onNavigate}
-      className={({ isActive }) =>
-        `guest-nav-link ${isActive ? "active" : ""}`
-      }
-    >
-      {label}
-    </NavLink>
   );
 }

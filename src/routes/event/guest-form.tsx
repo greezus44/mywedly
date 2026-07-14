@@ -1,198 +1,257 @@
-import { useState, useEffect, type FormEvent } from "react";
-import { type EventGuest, type EventRsvp, type Json } from "../../lib/supabase";
+import { useState, type FormEvent } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase, type EventGuest, type GuestGroup } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, FormField } from "../../components/ui";
-import { Badge, type BadgeVariant } from "../../components/ui";
+import { Input, Select, Badge, FormField } from "../../components/ui";
 import { generateUsername } from "../../lib/utils";
 
-export interface GuestFormProps {
-  guest?: EventGuest | null;
-  onSubmit: (values: GuestFormValues) => void;
-  onCancel: () => void;
-  isPending?: boolean;
+// ---------------------------------------------------------------------------
+// RsvpBadge
+// ---------------------------------------------------------------------------
+const RSVP_VARIANTS: Record<string, "success" | "danger" | "warning" | "default"> = {
+  attending: "success",
+  declined: "danger",
+  pending: "warning",
+  maybe: "warning",
+};
+
+export function RsvpBadge({ status }: { status: string | null }) {
+  const value = status ?? "pending";
+  return <Badge variant={RSVP_VARIANTS[value] ?? "default"}>{value}</Badge>;
 }
 
+// ---------------------------------------------------------------------------
+// guestToForm
+// ---------------------------------------------------------------------------
 export interface GuestFormValues {
   name: string;
-  email: string | null;
-  phone: string | null;
+  email: string;
+  phone: string;
+  group_name: string;
+  side: string;
+  plus_ones: number;
+  dietary: string;
+  table_number: string;
   username: string;
-  plus_one_allowed: boolean;
-  plus_one_count: number;
-  notes: string | null;
+  group_id: string;
+  rsvp_status: string;
 }
 
 export function guestToForm(guest: EventGuest): GuestFormValues {
   return {
-    name: guest.name,
-    email: guest.email,
-    phone: guest.phone,
-    username: guest.username,
-    plus_one_allowed: guest.plus_one_allowed,
-    plus_one_count: guest.plus_one_count,
-    notes: guest.notes,
+    name: guest.name ?? "",
+    email: guest.email ?? "",
+    phone: guest.phone ?? "",
+    group_name: guest.group_name ?? "",
+    side: guest.side ?? "",
+    plus_ones: guest.plus_ones ?? 0,
+    dietary: guest.dietary ?? "",
+    table_number: guest.table_number ?? "",
+    username: guest.username ?? "",
+    group_id: guest.group_id ?? "",
+    rsvp_status: guest.rsvp_status ?? "",
   };
 }
 
-export function GuestForm({ guest, onSubmit, onCancel, isPending }: GuestFormProps) {
-  const [name, setName] = useState(guest?.name || "");
-  const [email, setEmail] = useState(guest?.email || "");
-  const [phone, setPhone] = useState(guest?.phone || "");
-  const [username, setUsername] = useState(guest?.username || "");
-  const [plusOneAllowed, setPlusOneAllowed] = useState(guest?.plus_one_allowed ?? false);
-  const [plusOneCount, setPlusOneCount] = useState(guest?.plus_one_count ?? 0);
-  const [notes, setNotes] = useState(guest?.notes || "");
+const EMPTY_FORM: GuestFormValues = {
+  name: "",
+  email: "",
+  phone: "",
+  group_name: "",
+  side: "",
+  plus_ones: 0,
+  dietary: "",
+  table_number: "",
+  username: "",
+  group_id: "",
+  rsvp_status: "",
+};
+
+// ---------------------------------------------------------------------------
+// GuestForm
+// ---------------------------------------------------------------------------
+interface GuestFormProps {
+  eventId: string;
+  guest?: EventGuest | null;
+  groups?: GuestGroup[];
+  onSaved?: () => void;
+  onCancel?: () => void;
+}
+
+export function GuestForm({ eventId, guest, groups, onSaved, onCancel }: GuestFormProps) {
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<GuestFormValues>(guest ? guestToForm(guest) : EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
 
-  // Auto-generate username from name when creating a new guest
-  useEffect(() => {
-    if (!guest && name.trim() && !username) {
-      setUsername(generateUsername(name));
-    }
-  }, [name, username, guest]);
+  function update<K extends keyof GuestFormValues>(key: K, val: GuestFormValues[K]) {
+    setForm((prev) => ({ ...prev, [key]: val }));
+  }
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!form.name.trim()) throw new Error("Name is required");
+
+      const username = form.username.trim() || generateUsername(form.name);
+
+      if (guest) {
+        const { error } = await supabase
+          .from("event_guests")
+          .update({
+            name: form.name.trim(),
+            email: form.email || null,
+            phone: form.phone || null,
+            group_name: form.group_name || null,
+            side: form.side || null,
+            plus_ones: form.plus_ones,
+            dietary: form.dietary || null,
+            table_number: form.table_number || null,
+            username,
+            group_id: form.group_id || null,
+            rsvp_status: form.rsvp_status || null,
+          })
+          .eq("id", guest.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("event_guests")
+          .insert({
+            event_id: eventId,
+            name: form.name.trim(),
+            email: form.email || null,
+            phone: form.phone || null,
+            group_name: form.group_name || null,
+            side: form.side || null,
+            plus_ones: form.plus_ones,
+            dietary: form.dietary || null,
+            table_number: form.table_number || null,
+            username,
+            group_id: form.group_id || null,
+            rsvp_status: form.rsvp_status || null,
+          });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
+      onSaved?.();
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : "Failed to save guest");
+    },
+  });
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setError("Name is required.");
-      return;
-    }
-    if (!username.trim()) {
-      setError("Username is required.");
-      return;
-    }
     setError(null);
-    onSubmit({
-      name: name.trim(),
-      email: email.trim() || null,
-      phone: phone.trim() || null,
-      username: username.trim(),
-      plus_one_allowed: plusOneAllowed,
-      plus_one_count: plusOneCount,
-      notes: notes.trim() || null,
-    });
+    saveMutation.mutate();
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input
         label="Name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Guest name"
+        value={form.name}
+        onChange={(e) => update("name", e.target.value)}
+        placeholder="e.g. Jane Smith"
         required
         autoFocus
       />
-      <Input
-        label="Email"
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="guest@example.com"
-      />
-      <Input
-        label="Phone"
-        type="tel"
-        value={phone}
-        onChange={(e) => setPhone(e.target.value)}
-        placeholder="+1 555 000 0000"
-      />
-      <Input
-        label="Username"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-        placeholder="username for guest login"
-        required
-      />
-      <p className="-mt-2 text-xs text-dash-muted">Used by the guest to sign in to the event site.</p>
-
-      <div className="flex items-center gap-3">
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            type="checkbox"
-            checked={plusOneAllowed}
-            onChange={(e) => setPlusOneAllowed(e.target.checked)}
-            className="h-4 w-4 rounded border-dash-border text-dash-primary focus:ring-dash-primary"
-          />
-          <span className="text-sm text-dash-text">Plus one allowed</span>
-        </label>
-        {plusOneAllowed && (
-          <Input
-            type="number"
-            value={plusOneCount}
-            onChange={(e) => setPlusOneCount(Number(e.target.value))}
-            min={0}
-            className="w-24"
-            label=""
-          />
-        )}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Input
+          label="Email"
+          type="email"
+          value={form.email}
+          onChange={(e) => update("email", e.target.value)}
+          placeholder="jane@example.com"
+        />
+        <Input
+          label="Phone"
+          value={form.phone}
+          onChange={(e) => update("phone", e.target.value)}
+          placeholder="+44 1234 567890"
+        />
       </div>
-
-      <Textarea
-        label="Notes"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        placeholder="Internal notes about this guest"
-        rows={3}
-      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Input
+          label="Group Name"
+          value={form.group_name}
+          onChange={(e) => update("group_name", e.target.value)}
+          placeholder="e.g. Bride's Family"
+        />
+        <Select
+          label="Assigned Group"
+          value={form.group_id}
+          onChange={(e) => update("group_id", e.target.value)}
+        >
+          <option value="">No group</option>
+          {groups?.map((g) => (
+            <option key={g.id} value={g.id}>{g.name}</option>
+          ))}
+        </Select>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Select
+          label="Side"
+          value={form.side}
+          onChange={(e) => update("side", e.target.value)}
+        >
+          <option value="">No side</option>
+          <option value="bride">Bride</option>
+          <option value="groom">Groom</option>
+          <option value="both">Both</option>
+          <option value="other">Other</option>
+        </Select>
+        <Input
+          label="Plus Ones"
+          type="number"
+          min={0}
+          max={10}
+          value={form.plus_ones}
+          onChange={(e) => update("plus_ones", parseInt(e.target.value, 10) || 0)}
+        />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Input
+          label="Dietary Requirements"
+          value={form.dietary}
+          onChange={(e) => update("dietary", e.target.value)}
+          placeholder="e.g. Vegetarian"
+        />
+        <Input
+          label="Table Number"
+          value={form.table_number}
+          onChange={(e) => update("table_number", e.target.value)}
+          placeholder="e.g. Table 5"
+        />
+      </div>
+      <FormField label="Username" hint="Guests use this username to log in to the invitation site.">
+        <Input
+          value={form.username}
+          onChange={(e) => update("username", e.target.value)}
+          placeholder="Auto-generated from name if empty"
+        />
+      </FormField>
+      <Select
+        label="RSVP Status"
+        value={form.rsvp_status}
+        onChange={(e) => update("rsvp_status", e.target.value)}
+      >
+        <option value="">Not responded</option>
+        <option value="attending">Attending</option>
+        <option value="declined">Declined</option>
+        <option value="pending">Pending</option>
+      </Select>
 
       {error && <p className="text-sm text-dash-danger">{error}</p>}
 
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
-        <Button type="submit" loading={isPending}>
-          {guest ? "Save Changes" : "Add Guest"}
+        {onCancel && (
+          <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
+        )}
+        <Button type="submit" loading={saveMutation.isPending}>
+          {guest ? "Update Guest" : "Add Guest"}
         </Button>
       </div>
     </form>
   );
-}
-
-export type RsvpStatus = EventRsvp["status"];
-
-export interface RsvpBadgeProps {
-  status: RsvpStatus;
-}
-
-const rsvpBadgeConfig: Record<RsvpStatus, { label: string; variant: BadgeVariant }> = {
-  attending: { label: "Attending", variant: "success" },
-  not_attending: { label: "Not Attending", variant: "danger" },
-  maybe: { label: "Maybe", variant: "warning" },
-  no_response: { label: "No Response", variant: "default" },
-};
-
-export function RsvpBadge({ status }: RsvpBadgeProps) {
-  const config = rsvpBadgeConfig[status] || rsvpBadgeConfig.no_response;
-  return <Badge variant={config.variant}>{config.label}</Badge>;
-}
-
-export function rsvpStatusFromJson(rsvp: EventRsvp | null | undefined): RsvpStatus {
-  if (!rsvp) return "no_response";
-  return rsvp.status;
-}
-
-export function getRsvpCounts(rsvps: EventRsvp[]): {
-  attending: number;
-  not_attending: number;
-  maybe: number;
-  no_response: number;
-  total: number;
-} {
-  const counts = { attending: 0, not_attending: 0, maybe: 0, no_response: 0, total: rsvps.length };
-  for (const r of rsvps) {
-    if (r.status in counts) {
-      counts[r.status]++;
-    }
-  }
-  return counts;
-}
-
-export function getPlusOneCount(rsvps: EventRsvp[]): number {
-  return rsvps.filter((r) => r.plus_one).length;
-}
-
-export function getSubEventAttendance(rsvp: EventRsvp): Record<string, boolean> {
-  const att = rsvp.sub_event_attendance as Json | null;
-  if (!att || typeof att !== "object" || Array.isArray(att)) return {};
-  return att as Record<string, boolean>;
 }

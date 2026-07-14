@@ -3,91 +3,75 @@ import { cn } from "../../lib/utils";
 import { DatePicker } from "./DatePicker";
 import { TimePicker } from "./TimePicker";
 
-export interface DateTimePickerProps {
-  value: string; // ISO datetime string
-  onChange: (value: string) => void;
+interface DateTimePickerProps {
+  /** ISO date string "YYYY-MM-DD" or null */
+  date: string | null;
+  /** 24-hour time string "HH:MM" or null */
+  time: string | null;
+  onChange: (date: string | null, time: string | null) => void;
   label?: string;
   className?: string;
 }
 
-function splitDateTime(value: string): { date: string; time: string } {
-  if (!value) return { date: "", time: "" };
-  // Try ISO format: "2024-01-15T14:30" or "2024-01-15T14:30:00"
-  const match = value.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
-  if (match) return { date: match[1], time: match[2] };
-  // Date only
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return { date: value, time: "" };
-  return { date: "", time: "" };
-}
+type Tab = "date" | "time";
 
-function joinDateTime(date: string, time: string): string {
-  if (!date && !time) return "";
-  if (!date) return "";
-  if (!time) return date;
-  return `${date}T${time}`;
-}
-
-export function DateTimePicker({ value, onChange, label, className }: DateTimePickerProps) {
-  const { date, time } = splitDateTime(value);
-  const [tab, setTab] = useState<"date" | "time">("date");
-
-  const handleDateChange = (newDate: string) => {
-    onChange(joinDateTime(newDate, time));
-  };
-
-  const handleTimeChange = (newTime: string) => {
-    onChange(joinDateTime(date, newTime));
-  };
+export function DateTimePicker({
+  date,
+  time,
+  onChange,
+  label,
+  className,
+}: DateTimePickerProps) {
+  const [activeTab, setActiveTab] = useState<Tab>("date");
 
   return (
     <div className={cn("w-full", className)}>
       {label && (
         <label className="mb-1.5 block text-sm font-medium text-dash-text">{label}</label>
       )}
-      <div className="rounded-lg border border-dash-border bg-dash-surface">
-        <div className="flex border-b border-dash-border">
-          <button
-            type="button"
-            onClick={() => setTab("date")}
-            className={cn(
-              "flex-1 px-3 py-2 text-sm font-medium transition-colors",
-              tab === "date"
-                ? "border-b-2 border-dash-primary text-dash-primary"
-                : "text-dash-muted hover:text-dash-text"
-            )}
-          >
-            📅 Date
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("time")}
-            className={cn(
-              "flex-1 px-3 py-2 text-sm font-medium transition-colors",
-              tab === "time"
-                ? "border-b-2 border-dash-primary text-dash-primary"
-                : "text-dash-muted hover:text-dash-text"
-            )}
-          >
-            🕐 Time
-          </button>
-        </div>
-        <div className="p-3">
-          {tab === "date" ? (
-            <DatePicker value={date} onChange={handleDateChange} placeholder="Select date" />
-          ) : (
-            <TimePicker value={time} onChange={handleTimeChange} />
+
+      {/* Tabs */}
+      <div className="mb-2 inline-flex rounded-md border border-dash-border bg-dash-bg p-0.5">
+        <button
+          type="button"
+          onClick={() => setActiveTab("date")}
+          className={cn(
+            "rounded px-3 py-1 text-sm font-medium transition-colors",
+            activeTab === "date"
+              ? "bg-dash-surface text-dash-text shadow-sm"
+              : "text-dash-muted hover:text-dash-text"
           )}
-        </div>
+        >
+          Date
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("time")}
+          className={cn(
+            "rounded px-3 py-1 text-sm font-medium transition-colors",
+            activeTab === "time"
+              ? "bg-dash-surface text-dash-text shadow-sm"
+              : "text-dash-muted hover:text-dash-text"
+          )}
+        >
+          Time
+        </button>
       </div>
-      {(date || time) && (
-        <p className="mt-1.5 text-xs text-dash-muted">
-          {date && <span>{date}</span>}
-          {date && time && <span> · </span>}
-          {time && <span>{time}</span>}
-        </p>
+
+      {/* Active panel */}
+      {activeTab === "date" ? (
+        <DatePicker
+          value={date}
+          onChange={(d) => onChange(d, time)}
+          placeholder="Select a date"
+        />
+      ) : (
+        <TimePicker
+          value={time}
+          onChange={(t) => onChange(date, t)}
+          placeholder="Select a time"
+        />
       )}
     </div>
   );
 }
-
-export default DateTimePicker;

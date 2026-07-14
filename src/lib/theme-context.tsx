@@ -1,4 +1,10 @@
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useMemo,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { jsonToTheme, themeToEventCssVars, type ThemeConfig } from "./theme";
 import type { Json } from "./supabase";
 import { cn } from "./utils";
@@ -15,15 +21,18 @@ interface EventThemeProviderProps {
   className?: string;
 }
 
+/**
+ * Wraps children in a `.event-themed` div and applies all CSS variables
+ * derived from the provided theme JSON. Falls back to the default theme
+ * when the theme is null/undefined.
+ */
 export function EventThemeProvider({ theme, children, className }: EventThemeProviderProps) {
   const resolvedTheme = useMemo(() => jsonToTheme(theme), [theme]);
   const cssVars = useMemo(() => themeToEventCssVars(resolvedTheme), [resolvedTheme]);
-  const style = useMemo(() => cssVars as React.CSSProperties, [cssVars]);
-
-  const contextValue = useMemo(() => ({ theme: resolvedTheme }), [resolvedTheme]);
+  const style = cssVars as CSSProperties;
 
   return (
-    <EventThemeContext.Provider value={contextValue}>
+    <EventThemeContext.Provider value={{ theme: resolvedTheme }}>
       <div className={cn("event-themed", className)} style={style}>
         {children}
       </div>
@@ -31,10 +40,11 @@ export function EventThemeProvider({ theme, children, className }: EventThemePro
   );
 }
 
-export function useEventTheme(): ThemeConfig {
+/** Access the resolved event theme within an EventThemeProvider. */
+export function useEventTheme(): EventThemeContextValue {
   const ctx = useContext(EventThemeContext);
   if (!ctx) {
-    return jsonToTheme(null);
+    throw new Error("useEventTheme must be used within an EventThemeProvider");
   }
-  return ctx.theme;
+  return ctx;
 }

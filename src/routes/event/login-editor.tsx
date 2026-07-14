@@ -2,133 +2,125 @@ import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
-import { Button } from "../../components/ui/Button";
-import { Card, Toggle, Input, FormField } from "../../components/ui";
-import { TypographyControls } from "../../components/ui/TypographyControls";
 import { SplitEditor } from "../../components/preview/SplitEditor";
-import { LoginPreview } from "../../components/preview/PreviewRenderers";
+import { LoginPreview, type LoginConfig, type LogoConfig } from "../../components/preview/PreviewRenderers";
+import { EventThemeProvider } from "../../lib/theme-context";
+import { TypographyControls } from "../../components/ui/TypographyControls";
+import { Button } from "../../components/ui/Button";
+import { Input, Toggle, FormField } from "../../components/ui";
 import type { TypographyStyle } from "../../lib/typography";
 
-interface LoginConfig {
-  heading?: TypographyStyle;
-  subheading?: TypographyStyle;
-  placeholder?: string;
-  buttonText?: string;
-  showUsernameHint?: boolean;
-}
-
-function asConfig(json: Json | null | undefined): LoginConfig {
-  if (!json || typeof json !== "object" || Array.isArray(json)) return {};
-  return json as LoginConfig;
-}
-
-const DEFAULT_CONFIG: LoginConfig = {
-  buttonText: "Enter",
-  placeholder: "Enter your username",
-  showUsernameHint: true,
-};
+const DEFAULT_HEADING: TypographyStyle = { text: "Welcome", fontFamily: "Georgia, serif", fontSize: 36, fontWeight: 700, color: "#78350f", align: "center" };
+const DEFAULT_SUBHEADING: TypographyStyle = { text: "Enter your username to continue", fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 400, color: "#92400e", align: "center" };
 
 export function LoginEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
-  const [config, setConfig] = useState<LoginConfig>({
-    ...DEFAULT_CONFIG,
-    ...asConfig(event.draft_login_config),
-  });
-  const [saved, setSaved] = useState(false);
+
+  const [config, setConfig] = useState<LoginConfig>(
+    (event.draft_login_config as LoginConfig | null) ?? (event.login_config as LoginConfig | null) ?? {}
+  );
+  const [logoConfig, setLogoConfig] = useState<LogoConfig>(
+    (event.draft_logo_config as LogoConfig | null) ?? (event.logo_config as LogoConfig | null) ?? {}
+  );
+  const [savedMsg, setSavedMsg] = useState(false);
 
   useEffect(() => {
-    setConfig({ ...DEFAULT_CONFIG, ...asConfig(event.draft_login_config) });
-  }, [event.draft_login_config]);
+    // Sync if event changes externally
+    setConfig((event.draft_login_config as LoginConfig | null) ?? (event.login_config as LoginConfig | null) ?? {});
+  }, [event.draft_login_config, event.login_config]);
+
+  function update<K extends keyof LoginConfig>(key: K, val: LoginConfig[K]) {
+    setConfig((prev) => ({ ...prev, [key]: val }));
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_login_config: config as unknown as Json })
+        .update({
+          draft_login_config: config as unknown as Json,
+        })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 2000);
     },
   });
 
-  const update = (patch: Partial<LoginConfig>) => {
-    setConfig((prev) => ({ ...prev, ...patch }));
-  };
-
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-dash-text">Login Editor</h2>
-          <p className="text-sm text-dash-muted">Customize the guest login page.</p>
+          <p className="text-sm text-dash-muted">Customise the guest login screen.</p>
         </div>
         <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-          {saved ? "Saved!" : "Save"}
+          {savedMsg ? "Saved!" : "Save Changes"}
         </Button>
       </div>
 
+      {saveMutation.isError && (
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save"}
+        </p>
+      )}
+
       <SplitEditor
+        editorRatio={5}
         editor={
-          <div className="space-y-4">
-            <Card>
-              <h3 className="mb-3 text-sm font-semibold text-dash-text">Heading</h3>
+          <div className="space-y-6">
+            <Toggle
+              label="Show Logo"
+              checked={config.showLogo ?? true}
+              onChange={(v) => update("showLogo", v)}
+            />
+
+            <div className="border-t border-dash-border pt-4">
+              <h3 className="mb-3 text-sm font-semibold text-dash-text">Heading Typography</h3>
               <TypographyControls
-                value={config.heading || {}}
-                onChange={(heading) => update({ heading })}
+                value={(config.heading as TypographyStyle) ?? DEFAULT_HEADING}
+                onChange={(v) => update("heading", v as unknown as Json)}
                 showText
               />
-            </Card>
+            </div>
 
-            <Card>
-              <h3 className="mb-3 text-sm font-semibold text-dash-text">Subheading</h3>
+            <div className="border-t border-dash-border pt-4">
+              <h3 className="mb-3 text-sm font-semibold text-dash-text">Subheading Typography</h3>
               <TypographyControls
-                value={config.subheading || {}}
-                onChange={(subheading) => update({ subheading })}
+                value={(config.subheading as TypographyStyle) ?? DEFAULT_SUBHEADING}
+                onChange={(v) => update("subheading", v as unknown as Json)}
                 showText
               />
-            </Card>
+            </div>
 
-            <Card>
-              <h3 className="mb-3 text-sm font-semibold text-dash-text">Form Options</h3>
-              <div className="space-y-4">
-                <Input
-                  label="Placeholder Text"
-                  value={config.placeholder || ""}
-                  onChange={(e) => update({ placeholder: e.target.value })}
-                  placeholder="Enter your username"
-                />
-                <Input
-                  label="Button Text"
-                  value={config.buttonText || ""}
-                  onChange={(e) => update({ buttonText: e.target.value })}
-                  placeholder="Enter"
-                />
-                <Toggle
-                  checked={config.showUsernameHint ?? true}
-                  onChange={(showUsernameHint) => update({ showUsernameHint })}
-                  label="Show username hint"
-                />
-              </div>
-            </Card>
+            <div className="border-t border-dash-border pt-4 space-y-4">
+              <h3 className="text-sm font-semibold text-dash-text">Input & Button</h3>
+              <Input
+                label="Placeholder Text"
+                value={config.placeholder ?? ""}
+                onChange={(e) => update("placeholder", e.target.value)}
+                placeholder="Enter your username"
+              />
+              <Input
+                label="Button Text"
+                value={config.buttonText ?? ""}
+                onChange={(e) => update("buttonText", e.target.value)}
+                placeholder="Enter Site"
+              />
+            </div>
           </div>
         }
         preview={
-          <div className="rounded-lg border border-dash-border p-4">
-            <LoginPreview loginConfig={config as unknown as Json} />
-          </div>
+          <EventThemeProvider theme={event.draft_theme ?? event.theme}>
+            <LoginPreview config={config} logoConfig={logoConfig} />
+          </EventThemeProvider>
         }
+        previewHeader={<span className="text-sm font-medium text-dash-text">Live Preview</span>}
       />
-
-      {saveMutation.isError && (
-        <p className="text-sm text-dash-danger">
-          {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save."}
-        </p>
-      )}
     </div>
   );
 }

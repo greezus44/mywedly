@@ -119,7 +119,7 @@ export function DashboardPage() {
       ) : !events || events.length === 0 ? (
         <EmptyState
           title="No events yet"
-          message="Create your first invitation website to get started."
+          description="Create your first invitation website to get started."
           action={
             <Button onClick={() => setShowCreate(true)}>Create Event</Button>
           }

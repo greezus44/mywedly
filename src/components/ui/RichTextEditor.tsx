@@ -1,13 +1,13 @@
-import { useRef, useCallback, useEffect, type KeyboardEvent } from "react";
-import { cn } from "../../lib/utils";
+import { useCallback, useEffect, useRef, type KeyboardEvent } from "react";
 import { RICH_FONT_OPTIONS } from "../../lib/theme";
+import { cn } from "../../lib/utils";
 import { FontSelect } from "./FontSelect";
 
-export interface RichTextEditorProps {
+interface RichTextEditorProps {
   value: string;
   onChange: (html: string) => void;
-  className?: string;
   placeholder?: string;
+  className?: string;
 }
 
 const FONT_SIZES = [
@@ -17,162 +17,123 @@ const FONT_SIZES = [
   { label: "Heading", value: "6" },
 ];
 
-export function RichTextEditor({ value, onChange, className, placeholder }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, placeholder, className }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const isInternalChange = useRef(false);
 
-  // Set initial content
+  // Sync external value into the contentEditable when it changes externally
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
+    if (editorRef.current && !isInternalChange.current && editorRef.current.innerHTML !== value) {
       editorRef.current.innerHTML = value || "";
     }
+    isInternalChange.current = false;
   }, [value]);
 
   const exec = useCallback((command: string, val?: string) => {
     document.execCommand(command, false, val);
+    editorRef.current?.focus();
     if (editorRef.current) {
+      isInternalChange.current = true;
       onChange(editorRef.current.innerHTML);
     }
   }, [onChange]);
 
   const handleInput = useCallback(() => {
     if (editorRef.current) {
+      isInternalChange.current = true;
       onChange(editorRef.current.innerHTML);
     }
   }, [onChange]);
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    // Prevent default browser shortcuts from causing navigation
-    if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-      e.preventDefault();
-      handleCreateLink();
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
+    // Handle Enter for clean paragraph insertion
+    if (e.key === "Enter" && !e.shiftKey) {
+      // Default behavior is fine; contentEditable handles it
     }
-  };
+  }, []);
 
-  const handleCreateLink = () => {
+  const createLink = useCallback(() => {
     const url = window.prompt("Enter URL:");
-    if (url) {
-      exec("createLink", url);
-      // Add target and rel to created links
-      const selection = window.getSelection();
-      if (selection && selection.anchorNode) {
-        const link = selection.anchorNode.parentElement?.closest("a");
-        if (link) {
-          link.setAttribute("target", "_blank");
-          link.setAttribute("rel", "noopener noreferrer");
-        }
-      }
-    }
-  };
+    if (url) exec("createLink", url);
+  }, [exec]);
 
-  const handleFontFamily = (fontStack: string) => {
+  const setFontFamily = useCallback((fontStack: string) => {
     exec("fontName", fontStack);
-  };
+  }, [exec]);
 
-  const handleColor = (e: React.ChangeEvent<HTMLInputElement>) => {
-    exec("foreColor", e.target.value);
-  };
-
-  const toolbarBtn = "rounded p-1.5 text-dash-text hover:bg-dash-bg transition-colors";
-  const toolbarBtnActive = "bg-dash-bg text-dash-primary";
+  const toolbarBtn =
+    "flex h-8 w-8 items-center justify-center rounded text-sm text-dash-text hover:bg-dash-bg transition-colors";
 
   return (
-    <div className={cn("w-full rounded-lg border border-dash-border bg-dash-surface", className)}>
+    <div className={cn("w-full overflow-hidden rounded-lg border border-dash-border bg-dash-surface", className)}>
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-1 border-b border-dash-border p-2">
-        <button
-          type="button"
-          onMouseDown={(e) => { e.preventDefault(); exec("bold"); }}
-          className={cn(toolbarBtn, "font-bold")}
-          title="Bold"
-        >
-          B
+      <div className="flex flex-wrap items-center gap-1 border-b border-dash-border bg-dash-bg px-2 py-1.5">
+        <button type="button" onClick={() => exec("bold")} className={toolbarBtn} title="Bold">
+          <strong>B</strong>
         </button>
-        <button
-          type="button"
-          onMouseDown={(e) => { e.preventDefault(); exec("italic"); }}
-          className={cn(toolbarBtn, "italic")}
-          title="Italic"
-        >
-          I
+        <button type="button" onClick={() => exec("italic")} className={toolbarBtn} title="Italic">
+          <em>I</em>
         </button>
-        <button
-          type="button"
-          onMouseDown={(e) => { e.preventDefault(); exec("underline"); }}
-          className={cn(toolbarBtn, "underline")}
-          title="Underline"
-        >
-          U
+        <button type="button" onClick={() => exec("underline")} className={toolbarBtn} title="Underline">
+          <u>U</u>
         </button>
 
-        <div className="mx-1 h-5 w-px bg-dash-border" />
+        <div className="mx-1 h-6 w-px bg-dash-border" />
 
         {/* Font size */}
         <select
           onChange={(e) => exec("fontSize", e.target.value)}
+          className="h-8 rounded border border-dash-border bg-dash-surface px-1 text-xs text-dash-text"
           defaultValue="3"
-          className="rounded border border-dash-border bg-dash-surface px-2 py-1 text-xs text-dash-text"
           title="Font size"
         >
-          {FONT_SIZES.map((s) => (
-            <option key={s.value} value={s.value}>{s.label}</option>
+          {FONT_SIZES.map((size) => (
+            <option key={size.value} value={size.value}>
+              {size.label}
+            </option>
           ))}
         </select>
 
-        <div className="mx-1 h-5 w-px bg-dash-border" />
-
-        {/* Font family */}
-        <div className="w-40">
+        {/* Font family with preview */}
+        <div className="min-w-[140px]">
           <FontSelect
-            value=""
-            onChange={handleFontFamily}
             options={RICH_FONT_OPTIONS}
+            value={RICH_FONT_OPTIONS[0].value}
+            onChange={setFontFamily}
             placeholder="Font"
           />
         </div>
 
-        <div className="mx-1 h-5 w-px bg-dash-border" />
+        <div className="mx-1 h-6 w-px bg-dash-border" />
 
-        {/* Text color */}
-        <label className={cn(toolbarBtn, "cursor-pointer")} title="Text color">
-          <span className="flex items-center gap-1">
-            <span>A</span>
-            <span className="h-3 w-3 rounded border border-dash-border" style={{ backgroundColor: "#000000" }} />
-          </span>
+        {/* Foreground color */}
+        <label className="flex h-8 cursor-pointer items-center" title="Text colour">
+          <span className="sr-only">Text colour</span>
           <input
             type="color"
-            onChange={handleColor}
-            className="hidden"
+            onChange={(e) => exec("foreColor", e.target.value)}
+            className="h-6 w-6 cursor-pointer rounded border border-dash-border"
+            defaultValue="#000000"
           />
         </label>
 
-        <div className="mx-1 h-5 w-px bg-dash-border" />
-
-        <button
-          type="button"
-          onMouseDown={(e) => { e.preventDefault(); handleCreateLink(); }}
-          className={toolbarBtn}
-          title="Insert link"
-        >
-          🔗
+        <button type="button" onClick={createLink} className={toolbarBtn} title="Insert link">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.65-.688a4.5 4.5 0 00-1.242-7.244l-4.5-4.5a4.5 4.5 0 00-6.364 6.364l1.757 1.757" />
+          </svg>
         </button>
 
-        <div className="mx-1 h-5 w-px bg-dash-border" />
+        <div className="mx-1 h-6 w-px bg-dash-border" />
 
-        <button
-          type="button"
-          onMouseDown={(e) => { e.preventDefault(); exec("insertUnorderedList"); }}
-          className={toolbarBtn}
-          title="Bullet list"
-        >
-          •
+        <button type="button" onClick={() => exec("insertUnorderedList")} className={toolbarBtn} title="Bullet list">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm0 5.25h.007v.008H3.75V12zm0 5.25h.007v.008H3.75v-.008z" />
+          </svg>
         </button>
-        <button
-          type="button"
-          onMouseDown={(e) => { e.preventDefault(); exec("insertOrderedList"); }}
-          className={toolbarBtn}
-          title="Numbered list"
-        >
-          1.
+        <button type="button" onClick={() => exec("insertOrderedList")} className={toolbarBtn} title="Numbered list">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 7h12M5 12h12M5 17h12M3 5.5v.01M3 10.5v.01M3 15.5v.01" />
+          </svg>
         </button>
       </div>
 
@@ -180,14 +141,15 @@ export function RichTextEditor({ value, onChange, className, placeholder }: Rich
       <div
         ref={editorRef}
         contentEditable
+        suppressContentEditableWarning
         onInput={handleInput}
         onKeyDown={handleKeyDown}
         data-placeholder={placeholder}
-        className="rich-content min-h-[200px] p-4 outline-none focus:outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-dash-muted/50"
-        suppressContentEditableWarning
+        className={cn(
+          "rich-editor min-h-[120px] px-4 py-3 text-sm text-dash-text focus:outline-none",
+          "[&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-dash-muted"
+        )}
       />
     </div>
   );
 }
-
-export default RichTextEditor;

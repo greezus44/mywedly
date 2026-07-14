@@ -11,48 +11,49 @@ export async function generateQrDataUrl(
     width: 256,
     margin: 2,
     color: { dark: "#000000", light: "#ffffff" },
+    errorCorrectionLevel: "M",
     ...options,
   });
 }
 
 /**
- * Download a QR code as a PNG image.
+ * Trigger a download of a QR code as a PNG image.
  */
 export async function downloadQrCode(
   text: string,
-  filename: string = "qr-code.png",
+  filename = "qr-code.png",
   options?: QRCode.QRCodeToDataURLOptions
 ): Promise<void> {
   const dataUrl = await generateQrDataUrl(text, options);
-  const link = document.createElement("a");
-  link.href = dataUrl;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  triggerDownload(dataUrl, filename);
 }
 
 /**
- * Download a QR code as an SVG file.
+ * Trigger a download of a QR code as an SVG file.
  */
 export async function downloadQrSvg(
   text: string,
-  filename: string = "qr-code.svg",
+  filename = "qr-code.svg",
   options?: QRCode.QRCodeToStringOptions
 ): Promise<void> {
   const svgString = await QRCode.toString(text, {
     type: "svg",
     margin: 2,
     color: { dark: "#000000", light: "#ffffff" },
+    errorCorrectionLevel: "M",
     ...options,
   });
   const blob = new Blob([svgString], { type: "image/svg+xml" });
   const url = URL.createObjectURL(blob);
+  triggerDownload(url, filename);
+  URL.revokeObjectURL(url);
+}
+
+function triggerDownload(href: string, filename: string): void {
   const link = document.createElement("a");
-  link.href = url;
+  link.href = href;
   link.download = filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }

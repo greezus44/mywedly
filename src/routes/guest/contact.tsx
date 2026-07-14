@@ -1,83 +1,114 @@
 import { useGuestOutletContext } from "./guest-layout";
 import { formatDate, formatTime12 } from "../../lib/utils";
 
-export default function GuestContact() {
-  const { event } = useGuestOutletContext();
+interface ContactInfo {
+  email?: string | null;
+  phone?: string | null;
+  venue?: string | null;
+  address?: string | null;
+  eventDate?: string | null;
+  eventTime?: string | null;
+}
 
-  const venue = event.venue || null;
-  const address = event.address || null;
-  const eventDate = event.event_date || null;
-  const eventTime = event.event_time || null;
-  const mapQuery = [address, venue].filter(Boolean).join(", ");
+export default function GuestContact() {
+  const { event, slug } = useGuestOutletContext();
+
+  const email = (event.sharing_config as { email?: string } | null)?.email ?? null;
+  const phone = (event.sharing_config as { phone?: string } | null)?.phone ?? null;
+  const venue = event.venue;
+  const address = event.address;
+  const eventDate = event.event_date;
+  const eventTime = event.event_time;
+
+  const hasContact = Boolean(email || phone || venue || address || eventDate);
+  const mapQuery = address || venue;
   const mapSrc = mapQuery
     ? `https://maps.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`
-    : null;
+    : "";
 
   return (
     <section className="guest-section">
       <div className="mx-auto max-w-3xl">
-        <div className="text-center mb-10">
-          <p className="guest-eyebrow">Get In Touch</p>
-          <h1 className="guest-title">Contact & Venue</h1>
-          <p className="guest-subtitle mx-auto">Details for the big day.</p>
+        {/* Heading */}
+        <div className="mb-10 text-center">
+          <p className="guest-eyebrow">Get in touch</p>
+          <h1 className="guest-title">Contact</h1>
+          <p className="guest-subtitle mx-auto">Reach us with any questions about the celebration.</p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* When */}
-          <div
-            className="event-card"
-            style={{ backgroundColor: "var(--event-surface)", color: "var(--event-text)" }}
-          >
-            <p className="guest-eyebrow mb-2">When</p>
-            {eventDate ? (
-              <>
-                <p className="text-lg font-semibold mb-1" style={{ color: "var(--event-heading)" }}>
-                  {formatDate(eventDate)}
+        {/* Contact card */}
+        <div
+          className="event-card mb-8"
+          style={{ backgroundColor: "var(--event-surface)", color: "var(--event-text)" }}
+        >
+          <div className="space-y-6">
+            {/* Date & time */}
+            {eventDate && (
+              <div>
+                <p className="guest-eyebrow mb-1">When</p>
+                <p className="text-base">
+                  {formatDate(eventDate)}{eventTime && ` · ${formatTime12(eventTime)}`}
                 </p>
-                {eventTime && (
-                  <p style={{ color: "var(--event-muted)" }}>{formatTime12(eventTime)}</p>
-                )}
-              </>
-            ) : (
-              <p style={{ color: "var(--event-muted)" }}>Date to be announced.</p>
+              </div>
             )}
-          </div>
 
-          {/* Where */}
-          <div
-            className="event-card"
-            style={{ backgroundColor: "var(--event-surface)", color: "var(--event-text)" }}
-          >
-            <p className="guest-eyebrow mb-2">Where</p>
-            {venue ? (
-              <p className="text-lg font-semibold mb-1" style={{ color: "var(--event-heading)" }}>
-                {venue}
-              </p>
-            ) : (
-              <p className="text-lg font-semibold mb-1" style={{ color: "var(--event-heading)" }}>
-                Venue to be announced
-              </p>
+            {/* Venue */}
+            {venue && (
+              <div>
+                <p className="guest-eyebrow mb-1">Where</p>
+                <p className="text-base">{venue}</p>
+                {address && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{address}</p>}
+              </div>
             )}
-            {address && (
-              <p style={{ color: "var(--event-muted)" }}>{address}</p>
+
+            {/* Email */}
+            {email && (
+              <div>
+                <p className="guest-eyebrow mb-1">Email</p>
+                <a href={`mailto:${email}`} className="text-base hover:underline" style={{ color: "var(--event-primary)" }}>
+                  {email}
+                </a>
+              </div>
+            )}
+
+            {/* Phone */}
+            {phone && (
+              <div>
+                <p className="guest-eyebrow mb-1">Phone</p>
+                <a href={`tel:${phone}`} className="text-base hover:underline" style={{ color: "var(--event-primary)" }}>
+                  {phone}
+                </a>
+              </div>
+            )}
+
+            {!hasContact && (
+              <p style={{ color: "var(--event-muted)" }}>Contact details will be added soon.</p>
             )}
           </div>
         </div>
 
         {/* Embedded map */}
         {mapSrc && (
-          <div className="mt-6 overflow-hidden rounded-lg border" style={{ borderColor: "var(--event-border)" }}>
+          <div>
+            <p className="guest-eyebrow mb-3">Location</p>
             <iframe
-              title="Venue Map"
+              title="Event location"
               src={mapSrc}
               width="100%"
-              height="360"
-              style={{ border: 0, display: "block" }}
+              height={320}
+              style={{ border: 0, borderRadius: "var(--event-radius)" }}
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
             />
           </div>
         )}
+
+        {/* Back link */}
+        <div className="mt-10 text-center">
+          <a href={`/e/${slug}/home`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>
+            Back to home
+          </a>
+        </div>
       </div>
     </section>
   );

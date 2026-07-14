@@ -1,28 +1,47 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type CustomPage, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Card, Input, LoadingSpinner, ErrorState } from "../../components/ui";
+import { Input, Card, LoadingSpinner, ErrorState, EmptyState, Badge, Toggle } from "../../components/ui";
+import { RichTextEditor } from "../../components/ui/RichTextEditor";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import {
+  type Block,
+  type BlockContent,
   BLOCK_TYPES,
   createBlock,
-  blocksFromContent,
-  blocksToContent,
-  BlockContent,
-  type Block,
+  parseBlockContent,
+  serializeBlockContent,
 } from "./block-types";
+import { extractPathFromUrl, removeImage } from "../../lib/upload";
+import { cn } from "../../lib/utils";
 
 export function PageBuilder() {
   const { eventId, event } = useEventContext();
   const { pageId } = useParams<{ pageId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  const [title, setTitle] = useState("");
+  const [slug, setSlug] = useState("");
+  const [navLabel, setNavLabel] = useState("");
+  const [showInNav, setShowInNav] = useState(true);
+  const [isPublished, setIsPublished] = useState(false);
+  const [body, setBody] = useState("");
+  const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [blocks, setBlocks] = useState<Block[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
-  const [blocks, setBlocks] = useState<Block[] | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [savedMsg, setSavedMsg] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (mounted) setUserId(user?.id ?? null);
+    });
+    return () => { mounted = false; };
+  }, []);
 
   const { data: page, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["page", pageId],
@@ -31,70 +50,83 @@ export function PageBuilder() {
         .from("custom_pages")
         .select("*")
         .eq("id", pageId)
-        .eq("event_id", eventId)
         .maybeSingle();
       if (error) throw error;
-      if (!data) throw new Error("Page not found.");
-      return data as CustomPage;
+      return data as CustomPage | null;
     },
     enabled: !!pageId,
   });
 
-  // Initialize blocks once page is loaded
-  if (page && blocks === null) {
-    setBlocks(blocksFromContent(page.content));
+  useEffect(() => {
+    if (page) {
+      setTitle(page.title);
+      setSlug(page.slug);
+      setNavLabel(page.nav_label ?? "");
+      setShowInNav(page.show_in_nav);
+      setIsPublished(page.is_published);
+      setBody(page.body ?? "");
+      setCoverImage(page.cover_image_url ?? null);
+      setBlocks(parseBlockContent(page.blocks).blocks);
+    }
+  }, [page]);
+
+  function updateBlock(idx: number, patch: Partial<Block>) {
+    setBlocks((prev) => prev.map((b, i) => (i === idx ? { ...b, ...patch } : b)));
   }
 
-  // Get user ID for image uploads
-  useEffect(() => {
-    let mounted = true;
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (mounted) setUserId(session?.user?.id ?? null);
+  function updateBlockProp(idx: number, key: string, value: unknown) {
+    setBlocks((prev) =>
+      prev.map((b, i) => (i === idx ? { ...b, props: { ...b.props, [key]: value } } : b))
+    );
+  }
+
+  function removeBlock(idx: number) {
+    setBlocks((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function moveBlock(idx: number, dir: -1 | 1) {
+    setBlocks((prev) => {
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
     });
-    return () => { mounted = false; };
-  }, []);
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!pageId) return;
-      const content = blocksToContent(blocks ?? []) as Json;
+      const content: BlockContent = { blocks };
       const { error } = await supabase
         .from("custom_pages")
-        .update({ content })
+        .update({
+          title,
+          slug,
+          nav_label: navLabel || null,
+          show_in_nav: showInNav,
+          is_published: isPublished,
+          body,
+          cover_image_url: coverImage,
+          blocks: serializeBlockContent(content),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", pageId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["page", pageId] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      queryClient.invalidateQueries({ queryKey: ["pages", eventId] });
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 2000);
     },
   });
 
-  const addBlock = (type: Block["type"]) => {
-    const block = createBlock(type);
-    setBlocks((prev) => [...(prev ?? []), block]);
-  };
-
-  const updateBlock = (id: string, content: Record<string, unknown>) => {
-    setBlocks((prev) => (prev ?? []).map((b) => (b.id === id ? { ...b, content } : b)));
-  };
-
-  const removeBlock = (id: string) => {
-    setBlocks((prev) => (prev ?? []).filter((b) => b.id !== id));
-  };
-
-  const moveBlock = (id: string, dir: "up" | "down") => {
-    setBlocks((prev) => {
-      const list = prev ?? [];
-      const idx = list.findIndex((b) => b.id === id);
-      if (idx === -1) return list;
-      const newIdx = dir === "up" ? idx - 1 : idx + 1;
-      if (newIdx < 0 || newIdx >= list.length) return list;
-      const next = [...list];
-      [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
-      return next;
-    });
+  const handleCoverRemove = async () => {
+    if (coverImage) {
+      const path = extractPathFromUrl(coverImage);
+      if (path) await removeImage(path);
+    }
+    setCoverImage(null);
   };
 
   if (isLoading) {
@@ -105,260 +137,315 @@ export function PageBuilder() {
     );
   }
 
-  if (isError || !page) {
+  if (isError) {
     return (
       <ErrorState
         title="Failed to load page"
-        message={error instanceof Error ? error.message : "An error occurred."}
+        message={error instanceof Error ? error.message : "An unexpected error occurred."}
         onRetry={() => refetch()}
       />
     );
   }
 
-  const blockList = blocks ?? [];
+  if (!page) {
+    return (
+      <EmptyState
+        title="Page not found"
+        description="This page may have been deleted."
+        action={<Button variant="secondary" onClick={() => navigate(`/event/${eventId}/pages`)}>Back to Pages</Button>}
+      />
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <button
-            type="button"
-            onClick={() => navigate(`/event/${eventId}/pages`)}
-            className="mb-1 text-sm text-dash-muted hover:text-dash-text"
-          >
-            ← Back to Pages
-          </button>
-          <h2 className="text-xl font-bold text-dash-text">{page.title}</h2>
-          <p className="text-sm text-dash-muted">/e/{event.slug || event.draft_slug}/{page.slug}</p>
+          <h2 className="text-xl font-bold text-dash-text">Page Builder</h2>
+          <p className="text-sm text-dash-muted">Edit "{page.title}"</p>
         </div>
-        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-          {saved ? "Saved!" : "Save"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => navigate(`/event/${eventId}/pages`)}>Back</Button>
+          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+            {savedMsg ? "Saved!" : "Save Page"}
+          </Button>
+        </div>
       </div>
-
-      {/* Block type picker */}
-      <Card>
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Add Block</h3>
-        <div className="flex flex-wrap gap-2">
-          {BLOCK_TYPES.map((bt) => (
-            <button
-              key={bt.type}
-              type="button"
-              onClick={() => addBlock(bt.type)}
-              className="flex items-center gap-2 rounded-lg border border-dash-border px-3 py-1.5 text-sm text-dash-text transition-colors hover:border-dash-primary hover:bg-dash-primary/5"
-              title={bt.description}
-            >
-              <span className="text-lg">{bt.icon}</span>
-              {bt.label}
-            </button>
-          ))}
-        </div>
-      </Card>
-
-      {/* Blocks */}
-      {blockList.length === 0 ? (
-        <Card>
-          <p className="py-8 text-center text-sm text-dash-muted">
-            No blocks yet. Add a block above to start building your page.
-          </p>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {blockList.map((block, idx) => (
-            <Card key={block.id}>
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-xs font-medium uppercase text-dash-muted">
-                  {block.type} (#{idx + 1})
-                </span>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => moveBlock(block.id, "up")}
-                    disabled={idx === 0}
-                    className="rounded p-1 text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text disabled:opacity-30"
-                    title="Move up"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveBlock(block.id, "down")}
-                    disabled={idx === blockList.length - 1}
-                    className="rounded p-1 text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text disabled:opacity-30"
-                    title="Move down"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeBlock(block.id)}
-                    className="rounded p-1 text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-danger"
-                    title="Remove"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              {/* Block editor */}
-              <BlockEditor block={block} onChange={(content) => updateBlock(block.id, content)} userId={userId} />
-
-              {/* Block preview */}
-              <div className="mt-3 rounded-lg border border-dash-border bg-dash-bg p-3">
-                <p className="mb-2 text-xs text-dash-muted">Preview:</p>
-                <BlockContent block={block} />
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
 
       {saveMutation.isError && (
         <p className="text-sm text-dash-danger">
-          {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save."}
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save"}
         </p>
       )}
+
+      {/* Page Settings */}
+      <Card>
+        <h3 className="mb-4 text-sm font-semibold text-dash-text">Page Settings</h3>
+        <div className="space-y-4">
+          <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Input label="Slug" value={slug} onChange={(e) => setSlug(e.target.value)} />
+          <Input label="Nav Label" value={navLabel} onChange={(e) => setNavLabel(e.target.value)} placeholder="Label shown in navigation" />
+          <div className="flex items-center gap-6">
+            <Toggle label="Show in Navigation" checked={showInNav} onChange={setShowInNav} />
+            <Toggle label="Published" checked={isPublished} onChange={setIsPublished} />
+          </div>
+        </div>
+      </Card>
+
+      {/* Cover Image */}
+      <Card>
+        <h3 className="mb-4 text-sm font-semibold text-dash-text">Cover Image</h3>
+        <ImageUpload
+          userId={userId ?? ""}
+          value={coverImage ?? undefined}
+          onChange={(url) => setCoverImage(url)}
+          onRemove={handleCoverRemove}
+          aspectRatio="wide"
+        />
+      </Card>
+
+      {/* Body (Rich Text) */}
+      <Card>
+        <h3 className="mb-4 text-sm font-semibold text-dash-text">Body Content</h3>
+        <RichTextEditor value={body} onChange={setBody} placeholder="Write your page content…" />
+      </Card>
+
+      {/* Blocks */}
+      <Card>
+        <h3 className="mb-4 text-sm font-semibold text-dash-text">Blocks</h3>
+        <div className="space-y-4">
+          {blocks.map((block, idx) => (
+            <div key={block.id} className="rounded-md border border-dash-border bg-dash-bg p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Badge variant="primary">{block.type}</Badge>
+                  <span className="text-xs text-dash-muted">Block {idx + 1}</span>
+                </div>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => moveBlock(idx, -1)} disabled={idx === 0}>↑</Button>
+                  <Button variant="ghost" size="sm" onClick={() => moveBlock(idx, 1)} disabled={idx === blocks.length - 1}>↓</Button>
+                  <Button variant="ghost" size="sm" onClick={() => removeBlock(idx)}>Remove</Button>
+                </div>
+              </div>
+              <BlockEditor block={block} onChange={(patch) => updateBlock(idx, patch)} onPropChange={(key, val) => updateBlockProp(idx, key, val)} />
+            </div>
+          ))}
+
+          {blocks.length === 0 && (
+            <p className="py-4 text-center text-sm text-dash-muted">No blocks yet. Add one below.</p>
+          )}
+
+          {/* Add block buttons */}
+          <div className="flex flex-wrap gap-2 border-t border-dash-border pt-4">
+            {BLOCK_TYPES.map((def) => (
+              <button
+                key={def.type}
+                type="button"
+                onClick={() => setBlocks((prev) => [...prev, createBlock(def.type)])}
+                className="flex items-center gap-2 rounded-md border border-dash-border bg-dash-surface px-3 py-1.5 text-xs font-medium text-dash-text transition-colors hover:border-dash-primary hover:bg-dash-bg"
+                title={def.description}
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d={def.icon} />
+                </svg>
+                {def.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Card>
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Block Editor — renders controls for each block type
+// ---------------------------------------------------------------------------
 interface BlockEditorProps {
   block: Block;
-  onChange: (content: Record<string, unknown>) => void;
-  userId: string | null;
+  onChange: (patch: Partial<Block>) => void;
+  onPropChange: (key: string, value: unknown) => void;
 }
 
-function BlockEditor({ block, onChange, userId }: BlockEditorProps) {
-  const c = block.content;
-  const update = (patch: Record<string, unknown>) => onChange({ ...c, ...patch });
-
+function BlockEditor({ block, onPropChange }: BlockEditorProps) {
   switch (block.type) {
     case "heading":
       return (
         <div className="space-y-3">
           <Input
             label="Text"
-            value={(c.text as string) || ""}
-            onChange={(e) => update({ text: e.target.value })}
-            placeholder="Heading text"
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-dash-text">Font Size (px)</label>
-              <input
-                type="number"
-                value={(c.fontSize as number) || 24}
-                onChange={(e) => update({ fontSize: Number(e.target.value) })}
-                className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
-                min={8}
-                max={72}
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-dash-text">Alignment</label>
-              <select
-                value={(c.align as string) || "center"}
-                onChange={(e) => update({ align: e.target.value })}
-                className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
-              >
-                <option value="left">Left</option>
-                <option value="center">Center</option>
-                <option value="right">Right</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      );
-
-    case "text":
-      return (
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-dash-text">HTML Content</label>
-          <textarea
-            value={(c.html as string) || ""}
-            onChange={(e) => update({ html: e.target.value })}
-            placeholder="<p>Write your content here...</p>"
-            rows={5}
-            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
-          />
-        </div>
-      );
-
-    case "image":
-      return (
-        <div className="space-y-3">
-          {userId && (
-            <ImageUpload
-              value={(c.url as string) || null}
-              onChange={(url) => update({ url })}
-              userId={userId}
-              label="Image"
-              aspectRatio="auto"
-            />
-          )}
-          <Input
-            label="Alt Text"
-            value={(c.alt as string) || ""}
-            onChange={(e) => update({ alt: e.target.value })}
-            placeholder="Image description"
+            value={(block.props.text as string) ?? ""}
+            onChange={(e) => onPropChange("text", e.target.value)}
           />
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-dash-text">Width</label>
+            <label className="mb-1.5 block text-sm font-medium text-dash-text">Level</label>
             <select
-              value={(c.width as string) || "full"}
-              onChange={(e) => update({ width: e.target.value })}
-              className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+              value={(block.props.level as number) ?? 2}
+              onChange={(e) => onPropChange("level", parseInt(e.target.value, 10))}
+              className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text"
             >
-              <option value="full">Full Width</option>
-              <option value="auto">Auto</option>
+              <option value={1}>H1</option>
+              <option value={2}>H2</option>
+              <option value={3}>H3</option>
             </select>
           </div>
         </div>
       );
 
-    case "divider":
-      return <p className="text-sm text-dash-muted">A horizontal divider line. No configuration needed.</p>;
+    case "paragraph":
+      return (
+        <RichTextEditor
+          value={(block.props.text as string) ?? ""}
+          onChange={(html) => onPropChange("text", html)}
+          placeholder="Write paragraph content…"
+        />
+      );
+
+    case "image":
+      return (
+        <div className="space-y-3">
+          <Input
+            label="Image URL"
+            value={(block.props.url as string) ?? ""}
+            onChange={(e) => onPropChange("url", e.target.value)}
+            placeholder="https://…"
+          />
+          <Input
+            label="Alt Text"
+            value={(block.props.alt as string) ?? ""}
+            onChange={(e) => onPropChange("alt", e.target.value)}
+          />
+          <Input
+            label="Caption"
+            value={(block.props.caption as string) ?? ""}
+            onChange={(e) => onPropChange("caption", e.target.value)}
+          />
+        </div>
+      );
 
     case "button":
       return (
         <div className="space-y-3">
           <Input
             label="Button Text"
-            value={(c.text as string) || ""}
-            onChange={(e) => update({ text: e.target.value })}
-            placeholder="Click Here"
+            value={(block.props.text as string) ?? ""}
+            onChange={(e) => onPropChange("text", e.target.value)}
           />
           <Input
             label="Link URL"
-            value={(c.url as string) || ""}
-            onChange={(e) => update({ url: e.target.value })}
-            placeholder="https://..."
+            value={(block.props.url as string) ?? ""}
+            onChange={(e) => onPropChange("url", e.target.value)}
+            placeholder="https://…"
+          />
+        </div>
+      );
+
+    case "quote":
+      return (
+        <div className="space-y-3">
+          <Input
+            label="Quote"
+            value={(block.props.text as string) ?? ""}
+            onChange={(e) => onPropChange("text", e.target.value)}
+          />
+          <Input
+            label="Author"
+            value={(block.props.author as string) ?? ""}
+            onChange={(e) => onPropChange("author", e.target.value)}
           />
         </div>
       );
 
     case "spacer":
       return (
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-dash-text">Height (px)</label>
-          <input
-            type="number"
-            value={(c.height as number) || 32}
-            onChange={(e) => update({ height: Number(e.target.value) })}
-            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
-            min={0}
-            max={200}
+        <Input
+          label="Height (px)"
+          type="number"
+          value={(block.props.height as number) ?? 48}
+          onChange={(e) => onPropChange("height", parseInt(e.target.value, 10) || 48)}
+        />
+      );
+
+    case "video":
+      return (
+        <div className="space-y-3">
+          <Input
+            label="Video URL"
+            value={(block.props.url as string) ?? ""}
+            onChange={(e) => onPropChange("url", e.target.value)}
+            placeholder="YouTube or Vimeo URL"
+          />
+          <Input
+            label="Title"
+            value={(block.props.title as string) ?? ""}
+            onChange={(e) => onPropChange("title", e.target.value)}
           />
         </div>
       );
 
+    case "countdown":
+      return (
+        <div className="space-y-3">
+          <Input
+            label="Target Date"
+            type="datetime-local"
+            value={((block.props.targetDate as string) ?? "").slice(0, 16)}
+            onChange={(e) => onPropChange("targetDate", e.target.value ? new Date(e.target.value).toISOString() : "")}
+          />
+          <Input
+            label="Label"
+            value={(block.props.label as string) ?? ""}
+            onChange={(e) => onPropChange("label", e.target.value)}
+          />
+        </div>
+      );
+
+    case "rsvp":
+      return (
+        <div className="space-y-3">
+          <Input
+            label="Heading"
+            value={(block.props.heading as string) ?? ""}
+            onChange={(e) => onPropChange("heading", e.target.value)}
+          />
+          <Input
+            label="Button Text"
+            value={(block.props.buttonText as string) ?? ""}
+            onChange={(e) => onPropChange("buttonText", e.target.value)}
+          />
+        </div>
+      );
+
+    case "html":
+      return (
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-dash-text">HTML</label>
+          <textarea
+            value={(block.props.html as string) ?? ""}
+            onChange={(e) => onPropChange("html", e.target.value)}
+            rows={6}
+            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 font-mono text-sm text-dash-text focus:border-dash-primary focus:outline-none focus:ring-1 focus:ring-dash-primary"
+            placeholder="<div>Custom HTML</div>"
+          />
+        </div>
+      );
+
+    case "divider":
+      return <p className="text-sm text-dash-muted">A horizontal divider line. No configuration needed.</p>;
+
+    case "gallery":
+      return (
+        <Input
+          label="Columns"
+          type="number"
+          min={1}
+          max={6}
+          value={(block.props.columns as number) ?? 3}
+          onChange={(e) => onPropChange("columns", parseInt(e.target.value, 10) || 3)}
+        />
+      );
+
     default:
-      return null;
+      return <p className="text-sm text-dash-muted">No editor available for this block type.</p>;
   }
 }

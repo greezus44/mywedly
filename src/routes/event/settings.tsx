@@ -1,28 +1,32 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type Json } from "../../lib/supabase";
+import { supabase } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Card, Input, Textarea, Badge, Toggle, DateTimePicker, Modal } from "../../components/ui";
-import { formatDate, formatDateTime } from "../../lib/utils";
-import { isValidSlug } from "../../lib/theme";
+import { Input, Card, Modal, LoadingSpinner } from "../../components/ui";
+import { slugify, isValidSlug } from "../../lib/theme";
 
 export function SettingsPage() {
   const { event, eventId } = useEventContext();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [name, setName] = useState(event.draft_name || "");
-  const [slug, setSlug] = useState(event.draft_slug || "");
-  const [eventType, setEventType] = useState(event.draft_event_type || "Wedding");
-  const [eventDate, setEventDate] = useState(event.draft_event_date || "");
-  const [eventTime, setEventTime] = useState(event.draft_event_time || "");
-  const [venue, setVenue] = useState(event.draft_venue || "");
-  const [address, setAddress] = useState(event.draft_address || "");
-  const [rsvpDeadline, setRsvpDeadline] = useState(event.draft_rsvp_deadline || "");
-  const [isArchived, setIsArchived] = useState(event.is_archived);
-  const [showPublish, setShowPublish] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [name, setName] = useState(event.draft_name ?? event.name ?? "");
+  const [eventType, setEventType] = useState(event.draft_event_type ?? event.event_type ?? "Wedding");
+  const [venue, setVenue] = useState(event.draft_venue ?? event.venue ?? "");
+  const [address, setAddress] = useState(event.draft_address ?? event.address ?? "");
+  const [slug, setSlug] = useState(event.draft_slug ?? event.slug ?? "");
+  const [rsvpDeadline, setRsvpDeadline] = useState(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "");
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const [savedMsg, setSavedMsg] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+
+  useEffect(() => {
+    setName(event.draft_name ?? event.name ?? "");
+    setVenue(event.draft_venue ?? event.venue ?? "");
+    setSlug(event.draft_slug ?? event.slug ?? "");
+  }, [event]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -33,57 +37,11 @@ export function SettingsPage() {
         .from("user_events")
         .update({
           draft_name: name,
-          draft_slug: slug,
           draft_event_type: eventType,
-          draft_event_date: eventDate || null,
-          draft_event_time: eventTime || null,
           draft_venue: venue,
           draft_address: address,
+          draft_slug: slug,
           draft_rsvp_deadline: rsvpDeadline || null,
-          is_archived: isArchived,
-        })
-        .eq("id", eventId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaved(true);
-      setError(null);
-      setTimeout(() => setSaved(false), 2000);
-    },
-    onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to save settings.");
-    },
-  });
-
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      if (!slug || !isValidSlug(slug)) {
-        throw new Error("A valid slug is required to publish.");
-      }
-      if (!name) {
-        throw new Error("Event name is required to publish.");
-      }
-      const { error } = await supabase
-        .from("user_events")
-        .update({
-          slug,
-          name,
-          theme: event.draft_theme ?? event.theme,
-          cover_config: event.draft_cover_config ?? event.cover_config,
-          cover_image: event.draft_cover_image ?? event.cover_image,
-          logo_config: event.draft_logo_config ?? event.logo_config,
-          content: event.draft_content ?? event.content,
-          login_config: event.draft_login_config ?? event.login_config,
-          sharing_config: event.draft_sharing_config ?? event.sharing_config,
-          event_date: event.draft_event_date ?? event.event_date,
-          event_time: event.draft_event_time ?? event.event_time,
-          venue: event.draft_venue ?? event.venue,
-          address: event.draft_address ?? event.address,
-          event_type: event.draft_event_type ?? event.event_type,
-          rsvp_deadline: event.draft_rsvp_deadline ?? event.rsvp_deadline,
-          is_published: true,
-          published_at: new Date().toISOString(),
         })
         .eq("id", eventId);
       if (error) throw error;
@@ -91,170 +49,166 @@ export function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
       queryClient.invalidateQueries({ queryKey: ["events"] });
-      setShowPublish(false);
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 2000);
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to publish.");
+      setSlugError(err instanceof Error ? err.message : "Failed to save");
     },
   });
 
-  const unpublishMutation = useMutation({
+  const archiveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("user_events")
-        .update({ is_published: false })
+        .update({ is_archived: true })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
       queryClient.invalidateQueries({ queryKey: ["events"] });
+      navigate("/dashboard");
     },
   });
 
-  const handleSave = (e: FormEvent) => {
-    e.preventDefault();
-    saveMutation.mutate();
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("user_events")
+        .delete()
+        .eq("id", eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      navigate("/dashboard");
+    },
+  });
+
+  const handleSlugChange = (val: string) => {
+    setSlug(slugify(val));
+    setSlugError(null);
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-xl font-bold text-dash-text">Settings</h2>
-        <p className="text-sm text-dash-muted">Manage your event details and publishing.</p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-dash-text">Settings</h2>
+          <p className="text-sm text-dash-muted">Manage your event details and configuration.</p>
+        </div>
+        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+          {savedMsg ? "Saved!" : "Save Changes"}
+        </Button>
       </div>
 
-      {/* Publish status */}
+      {saveMutation.isError && (
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save"}
+        </p>
+      )}
+
+      {/* Event Details */}
       <Card>
-        <div className="flex items-center justify-between">
+        <h3 className="mb-4 text-sm font-semibold text-dash-text">Event Details</h3>
+        <div className="space-y-4">
+          <Input
+            label="Event Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. John & Jane's Wedding"
+          />
           <div>
-            <h3 className="text-sm font-semibold text-dash-text">Publish Status</h3>
-            <p className="mt-1 text-sm text-dash-muted">
-              {event.is_published
-                ? `Published on ${event.published_at ? formatDateTime(event.published_at) : "unknown date"}`
-                : "This event is not yet published."}
-            </p>
+            <label className="mb-1.5 block text-sm font-medium text-dash-text">Event Type</label>
+            <select
+              value={eventType}
+              onChange={(e) => setEventType(e.target.value)}
+              className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text"
+            >
+              <option value="Wedding">Wedding</option>
+              <option value="Birthday">Birthday</option>
+              <option value="Corporate">Corporate</option>
+              <option value="Other">Other</option>
+            </select>
           </div>
-          <div className="flex items-center gap-2">
-            {event.is_published ? (
-              <>
-                <Badge variant="success">Published</Badge>
-                <Button variant="secondary" size="sm" onClick={() => unpublishMutation.mutate()} loading={unpublishMutation.isPending}>
-                  Unpublish
-                </Button>
-              </>
-            ) : (
-              <>
-                <Badge variant="default">Draft</Badge>
-                <Button size="sm" onClick={() => setShowPublish(true)}>Publish</Button>
-              </>
-            )}
-          </div>
+          <Input
+            label="Venue"
+            value={venue}
+            onChange={(e) => setVenue(e.target.value)}
+            placeholder="e.g. The Grand Ballroom"
+          />
+          <Input
+            label="Address"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="e.g. 123 Main Street, London"
+          />
         </div>
       </Card>
 
-      {/* Event details */}
-      <form onSubmit={handleSave}>
-        <Card>
-          <h3 className="mb-4 text-sm font-semibold text-dash-text">Event Details</h3>
-          <div className="space-y-4">
-            <Input
-              label="Event Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="John & Jane's Wedding"
-              required
-            />
-            <Input
-              label="URL Slug"
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              placeholder="john-and-jane"
-            />
-            <p className="-mt-2 text-xs text-dash-muted">Lowercase letters, numbers, and hyphens only.</p>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-dash-text">Event Type</label>
-              <select
-                value={eventType}
-                onChange={(e) => setEventType(e.target.value)}
-                className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
-              >
-                <option value="Wedding">Wedding</option>
-                <option value="Birthday">Birthday</option>
-                <option value="Corporate">Corporate</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input
-                label="Event Date"
-                type="date"
-                value={eventDate}
-                onChange={(e) => setEventDate(e.target.value)}
-              />
-              <Input
-                label="Event Time"
-                type="time"
-                value={eventTime}
-                onChange={(e) => setEventTime(e.target.value)}
-              />
-            </div>
-            <Input
-              label="Venue"
-              value={venue}
-              onChange={(e) => setVenue(e.target.value)}
-              placeholder="Venue name"
-            />
-            <Textarea
-              label="Address"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Full venue address"
-              rows={2}
-            />
-            <DateTimePicker
-              label="RSVP Deadline"
-              value={rsvpDeadline}
-              onChange={setRsvpDeadline}
-            />
-            <Toggle
-              checked={isArchived}
-              onChange={setIsArchived}
-              label="Archive this event"
-            />
-          </div>
+      {/* URL Slug */}
+      <Card>
+        <h3 className="mb-4 text-sm font-semibold text-dash-text">URL Slug</h3>
+        <Input
+          label="Slug"
+          value={slug}
+          onChange={(e) => handleSlugChange(e.target.value)}
+          placeholder="john-and-jane"
+          error={slugError ?? undefined}
+        />
+        {slug && (
+          <p className="mt-2 text-xs text-dash-muted">
+            Your invitation will be at: <span className="text-dash-primary">{window.location.origin}/e/{slug}</span>
+          </p>
+        )}
+      </Card>
 
-          {error && <p className="mt-3 text-sm text-dash-danger">{error}</p>}
+      {/* RSVP Deadline */}
+      <Card>
+        <h3 className="mb-4 text-sm font-semibold text-dash-text">RSVP Deadline</h3>
+        <Input
+          label="Deadline"
+          type="datetime-local"
+          value={rsvpDeadline ? rsvpDeadline.slice(0, 16) : ""}
+          onChange={(e) => setRsvpDeadline(e.target.value ? new Date(e.target.value).toISOString() : "")}
+        />
+      </Card>
 
-          <div className="mt-4 flex justify-end">
-            <Button type="submit" loading={saveMutation.isPending}>
-              {saved ? "Saved!" : "Save Settings"}
-            </Button>
-          </div>
-        </Card>
-      </form>
+      {/* Danger Zone */}
+      <Card className="border-dash-danger/30">
+        <h3 className="mb-4 text-sm font-semibold text-dash-danger">Danger Zone</h3>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button
+            variant="secondary"
+            onClick={() => archiveMutation.mutate()}
+            loading={archiveMutation.isPending}
+          >
+            Archive Event
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => setShowDelete(true)}
+          >
+            Delete Event
+          </Button>
+        </div>
+      </Card>
 
-      {/* Publish confirmation modal */}
-      <Modal open={showPublish} onClose={() => setShowPublish(false)} title="Publish Event">
+      <Modal open={showDelete} onClose={() => setShowDelete(false)} title="Delete Event">
         <div className="space-y-4">
           <p className="text-sm text-dash-muted">
-            Publishing will copy all draft content to your live event site. Guests will be able to
-            access it at <span className="font-medium text-dash-text">/e/{slug}</span>.
+            Are you sure you want to permanently delete this event? This action cannot be undone and all
+            guest data, RSVPs, and custom pages will be lost.
           </p>
-          <div className="rounded-lg bg-dash-bg p-3 text-sm">
-            <p><span className="text-dash-muted">Name:</span> {name || "—"}</p>
-            <p><span className="text-dash-muted">Slug:</span> /e/{slug || "—"}</p>
-            {eventDate && <p><span className="text-dash-muted">Date:</span> {formatDate(eventDate)}</p>}
-          </div>
-          {publishMutation.isError && (
+          {deleteMutation.isError && (
             <p className="text-sm text-dash-danger">
-              {publishMutation.error instanceof Error ? publishMutation.error.message : "Failed to publish."}
+              {deleteMutation.error instanceof Error ? deleteMutation.error.message : "Failed to delete"}
             </p>
           )}
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setShowPublish(false)}>Cancel</Button>
-            <Button onClick={() => publishMutation.mutate()} loading={publishMutation.isPending}>
-              Publish Now
+            <Button variant="secondary" onClick={() => setShowDelete(false)}>Cancel</Button>
+            <Button variant="danger" onClick={() => deleteMutation.mutate()} loading={deleteMutation.isPending}>
+              Delete Permanently
             </Button>
           </div>
         </div>
