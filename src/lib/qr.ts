@@ -1,64 +1,52 @@
 import QRCode from "qrcode";
 
-export async function generateQrDataUrl(
-  text: string,
-  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
-): Promise<string> {
-  return QRCode.toDataURL(text, {
-    width: options?.width ?? 256,
-    margin: options?.margin ?? 2,
+export async function generateQrDataUrl(text: string, opts?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }): Promise<string> {
+  const qrOpts = {
+    width: opts?.width ?? 256,
+    margin: opts?.margin ?? 2,
     color: {
-      dark: options?.color?.dark ?? "#000000",
-      light: options?.color?.light ?? "#ffffff",
+      dark: opts?.color?.dark ?? "#000000",
+      light: opts?.color?.light ?? "#ffffff",
     },
-    errorCorrectionLevel: "M",
-  });
-}
-
-export async function generateQrSvg(
-  text: string,
-  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
-): Promise<string> {
-  return QRCode.toString(text, {
-    type: "svg",
-    width: options?.width ?? 256,
-    margin: options?.margin ?? 2,
-    color: {
-      dark: options?.color?.dark ?? "#000000",
-      light: options?.color?.light ?? "#ffffff",
-    },
-    errorCorrectionLevel: "M",
-  });
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  return QRCode.toDataURL(text, qrOpts);
 }
 
 export async function downloadQrCode(
   text: string,
-  filename = "qr-code.png",
-  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
+  fileName: string = "qr-code.png",
+  opts?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
 ): Promise<void> {
-  const dataUrl = await generateQrDataUrl(text, options);
-  const res = await fetch(dataUrl);
-  const blob = await res.blob();
-  downloadBlob(blob, filename);
+  const dataUrl = await generateQrDataUrl(text, opts);
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 export async function downloadQrSvg(
   text: string,
-  filename = "qr-code.svg",
-  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
+  fileName: string = "qr-code.svg",
+  opts?: { margin?: number; color?: { dark?: string; light?: string } }
 ): Promise<void> {
-  const svg = await generateQrSvg(text, options);
+  const svgOpts = {
+    type: "svg" as const,
+    margin: opts?.margin ?? 2,
+    color: {
+      dark: opts?.color?.dark ?? "#000000",
+      light: opts?.color?.light ?? "#ffffff",
+    },
+  };
+  const svg = await QRCode.toString(text, svgOpts);
   const blob = new Blob([svg], { type: "image/svg+xml" });
-  downloadBlob(blob, filename);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

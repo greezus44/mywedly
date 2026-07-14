@@ -1,21 +1,20 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 
 interface DatePickerProps {
-  value: string | null;
+  value?: string | null;
   onChange: (isoDate: string | null) => void;
   label?: string;
   placeholder?: string;
   className?: string;
-  min?: string;
-  max?: string;
 }
 
-const MONTH_NAMES = [
+const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
-const DAY_NAMES = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+const DOW = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 function toISODate(date: Date): string {
   const y = date.getFullYear();
@@ -24,144 +23,115 @@ function toISODate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function parseISODate(iso: string | null | undefined): Date | null {
-  if (!iso) return null;
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return null;
-  return new Date(y, m - 1, d);
+function parseISODate(iso: string): Date | null {
+  const parts = iso.split("-");
+  if (parts.length !== 3) return null;
+  const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  if (isNaN(d.getTime())) return null;
+  return d;
 }
 
-function formatDateDisplay(iso: string | null): string {
-  if (!iso) return "";
-  const date = parseISODate(iso);
-  if (!date) return "";
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-export function DatePicker({
-  value,
-  onChange,
-  label,
-  placeholder = "Select a date",
-  className,
-  min,
-  max,
-}: DatePickerProps) {
+export function DatePicker({ value, onChange, label, placeholder = "Select date", className }: DatePickerProps) {
   const [open, setOpen] = useState(false);
-  const [viewMonth, setViewMonth] = useState(() => {
-    const d = parseISODate(value);
-    return d ?? new Date();
+  const [viewDate, setViewDate] = useState(() => {
+    const parsed = value ? parseISODate(value) : null;
+    return parsed ?? new Date();
   });
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
+    function handleClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
     if (open) {
-      document.addEventListener("mousedown", handleClick);
-      return () => document.removeEventListener("mousedown", handleClick);
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [open]);
 
-  useEffect(() => {
-    if (open) {
-      const d = parseISODate(value);
-      setViewMonth(d ?? new Date());
-    }
-  }, [open, value]);
+  const selected = value ? parseISODate(value) : null;
 
-  const handleSelect = useCallback(
-    (day: Date) => {
-      onChange(toISODate(day));
-      setOpen(false);
-    },
-    [onChange]
-  );
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
 
-  const prevMonth = () => {
-    setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1));
-  };
-  const nextMonth = () => {
-    setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1));
-  };
-
-  const year = viewMonth.getFullYear();
-  const month = viewMonth.getMonth();
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
+  const startPad = firstDay.getDay();
   const daysInMonth = lastDay.getDate();
-  const startWeekday = firstDay.getDay();
 
-  const cells: (Date | null)[] = [];
-  for (let i = 0; i < startWeekday; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startPad; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
 
-  const selectedDate = parseISODate(value);
-  const minDate = parseISODate(min);
-  const maxDate = parseISODate(max);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const prevMonth = () => setViewDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
+
+  const selectDay = (day: number) => {
+    const date = new Date(year, month, day);
+    onChange(toISODate(date));
+    setOpen(false);
+  };
+
+  const displayValue = selected
+    ? `${MONTHS[selected.getMonth()]} ${selected.getDate()}, ${selected.getFullYear()}`
+    : "";
 
   return (
-    <div className={cn("relative", className)} ref={containerRef}>
-      {label && <label className="block text-sm font-medium text-dash-text mb-1">{label}</label>}
+    <div ref={containerRef} className={cn("relative w-full", className)}>
+      {label && <label className="mb-1.5 block text-sm font-medium text-dash-text">{label}</label>}
       <button
         type="button"
         onClick={() => setOpen(!open)}
         className={cn(
-          "w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-left text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+          "w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-left text-sm text-dash-text transition-colors hover:bg-dash-bg focus:outline-none focus:ring-2 focus:ring-dash-primary/30",
+          !displayValue && "text-dash-muted"
         )}
       >
-        {value ? formatDateDisplay(value) : <span className="text-dash-muted">{placeholder}</span>}
+        {displayValue || placeholder}
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 rounded-lg border border-dash-border bg-dash-surface shadow-lg p-3 w-72">
-          <div className="flex items-center justify-between mb-3">
-            <button type="button" onClick={prevMonth} className="px-2 py-1 rounded hover:bg-dash-bg text-dash-text">
-              ‹
+        <div className="absolute z-50 mt-1 w-64 rounded-lg border border-dash-border bg-dash-surface p-3 shadow-lg">
+          <div className="mb-3 flex items-center justify-between">
+            <button type="button" onClick={prevMonth} className="rounded p-1 text-dash-muted hover:bg-dash-bg">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
             </button>
-            <span className="text-sm font-medium text-dash-text">
-              {MONTH_NAMES[month]} {year}
+            <span className="text-sm font-semibold text-dash-text">
+              {MONTHS[month]} {year}
             </span>
-            <button type="button" onClick={nextMonth} className="px-2 py-1 rounded hover:bg-dash-bg text-dash-text">
-              ›
+            <button type="button" onClick={nextMonth} className="rounded p-1 text-dash-muted hover:bg-dash-bg">
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
             </button>
           </div>
-          <div className="grid grid-cols-7 gap-1 mb-1">
-            {DAY_NAMES.map((d) => (
-              <div key={d} className="text-center text-xs text-dash-muted font-medium py-1">
-                {d}
-              </div>
+          <div className="mb-1 grid grid-cols-7 gap-1 text-center">
+            {DOW.map((d) => (
+              <div key={d} className="text-xs font-medium text-dash-muted">{d}</div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1">
-            {cells.map((date, i) => {
-              if (!date) return <div key={i} />;
-              const isSelected = selectedDate && date.getTime() === selectedDate.getTime();
-              const isDisabled =
-                Boolean((minDate && date < minDate) || (maxDate && date > maxDate));
+          <div className="grid grid-cols-7 gap-1 text-center">
+            {cells.map((day, i) => {
+              if (day === null) return <div key={i} />;
+              const isSelected =
+                selected &&
+                selected.getDate() === day &&
+                selected.getMonth() === month &&
+                selected.getFullYear() === year;
               return (
                 <button
                   key={i}
                   type="button"
-                  disabled={isDisabled}
-                  onClick={() => handleSelect(date)}
+                  onClick={() => selectDay(day)}
                   className={cn(
-                    "text-sm rounded h-8 w-8 flex items-center justify-center transition-colors",
-                    isSelected
-                      ? "bg-dash-primary text-dash-primary-fg"
-                      : "text-dash-text hover:bg-dash-bg",
-                    isDisabled && "opacity-30 cursor-not-allowed hover:bg-transparent"
+                    "h-8 w-8 rounded-md text-sm transition-colors hover:bg-dash-bg",
+                    isSelected ? "bg-dash-primary text-dash-primary-fg" : "text-dash-text"
                   )}
                 >
-                  {date.getDate()}
+                  {day}
                 </button>
               );
             })}
@@ -173,7 +143,7 @@ export function DatePicker({
                 onChange(null);
                 setOpen(false);
               }}
-              className="mt-2 text-xs text-dash-muted hover:text-dash-text w-full text-center"
+              className="mt-2 w-full rounded-md py-1 text-xs text-dash-muted hover:bg-dash-bg"
             >
               Clear
             </button>

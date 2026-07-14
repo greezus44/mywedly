@@ -1,8 +1,8 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui";
+import { Input } from "../components/ui/Input";
 import { LoadingSpinner } from "../components/ui";
 
 export function AuthPage() {
@@ -10,7 +10,6 @@ export function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,18 +23,16 @@ export function AuthPage() {
         const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName } },
         });
         if (signUpError) throw signUpError;
         if (data.user) {
           navigate("/dashboard");
         }
       } else {
-        const { data, error: signInError } =
-          await supabase.auth.signInWithPassword({
-            email,
-            password,
-          });
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
         if (signInError) throw signInError;
         if (data.user) {
           navigate("/dashboard");
@@ -49,58 +46,24 @@ export function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-dash-bg flex flex-col items-center justify-center px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <Link to="/" className="inline-block">
-            <span className="text-3xl font-bold text-dash-text">
-              My<span className="text-dash-primary">Wedly</span>
-            </span>
+        <div className="mb-8 text-center">
+          <Link to="/" className="text-2xl font-bold text-dash-primary">
+            MyWedly
           </Link>
-          <p className="mt-2 text-sm text-dash-muted">
+          <h1 className="mt-4 text-2xl font-bold text-dash-text">
+            {mode === "signin" ? "Welcome back" : "Create your account"}
+          </h1>
+          <p className="mt-1 text-sm text-dash-muted">
             {mode === "signin"
               ? "Sign in to manage your invitation websites"
-              : "Create an account to get started"}
+              : "Sign up to start creating beautiful invitations"}
           </p>
         </div>
 
-        <div className="rounded-lg border border-dash-border bg-dash-surface shadow-sm p-6">
-          <div className="flex rounded-lg border border-dash-border bg-dash-bg p-0.5 mb-6">
-            <button
-              type="button"
-              onClick={() => setMode("signin")}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                mode === "signin"
-                  ? "bg-dash-primary text-dash-primary-fg"
-                  : "text-dash-text hover:bg-dash-surface"
-              }`}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("signup")}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                mode === "signup"
-                  ? "bg-dash-primary text-dash-primary-fg"
-                  : "text-dash-text hover:bg-dash-surface"
-              }`}
-            >
-              Sign up
-            </button>
-          </div>
-
+        <div className="rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === "signup" && (
-              <Input
-                label="Full name"
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Your full name"
-                required
-              />
-            )}
             <Input
               label="Email"
               type="email"
@@ -108,6 +71,7 @@ export function AuthPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               required
+              autoComplete="email"
             />
             <Input
               label="Password"
@@ -116,35 +80,62 @@ export function AuthPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
               minLength={6}
             />
 
             {error && (
-              <div className="rounded-md border border-dash-danger/20 bg-dash-danger/5 px-4 py-3">
-                <p className="text-sm text-dash-danger">{error}</p>
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {error}
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <LoadingSpinner className="h-4 w-4" />
-                  {mode === "signin" ? "Signing in..." : "Signing up..."}
-                </>
-              ) : mode === "signin" ? (
-                "Sign in"
-              ) : (
-                "Sign up"
-              )}
+            <Button type="submit" className="w-full" loading={loading}>
+              {mode === "signin" ? "Sign in" : "Sign up"}
             </Button>
           </form>
+
+          <div className="mt-4 text-center text-sm text-dash-muted">
+            {mode === "signin" ? (
+              <>
+                Don't have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signup");
+                    setError(null);
+                  }}
+                  className="font-medium text-dash-primary hover:underline"
+                >
+                  Sign up
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signin");
+                    setError(null);
+                  }}
+                  className="font-medium text-dash-primary hover:underline"
+                >
+                  Sign in
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
-        <p className="mt-6 text-center text-sm text-dash-muted">
-          <Link to="/" className="text-dash-primary hover:text-dash-primary-hover">
+        <div className="mt-4 text-center">
+          <Link
+            to="/"
+            className="text-sm text-dash-muted hover:text-dash-primary"
+          >
             ← Back to home
           </Link>
-        </p>
+        </div>
       </div>
     </div>
   );

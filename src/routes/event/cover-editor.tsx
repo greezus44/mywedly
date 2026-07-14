@@ -1,48 +1,55 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { Button } from "../../components/ui/Button";
-import { Input, RangeInput, Card, LoadingSpinner } from "../../components/ui";
+import { Input, Textarea, Select } from "../../components/ui";
+import { RangeInput, FormField, LoadingSpinner } from "../../components/ui";
 import { cn } from "../../lib/utils";
 
 interface LogoConfig {
-  url: string | null;
+  src: string | null;
   size: number;
   align: "left" | "center" | "right";
 }
 
 interface CoverConfig {
-  title?: string;
-  subtitle?: string;
-  date?: string;
-  venue?: string;
-  coverImage?: string;
+  title?: Json;
+  subtitle?: Json;
+  overlay?: number;
+  align?: string;
 }
-
-const DEFAULT_LOGO: LogoConfig = { url: null, size: 120, align: "center" };
 
 export function CoverEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const [logoConfig, setLogoConfig] = useState<LogoConfig>(DEFAULT_LOGO);
-  const [coverImage, setCoverImage] = useState<string | null>(null);
-  const [coverConfig, setCoverConfig] = useState<CoverConfig>({});
+  const [coverImage, setCoverImage] = useState<string | null>(
+    event.draft_cover_image ?? null
+  );
+  const [coverConfig, setCoverConfig] = useState<CoverConfig>(
+    (event.draft_cover_config as unknown as CoverConfig) ?? {}
+  );
+  const [logoConfig, setLogoConfig] = useState<LogoConfig>(
+    (event.draft_logo_config as unknown as LogoConfig) ?? {
+      src: null,
+      size: 120,
+      align: "center",
+    }
+  );
 
   useEffect(() => {
-    const storedLogo = (event.draft_logo_config ?? event.logo_config ?? {}) as Record<string, unknown>;
-    setLogoConfig({
-      url: (storedLogo.url as string) ?? null,
-      size: (storedLogo.size as number) ?? 120,
-      align: (storedLogo.align as "left" | "center" | "right") ?? "center",
-    });
-    setCoverImage(event.draft_cover_image ?? event.cover_image ?? null);
-    setCoverConfig(
-      (event.draft_cover_config ?? event.cover_config ?? {}) as CoverConfig
+    setCoverImage(event.draft_cover_image ?? null);
+    setCoverConfig((event.draft_cover_config as unknown as CoverConfig) ?? {});
+    setLogoConfig(
+      (event.draft_logo_config as unknown as LogoConfig) ?? {
+        src: null,
+        size: 120,
+        align: "center",
+      }
     );
   }, [event]);
 
@@ -51,9 +58,9 @@ export function CoverEditor() {
       const { error } = await supabase
         .from("user_events")
         .update({
-          draft_logo_config: logoConfig as unknown as Json,
           draft_cover_image: coverImage,
           draft_cover_config: coverConfig as unknown as Json,
+          draft_logo_config: logoConfig as unknown as Json,
         })
         .eq("id", eventId);
       if (error) throw error;
@@ -63,172 +70,196 @@ export function CoverEditor() {
     },
   });
 
-  const alignments: { value: "left" | "center" | "right"; label: string }[] = [
-    { value: "left", label: "Left" },
-    { value: "center", label: "Center" },
-    { value: "right", label: "Right" },
-  ];
-
-  const editor = (
-    <div className="p-4 space-y-6">
-      {/* Logo section */}
-      <div>
-        <h3 className="text-sm font-semibold text-dash-text mb-3">Logo</h3>
-        <ImageUpload
-          value={logoConfig.url}
-          onChange={(url) => setLogoConfig({ ...logoConfig, url })}
-          pathPrefix={`events/${eventId}/logo`}
-          aspectRatio="square"
-          label="Upload logo"
-        />
-        {logoConfig.url && (
-          <>
-            <div className="mt-3">
-              <RangeInput
-                label="Logo size"
-                value={logoConfig.size}
-                onChange={(size) => setLogoConfig({ ...logoConfig, size })}
-                min={40}
-                max={300}
-                step={10}
-              />
-            </div>
-            <div className="mt-3">
-              <label className="block text-sm font-medium text-dash-text mb-1">
-                Alignment
-              </label>
-              <div className="flex gap-1">
-                {alignments.map((align) => (
-                  <button
-                    key={align.value}
-                    type="button"
-                    onClick={() => setLogoConfig({ ...logoConfig, align: align.value })}
-                    className={cn(
-                      "px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
-                      logoConfig.align === align.value
-                        ? "bg-dash-primary text-dash-primary-fg"
-                        : "bg-dash-bg text-dash-text hover:bg-dash-border"
-                    )}
-                  >
-                    {align.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Cover image */}
-      <div>
-        <h3 className="text-sm font-semibold text-dash-text mb-3">Cover Image</h3>
-        <ImageUpload
-          value={coverImage}
-          onChange={(url) => setCoverImage(url)}
-          pathPrefix={`events/${eventId}/cover`}
-          aspectRatio="wide"
-          label="Upload cover image"
-        />
-      </div>
-
-      {/* Cover text */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-dash-text">Cover Text</h3>
-        <Input
-          label="Title"
-          type="text"
-          value={coverConfig.title ?? ""}
-          onChange={(e) => setCoverConfig({ ...coverConfig, title: e.target.value })}
-          placeholder="Our Wedding"
-        />
-        <Input
-          label="Subtitle"
-          type="text"
-          value={coverConfig.subtitle ?? ""}
-          onChange={(e) => setCoverConfig({ ...coverConfig, subtitle: e.target.value })}
-          placeholder="We're getting married"
-        />
-        <Input
-          label="Date"
-          type="text"
-          value={coverConfig.date ?? ""}
-          onChange={(e) => setCoverConfig({ ...coverConfig, date: e.target.value })}
-          placeholder="December 31, 2025"
-        />
-        <Input
-          label="Venue"
-          type="text"
-          value={coverConfig.venue ?? ""}
-          onChange={(e) => setCoverConfig({ ...coverConfig, venue: e.target.value })}
-          placeholder="Garden Venue"
-        />
-      </div>
-
-      <div className="flex items-center justify-between pt-2 border-t border-dash-border">
-        {saveMutation.isError && (
-          <p className="text-sm text-dash-danger">
-            {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
-          </p>
-        )}
-        {saveMutation.isSuccess && (
-          <p className="text-sm text-green-600">Saved!</p>
-        )}
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-          className="ml-auto"
-        >
-          Save changes
-        </Button>
-      </div>
-    </div>
-  );
-
-  const preview = (
-    <div className="p-4">
-      <Card className="overflow-hidden">
-        <CoverPreview
-          config={{ ...coverConfig, coverImage } as unknown as Json}
-        />
-      </Card>
-      {logoConfig.url && (
-        <div className="mt-4 flex justify-center">
-          <img
-            src={logoConfig.url}
-            alt="Logo"
-            style={{
-              width: `${logoConfig.size}px`,
-              height: "auto",
-            }}
-            className={cn(
-              logoConfig.align === "left" && "mr-auto",
-              logoConfig.align === "right" && "ml-auto",
-              logoConfig.align === "center" && "mx-auto",
-            )}
-          />
-        </div>
-      )}
-    </div>
-  );
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-dash-text">Cover Editor</h2>
-          <p className="text-sm text-dash-muted">
-            Customize the cover page of your invitation website
-          </p>
-        </div>
+        <h2 className="text-xl font-semibold text-dash-text">Cover Editor</h2>
+        <Button
+          onClick={() => saveMutation.mutate()}
+          loading={saveMutation.isPending}
+        >
+          Save Changes
+        </Button>
       </div>
-      {saveMutation.isPending && (
-        <div className="flex items-center gap-2 text-sm text-dash-muted">
-          <LoadingSpinner className="h-4 w-4" /> Saving...
-        </div>
+
+      {saveMutation.isError && (
+        <p className="text-sm text-red-600">
+          {saveMutation.error instanceof Error
+            ? saveMutation.error.message
+            : "Failed to save"}
+        </p>
       )}
-      <div className="h-[calc(100vh-220px)] min-h-[500px]">
-        <SplitEditor editor={editor} preview={preview} />
-      </div>
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-green-600">Saved successfully!</p>
+      )}
+
+      <SplitEditor
+        editorRatio={0.5}
+        editor={
+          <div className="space-y-6">
+            {/* Cover Image */}
+            <FormField label="Cover Image">
+              <ImageUpload
+                bucket="event-assets"
+                pathPrefix={`events/${eventId}/cover`}
+                value={coverImage}
+                onChange={setCoverImage}
+                aspectRatio="16/9"
+              />
+            </FormField>
+
+            {/* Overlay */}
+            <RangeInput
+              label="Overlay Opacity"
+              value={Math.round((coverConfig.overlay ?? 0.3) * 100)}
+              onChange={(v) =>
+                setCoverConfig({ ...coverConfig, overlay: v / 100 })
+              }
+              min={0}
+              max={90}
+              step={5}
+            />
+
+            {/* Alignment */}
+            <FormField label="Text Alignment">
+              <div className="flex gap-2">
+                {(["left", "center", "right"] as const).map((a) => (
+                  <Button
+                    key={a}
+                    variant={
+                      (coverConfig.align ?? "center") === a
+                        ? "primary"
+                        : "secondary"
+                    }
+                    size="sm"
+                    onClick={() => setCoverConfig({ ...coverConfig, align: a })}
+                  >
+                    {a.charAt(0).toUpperCase() + a.slice(1)}
+                  </Button>
+                ))}
+              </div>
+            </FormField>
+
+            {/* Title Text */}
+            <Input
+              label="Title Text"
+              value={
+                typeof coverConfig.title === "string"
+                  ? coverConfig.title
+                  : (coverConfig.title as { text?: string })?.text ?? ""
+              }
+              onChange={(e) =>
+                setCoverConfig({
+                  ...coverConfig,
+                  title: e.target.value,
+                })
+              }
+              placeholder="Our Wedding"
+            />
+
+            {/* Subtitle Text */}
+            <Input
+              label="Subtitle Text"
+              value={
+                typeof coverConfig.subtitle === "string"
+                  ? coverConfig.subtitle
+                  : (coverConfig.subtitle as { text?: string })?.text ?? ""
+              }
+              onChange={(e) =>
+                setCoverConfig({
+                  ...coverConfig,
+                  subtitle: e.target.value,
+                })
+              }
+              placeholder="e.g. We're getting married!"
+            />
+
+            {/* Logo Section */}
+            <div className="border-t border-dash-border pt-4">
+              <h3 className="mb-3 text-sm font-semibold text-dash-text">
+                Logo
+              </h3>
+              <ImageUpload
+                bucket="event-assets"
+                pathPrefix={`events/${eventId}/logo`}
+                value={logoConfig.src}
+                onChange={(src) =>
+                  setLogoConfig({ ...logoConfig, src })
+                }
+                label="Logo Image"
+                aspectRatio="1/1"
+              />
+
+              <div className="mt-4">
+                <RangeInput
+                  label="Logo Size"
+                  value={logoConfig.size}
+                  onChange={(v) =>
+                    setLogoConfig({ ...logoConfig, size: v })
+                  }
+                  min={40}
+                  max={300}
+                  step={10}
+                />
+              </div>
+
+              <div className="mt-4">
+                <FormField label="Logo Alignment">
+                  <div className="flex gap-2">
+                    {(["left", "center", "right"] as const).map((a) => (
+                      <Button
+                        key={a}
+                        variant={
+                          logoConfig.align === a ? "primary" : "secondary"
+                        }
+                        size="sm"
+                        onClick={() =>
+                          setLogoConfig({ ...logoConfig, align: a })
+                        }
+                      >
+                        {a.charAt(0).toUpperCase() + a.slice(1)}
+                      </Button>
+                    ))}
+                  </div>
+                </FormField>
+              </div>
+            </div>
+          </div>
+        }
+        preview={
+          <div className="relative">
+            {/* Logo preview overlay */}
+            {logoConfig.src && (
+              <div
+                className={cn(
+                  "absolute z-20 p-4",
+                  logoConfig.align === "left" && "left-0",
+                  logoConfig.align === "center" && "left-1/2 -translate-x-1/2",
+                  logoConfig.align === "right" && "right-0"
+                )}
+              >
+                <img
+                  src={logoConfig.src}
+                  alt="Logo"
+                  style={{
+                    width: `${logoConfig.size}px`,
+                    height: "auto",
+                  }}
+                />
+              </div>
+            )}
+            <CoverPreview
+              coverImage={coverImage}
+              coverConfig={coverConfig as unknown as Json}
+              name={event.draft_name || event.name}
+              eventType={event.draft_event_type || event.event_type}
+              eventDate={event.draft_event_date}
+              eventTime={event.draft_event_time}
+              venue={event.draft_venue}
+            />
+          </div>
+        }
+      />
     </div>
   );
 }

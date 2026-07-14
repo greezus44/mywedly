@@ -31,29 +31,28 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
-        return <>{this.props.fallback}</>;
+        return this.props.fallback;
       }
       return (
-        <div className="flex min-h-[200px] flex-col items-center justify-center p-6 text-center">
-          <div className="mb-3 text-dash-danger">
-            <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+        <div className="flex min-h-[200px] flex-col items-center justify-center p-8 text-center">
+          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+            <svg className="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
             </svg>
           </div>
-          <h2 className="text-lg font-semibold text-dash-text">Something went wrong</h2>
-          <p className="mt-1 text-sm text-dash-muted max-w-sm">
+          <h2 className="text-lg font-semibold text-gray-900">Something went wrong</h2>
+          <p className="mt-1 max-w-sm text-sm text-gray-500">
             {this.state.error?.message || "An unexpected error occurred."}
           </p>
           <button
-            type="button"
             onClick={this.handleReset}
-            className="mt-4 rounded-md bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg hover:bg-dash-primary-hover transition-colors"
+            className="mt-4 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
           >
             Try again
           </button>
         </div>
       );
     }
-    return <>{this.props.children}</>;
+    return this.props.children;
   }
 }

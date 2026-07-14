@@ -1,92 +1,90 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase, type CustomPage, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import {
-  Input,
-  Textarea,
-  Card,
-  LoadingSpinner,
-  ErrorState,
-  Select,
-} from "../../components/ui";
+import { Input, Textarea, Card, Badge, LoadingSpinner, ErrorState, EmptyState } from "../../components/ui";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
 import {
   BLOCK_TYPES,
   createBlock,
-  jsonToBlocks,
   blocksToJson,
+  jsonToBlocks,
   type Block,
   type BlockType,
 } from "./block-types";
 import { cn } from "../../lib/utils";
 
-async function fetchPage(pageId: string): Promise<CustomPage | null> {
-  const { data, error } = await supabase
-    .from("custom_pages")
-    .select("*")
-    .eq("id", pageId)
-    .maybeSingle();
-  if (error) throw error;
-  return data as CustomPage | null;
-}
-
-async function updatePage(
-  pageId: string,
-  updates: Partial<Pick<CustomPage, "title" | "slug" | "body" | "blocks" | "cover_image_url" | "nav_label" | "show_in_nav">>
-): Promise<void> {
-  const { error } = await supabase
-    .from("custom_pages")
-    .update(updates)
-    .eq("id", pageId);
-  if (error) throw error;
-}
-
 export function PageBuilder() {
   const { eventId } = useEventContext();
   const { pageId } = useParams<{ pageId: string }>();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
-  const [title, setTitle] = useState("");
-  const [slug, setSlug] = useState("");
-  const [navLabel, setNavLabel] = useState("");
-  const [showInNav, setShowInNav] = useState(true);
-  const [coverImage, setCoverImage] = useState<string | null>(null);
   const [blocks, setBlocks] = useState<Block[]>([]);
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [navLabel, setNavLabel] = useState("");
 
-  const { data: page, isLoading, isError, error, refetch } = useQuery({
+  const {
+    data: page,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["custom-page", pageId],
-    queryFn: () => fetchPage(pageId!),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("custom_pages")
+        .select("*")
+        .eq("id", pageId!)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("Page not found");
+      return data as CustomPage;
+    },
     enabled: !!pageId,
   });
 
   useEffect(() => {
     if (page) {
       setTitle(page.title);
-      setSlug(page.slug);
       setNavLabel(page.nav_label ?? "");
-      setShowInNav(page.show_in_nav);
-      setCoverImage(page.cover_image_url);
       setBlocks(jsonToBlocks(page.blocks));
     }
   }, [page]);
 
-  const saveMutation = useMutation({
+  const updateMutation = useMutation({
     mutationFn: async () => {
-      await updatePage(pageId!, {
-        title,
-        slug,
-        body: blocks.map((b) => b.content.text ?? "").join("\n\n"),
-        blocks: blocksToJson(blocks),
-        cover_image_url: coverImage,
-        nav_label: navLabel || null,
-        show_in_nav: showInNav,
-      });
+      const { error } = await supabase
+        .from("custom_pages")
+        .update({
+          title,
+          nav_label: navLabel || null,
+          blocks: blocksToJson(blocks),
+        })
+        .eq("id", pageId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["custom-page", pageId] });
+      queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] });
+    },
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("custom_pages")
+        .update({
+          title,
+          nav_label: navLabel || null,
+          blocks: blocksToJson(blocks),
+          is_published: true,
+        })
+        .eq("id", pageId!);
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom-page", pageId] });
@@ -95,317 +93,315 @@ export function PageBuilder() {
   });
 
   const addBlock = (type: BlockType) => {
-    const block = createBlock(type);
-    setBlocks([...blocks, block]);
-    setSelectedBlockId(block.id);
+    setBlocks([...blocks, createBlock(type)]);
+  };
+
+  const removeBlock = (id: string) => {
+    setBlocks(blocks.filter((b) => b.id !== id));
+  };
+
+  const moveBlock = (index: number, direction: "up" | "down") => {
+    const newBlocks = [...blocks];
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= newBlocks.length) return;
+    [newBlocks[index], newBlocks[targetIndex]] = [newBlocks[targetIndex], newBlocks[index]];
+    setBlocks(newBlocks);
   };
 
   const updateBlock = (id: string, content: Partial<Block["content"]>) => {
     setBlocks(blocks.map((b) => (b.id === id ? { ...b, content: { ...b.content, ...content } } : b)));
   };
 
-  const removeBlock = (id: string) => {
-    setBlocks(blocks.filter((b) => b.id !== id));
-    if (selectedBlockId === id) setSelectedBlockId(null);
-  };
-
-  const moveBlock = (id: string, direction: "up" | "down") => {
-    const index = blocks.findIndex((b) => b.id === id);
-    if (index === -1) return;
-    const newIndex = direction === "up" ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= blocks.length) return;
-    const updated = [...blocks];
-    [updated[index], updated[newIndex]] = [updated[newIndex], updated[index]];
-    setBlocks(updated);
-  };
-
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <LoadingSpinner className="h-8 w-8" />
+      <div className="flex justify-center py-12">
+        <LoadingSpinner />
       </div>
     );
   }
 
-  if (isError) {
+  if (isError || !page) {
     return (
-      <ErrorState
-        title="Failed to load page"
-        description={error instanceof Error ? error.message : undefined}
-        onRetry={() => refetch()}
-      />
+      <div className="space-y-4">
+        <Button variant="secondary" size="sm" onClick={() => navigate(`/event/${eventId}/pages`)}>
+          ← Back to Pages
+        </Button>
+        <ErrorState onRetry={() => refetch()} />
+      </div>
     );
-  }
-
-  if (!page) {
-    return <ErrorState title="Page not found" />;
   }
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Link to={`/event/${eventId}/pages`}>
-            <Button variant="ghost" size="sm">
-              ← Back to pages
-            </Button>
-          </Link>
-          <h2 className="text-xl font-bold text-dash-text">Page Builder</h2>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate(`/event/${eventId}/pages`)}
+          >
+            ← Back
+          </Button>
+          <h2 className="text-xl font-semibold text-dash-text">Page Builder</h2>
+          {page.is_published && <Badge color="success">Published</Badge>}
         </div>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-        >
-          Save changes
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => updateMutation.mutate()}
+            loading={updateMutation.isPending}
+          >
+            Save Draft
+          </Button>
+          <Button
+            onClick={() => publishMutation.mutate()}
+            loading={publishMutation.isPending}
+          >
+            Publish Page
+          </Button>
+        </div>
       </div>
 
-      {saveMutation.isSuccess && (
+      {updateMutation.isError && (
+        <p className="text-sm text-red-600">Failed to save</p>
+      )}
+      {updateMutation.isSuccess && (
         <p className="text-sm text-green-600">Saved!</p>
       )}
-      {saveMutation.isError && (
-        <p className="text-sm text-dash-danger">
-          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
-        </p>
-      )}
 
-      {/* Page settings */}
-      <Card className="p-4 space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
+      {/* Page Settings */}
+      <Card>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
-            label="Page title"
-            type="text"
+            label="Page Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
           <Input
-            label="URL slug"
-            type="text"
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-          />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Input
-            label="Nav label"
-            type="text"
+            label="Nav Label"
             value={navLabel}
             onChange={(e) => setNavLabel(e.target.value)}
             placeholder="Label shown in navigation"
           />
-          <Select
-            label="Show in navigation"
-            value={showInNav ? "true" : "false"}
-            onChange={(e) => setShowInNav(e.target.value === "true")}
-          >
-            <option value="true">Yes</option>
-            <option value="false">No</option>
-          </Select>
         </div>
-        <ImageUpload
-          label="Cover image"
-          value={coverImage}
-          onChange={setCoverImage}
-          pathPrefix={`events/${eventId}/pages`}
-          aspectRatio="wide"
-        />
       </Card>
 
-      {/* Block types palette */}
-      <Card className="p-4">
-        <h3 className="text-sm font-semibold text-dash-text mb-3">Add Block</h3>
+      {/* Block Palette */}
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h3 className="mb-3 text-sm font-semibold text-dash-text">Add Block</h3>
         <div className="flex flex-wrap gap-2">
           {BLOCK_TYPES.map((bt) => (
             <button
               key={bt.type}
-              type="button"
               onClick={() => addBlock(bt.type)}
-              className="inline-flex items-center gap-2 rounded-md border border-dash-border bg-dash-bg px-3 py-1.5 text-sm font-medium text-dash-text hover:border-dash-primary hover:bg-dash-primary/5 transition-colors"
+              className="flex items-center gap-2 rounded-md border border-dash-border px-3 py-2 text-sm font-medium text-dash-text transition-colors hover:bg-dash-bg"
             >
-              <span className="text-base">{bt.icon}</span>
+              <span className="text-lg">{bt.icon}</span>
               {bt.label}
             </button>
           ))}
         </div>
-      </Card>
+      </div>
 
       {/* Blocks */}
-      <div className="space-y-3">
-        {blocks.length === 0 && (
-          <Card className="p-8 text-center">
-            <p className="text-sm text-dash-muted">
-              No blocks yet. Add a block from the palette above to get started.
-            </p>
-          </Card>
-        )}
-        {blocks.map((block, index) => (
-          <Card
-            key={block.id}
-            className={cn(
-              "p-4 transition-colors",
-              selectedBlockId === block.id && "border-dash-primary"
-            )}
-            onClick={() => setSelectedBlockId(block.id)}
-          >
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-base">
-                  {BLOCK_TYPES.find((bt) => bt.type === block.type)?.icon}
-                </span>
-                <span className="text-sm font-medium text-dash-text capitalize">
-                  {block.type}
-                </span>
+      {blocks.length === 0 ? (
+        <EmptyState
+          title="No blocks yet"
+          description="Add blocks above to build your page."
+        />
+      ) : (
+        <div className="space-y-3">
+          {blocks.map((block, index) => (
+            <Card key={block.id}>
+              <div className="mb-3 flex items-center justify-between">
+                <Badge color="primary">{block.type}</Badge>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => moveBlock(index, "up")}
+                    disabled={index === 0}
+                  >
+                    ↑
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => moveBlock(index, "down")}
+                    disabled={index === blocks.length - 1}
+                  >
+                    ↓
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeBlock(block.id)}
+                  >
+                    ✕
+                  </Button>
+                </div>
               </div>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={index === 0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    moveBlock(block.id, "up");
-                  }}
-                >
-                  ↑
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={index === blocks.length - 1}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    moveBlock(block.id, "down");
-                  }}
-                >
-                  ↓
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeBlock(block.id);
-                  }}
-                >
-                  Delete
-                </Button>
-              </div>
-            </div>
-
-            {/* Block editor */}
-            <BlockEditor block={block} onChange={(content) => updateBlock(block.id, content)} eventId={eventId} />
-          </Card>
-        ))}
-      </div>
+              <BlockEditor block={block} onChange={updateBlock} eventId={eventId} />
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function BlockEditor({
-  block,
-  onChange,
-  eventId,
-}: {
+// ─── Block Editor ────────────────────────────────────────────────────────────
+
+interface BlockEditorProps {
   block: Block;
-  onChange: (content: Partial<Block["content"]>) => void;
+  onChange: (id: string, content: Partial<Block["content"]>) => void;
   eventId: string;
-}) {
-  switch (block.type) {
+}
+
+function BlockEditor({ block, onChange, eventId }: BlockEditorProps) {
+  const { id, type, content } = block;
+
+  switch (type) {
     case "heading":
       return (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Input
-            type="text"
-            value={block.content.text ?? ""}
-            onChange={(e) => onChange({ text: e.target.value })}
+            value={content.text ?? ""}
+            onChange={(e) => onChange(id, { text: e.target.value })}
             placeholder="Heading text"
           />
           <div className="flex gap-2">
-            <Select
-              value={String(block.content.level ?? 2)}
-              onChange={(e) => onChange({ level: Number(e.target.value) as 1 | 2 | 3 })}
-            >
-              <option value="1">H1</option>
-              <option value="2">H2</option>
-              <option value="3">H3</option>
-            </Select>
-            <Select
-              value={block.content.align ?? "left"}
-              onChange={(e) => onChange({ align: e.target.value as "left" | "center" | "right" })}
-            >
-              <option value="left">Left</option>
-              <option value="center">Center</option>
-              <option value="right">Right</option>
-            </Select>
+            {(["left", "center", "right"] as const).map((a) => (
+              <Button
+                key={a}
+                variant={content.align === a ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => onChange(id, { align: a })}
+              >
+                {a.charAt(0).toUpperCase() + a.slice(1)}
+              </Button>
+            ))}
+            {(["sm", "md", "lg"] as const).map((s) => (
+              <Button
+                key={s}
+                variant={content.size === s ? "primary" : "secondary"}
+                size="sm"
+                onClick={() => onChange(id, { size: s })}
+              >
+                {s.toUpperCase()}
+              </Button>
+            ))}
           </div>
         </div>
       );
+
     case "paragraph":
       return (
-        <div>
-          <Textarea
-            value={block.content.text ?? ""}
-            onChange={(e) => onChange({ text: e.target.value })}
-            placeholder="Paragraph text"
-            rows={3}
-          />
-          <Select
-            className="mt-2"
-            value={block.content.align ?? "left"}
-            onChange={(e) => onChange({ align: e.target.value as "left" | "center" | "right" })}
-          >
-            <option value="left">Left</option>
-            <option value="center">Center</option>
-            <option value="right">Right</option>
-          </Select>
-        </div>
+        <RichTextEditor
+          value={content.html ?? ""}
+          onChange={(html) => onChange(id, { html })}
+          placeholder="Write your text..."
+        />
       );
+
     case "image":
       return (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <ImageUpload
-            value={block.content.url ?? null}
-            onChange={(url) => onChange({ url: url ?? "" })}
-            pathPrefix={`events/${eventId}/blocks`}
-            aspectRatio="auto"
+            bucket="event-assets"
+            pathPrefix={`events/${eventId}/pages`}
+            value={content.src ?? null}
+            onChange={(src) => onChange(id, { src: src ?? undefined })}
+            label="Image"
+            aspectRatio="16/9"
           />
           <Input
-            type="text"
-            value={block.content.alt ?? ""}
-            onChange={(e) => onChange({ alt: e.target.value })}
-            placeholder="Alt text"
+            value={content.alt ?? ""}
+            onChange={(e) => onChange(id, { alt: e.target.value })}
+            placeholder="Alt text (for accessibility)"
           />
         </div>
       );
-    case "button":
+
+    case "gallery":
+      return (
+        <div className="space-y-3">
+          <p className="text-sm text-dash-muted">Gallery images:</p>
+          {(content.images ?? []).map((img, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <img src={img} alt="" className="h-16 w-16 rounded object-cover" />
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => {
+                  const images = (content.images ?? []).filter((_, i) => i !== idx);
+                  onChange(id, { images });
+                }}
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
+          <ImageUpload
+            bucket="event-assets"
+            pathPrefix={`events/${eventId}/pages`}
+            value={null}
+            onChange={(src) => {
+              if (src) {
+                const images = [...(content.images ?? []), src];
+                onChange(id, { images });
+              }
+            }}
+            label="Add Image"
+            aspectRatio="1/1"
+          />
+        </div>
+      );
+
+    case "divider":
+      return <hr className="border-dash-border" />;
+
+    case "spacer":
       return (
         <div className="space-y-2">
+          <p className="text-sm text-dash-muted">Spacer height: {content.height ?? 32}px</p>
+          <input
+            type="range"
+            min={8}
+            max={128}
+            step={8}
+            value={content.height ?? 32}
+            onChange={(e) => onChange(id, { height: Number(e.target.value) })}
+            className="w-full accent-dash-primary"
+          />
+        </div>
+      );
+
+    case "button":
+      return (
+        <div className="space-y-3">
           <Input
-            type="text"
-            value={block.content.text ?? ""}
-            onChange={(e) => onChange({ text: e.target.value })}
+            value={content.label ?? ""}
+            onChange={(e) => onChange(id, { label: e.target.value })}
             placeholder="Button text"
           />
           <Input
-            type="text"
-            value={block.content.url ?? ""}
-            onChange={(e) => onChange({ url: e.target.value })}
-            placeholder="Button URL"
+            value={content.link ?? ""}
+            onChange={(e) => onChange(id, { link: e.target.value })}
+            placeholder="Button link URL"
           />
-          <Select
-            value={block.content.variant ?? "primary"}
-            onChange={(e) => onChange({ variant: e.target.value as "primary" | "secondary" })}
-          >
-            <option value="primary">Primary</option>
-            <option value="secondary">Secondary</option>
-          </Select>
         </div>
       );
-    case "divider":
-      return <div className="border-t border-dash-border" />;
-    case "spacer":
-      return <div className="h-12 bg-dash-bg rounded text-center text-xs text-dash-muted py-4">Spacer block</div>;
+
+    case "video":
+      return (
+        <Input
+          value={content.url ?? ""}
+          onChange={(e) => onChange(id, { url: e.target.value })}
+          placeholder="Video embed URL"
+        />
+      );
+
     default:
       return null;
   }

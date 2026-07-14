@@ -1,194 +1,138 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { cn, to12Hour, to24Hour, roundTo5Min } from "../../lib/utils";
+import React, { useEffect, useRef, useState } from "react";
+import { cn, to12Hour, to24Hour } from "../../lib/utils";
 
 interface TimePickerProps {
-  value: string | null;
-  onChange: (time: string | null) => void;
+  value?: string | null;
+  onChange: (time: string) => void;
   label?: string;
   className?: string;
 }
 
-function formatDisplay(time24: string | null): string {
-  if (!time24) return "";
-  return to12Hour(time24);
-}
+const HOURS_12 = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
 
 export function TimePicker({ value, onChange, label, className }: TimePickerProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Internal state for hour, minute, period
-  const [hour, setHour] = useState("12");
-  const [minute, setMinute] = useState("00");
-  const [period, setPeriod] = useState<"AM" | "PM">("AM");
+  // Parse current value
+  let curHour24 = 9;
+  let curMin = 0;
+  if (value) {
+    const parts = value.split(":");
+    if (parts.length >= 2) {
+      curHour24 = parseInt(parts[0], 10) || 9;
+      curMin = parseInt(parts[1], 10) || 0;
+    }
+  }
+  const curPeriod = curHour24 >= 12 ? "PM" : "AM";
+  const curHour12 = curHour24 % 12 === 0 ? 12 : curHour24 % 12;
+
+  const [selHour, setSelHour] = useState(curHour12);
+  const [selMin, setSelMin] = useState(curMin);
+  const [selPeriod, setSelPeriod] = useState<"AM" | "PM">(curPeriod);
 
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
+    function handleClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
     if (open) {
-      document.addEventListener("mousedown", handleClick);
-      return () => document.removeEventListener("mousedown", handleClick);
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [open]);
 
-  useEffect(() => {
-    if (open && value) {
-      const [h, m] = value.split(":").map(Number);
-      const p = h >= 12 ? "PM" : "AM";
-      const displayH = h % 12 === 0 ? 12 : h % 12;
-      setHour(String(displayH));
-      setMinute(String(m).padStart(2, "0"));
-      setPeriod(p);
-    } else if (open && !value) {
-      setHour("12");
-      setMinute("00");
-      setPeriod("AM");
-    }
-  }, [open, value]);
-
-  const commit = useCallback(
-    (h: string, m: string, p: "AM" | "PM") => {
-      const time12 = `${h}:${m} ${p}`;
-      const time24 = to24Hour(time12);
-      const rounded = roundTo5Min(time24);
-      onChange(rounded);
-    },
-    [onChange]
-  );
-
-  const handleHourChange = (val: string) => {
-    const num = parseInt(val, 10);
-    if (isNaN(num)) return;
-    const clamped = Math.max(1, Math.min(12, num));
-    const h = String(clamped);
-    setHour(h);
-    commit(h, minute, period);
+  const commit = (h: number, m: number, p: "AM" | "PM") => {
+    const time12 = `${h}:${String(m).padStart(2, "0")} ${p}`;
+    const time24 = to24Hour(time12);
+    onChange(time24);
   };
 
-  const handleMinuteChange = (val: string) => {
-    const num = parseInt(val, 10);
-    if (isNaN(num)) return;
-    const clamped = Math.max(0, Math.min(59, num));
-    const m = String(clamped).padStart(2, "0");
-    setMinute(m);
-    commit(hour, m, period);
+  const handleHourChange = (h: number) => {
+    setSelHour(h);
+    commit(h, selMin, selPeriod);
   };
 
-  const togglePeriod = () => {
-    const p = period === "AM" ? "PM" : "AM";
-    setPeriod(p);
-    commit(hour, minute, p);
+  const handleMinChange = (m: number) => {
+    setSelMin(m);
+    commit(selHour, m, selPeriod);
   };
 
-  const hours = Array.from({ length: 12 }, (_, i) => i + 1);
-  const minutes = Array.from({ length: 12 }, (_, i) => i * 5);
+  const handlePeriodChange = (p: "AM" | "PM") => {
+    setSelPeriod(p);
+    commit(selHour, selMin, p);
+  };
+
+  const displayValue = value ? to12Hour(value) : "";
 
   return (
-    <div className={cn("relative", className)} ref={containerRef}>
-      {label && <label className="block text-sm font-medium text-dash-text mb-1">{label}</label>}
+    <div ref={containerRef} className={cn("relative w-full", className)}>
+      {label && <label className="mb-1.5 block text-sm font-medium text-dash-text">{label}</label>}
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-left text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+        className={cn(
+          "w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-left text-sm text-dash-text transition-colors hover:bg-dash-bg focus:outline-none focus:ring-2 focus:ring-dash-primary/30",
+          !displayValue && "text-dash-muted"
+        )}
       >
-        {value ? formatDisplay(value) : <span className="text-dash-muted">Select time</span>}
+        {displayValue || "Select time"}
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 rounded-lg border border-dash-border bg-dash-surface shadow-lg p-4 w-64">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <select
-              value={hour}
-              onChange={(e) => handleHourChange(e.target.value)}
-              className="rounded-md border border-dash-border bg-dash-surface px-2 py-1.5 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
-            >
-              {hours.map((h) => (
-                <option key={h} value={h}>
+        <div className="absolute z-50 mt-1 flex gap-2 rounded-lg border border-dash-border bg-dash-surface p-3 shadow-lg">
+          <div className="flex flex-col gap-1">
+            <div className="mb-1 text-xs font-medium text-dash-muted">Hour</div>
+            <div className="h-32 overflow-y-auto scrollbar-thin">
+              {HOURS_12.map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => handleHourChange(h)}
+                  className={cn(
+                    "mb-0.5 block w-full rounded px-2 py-1 text-sm hover:bg-dash-bg",
+                    selHour === h ? "bg-dash-primary text-dash-primary-fg" : "text-dash-text"
+                  )}
+                >
                   {h}
-                </option>
+                </button>
               ))}
-            </select>
-            <span className="text-dash-text font-medium">:</span>
-            <select
-              value={minute}
-              onChange={(e) => handleMinuteChange(e.target.value)}
-              className="rounded-md border border-dash-border bg-dash-surface px-2 py-1.5 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
-            >
-              {minutes.map((m) => (
-                <option key={m} value={String(m).padStart(2, "0")}>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="mb-1 text-xs font-medium text-dash-muted">Min</div>
+            <div className="h-32 overflow-y-auto scrollbar-thin">
+              {MINUTES.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => handleMinChange(m)}
+                  className={cn(
+                    "mb-0.5 block w-full rounded px-2 py-1 text-sm hover:bg-dash-bg",
+                    selMin === m ? "bg-dash-primary text-dash-primary-fg" : "text-dash-text"
+                  )}
+                >
                   {String(m).padStart(2, "0")}
-                </option>
+                </button>
               ))}
-            </select>
-            <button
-              type="button"
-              onClick={togglePeriod}
-              className="rounded-md border border-dash-border bg-dash-surface px-3 py-1.5 text-sm font-medium text-dash-text hover:bg-dash-bg focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
-            >
-              {period}
-            </button>
+            </div>
           </div>
-          <div className="grid grid-cols-4 gap-1 mb-2">
-            {hours.map((h) => (
+          <div className="flex flex-col gap-1">
+            <div className="mb-1 text-xs font-medium text-dash-muted">AM/PM</div>
+            {(["AM", "PM"] as const).map((p) => (
               <button
-                key={h}
+                key={p}
                 type="button"
-                onClick={() => {
-                  setHour(String(h));
-                  commit(String(h), minute, period);
-                }}
+                onClick={() => handlePeriodChange(p)}
                 className={cn(
-                  "text-sm rounded h-8 transition-colors",
-                  hour === String(h)
-                    ? "bg-dash-primary text-dash-primary-fg"
-                    : "text-dash-text hover:bg-dash-bg"
+                  "mb-0.5 block w-full rounded px-2 py-1 text-sm hover:bg-dash-bg",
+                  selPeriod === p ? "bg-dash-primary text-dash-primary-fg" : "text-dash-text"
                 )}
               >
-                {h}
+                {p}
               </button>
             ))}
-          </div>
-          <div className="grid grid-cols-6 gap-1 mb-3">
-            {minutes.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  const mStr = String(m).padStart(2, "0");
-                  setMinute(mStr);
-                  commit(hour, mStr, period);
-                }}
-                className={cn(
-                  "text-xs rounded h-7 transition-colors",
-                  minute === String(m).padStart(2, "0")
-                    ? "bg-dash-primary text-dash-primary-fg"
-                    : "text-dash-text hover:bg-dash-bg"
-                )}
-              >
-                {String(m).padStart(2, "0")}
-              </button>
-            ))}
-          </div>
-          <div className="flex justify-between">
-            <button
-              type="button"
-              onClick={() => {
-                onChange(null);
-                setOpen(false);
-              }}
-              className="text-xs text-dash-muted hover:text-dash-text"
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="text-xs text-dash-primary hover:text-dash-primary-hover font-medium"
-            >
-              Done
-            </button>
           </div>
         </div>
       )}

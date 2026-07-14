@@ -1,208 +1,166 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type GuestGroup } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import {
-  Input,
-  Card,
-  Modal,
-  LoadingSpinner,
-  ErrorState,
-  EmptyState,
-} from "../../components/ui";
-
-async function fetchGroups(eventId: string): Promise<GuestGroup[]> {
-  const { data, error } = await supabase
-    .from("guest_groups")
-    .select("*")
-    .eq("event_id", eventId)
-    .order("sort_order", { ascending: true });
-
-  if (error) throw error;
-  return (data ?? []) as GuestGroup[];
-}
-
-async function createGroup(
-  eventId: string,
-  name: string,
-  sortOrder: number
-): Promise<void> {
-  const { error } = await supabase.from("guest_groups").insert({
-    event_id: eventId,
-    name,
-    sort_order: sortOrder,
-  });
-  if (error) throw error;
-}
-
-async function updateGroup(
-  id: string,
-  name: string,
-  sortOrder: number
-): Promise<void> {
-  const { error } = await supabase
-    .from("guest_groups")
-    .update({ name, sort_order: sortOrder })
-    .eq("id", id);
-  if (error) throw error;
-}
-
-async function deleteGroup(id: string): Promise<void> {
-  const { error } = await supabase.from("guest_groups").delete().eq("id", id);
-  if (error) throw error;
-}
-
-async function fetchGroupGuestCounts(
-  eventId: string
-): Promise<Record<string, number>> {
-  const { data, error } = await supabase
-    .from("event_guests")
-    .select("group_id")
-    .eq("event_id", eventId)
-    .not("group_id", "is", null);
-
-  if (error) throw error;
-
-  const counts: Record<string, number> = {};
-  for (const row of (data ?? []) as Array<{ group_id: string | null }>) {
-    if (row.group_id) {
-      counts[row.group_id] = (counts[row.group_id] ?? 0) + 1;
-    }
-  }
-  return counts;
-}
+import { Input, FormField, Modal, Card, Badge, EmptyState, LoadingSpinner, ErrorState } from "../../components/ui";
 
 export function GroupsPage() {
   const { eventId } = useEventContext();
   const queryClient = useQueryClient();
-  const [showModal, setShowModal] = useState(false);
-  const [editingGroup, setEditingGroup] = useState<GuestGroup | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
-  const { data: groups, isLoading, isError, error: queryError, refetch } = useQuery({
-    queryKey: ["groups", eventId],
-    queryFn: () => fetchGroups(eventId),
+  const {
+    data: groups,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ["guest-groups", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("guest_groups")
+        .select("*")
+        .eq("event_id", eventId!)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return data as GuestGroup[];
+    },
+    enabled: !!eventId,
   });
 
-  const { data: guestCounts } = useQuery({
-    queryKey: ["group-guest-counts", eventId],
-    queryFn: () => fetchGroupGuestCounts(eventId),
-  });
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      setError(null);
-      if (!name.trim()) {
-        setError("Group name is required");
-        throw new Error("Name required");
-      }
-      if (editingGroup) {
-        await updateGroup(editingGroup.id, name.trim(), editingGroup.sort_order);
-      } else {
-        await createGroup(eventId, name.trim(), groups?.length ?? 0);
-      }
+  const createMutation = useMutation({
+    mutationFn: async (groupName: string) => {
+      const nextOrder = groups?.length ?? 0;
+      const { error } = await supabase
+        .from("guest_groups")
+        .insert({
+          event_id: eventId,
+          name: groupName,
+          sort_order: nextOrder,
+        });
+      if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["groups", eventId] });
-      setShowModal(false);
-      setEditingGroup(null);
+      queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
+      setShowForm(false);
       setName("");
     },
-    onError: (err: Error) => {
-      if (err.message !== "Name required") {
-        setError(err.message);
-      }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, groupName }: { id: string; groupName: string }) => {
+      const { error } = await supabase
+        .from("guest_groups")
+        .update({ name: groupName })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
+      setShowForm(false);
+      setEditingId(null);
+      setName("");
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteGroup(id),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("guest_groups")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["groups", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["group-guest-counts", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
     },
   });
 
-  const openCreate = () => {
-    setEditingGroup(null);
-    setName("");
-    setError(null);
-    setShowModal(true);
+  const handleSubmit = () => {
+    if (!name.trim()) return;
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, groupName: name });
+    } else {
+      createMutation.mutate(name);
+    }
   };
 
-  const openEdit = (group: GuestGroup) => {
-    setEditingGroup(group);
+  const handleEdit = (group: GuestGroup) => {
+    setEditingId(group.id);
     setName(group.name);
-    setError(null);
-    setShowModal(true);
+    setShowForm(true);
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return <ErrorState onRetry={() => refetch()} />;
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-dash-text">Guest Groups</h2>
-          <p className="text-sm text-dash-muted">
-            Organize your guests into groups for easier management
-          </p>
-        </div>
-        <Button onClick={openCreate}>Add group</Button>
+        <h2 className="text-xl font-semibold text-dash-text">Guest Groups</h2>
+        <Button
+          onClick={() => {
+            setName("");
+            setEditingId(null);
+            setShowForm(true);
+          }}
+        >
+          Add Group
+        </Button>
       </div>
 
-      {isLoading && (
-        <div className="flex items-center justify-center py-20">
-          <LoadingSpinner className="h-8 w-8" />
-        </div>
-      )}
-
-      {isError && (
-        <ErrorState
-          title="Failed to load groups"
-          description={queryError instanceof Error ? queryError.message : undefined}
-          onRetry={() => refetch()}
-        />
-      )}
-
-      {groups && groups.length === 0 && (
+      {groups && groups.length === 0 ? (
         <EmptyState
           title="No guest groups"
-          description="Create groups to organize your guests (e.g. Family, Friends, Colleagues)."
-          action={<Button onClick={openCreate}>Add group</Button>}
+          description="Create groups to organize your guests (e.g. Bride's side, Groom's side)."
+          action={
+            <Button
+              onClick={() => {
+                setName("");
+                setEditingId(null);
+                setShowForm(true);
+              }}
+            >
+              Add Group
+            </Button>
+          }
         />
-      )}
-
-      {groups && groups.length > 0 && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {groups.map((group) => (
-            <Card key={group.id} className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-dash-text truncate">
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {groups?.map((group) => (
+            <Card key={group.id}>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-lg font-semibold text-dash-text">
                     {group.name}
                   </h3>
-                  <p className="text-sm text-dash-muted mt-1">
-                    {guestCounts?.[group.id] ?? 0} guest
-                    {(guestCounts?.[group.id] ?? 0) !== 1 ? "s" : ""}
-                  </p>
+                  <Badge className="mt-1">Group</Badge>
                 </div>
-                <div className="flex gap-1 shrink-0">
+                <div className="flex gap-2">
                   <Button
-                    variant="ghost"
+                    variant="secondary"
                     size="sm"
-                    onClick={() => openEdit(group)}
+                    onClick={() => handleEdit(group)}
                   >
                     Edit
                   </Button>
                   <Button
-                    variant="ghost"
+                    variant="danger"
                     size="sm"
-                    onClick={() => {
-                      if (confirm(`Delete "${group.name}"? Guests in this group will not be deleted.`)) {
-                        deleteMutation.mutate(group.id);
-                      }
-                    }}
+                    onClick={() => deleteMutation.mutate(group.id)}
+                    loading={deleteMutation.isPending}
                   >
                     Delete
                   </Button>
@@ -213,32 +171,43 @@ export function GroupsPage() {
         </div>
       )}
 
-      {/* Create/Edit modal */}
       <Modal
-        open={showModal}
-        onClose={() => setShowModal(false)}
-        title={editingGroup ? "Edit Group" : "Add Group"}
+        open={showForm}
+        onClose={() => {
+          setShowForm(false);
+          setEditingId(null);
+          setName("");
+        }}
+        title={editingId ? "Edit Group" : "Add Group"}
       >
         <div className="space-y-4">
           <Input
-            label="Group name"
-            type="text"
+            label="Group Name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Family, Friends, Colleagues"
+            placeholder="e.g. Bride's Family"
             autoFocus
-            error={error ?? undefined}
           />
+          {(createMutation.isError || updateMutation.isError) && (
+            <p className="text-sm text-red-600">Failed to save</p>
+          )}
           <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setShowModal(false)}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowForm(false);
+                setEditingId(null);
+                setName("");
+              }}
+            >
               Cancel
             </Button>
             <Button
-              onClick={() => saveMutation.mutate()}
-              loading={saveMutation.isPending}
+              onClick={handleSubmit}
+              loading={createMutation.isPending || updateMutation.isPending}
               disabled={!name.trim()}
             >
-              {editingGroup ? "Save changes" : "Add group"}
+              {editingId ? "Update" : "Add"}
             </Button>
           </div>
         </div>

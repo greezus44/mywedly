@@ -1,20 +1,30 @@
+import React from "react";
 import type { Json } from "../../lib/supabase";
+
+// ─── Block Types ────────────────────────────────────────────────────────────
 
 export type BlockType =
   | "heading"
   | "paragraph"
   | "image"
+  | "gallery"
   | "divider"
   | "spacer"
-  | "button";
+  | "button"
+  | "video";
 
 export interface BlockContent {
   text?: string;
+  html?: string;
+  src?: string;
   url?: string;
   alt?: string;
+  images?: string[];
   align?: "left" | "center" | "right";
-  level?: 1 | 2 | 3;
-  variant?: "primary" | "secondary";
+  size?: "sm" | "md" | "lg";
+  label?: string;
+  link?: string;
+  height?: number;
 }
 
 export interface Block {
@@ -23,76 +33,90 @@ export interface Block {
   content: BlockContent;
 }
 
-export const BLOCK_TYPES: Array<{
+// ─── Block Type Definitions ──────────────────────────────────────────────────
+
+export interface BlockTypeDef {
   type: BlockType;
   label: string;
   icon: string;
   description: string;
-}> = [
+}
+
+export const BLOCK_TYPES: BlockTypeDef[] = [
   {
     type: "heading",
     label: "Heading",
     icon: "H",
-    description: "Add a section heading",
+    description: "A section heading",
   },
   {
     type: "paragraph",
     label: "Text",
     icon: "¶",
-    description: "Add a paragraph of text",
+    description: "Rich text paragraph",
   },
   {
     type: "image",
     label: "Image",
     icon: "🖼",
-    description: "Upload or link an image",
+    description: "A single image",
   },
   {
-    type: "button",
-    label: "Button",
-    icon: "◉",
-    description: "Add a call-to-action button",
+    type: "gallery",
+    label: "Gallery",
+    icon: "▦",
+    description: "Multiple images in a grid",
   },
   {
     type: "divider",
     label: "Divider",
     icon: "—",
-    description: "Add a horizontal divider",
+    description: "A horizontal line",
   },
   {
     type: "spacer",
     label: "Spacer",
     icon: "␣",
-    description: "Add vertical spacing",
+    description: "Vertical spacing",
+  },
+  {
+    type: "button",
+    label: "Button",
+    icon: "▢",
+    description: "A clickable button link",
+  },
+  {
+    type: "video",
+    label: "Video",
+    icon: "▶",
+    description: "Embedded video URL",
   },
 ];
 
+// ─── Block Factory ──────────────────────────────────────────────────────────
+
+let blockCounter = 0;
+
 export function createBlock(type: BlockType): Block {
+  const id = `block-${Date.now()}-${++blockCounter}`;
+  const defaultContent: Record<BlockType, BlockContent> = {
+    heading: { text: "New Heading", align: "center", size: "lg" },
+    paragraph: { html: "" },
+    image: { src: "", alt: "", align: "center" },
+    gallery: { images: [] },
+    divider: {},
+    spacer: { height: 32 },
+    button: { label: "Click Here", link: "", align: "center" },
+    video: { url: "", align: "center" },
+  };
   return {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id,
     type,
-    content: getDefaultContent(type),
+    content: defaultContent[type],
   };
 }
 
-function getDefaultContent(type: BlockType): BlockContent {
-  switch (type) {
-    case "heading":
-      return { text: "New Heading", level: 2, align: "left" };
-    case "paragraph":
-      return { text: "Write your text here...", align: "left" };
-    case "image":
-      return { url: "", alt: "", align: "center" };
-    case "button":
-      return { text: "Click here", url: "", variant: "primary", align: "center" };
-    case "divider":
-      return { align: "center" };
-    case "spacer":
-      return {};
-    default:
-      return {};
-  }
-}
+// ─── Block Serialization ─────────────────────────────────────────────────────
 
 export function blocksToJson(blocks: Block[]): Json {
   return blocks as unknown as Json;
@@ -100,5 +124,12 @@ export function blocksToJson(blocks: Block[]): Json {
 
 export function jsonToBlocks(json: Json | null | undefined): Block[] {
   if (!json || !Array.isArray(json)) return [];
-  return json as unknown as Block[];
+  return (json as unknown[]).map((item) => {
+    const obj = item as Record<string, unknown>;
+    return {
+      id: (obj.id as string) ?? `block-${Math.random()}`,
+      type: (obj.type as BlockType) ?? "paragraph",
+      content: (obj.content as BlockContent) ?? {},
+    };
+  });
 }

@@ -1,35 +1,33 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "../../lib/supabase";
+import { useNavigate } from "react-router-dom";
+import { supabase, type UserEvent } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Select, Card, Modal, DatePicker, TimePicker } from "../../components/ui";
-import { slugify } from "../../lib/theme";
+import { Input, Textarea, Select, FormField, Modal, Badge } from "../../components/ui";
+import { DateTimePicker } from "../../components/ui/DateTimePicker";
 
 export function SettingsPage() {
   const { event, eventId } = useEventContext();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
-  const [name, setName] = useState("");
-  const [eventType, setEventType] = useState("other");
-  const [eventDate, setEventDate] = useState<string | null>(null);
-  const [eventTime, setEventTime] = useState<string | null>(null);
-  const [venue, setVenue] = useState("");
-  const [address, setAddress] = useState("");
-  const [rsvpDeadline, setRsvpDeadline] = useState<string | null>(null);
+  const [name, setName] = useState(event.draft_name ?? event.name ?? "");
+  const [eventType, setEventType] = useState(event.draft_event_type ?? event.event_type ?? "");
+  const [eventDate, setEventDate] = useState<string | null>(event.draft_event_date ?? null);
+  const [venue, setVenue] = useState(event.draft_venue ?? event.venue ?? "");
+  const [address, setAddress] = useState(event.draft_address ?? event.address ?? "");
+  const [rsvpDeadline, setRsvpDeadline] = useState<string | null>(event.draft_rsvp_deadline ?? null);
   const [showDelete, setShowDelete] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
 
   useEffect(() => {
-    setName(event.draft_name ?? event.name);
-    setEventType(event.draft_event_type ?? event.event_type);
-    setEventDate(event.draft_event_date ?? event.event_date);
-    setEventTime(event.draft_event_time ?? event.event_time);
+    setName(event.draft_name ?? event.name ?? "");
+    setEventType(event.draft_event_type ?? event.event_type ?? "");
+    setEventDate(event.draft_event_date ?? null);
     setVenue(event.draft_venue ?? event.venue ?? "");
     setAddress(event.draft_address ?? event.address ?? "");
-    setRsvpDeadline(event.draft_rsvp_deadline ?? event.rsvp_deadline);
+    setRsvpDeadline(event.draft_rsvp_deadline ?? null);
   }, [event]);
 
   const saveMutation = useMutation({
@@ -40,7 +38,6 @@ export function SettingsPage() {
           draft_name: name,
           draft_event_type: eventType,
           draft_event_date: eventDate,
-          draft_event_time: eventTime,
           draft_venue: venue,
           draft_address: address,
           draft_rsvp_deadline: rsvpDeadline,
@@ -50,6 +47,7 @@ export function SettingsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["user-events"] });
     },
   });
 
@@ -62,110 +60,103 @@ export function SettingsPage() {
       if (error) throw error;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-events"] });
       navigate("/dashboard");
     },
   });
 
-  const handleDelete = () => {
-    deleteMutation.mutate();
-  };
-
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h2 className="text-xl font-bold text-dash-text">Website Settings</h2>
-        <p className="text-sm text-dash-muted">
-          Manage your invitation website details
-        </p>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-dash-text">Website Settings</h2>
+        <Badge color={event.is_published ? "success" : "warning"}>
+          {event.is_published ? "Published" : "Draft"}
+        </Badge>
       </div>
 
-      {/* General settings */}
-      <Card className="p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-dash-text">Event Details</h3>
-        <Input
-          label="Event name"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Event name"
-        />
-        <Select
-          label="Event type"
-          value={eventType}
-          onChange={(e) => setEventType(e.target.value)}
-        >
-          <option value="wedding">Wedding</option>
-          <option value="birthday">Birthday</option>
-          <option value="engagement">Engagement</option>
-          <option value="anniversary">Anniversary</option>
-          <option value="baby_shower">Baby Shower</option>
-          <option value="corporate">Corporate</option>
-          <option value="other">Other</option>
-        </Select>
-        <div className="grid grid-cols-2 gap-3">
-          <DatePicker
-            label="Event date"
+      {saveMutation.isError && (
+        <p className="text-sm text-red-600">
+          {saveMutation.error instanceof Error
+            ? saveMutation.error.message
+            : "Failed to save"}
+        </p>
+      )}
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-green-600">Saved successfully!</p>
+      )}
+
+      {/* General Settings */}
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h3 className="mb-4 text-sm font-semibold text-dash-text">General</h3>
+        <div className="space-y-4">
+          <Input
+            label="Event Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Sarah & John's Wedding"
+          />
+          <Select
+            label="Event Type"
+            value={eventType}
+            onChange={(e) => setEventType(e.target.value)}
+          >
+            <option value="">Select type...</option>
+            <option value="wedding">Wedding</option>
+            <option value="engagement">Engagement</option>
+            <option value="birthday">Birthday</option>
+            <option value="anniversary">Anniversary</option>
+            <option value="other">Other</option>
+          </Select>
+          <DateTimePicker
+            label="Event Date & Time"
             value={eventDate}
             onChange={setEventDate}
           />
-          <TimePicker
-            label="Event time"
-            value={eventTime}
-            onChange={setEventTime}
+          <Input
+            label="Venue"
+            value={venue}
+            onChange={(e) => setVenue(e.target.value)}
+            placeholder="e.g. Grand Ballroom Hotel"
+          />
+          <Textarea
+            label="Address"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="Full venue address"
+            rows={2}
+          />
+          <DateTimePicker
+            label="RSVP Deadline"
+            value={rsvpDeadline}
+            onChange={setRsvpDeadline}
           />
         </div>
-        <Input
-          label="Venue"
-          type="text"
-          value={venue}
-          onChange={(e) => setVenue(e.target.value)}
-          placeholder="Venue name"
-        />
-        <Textarea
-          label="Address"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          placeholder="Full address"
-          rows={2}
-        />
-        <DatePicker
-          label="RSVP deadline"
-          value={rsvpDeadline ? rsvpDeadline.split("T")[0] : null}
-          onChange={(d) => setRsvpDeadline(d ? new Date(d).toISOString() : null)}
-        />
-
-        <div className="flex items-center justify-between pt-2 border-t border-dash-border">
-          {saveMutation.isError && (
-            <p className="text-sm text-dash-danger">
-              {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
-            </p>
-          )}
-          {saveMutation.isSuccess && (
-            <p className="text-sm text-green-600">Saved!</p>
-          )}
+        <div className="mt-4">
           <Button
             onClick={() => saveMutation.mutate()}
             loading={saveMutation.isPending}
-            className="ml-auto"
           >
-            Save changes
+            Save Changes
           </Button>
         </div>
-      </Card>
+      </div>
 
-      {/* Danger zone */}
-      <Card className="p-5 border-dash-danger/20">
-        <h3 className="text-sm font-semibold text-dash-danger mb-2">Danger Zone</h3>
-        <p className="text-sm text-dash-muted mb-4">
-          Once you delete this website, all data including guests, RSVPs, and
-          custom pages will be permanently removed.
+      {/* Danger Zone */}
+      <div className="rounded-lg border-2 border-red-200 bg-red-50 p-4">
+        <h3 className="mb-2 text-sm font-semibold text-red-700">Danger Zone</h3>
+        <p className="mb-3 text-sm text-red-600">
+          Deleting this website will permanently remove all data, including guests, RSVPs, and pages.
         </p>
-        <Button variant="danger" onClick={() => setShowDelete(true)}>
-          Delete website
+        <Button
+          variant="danger"
+          size="sm"
+          onClick={() => setShowDelete(true)}
+        >
+          Delete Website
         </Button>
-      </Card>
+      </div>
 
-      {/* Delete confirmation modal */}
+      {/* Delete Confirmation Modal */}
       <Modal
         open={showDelete}
         onClose={() => {
@@ -176,22 +167,20 @@ export function SettingsPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-dash-text">
-            Are you sure you want to delete{" "}
-            <strong>{event.name}</strong>? This action cannot be undone.
-          </p>
-          <p className="text-sm text-dash-muted">
-            Type <strong>{event.name}</strong> to confirm:
+            Are you sure you want to delete <strong>{event.draft_name || event.name}</strong>?
+            This action cannot be undone.
           </p>
           <Input
-            type="text"
+            label='Type the event name to confirm'
             value={deleteConfirm}
             onChange={(e) => setDeleteConfirm(e.target.value)}
-            placeholder={event.name}
-            autoFocus
+            placeholder={event.draft_name || event.name}
           />
           {deleteMutation.isError && (
-            <p className="text-sm text-dash-danger">
-              {deleteMutation.error instanceof Error ? deleteMutation.error.message : "Delete failed"}
+            <p className="text-sm text-red-600">
+              {deleteMutation.error instanceof Error
+                ? deleteMutation.error.message
+                : "Failed to delete"}
             </p>
           )}
           <div className="flex justify-end gap-2">
@@ -206,11 +195,11 @@ export function SettingsPage() {
             </Button>
             <Button
               variant="danger"
-              onClick={handleDelete}
+              onClick={() => deleteMutation.mutate()}
               loading={deleteMutation.isPending}
-              disabled={deleteConfirm !== event.name}
+              disabled={deleteConfirm !== (event.draft_name || event.name)}
             >
-              Delete forever
+              Delete Permanently
             </Button>
           </div>
         </div>

@@ -1,102 +1,126 @@
 import { useGuestOutletContext } from "./guest-layout";
 
-interface ContactContent {
+interface ContactConfig {
   phone?: string;
   email?: string;
   address?: string;
   venue?: string;
-  map_url?: string;
-  notes?: string;
+  mapUrl?: string;
+  contactName?: string;
+  extraInfo?: string;
 }
 
 export default function GuestContact() {
   const { event } = useGuestOutletContext();
-  const content = (event.content ?? {}) as Record<string, unknown>;
-  const contact = (content.contact ?? {}) as ContactContent;
+  const config = (event.content ?? {}) as Record<string, unknown>;
+  const contact = (config.contact ?? {}) as ContactConfig;
 
-  const venue = contact.venue ?? event.venue ?? "";
-  const address = contact.address ?? event.address ?? "";
-  const phone = contact.phone ?? "";
-  const email = contact.email ?? "";
-  const notes = contact.notes ?? "";
+  const sections: { eyebrow: string; title: string; items: { label: string; value: string }[] }[] = [];
 
-  const mapQuery = encodeURIComponent(`${venue} ${address}`.trim());
-  const mapSrc = contact.map_url || (mapQuery ? `https://www.google.com/maps?q=${mapQuery}&output=embed` : "");
+  if (contact.venue || contact.address) {
+    sections.push({
+      eyebrow: "Location",
+      title: contact.venue || "Venue",
+      items: contact.address ? [{ label: "Address", value: contact.address }] : [],
+    });
+  }
 
-  const hasAny = venue || address || phone || email || notes;
+  if (contact.phone || contact.email || contact.contactName) {
+    const items: { label: string; value: string }[] = [];
+    if (contact.contactName) items.push({ label: "Contact", value: contact.contactName });
+    if (contact.phone) items.push({ label: "Phone", value: contact.phone });
+    if (contact.email) items.push({ label: "Email", value: contact.email });
+    sections.push({ eyebrow: "Get in Touch", title: "Contact Details", items });
+  }
+
+  if (contact.extraInfo) {
+    sections.push({ eyebrow: "Additional Info", title: "Good to Know", items: [{ label: "", value: contact.extraInfo }] });
+  }
+
+  // Fallback to event-level fields if no contact config
+  if (sections.length === 0) {
+    const items: { label: string; value: string }[] = [];
+    if (event.venue) items.push({ label: "Venue", value: event.venue });
+    if (event.address) items.push({ label: "Address", value: event.address });
+    if (items.length > 0) {
+      sections.push({ eyebrow: "Location", title: event.venue || "Venue", items });
+    }
+  }
+
+  const mapUrl = contact.mapUrl || (event.address ? `https://maps.google.com/maps?q=${encodeURIComponent(event.address)}&output=embed` : "");
 
   return (
-    <div className="guest-section">
-      <div className="mx-auto max-w-3xl">
-        {/* Header */}
-        <div className="mb-12 text-center">
+    <div>
+      {/* Header */}
+      <section className="guest-section text-center">
+        <div className="mx-auto max-w-2xl">
           <p className="guest-eyebrow">Contact</p>
           <h1 className="guest-title">Get in Touch</h1>
-          <p className="guest-subtitle mx-auto">Reach out if you have any questions about {event.name}.</p>
+          <p className="guest-subtitle mx-auto">
+            Have questions about {event.name}? Here's everything you need to reach us.
+          </p>
         </div>
+      </section>
 
-        {!hasAny && (
-          <div className="py-12 text-center">
-            <p className="guest-subtitle mx-auto">Contact details will be added soon.</p>
-          </div>
-        )}
-
-        {hasAny && (
-          <div className="grid gap-8 md:grid-cols-2">
-            {/* Left: contact details */}
-            <div className="space-y-8">
-              {venue && (
-                <section className="animate-slideUpStagger">
-                  <p className="guest-eyebrow mb-2">Venue</p>
-                  <p className="text-base font-medium" style={{ color: "var(--event-heading)" }}>{venue}</p>
-                  {address && <p className="mt-1 text-sm" style={{ color: "var(--event-muted)" }}>{address}</p>}
-                </section>
-              )}
-
-              {phone && (
-                <section className="animate-slideUpStagger" style={{ animationDelay: "80ms" }}>
-                  <p className="guest-eyebrow mb-2">Phone</p>
-                  <a href={`tel:${phone}`} className="text-base hover:underline" style={{ color: "var(--event-text)" }}>
-                    {phone}
-                  </a>
-                </section>
-              )}
-
-              {email && (
-                <section className="animate-slideUpStagger" style={{ animationDelay: "160ms" }}>
-                  <p className="guest-eyebrow mb-2">Email</p>
-                  <a href={`mailto:${email}`} className="text-base hover:underline" style={{ color: "var(--event-text)" }}>
-                    {email}
-                  </a>
-                </section>
-              )}
-
-              {notes && (
-                <section className="animate-slideUpStagger" style={{ animationDelay: "240ms" }}>
-                  <p className="guest-eyebrow mb-2">Notes</p>
-                  <p className="text-sm leading-relaxed" style={{ color: "var(--event-text)" }}>{notes}</p>
-                </section>
-              )}
-            </div>
-
-            {/* Right: map */}
-            {mapSrc && (
-              <div className="animate-slideUpStagger" style={{ animationDelay: "120ms" }}>
-                <p className="guest-eyebrow mb-3">Location</p>
-                <div className="overflow-hidden rounded-xl" style={{ borderRadius: "var(--event-radius)", border: "1px solid var(--event-border)" }}>
-                  <iframe
-                    src={mapSrc}
-                    title="Event location map"
-                    className="h-72 w-full"
-                    loading="lazy"
-                    style={{ border: 0 }}
-                  />
+      {/* Contact Sections */}
+      {sections.length > 0 && (
+        <section className="px-6 pb-12">
+          <div className="mx-auto max-w-4xl space-y-8">
+            {sections.map((section, i) => (
+              <div key={i} className="animate-slideUpStagger" style={{ animationDelay: `${i * 100}ms` }}>
+                <p className="guest-eyebrow mb-2">{section.eyebrow}</p>
+                <h2 className="mb-4 text-xl font-semibold" style={{ color: "var(--event-heading)" }}>
+                  {section.title}
+                </h2>
+                <div className="event-card space-y-3">
+                  {section.items.map((item, j) => (
+                    <div key={j} className="flex flex-col gap-1 sm:flex-row sm:gap-4">
+                      {item.label && (
+                        <span className="text-sm font-medium shrink-0 sm:w-28" style={{ color: "var(--event-muted)" }}>
+                          {item.label}
+                        </span>
+                      )}
+                      <span className="text-sm" style={{ color: "var(--event-text)" }}>
+                        {item.value}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
-            )}
+            ))}
           </div>
-        )}
-      </div>
+        </section>
+      )}
+
+      {/* Map */}
+      {mapUrl && (
+        <section className="px-6 pb-16">
+          <div className="mx-auto max-w-4xl">
+            <p className="guest-eyebrow mb-2 text-center">Find Us</p>
+            <h2 className="mb-6 text-center text-xl font-semibold" style={{ color: "var(--event-heading)" }}>
+              Location Map
+            </h2>
+            <div className="overflow-hidden rounded-2xl" style={{ borderRadius: "var(--event-radius)", border: "1px solid var(--event-border)" }}>
+              <div className="relative w-full" style={{ paddingBottom: "45%" }}>
+                <iframe
+                  src={mapUrl}
+                  title="Location Map"
+                  className="absolute inset-0 h-full w-full"
+                  style={{ border: 0 }}
+                  loading="lazy"
+                  allowFullScreen
+                />
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {sections.length === 0 && !mapUrl && (
+        <section className="px-6 pb-16 text-center">
+          <p className="guest-subtitle mx-auto">Contact details will be added soon. Check back later!</p>
+        </section>
+      )}
     </div>
   );
 }

@@ -1,28 +1,30 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { LoginPreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Card } from "../../components/ui";
+import { Input, Textarea, FormField } from "../../components/ui";
 
 interface LoginConfig {
   heading?: string;
   subheading?: string;
   placeholder?: string;
-  ctaText?: string;
+  buttonText?: string;
+  helpText?: string;
 }
 
 export function LoginEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
-  const [config, setConfig] = useState<LoginConfig>({});
+
+  const [loginConfig, setLoginConfig] = useState<LoginConfig>(
+    (event.draft_login_config as LoginConfig) ?? {}
+  );
 
   useEffect(() => {
-    setConfig(
-      (event.draft_login_config ?? event.login_config ?? {}) as LoginConfig
-    );
+    setLoginConfig((event.draft_login_config as LoginConfig) ?? {});
   }, [event]);
 
   const saveMutation = useMutation({
@@ -30,7 +32,7 @@ export function LoginEditor() {
       const { error } = await supabase
         .from("user_events")
         .update({
-          draft_login_config: config as unknown as Json,
+          draft_login_config: loginConfig as unknown as Json,
         })
         .eq("id", eventId);
       if (error) throw error;
@@ -40,77 +42,84 @@ export function LoginEditor() {
     },
   });
 
-  const editor = (
-    <div className="p-4 space-y-4">
-      <h3 className="text-sm font-semibold text-dash-text">Login Page Settings</h3>
-      <Input
-        label="Heading"
-        type="text"
-        value={config.heading ?? ""}
-        onChange={(e) => setConfig({ ...config, heading: e.target.value })}
-        placeholder="Welcome"
-      />
-      <Input
-        label="Subheading"
-        type="text"
-        value={config.subheading ?? ""}
-        onChange={(e) => setConfig({ ...config, subheading: e.target.value })}
-        placeholder="Enter your username to view the invitation"
-      />
-      <Input
-        label="Input placeholder"
-        type="text"
-        value={config.placeholder ?? ""}
-        onChange={(e) => setConfig({ ...config, placeholder: e.target.value })}
-        placeholder="Your username"
-      />
-      <Input
-        label="Button text"
-        type="text"
-        value={config.ctaText ?? ""}
-        onChange={(e) => setConfig({ ...config, ctaText: e.target.value })}
-        placeholder="View Invitation"
-      />
-
-      <div className="flex items-center justify-between pt-2 border-t border-dash-border">
-        {saveMutation.isError && (
-          <p className="text-sm text-dash-danger">
-            {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
-          </p>
-        )}
-        {saveMutation.isSuccess && (
-          <p className="text-sm text-green-600">Saved!</p>
-        )}
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-dash-text">Login Editor</h2>
         <Button
           onClick={() => saveMutation.mutate()}
           loading={saveMutation.isPending}
-          className="ml-auto"
         >
-          Save changes
+          Save Changes
         </Button>
       </div>
-    </div>
-  );
 
-  const preview = (
-    <div className="p-4">
-      <Card className="overflow-hidden">
-        <LoginPreview config={config as unknown as Json} />
-      </Card>
-    </div>
-  );
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-bold text-dash-text">Login Editor</h2>
-        <p className="text-sm text-dash-muted">
-          Customize the login page guests see before viewing your invitation
+      {saveMutation.isError && (
+        <p className="text-sm text-red-600">
+          {saveMutation.error instanceof Error
+            ? saveMutation.error.message
+            : "Failed to save"}
         </p>
-      </div>
-      <div className="h-[calc(100vh-220px)] min-h-[500px]">
-        <SplitEditor editor={editor} preview={preview} />
-      </div>
+      )}
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-green-600">Saved successfully!</p>
+      )}
+
+      <SplitEditor
+        editorRatio={0.5}
+        editor={
+          <div className="space-y-4">
+            <Input
+              label="Heading"
+              value={loginConfig.heading ?? ""}
+              onChange={(e) =>
+                setLoginConfig({ ...loginConfig, heading: e.target.value })
+              }
+              placeholder="Welcome"
+            />
+            <Textarea
+              label="Subheading"
+              value={loginConfig.subheading ?? ""}
+              onChange={(e) =>
+                setLoginConfig({ ...loginConfig, subheading: e.target.value })
+              }
+              placeholder="Please sign in to view the event"
+              rows={3}
+            />
+            <Input
+              label="Placeholder Text"
+              value={loginConfig.placeholder ?? ""}
+              onChange={(e) =>
+                setLoginConfig({ ...loginConfig, placeholder: e.target.value })
+              }
+              placeholder="Enter your username"
+            />
+            <Input
+              label="Button Text"
+              value={loginConfig.buttonText ?? ""}
+              onChange={(e) =>
+                setLoginConfig({ ...loginConfig, buttonText: e.target.value })
+              }
+              placeholder="Sign In"
+            />
+            <Textarea
+              label="Help Text"
+              value={loginConfig.helpText ?? ""}
+              onChange={(e) =>
+                setLoginConfig({ ...loginConfig, helpText: e.target.value })
+              }
+              placeholder="Enter the username from your invitation."
+              rows={2}
+            />
+          </div>
+        }
+        preview={
+          <LoginPreview
+            loginConfig={loginConfig as unknown as Json}
+            eventName={event.draft_name || event.name}
+          />
+        }
+      />
     </div>
   );
 }

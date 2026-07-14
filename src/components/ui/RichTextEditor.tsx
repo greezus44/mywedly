@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { cn } from "../../lib/utils";
 
 interface RichTextEditorProps {
@@ -6,10 +6,6 @@ interface RichTextEditorProps {
   onChange: (html: string) => void;
   placeholder?: string;
   className?: string;
-}
-
-function execCommand(command: string, value?: string) {
-  document.execCommand(command, false, value);
 }
 
 export function RichTextEditor({ value, onChange, placeholder, className }: RichTextEditorProps) {
@@ -26,47 +22,56 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
     isInternalChange.current = false;
   }, [value]);
 
-  const handleInput = useCallback(() => {
-    isInternalChange.current = true;
-    const html = editorRef.current?.innerHTML ?? "";
-    onChange(html);
+  const exec = useCallback((command: string, val?: string) => {
+    document.execCommand(command, false, val);
+    if (editorRef.current) {
+      isInternalChange.current = true;
+      onChange(editorRef.current.innerHTML);
+    }
   }, [onChange]);
 
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const text = e.clipboardData.getData("text/plain");
-    execCommand("insertText", text);
-  }, []);
+  const handleInput = useCallback(() => {
+    if (editorRef.current) {
+      isInternalChange.current = true;
+      onChange(editorRef.current.innerHTML);
+    }
+  }, [onChange]);
 
-  const toolbarButtons: { label: string; action: () => void; title: string }[] = [
-    { label: "B", title: "Bold", action: () => execCommand("bold") },
-    { label: "I", title: "Italic", action: () => execCommand("italic") },
-    { label: "U", title: "Underline", action: () => execCommand("underline") },
-    { label: "H1", title: "Heading 1", action: () => execCommand("formatBlock", "<h1>") },
-    { label: "H2", title: "Heading 2", action: () => execCommand("formatBlock", "<h2>") },
-    { label: "H3", title: "Heading 3", action: () => execCommand("formatBlock", "<h3>") },
-    { label: "P", title: "Paragraph", action: () => execCommand("formatBlock", "<p>") },
-    { label: "•", title: "Bullet List", action: () => execCommand("insertUnorderedList") },
-    { label: "1.", title: "Numbered List", action: () => execCommand("insertOrderedList") },
-    { label: "❝", title: "Quote", action: () => execCommand("formatBlock", "<blockquote>") },
-    { label: "Link", title: "Insert Link", action: () => {
-      const url = prompt("Enter URL:");
-      if (url) execCommand("createLink", url);
-    }},
-    { label: "⟲", title: "Undo", action: () => execCommand("undo") },
-    { label: "⟳", title: "Redo", action: () => execCommand("redo") },
+  const toolbarButtons: { cmd: string; label: string; val?: string }[] = [
+    { cmd: "bold", label: "B" },
+    { cmd: "italic", label: "I" },
+    { cmd: "underline", label: "U" },
+    { cmd: "insertUnorderedList", label: "• List" },
+    { cmd: "insertOrderedList", label: "1. List" },
+    { cmd: "formatBlock", label: "H2", val: "<h2>" },
+    { cmd: "formatBlock", label: "H3", val: "<h3>" },
+    { cmd: "formatBlock", label: "P", val: "<p>" },
+    { cmd: "createLink", label: "Link" },
+    { cmd: "insertImage", label: "Image" },
   ];
 
+  const handleToolbarClick = (e: React.MouseEvent, cmd: string, val?: string) => {
+    e.preventDefault();
+    if (cmd === "createLink") {
+      const url = window.prompt("Enter URL:");
+      if (url) exec(cmd, url);
+    } else if (cmd === "insertImage") {
+      const url = window.prompt("Enter image URL:");
+      if (url) exec(cmd, url);
+    } else {
+      exec(cmd, val);
+    }
+  };
+
   return (
-    <div className={cn("rounded-lg border border-dash-border bg-dash-surface overflow-hidden", className)}>
-      <div className="flex flex-wrap items-center gap-1 border-b border-dash-border bg-dash-bg px-2 py-1.5">
-        {toolbarButtons.map((btn, i) => (
+    <div className={cn("w-full rounded-md border border-dash-border bg-dash-surface", className)}>
+      <div className="flex flex-wrap items-center gap-1 border-b border-dash-border p-2">
+        {toolbarButtons.map((btn) => (
           <button
-            key={i}
+            key={btn.cmd + btn.label}
             type="button"
-            title={btn.title}
-            onClick={btn.action}
-            className="min-w-[28px] h-7 px-1.5 rounded text-sm font-medium text-dash-text hover:bg-dash-surface hover:text-dash-primary transition-colors"
+            onMouseDown={(e) => handleToolbarClick(e, btn.cmd, btn.val)}
+            className="rounded px-2 py-1 text-sm font-medium text-dash-text hover:bg-dash-bg"
           >
             {btn.label}
           </button>
@@ -75,13 +80,11 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
       <div
         ref={editorRef}
         contentEditable
-        suppressContentEditableWarning
         onInput={handleInput}
-        onPaste={handlePaste}
         data-placeholder={placeholder}
         className={cn(
-          "rich-content min-h-[120px] px-4 py-3 text-sm text-dash-text focus:outline-none",
-          "[&[data-placeholder]]:empty:before:content-[attr(data-placeholder)] [&[data-placeholder]]:empty:before:text-dash-muted"
+          "rich-editor min-h-[120px] p-3 text-sm text-dash-text focus:outline-none",
+          "[&:empty:before]:content-[attr(data-placeholder)] [&:empty:before]:text-dash-muted"
         )}
       />
     </div>
