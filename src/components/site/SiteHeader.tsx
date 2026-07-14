@@ -1,49 +1,40 @@
 import React from "react";
-import { cn } from "../../lib/utils";
+import { Link } from "react-router-dom";
 
-interface SiteHeaderProps {
-  className?: string;
-}
-
-export function SiteHeader({ className }: SiteHeaderProps) {
+export const SiteHeader: React.FC = () => {
   return (
-    <header
-      className={cn(
-        "sticky top-0 z-40 border-b border-dash-border bg-dash-surface/80 backdrop-blur",
-        className
-      )}
-    >
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-        <a href="/" className="flex items-center gap-2">
-          <span className="text-xl font-bold text-dash-primary">MyWedly</span>
-        </a>
-        <nav className="flex items-center gap-4">
-          <a
-            href="#features"
-            className="text-sm font-medium text-dash-muted hover:text-dash-text"
+    <header className="sticky top-0 z-40 border-b border-dash-border bg-dash-surface/80 backdrop-blur">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+        <Link to="/" className="flex items-center gap-2 text-lg font-bold text-dash-text">
+          <span className="text-dash-primary">My</span>Wedly
+        </Link>
+        <nav className="flex items-center gap-1">
+          <Link
+            to="/"
+            className="rounded-md px-3 py-2 text-sm font-medium text-dash-muted hover:bg-dash-bg hover:text-dash-text"
+          >
+            Home
+          </Link>
+          <Link
+            to="/features"
+            className="rounded-md px-3 py-2 text-sm font-medium text-dash-muted hover:bg-dash-bg hover:text-dash-text"
           >
             Features
-          </a>
-          <a
-            href="#pricing"
-            className="text-sm font-medium text-dash-muted hover:text-dash-text"
+          </Link>
+          <Link
+            to="/pricing"
+            className="rounded-md px-3 py-2 text-sm font-medium text-dash-muted hover:bg-dash-bg hover:text-dash-text"
           >
             Pricing
-          </a>
-          <a
-            href="/login"
-            className="text-sm font-medium text-dash-text hover:text-dash-primary"
+          </Link>
+          <Link
+            to="/login"
+            className="rounded-md bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg hover:bg-dash-primary-hover"
           >
-            Sign in
-          </a>
-          <a
-            href="/register"
-            className="rounded-lg bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg hover:bg-dash-primary-hover"
-          >
-            Get started
-          </a>
+            Sign In
+          </Link>
         </nav>
       </div>
     </header>
   );
-}
+};

@@ -1,22 +1,13 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type CustomPage, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
-import {
-  Block,
-  BlockType,
-  BLOCK_TYPES,
-  createBlock,
-  blocksToJson,
-  jsonToBlocks,
-} from "./block-types";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
+import { Card, Input, Textarea, LoadingSpinner, ErrorState, EmptyState } from "../../components/ui";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
-import { Card, LoadingSpinner, ErrorState } from "../../components/ui";
-import { cn } from "../../lib/utils";
+import { BLOCK_TYPES, createBlock, jsonToBlocks, blocksToJson, type Block, type BlockType } from "./block-types";
 
 export function PageBuilder() {
   const { eventId } = useEventContext();
@@ -24,56 +15,63 @@ export function PageBuilder() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [blocks, setBlocks] = useState<Block[]>([]);
-  const [title, setTitle] = useState("");
-  const [navLabel, setNavLabel] = useState("");
-  const [showInNav, setShowInNav] = useState(true);
-  const [coverImage, setCoverImage] = useState<string | null>(null);
-
-  const {
-    data: page,
-    isLoading,
-    isError,
-    error,
-  } = useQuery({
+  const { data: page, isLoading, isError, refetch } = useQuery({
     queryKey: ["custom-page", pageId],
-    enabled: !!pageId,
     queryFn: async () => {
-      const { data, error: queryError } = await supabase
+      const { data, error } = await supabase
         .from("custom_pages")
         .select("*")
         .eq("id", pageId!)
         .maybeSingle();
-      if (queryError) throw queryError;
+      if (error) throw error;
       if (!data) throw new Error("Page not found");
       return data as CustomPage;
     },
+    enabled: !!pageId,
   });
+
+  const [title, setTitle] = useState("");
+  const [navLabel, setNavLabel] = useState("");
+  const [slug, setSlug] = useState("");
+  const [body, setBody] = useState("");
+  const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [inlineImage, setInlineImage] = useState<string | null>(null);
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [showInNav, setShowInNav] = useState(true);
+  const [icon, setIcon] = useState("");
 
   useEffect(() => {
     if (page) {
       setTitle(page.title);
-      setNavLabel(page.nav_label ?? "");
-      setShowInNav(page.show_in_nav);
+      setNavLabel(page.nav_label ?? page.title);
+      setSlug(page.slug);
+      setBody(page.body ?? "");
       setCoverImage(page.cover_image_url);
+      setInlineImage(page.inline_image_url);
       setBlocks(jsonToBlocks(page.blocks));
+      setShowInNav(page.show_in_nav);
+      setIcon(page.icon ?? "");
     }
   }, [page]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { error: updateError } = await supabase
+      const { error } = await supabase
         .from("custom_pages")
         .update({
           title,
           nav_label: navLabel || title,
-          show_in_nav: showInNav,
+          slug,
+          body,
           cover_image_url: coverImage,
+          inline_image_url: inlineImage,
           blocks: blocksToJson(blocks),
+          show_in_nav: showInNav,
+          icon: icon || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", pageId!);
-      if (updateError) throw updateError;
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom-page", pageId] });
@@ -85,9 +83,9 @@ export function PageBuilder() {
     setBlocks((prev) => [...prev, createBlock(type)]);
   };
 
-  const updateBlock = (id: string, data: Record<string, unknown>) => {
+  const updateBlock = (id: string, content: Partial<Block["content"]>) => {
     setBlocks((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...data } } : b))
+      prev.map((b) => (b.id === id ? { ...b, content: { ...b.content, ...content } } : b)),
     );
   };
 
@@ -95,28 +93,34 @@ export function PageBuilder() {
     setBlocks((prev) => prev.filter((b) => b.id !== id));
   };
 
-  const moveBlock = (id: string, dir: "up" | "down") => {
+  const moveBlock = (id: string, direction: "up" | "down") => {
     setBlocks((prev) => {
-      const idx = prev.findIndex((b) => b.id === id);
-      if (idx === -1) return prev;
-      const newIdx = dir === "up" ? idx - 1 : idx + 1;
-      if (newIdx < 0 || newIdx >= prev.length) return prev;
+      const index = prev.findIndex((b) => b.id === id);
+      if (index === -1) return prev;
+      const newIndex = direction === "up" ? index - 1 : index + 1;
+      if (newIndex < 0 || newIndex >= prev.length) return prev;
       const newBlocks = [...prev];
-      [newBlocks[idx], newBlocks[newIdx]] = [newBlocks[newIdx], newBlocks[idx]];
+      [newBlocks[index], newBlocks[newIndex]] = [newBlocks[newIndex], newBlocks[index]];
       return newBlocks;
     });
   };
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-20">
-        <LoadingSpinner className="h-8 w-8" />
+      <div className="flex items-center justify-center py-20">
+        <LoadingSpinner size={32} />
       </div>
     );
   }
 
-  if (isError) {
-    return <ErrorState message={error instanceof Error ? error.message : "Failed to load"} />;
+  if (isError || !page) {
+    return (
+      <ErrorState
+        title="Page not found"
+        message="This custom page could not be loaded."
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   return (
@@ -125,12 +129,13 @@ export function PageBuilder() {
       <div className="flex items-center justify-between">
         <div>
           <button
+            type="button"
             onClick={() => navigate(`/event/${eventId}/pages`)}
             className="text-sm text-dash-muted hover:text-dash-text"
           >
-            ← Pages
+            ← Back to Pages
           </button>
-          <h2 className="mt-1 text-xl font-semibold text-dash-text">Page Builder</h2>
+          <h2 className="mt-1 text-xl font-bold text-dash-text">Edit Page</h2>
         </div>
         <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
           Save Page
@@ -139,286 +144,212 @@ export function PageBuilder() {
 
       {saveMutation.isError && (
         <p className="text-sm text-dash-danger">
-          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+          Error: {(saveMutation.error as Error)?.message}
         </p>
       )}
       {saveMutation.isSuccess && (
-        <p className="text-sm text-green-600">Page saved!</p>
+        <p className="text-sm text-green-600">Page saved successfully!</p>
       )}
 
-      {/* Page settings */}
+      {/* Page Settings */}
       <Card>
-        <h3 className="text-sm font-medium text-dash-text">Page Settings</h3>
-        <div className="mt-4 space-y-4">
+        <h3 className="text-sm font-medium text-dash-text mb-4">Page Settings</h3>
+        <div className="space-y-4">
           <Input
-            label="Title"
-            type="text"
+            label="Page Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            placeholder="Page title"
           />
-          <Input
-            label="Nav Label"
-            type="text"
-            value={navLabel}
-            onChange={(e) => setNavLabel(e.target.value)}
-            placeholder="Label shown in navigation"
-          />
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={showInNav}
-              onChange={(e) => setShowInNav(e.target.checked)}
-              className="h-4 w-4 rounded border-dash-border"
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Navigation Label"
+              value={navLabel}
+              onChange={(e) => setNavLabel(e.target.value)}
+              placeholder="Label shown in nav"
             />
-            <span className="text-sm text-dash-text">Show in navigation</span>
-          </label>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-dash-text">Cover Image</label>
-            <ImageUpload
-              bucket="event-assets"
-              path={`${eventId}/pages/${pageId}/cover`}
-              value={coverImage}
-              onUpload={setCoverImage}
-              onRemove={() => setCoverImage(null)}
-              aspectRatio="wide"
+            <Input
+              label="URL Slug"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              placeholder="page-slug"
             />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Icon (emoji)"
+              value={icon}
+              onChange={(e) => setIcon(e.target.value)}
+              placeholder="📄"
+            />
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 text-sm text-dash-text">
+                <input
+                  type="checkbox"
+                  checked={showInNav}
+                  onChange={(e) => setShowInNav(e.target.checked)}
+                  className="h-4 w-4 rounded border-dash-border"
+                />
+                Show in navigation
+              </label>
+            </div>
           </div>
         </div>
       </Card>
 
-      {/* Block types */}
+      {/* Cover Image */}
       <Card>
-        <h3 className="text-sm font-medium text-dash-text">Add Block</h3>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {BLOCK_TYPES.map((bt) => (
-            <button
-              key={bt.type}
-              type="button"
-              onClick={() => addBlock(bt.type)}
-              className="flex items-center gap-2 rounded-lg border border-dash-border px-3 py-2 text-sm text-dash-text transition-colors hover:bg-dash-bg"
-              title={bt.description}
-            >
-              <span>{bt.icon}</span>
-              <span>{bt.label}</span>
-            </button>
-          ))}
-        </div>
+        <h3 className="text-sm font-medium text-dash-text mb-4">Cover Image</h3>
+        <ImageUpload
+          value={coverImage}
+          onChange={setCoverImage}
+          bucket="event-assets"
+          pathPrefix={`events/${eventId}/pages/${pageId}`}
+          label="Cover Image"
+        />
+      </Card>
+
+      {/* Body (legacy rich text) */}
+      <Card>
+        <h3 className="text-sm font-medium text-dash-text mb-4">Page Content</h3>
+        <RichTextEditor
+          value={body}
+          onChange={setBody}
+          placeholder="Write your page content..."
+        />
+      </Card>
+
+      {/* Inline Image */}
+      <Card>
+        <h3 className="text-sm font-medium text-dash-text mb-4">Inline Image</h3>
+        <ImageUpload
+          value={inlineImage}
+          onChange={setInlineImage}
+          bucket="event-assets"
+          pathPrefix={`events/${eventId}/pages/${pageId}/inline`}
+          label="Inline Image"
+        />
       </Card>
 
       {/* Blocks */}
-      <div className="space-y-4">
+      <Card>
+        <h3 className="text-sm font-medium text-dash-text mb-4">Content Blocks</h3>
+
+        {/* Add block buttons */}
+        <div className="mb-4 flex flex-wrap gap-2">
+          {BLOCK_TYPES.map((bt) => (
+            <Button
+              key={bt.type}
+              variant="secondary"
+              size="sm"
+              onClick={() => addBlock(bt.type)}
+            >
+              {bt.icon} {bt.label}
+            </Button>
+          ))}
+        </div>
+
+        {/* Block list */}
         {blocks.length === 0 ? (
-          <Card>
-            <p className="text-center text-sm text-dash-muted">
-              No blocks yet. Add a block above to start building your page.
-            </p>
-          </Card>
+          <EmptyState
+            title="No blocks yet"
+            description="Add content blocks above to build your page."
+            className="py-8"
+          />
         ) : (
-          blocks.map((block, index) => (
-            <Card key={block.id}>
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-sm font-medium text-dash-text capitalize">
-                  {block.type}
-                </span>
-                <div className="flex gap-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={index === 0}
-                    onClick={() => moveBlock(block.id, "up")}
-                  >
-                    ↑
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={index === blocks.length - 1}
-                    onClick={() => moveBlock(block.id, "down")}
-                  >
-                    ↓
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    onClick={() => removeBlock(block.id)}
-                  >
-                    Delete
-                  </Button>
+          <div className="space-y-3">
+            {blocks.map((block, index) => (
+              <div
+                key={block.id}
+                className="rounded-md border border-dash-border bg-dash-bg p-3"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-medium uppercase text-dash-muted">
+                    {block.type}
+                  </span>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => moveBlock(block.id, "up")}
+                      disabled={index === 0}
+                    >
+                      ↑
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => moveBlock(block.id, "down")}
+                      disabled={index === blocks.length - 1}
+                    >
+                      ↓
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeBlock(block.id)}
+                    >
+                      ✕
+                    </Button>
+                  </div>
                 </div>
-              </div>
-              <BlockEditor block={block} onChange={(data) => updateBlock(block.id, data)} eventId={eventId} pageId={pageId!} />
-            </Card>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
 
-interface BlockEditorProps {
-  block: Block;
-  onChange: (data: Record<string, unknown>) => void;
-  eventId: string;
-  pageId: string;
-}
-
-function BlockEditor({ block, onChange, eventId, pageId }: BlockEditorProps) {
-  switch (block.type) {
-    case "heading":
-      return (
-        <div className="space-y-3">
-          <Input
-            type="text"
-            value={(block.data.text as string) ?? ""}
-            onChange={(e) => onChange({ text: e.target.value })}
-            placeholder="Heading text"
-          />
-          <div className="flex gap-2">
-            <select
-              value={(block.data.level as string) ?? "h2"}
-              onChange={(e) => onChange({ level: e.target.value })}
-              className="rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm"
-            >
-              <option value="h1">H1</option>
-              <option value="h2">H2</option>
-              <option value="h3">H3</option>
-            </select>
-            <select
-              value={(block.data.align as string) ?? "left"}
-              onChange={(e) => onChange({ align: e.target.value })}
-              className="rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm"
-            >
-              <option value="left">Left</option>
-              <option value="center">Center</option>
-              <option value="right">Right</option>
-            </select>
-          </div>
-        </div>
-      );
-    case "paragraph":
-      return (
-        <RichTextEditor
-          value={(block.data.html as string) ?? ""}
-          onChange={(html) => onChange({ html })}
-          placeholder="Write your text..."
-        />
-      );
-    case "image":
-      return (
-        <div className="space-y-3">
-          <ImageUpload
-            bucket="event-assets"
-            path={`${eventId}/pages/${pageId}/${block.id}`}
-            value={(block.data.url as string) || null}
-            onUpload={(url) => onChange({ url })}
-            onRemove={() => onChange({ url: "" })}
-            aspectRatio="auto"
-          />
-          <Input
-            type="text"
-            value={(block.data.caption as string) ?? ""}
-            onChange={(e) => onChange({ caption: e.target.value })}
-            placeholder="Caption (optional)"
-          />
-          <Input
-            type="text"
-            value={(block.data.alt as string) ?? ""}
-            onChange={(e) => onChange({ alt: e.target.value })}
-            placeholder="Alt text (optional)"
-          />
-        </div>
-      );
-    case "gallery":
-      return (
-        <div className="space-y-2">
-          <p className="text-sm text-dash-muted">Gallery images (add up to 6)</p>
-          <div className="grid grid-cols-3 gap-2">
-            {((block.data.images as string[]) ?? []).map((img, i) => (
-              <div key={i} className="relative">
-                <img src={img} alt="" className="aspect-square rounded-lg object-cover" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const imgs = (block.data.images as string[]) ?? [];
-                    onChange({ images: imgs.filter((_, idx) => idx !== i) });
-                  }}
-                  className="absolute right-1 top-1 rounded bg-black/50 px-1 text-xs text-white"
-                >
-                  ✕
-                </button>
+                {/* Block editors */}
+                {(block.type === "heading" || block.type === "paragraph") && (
+                  <Input
+                    value={block.content.text ?? ""}
+                    onChange={(e) => updateBlock(block.id, { text: e.target.value })}
+                    placeholder={block.type === "heading" ? "Heading text" : "Paragraph text"}
+                  />
+                )}
+                {block.type === "image" && (
+                  <Input
+                    label="Image URL"
+                    value={block.content.url ?? ""}
+                    onChange={(e) => updateBlock(block.id, { url: e.target.value })}
+                    placeholder="https://..."
+                  />
+                )}
+                {block.type === "button" && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      label="Button Label"
+                      value={block.content.label ?? ""}
+                      onChange={(e) => updateBlock(block.id, { label: e.target.value })}
+                      placeholder="Click Here"
+                    />
+                    <Input
+                      label="Link URL"
+                      value={block.content.href ?? ""}
+                      onChange={(e) => updateBlock(block.id, { href: e.target.value })}
+                      placeholder="https://..."
+                    />
+                  </div>
+                )}
+                {block.type === "spacer" && (
+                  <Input
+                    label="Height (px)"
+                    type="number"
+                    value={block.content.height ?? 40}
+                    onChange={(e) => updateBlock(block.id, { height: Number(e.target.value) })}
+                  />
+                )}
+                {block.type === "html" && (
+                  <Textarea
+                    label="Custom HTML"
+                    value={block.content.html ?? ""}
+                    onChange={(e) => updateBlock(block.id, { html: e.target.value })}
+                    placeholder="<p>Custom HTML</p>"
+                  />
+                )}
+                {block.type === "divider" && (
+                  <p className="text-sm text-dash-muted">A horizontal divider line will appear here.</p>
+                )}
               </div>
             ))}
-            {((block.data.images as string[]) ?? []).length < 6 && (
-              <ImageUpload
-                bucket="event-assets"
-                path={`${eventId}/pages/${pageId}/${block.id}-${Date.now()}`}
-                value={null}
-                onUpload={(url) => {
-                  const imgs = (block.data.images as string[]) ?? [];
-                  onChange({ images: [...imgs, url] });
-                }}
-                aspectRatio="square"
-              />
-            )}
           </div>
-        </div>
-      );
-    case "button":
-      return (
-        <div className="space-y-3">
-          <Input
-            type="text"
-            value={(block.data.text as string) ?? ""}
-            onChange={(e) => onChange({ text: e.target.value })}
-            placeholder="Button text"
-          />
-          <Input
-            type="text"
-            value={(block.data.url as string) ?? ""}
-            onChange={(e) => onChange({ url: e.target.value })}
-            placeholder="https://..."
-          />
-          <select
-            value={(block.data.align as string) ?? "center"}
-            onChange={(e) => onChange({ align: e.target.value })}
-            className="rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm"
-          >
-            <option value="left">Left</option>
-            <option value="center">Center</option>
-            <option value="right">Right</option>
-          </select>
-        </div>
-      );
-    case "quote":
-      return (
-        <div className="space-y-3">
-          <Textarea
-            value={(block.data.text as string) ?? ""}
-            onChange={(e) => onChange({ text: e.target.value })}
-            placeholder="Quote text"
-          />
-          <Input
-            type="text"
-            value={(block.data.author as string) ?? ""}
-            onChange={(e) => onChange({ author: e.target.value })}
-            placeholder="Author (optional)"
-          />
-        </div>
-      );
-    case "divider":
-      return <hr className="border-dash-border" />;
-    case "spacer":
-      return (
-        <div>
-          <Input
-            type="number"
-            value={(block.data.height as number) ?? 40}
-            onChange={(e) => onChange({ height: Number(e.target.value) })}
-            label="Height (px)"
-          />
-        </div>
-      );
-    default:
-      return null;
-  }
+        )}
+      </Card>
+    </div>
+  );
 }

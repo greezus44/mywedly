@@ -1,17 +1,13 @@
 import React from "react";
-import { useParams, NavLink, Outlet, useOutletContext, Navigate } from "react-router-dom";
+import { useParams, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
-import { LoadingSpinner, ErrorState, Badge } from "../../components/ui";
-import { Button } from "../../components/ui/Button";
+import { LoadingSpinner, ErrorState, Badge, Button } from "../../components/ui";
+import { cn } from "../../lib/utils";
 
-interface EventContextValue {
+export interface EventContextValue {
   event: UserEvent;
   eventId: string;
-}
-
-export function useEventContext(): EventContextValue {
-  return useOutletContext<EventContextValue>();
 }
 
 const navTabs = [
@@ -30,143 +26,159 @@ const navTabs = [
   { label: "Settings", to: "settings" },
 ];
 
+export function useEventContext(): EventContextValue {
+  const ctx = (React.useContext(EventContext) ?? null) as EventContextValue | null;
+  if (!ctx) throw new Error("useEventContext must be used within an EventLayout");
+  return ctx;
+}
+
+const EventContext = React.createContext<EventContextValue | null>(null);
+
 export function EventLayout() {
   const { eventId } = useParams<{ eventId: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const {
     data: event,
     isLoading,
     isError,
-    error,
     refetch,
   } = useQuery({
     queryKey: ["event", eventId],
-    enabled: !!eventId,
     queryFn: async () => {
-      const { data, error: queryError } = await supabase
+      const { data, error } = await supabase
         .from("user_events")
         .select("*")
         .eq("id", eventId!)
         .maybeSingle();
-      if (queryError) throw queryError;
+      if (error) throw error;
       if (!data) throw new Error("Event not found");
       return data as UserEvent;
     },
+    enabled: !!eventId,
   });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      if (!event) throw new Error("No event loaded");
-      const updates: Record<string, Json | boolean | string | null> = {
+      if (!event) throw new Error("Event not loaded");
+      const updates: Record<string, unknown> = {
         is_published: true,
         published_at: new Date().toISOString(),
-        name: event.draft_name ?? event.name,
-        event_type: event.draft_event_type ?? event.event_type,
-        event_date: event.draft_event_date ?? event.event_date,
-        event_time: event.draft_event_time ?? event.event_time,
-        venue: event.draft_venue ?? event.venue,
-        address: event.draft_address ?? event.address,
-        cover_image: event.draft_cover_image ?? event.cover_image,
-        cover_config: event.draft_cover_config ?? event.cover_config,
-        theme: event.draft_theme ?? event.theme,
-        logo_config: event.draft_logo_config ?? event.logo_config,
-        content: event.draft_content ?? event.content,
-        login_config: event.draft_login_config ?? event.login_config,
-        sharing_config: event.draft_sharing_config ?? event.sharing_config,
-        slug: event.draft_slug ?? event.slug,
-        rsvp_deadline: event.draft_rsvp_deadline ?? event.rsvp_deadline,
+        // Copy draft fields to published
+        name: event.draft_name,
+        event_type: event.draft_event_type,
+        event_date: event.draft_event_date,
+        event_time: event.draft_event_time,
+        venue: event.draft_venue,
+        address: event.draft_address,
+        cover_image: event.draft_cover_image,
+        cover_config: event.draft_cover_config as Json,
+        theme: event.draft_theme as Json,
+        logo_config: event.draft_logo_config as Json,
+        content: event.draft_content as Json,
+        login_config: event.draft_login_config as Json,
+        sharing_config: event.draft_sharing_config as Json,
+        slug: event.draft_slug,
+        rsvp_deadline: event.draft_rsvp_deadline,
         updated_at: new Date().toISOString(),
       };
-      const { error: updateError } = await supabase
+      const { error } = await supabase
         .from("user_events")
         .update(updates)
         .eq("id", eventId!);
-      if (updateError) throw updateError;
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
     },
   });
 
-  if (!eventId) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
+  // While loading: render spinner and DO NOT render Outlet
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <LoadingSpinner className="h-8 w-8" />
+        <LoadingSpinner size={32} />
       </div>
     );
   }
 
+  // If error: render error message and DO NOT render Outlet
   if (isError || !event) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
         <ErrorState
-          message={error instanceof Error ? error.message : "Failed to load event"}
+          title="Event not found"
+          message="This invitation website could not be loaded."
           onRetry={() => refetch()}
         />
       </div>
     );
   }
 
+  // Only when event is successfully loaded: provide context and render Outlet
   return (
-    <div className="min-h-screen bg-dash-bg">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-dash-border bg-dash-surface/80 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-4">
-          <div className="flex items-center justify-between py-3">
+    <EventContext.Provider value={{ event, eventId: eventId! }}>
+      <div className="min-h-screen bg-dash-bg">
+        {/* Top bar */}
+        <header className="sticky top-0 z-40 border-b border-dash-border bg-dash-surface/80 backdrop-blur">
+          <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
             <div className="flex items-center gap-3">
-              <NavLink to="/dashboard" className="text-sm text-dash-muted hover:text-dash-text">
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard")}
+                className="text-sm text-dash-muted hover:text-dash-text"
+              >
                 ← Dashboard
-              </NavLink>
+              </button>
               <span className="text-dash-border">/</span>
-              <h1 className="text-lg font-semibold text-dash-text">
-                {event.draft_name || event.name}
-              </h1>
+              <span className="font-semibold text-dash-text">{event.draft_name}</span>
               {event.is_published ? (
                 <Badge variant="success">Published</Badge>
               ) : (
-                <Badge variant="default">Draft</Badge>
+                <Badge variant="warning">Draft</Badge>
               )}
             </div>
             <Button
               size="sm"
-              variant="primary"
               loading={publishMutation.isPending}
               onClick={() => publishMutation.mutate()}
             >
               {event.is_published ? "Republish" : "Publish"}
             </Button>
           </div>
+        </header>
 
-          {/* Nav tabs */}
-          <nav className="flex gap-1 overflow-x-auto pb-2 scrollbar-thin">
-            {navTabs.map((tab) => (
-              <NavLink
-                key={tab.to || "index"}
-                to={tab.to}
-                end={tab.to === ""}
-                className={({ isActive }) =>
-                  `whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-dash-primary text-dash-primary-fg"
-                      : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"
-                  }`
-                }
-              >
-                {tab.label}
-              </NavLink>
-            ))}
-          </nav>
-        </div>
-      </header>
+        {/* Nav tabs */}
+        <nav className="sticky top-14 z-30 border-b border-dash-border bg-dash-surface/80 backdrop-blur">
+          <div className="mx-auto max-w-7xl px-4">
+            <div className="flex gap-1 overflow-x-auto scrollbar-thin">
+              {navTabs.map((tab) => (
+                <NavLink
+                  key={tab.label}
+                  to={tab.to}
+                  end={tab.to === ""}
+                  className={({ isActive }) =>
+                    cn(
+                      "whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-dash-primary/10 text-dash-primary"
+                        : "text-dash-muted hover:bg-dash-bg hover:text-dash-text",
+                    )
+                  }
+                >
+                  {tab.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        </nav>
 
-      <main className="mx-auto max-w-7xl px-4 py-6">
-        <Outlet context={{ event, eventId: eventId! } as EventContextValue} />
-      </main>
-    </div>
+        {/* Content */}
+        <main className="mx-auto max-w-7xl px-4 py-6">
+          <Outlet context={{ event, eventId: eventId! } satisfies EventContextValue} />
+        </main>
+      </div>
+    </EventContext.Provider>
   );
 }

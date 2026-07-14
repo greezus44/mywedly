@@ -1,7 +1,9 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export type Json =
   | string
@@ -11,15 +13,11 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
-export type SupaClient = SupabaseClient;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
 export interface Profile {
   id: string;
-  email: string | null;
-  full_name: string | null;
-  avatar_url: string | null;
+  email: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -28,9 +26,9 @@ export interface UserEvent {
   id: string;
   creator_id: string;
   name: string;
-  draft_name: string | null;
-  event_type: string | null;
-  draft_event_type: string | null;
+  draft_name: string;
+  event_type: string;
+  draft_event_type: string;
   event_date: string | null;
   draft_event_date: string | null;
   event_time: string | null;
@@ -58,8 +56,8 @@ export interface UserEvent {
   published_at: string | null;
   created_at: string;
   updated_at: string;
-  slug: string | null;
-  draft_slug: string | null;
+  slug: string;
+  draft_slug: string;
   rsvp_deadline: string | null;
   draft_rsvp_deadline: string | null;
 }
@@ -94,8 +92,8 @@ export interface EventGuest {
   group_name: string | null;
   side: string | null;
   group_id: string | null;
-  token: string | null;
-  rsvp_status: string | null;
+  token: string;
+  rsvp_status: string;
   rsvp_submitted_at: string | null;
   plus_ones: number;
   dietary: string | null;
@@ -141,7 +139,7 @@ export interface EventSchedule {
   event_id: string;
   title: string;
   description: string | null;
-  schedule_date: string | null;
+  schedule_date: string;
   start_time: string | null;
   end_time: string | null;
   venue: string | null;
@@ -199,9 +197,9 @@ export interface GuestInvitationOverride {
 export interface SharingEvent {
   id: string;
   event_id: string;
-  event_type: string | null;
+  event_type: string;
   guest_id: string | null;
-  source: string | null;
+  source: string;
   device_type: string | null;
   metadata: Json;
   created_at: string;

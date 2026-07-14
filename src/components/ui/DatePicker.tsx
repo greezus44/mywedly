@@ -1,13 +1,28 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { cn } from "../../lib/utils";
+import { Input } from "./Input";
 
 interface DatePickerProps {
-  value?: string | null;
+  value: string | null;
   onChange: (isoDate: string | null) => void;
+  label?: string;
   placeholder?: string;
-  className?: string;
-  minDate?: string;
-  maxDate?: string;
+  min?: string;
+  max?: string;
+}
+
+function toDateInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
+}
+
+function toIsoDate(dateInput: string): string | null {
+  if (!dateInput) return null;
+  const d = new Date(dateInput + "T00:00:00");
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
 }
 
 const MONTH_NAMES = [
@@ -15,39 +30,24 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-const DAY_NAMES = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-function toDateParts(iso: string | null | undefined): { y: number; m: number; d: number } | null {
-  if (!iso) return null;
-  const dt = new Date(iso);
-  if (isNaN(dt.getTime())) return null;
-  return { y: dt.getFullYear(), m: dt.getMonth(), d: dt.getDate() };
-}
-
-function toIsoDate(y: number, m: number, d: number): string {
-  return new Date(y, m, d).toISOString().split("T")[0];
-}
-
-export function DatePicker({
+export const DatePicker: React.FC<DatePickerProps> = ({
   value,
   onChange,
-  placeholder = "Select date",
-  className,
-  minDate,
-  maxDate,
-}: DatePickerProps) {
+  label,
+  placeholder = "Select a date",
+  min,
+  max,
+}) => {
   const [open, setOpen] = useState(false);
-  const [viewYear, setViewYear] = useState(() => {
-    const p = toDateParts(value);
-    return p ? p.y : new Date().getFullYear();
-  });
-  const [viewMonth, setViewMonth] = useState(() => {
-    const p = toDateParts(value);
-    return p ? p.m : new Date().getMonth();
-  });
-  const containerRef = useRef<HTMLDivElement>(null);
+  const initial = value ? new Date(value) : new Date();
+  const [viewMonth, setViewMonth] = useState(initial.getMonth());
+  const [viewYear, setViewYear] = useState(initial.getFullYear());
+  const containerRef = React.useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
+    if (!open) return;
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
@@ -55,17 +55,30 @@ export function DatePicker({
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [open]);
 
-  const selected = toDateParts(value);
-  const minParts = toDateParts(minDate);
-  const maxParts = toDateParts(maxDate);
+  const selectedDate = value ? new Date(value) : null;
 
-  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const cells: (number | null)[] = [];
-  for (let i = 0; i < firstDay; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  const daysInMonth = useMemo(() => {
+    return new Date(viewYear, viewMonth + 1, 0).getDate();
+  }, [viewYear, viewMonth]);
+
+  const firstDayOfWeek = useMemo(() => {
+    return new Date(viewYear, viewMonth, 1).getDay();
+  }, [viewYear, viewMonth]);
+
+  const cells: (Date | null)[] = [];
+  for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(viewYear, viewMonth, d));
+
+  const minDate = min ? new Date(min) : null;
+  const maxDate = max ? new Date(max) : null;
+
+  const isDisabled = (d: Date) => {
+    if (minDate && d < minDate) return true;
+    if (maxDate && d > maxDate) return true;
+    return false;
+  };
 
   const prevMonth = () => {
     if (viewMonth === 0) {
@@ -75,7 +88,6 @@ export function DatePicker({
       setViewMonth((m) => m - 1);
     }
   };
-
   const nextMonth = () => {
     if (viewMonth === 11) {
       setViewMonth(0);
@@ -85,81 +97,67 @@ export function DatePicker({
     }
   };
 
-  const isDisabled = (d: number) => {
-    const iso = toIsoDate(viewYear, viewMonth, d);
-    if (minParts && iso < toIsoDate(minParts.y, minParts.m, minParts.d)) return true;
-    if (maxParts && iso > toIsoDate(maxParts.y, maxParts.m, maxParts.d)) return true;
-    return false;
+  const selectDate = (d: Date) => {
+    if (isDisabled(d)) return;
+    onChange(toIsoDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`));
+    setOpen(false);
   };
 
   return (
-    <div ref={containerRef} className={cn("relative", className)}>
-      <button
-        type="button"
+    <div ref={containerRef} className="relative w-full">
+      <Input
+        label={label}
+        readOnly
+        value={selectedDate ? selectedDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : ""}
+        placeholder={placeholder}
         onClick={() => setOpen((o) => !o)}
-        className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-left text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
-      >
-        {value ? new Date(value + "T00:00:00").toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : (
-          <span className="text-dash-muted/60">{placeholder}</span>
-        )}
-      </button>
+        className="cursor-pointer"
+      />
       {open && (
-        <div className="absolute z-50 mt-1 w-64 rounded-lg border border-dash-border bg-dash-surface p-3 shadow-lg">
+        <div className="absolute z-50 mt-1 rounded-lg border border-dash-border bg-dash-surface p-3 shadow-lg">
           <div className="mb-2 flex items-center justify-between">
-            <button type="button" onClick={prevMonth} className="px-2 py-1 text-dash-muted hover:text-dash-text">
+            <button type="button" onClick={prevMonth} className="rounded p-1 text-dash-muted hover:bg-dash-bg">
               ‹
             </button>
             <span className="text-sm font-medium text-dash-text">
               {MONTH_NAMES[viewMonth]} {viewYear}
             </span>
-            <button type="button" onClick={nextMonth} className="px-2 py-1 text-dash-muted hover:text-dash-text">
+            <button type="button" onClick={nextMonth} className="rounded p-1 text-dash-muted hover:bg-dash-bg">
               ›
             </button>
           </div>
           <div className="grid grid-cols-7 gap-1">
             {DAY_NAMES.map((dn) => (
-              <div key={dn} className="text-center text-xs font-medium text-dash-muted">
+              <div key={dn} className="px-1 pb-1 text-center text-xs text-dash-muted">
                 {dn}
               </div>
             ))}
-            {cells.map((d, i) => (
-              <div key={i}>
-                {d !== null && (
-                  <button
-                    type="button"
-                    disabled={isDisabled(d)}
-                    onClick={() => {
-                      onChange(toIsoDate(viewYear, viewMonth, d));
-                      setOpen(false);
-                    }}
-                    className={cn(
-                      "h-8 w-8 rounded text-sm transition-colors",
-                      selected && selected.y === viewYear && selected.m === viewMonth && selected.d === d
-                        ? "bg-dash-primary text-dash-primary-fg"
+            {cells.map((d, i) => {
+              if (!d) return <div key={`empty-${i}`} />;
+              const isSelected = selectedDate && d.toDateString() === selectedDate.toDateString();
+              const disabled = isDisabled(d);
+              return (
+                <button
+                  key={d.toISOString()}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => selectDate(d)}
+                  className={cn(
+                    "h-8 w-8 rounded text-xs transition-colors",
+                    isSelected
+                      ? "bg-dash-primary text-dash-primary-fg"
+                      : disabled
+                        ? "text-dash-muted/40 cursor-not-allowed"
                         : "text-dash-text hover:bg-dash-bg",
-                      isDisabled(d) && "opacity-40 cursor-not-allowed hover:bg-transparent"
-                    )}
-                  >
-                    {d}
-                  </button>
-                )}
-              </div>
-            ))}
+                  )}
+                >
+                  {d.getDate()}
+                </button>
+              );
+            })}
           </div>
-          {value && (
-            <button
-              type="button"
-              onClick={() => {
-                onChange(null);
-                setOpen(false);
-              }}
-              className="mt-2 w-full text-center text-xs text-dash-muted hover:text-dash-text"
-            >
-              Clear
-            </button>
-          )}
         </div>
       )}
     </div>
   );
-}
+};

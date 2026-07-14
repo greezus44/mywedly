@@ -1,240 +1,233 @@
 import React from "react";
+import type { UserEvent, Json } from "../../lib/supabase";
 import { resolveTypography } from "../../lib/typography";
-import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
-import type { Json } from "../../lib/supabase";
+import { jsonToTheme } from "../../lib/theme";
+import { EventThemeProvider } from "../../lib/theme-context";
+import { RichTextContent } from "../../lib/sanitize";
+import { formatDate, formatTime12 } from "../../lib/utils";
 
-interface PreviewField {
-  text?: string;
-  align?: string;
-  color?: string;
-  fontSize?: number;
-  fontFamily?: string;
-  fontWeight?: number;
-  lineHeight?: number;
-  letterSpacing?: number;
+export interface CoverConfig {
+  eyebrow?: string | { text?: string; fontFamily?: string; fontSize?: number; fontWeight?: number; color?: string; align?: string; italic?: boolean; underline?: boolean };
+  heading?: string | { text?: string; fontFamily?: string; fontSize?: number; fontWeight?: number; color?: string; align?: string; italic?: boolean; underline?: boolean };
+  subheading?: string | { text?: string; fontFamily?: string; fontSize?: number; fontWeight?: number; color?: string; align?: string; italic?: boolean; underline?: boolean };
+  bodyHtml?: string;
+  ctaText?: string;
+  overlayOpacity?: number;
+  background?: {
+    image?: string | null;
+    color?: string;
+    position?: string;
+    fit?: string;
+  };
 }
 
-function field(value: unknown, fallback = ""): { text: string; style: React.CSSProperties } {
-  return resolveTypography(value, fallback);
+export interface LogoConfig {
+  url?: string | null;
+  size?: number;
+  align?: string;
 }
 
 interface CoverPreviewProps {
-  coverConfig?: Json | null;
-  eventName?: string;
-  eventDate?: string | null;
-  eventTime?: string | null;
-  venue?: string | null;
+  event: UserEvent;
+  theme?: Json | null;
+  coverConfig?: CoverConfig;
+  logoConfig?: LogoConfig;
   coverImage?: string | null;
 }
 
-export function CoverPreview({
+export const CoverPreview: React.FC<CoverPreviewProps> = ({
+  event,
+  theme,
   coverConfig,
-  eventName,
-  eventDate,
-  eventTime,
-  venue,
+  logoConfig,
   coverImage,
-}: CoverPreviewProps) {
-  const cfg = (coverConfig ?? {}) as Record<string, unknown>;
-  const title = field(cfg.title, eventName ?? "Our Wedding");
-  const subtitle = field(cfg.subtitle, "");
-  const dateText = field(cfg.date, eventDate ? formatDate(eventDate) : "");
-  const timeText = field(cfg.time, eventTime ? formatTime12(eventTime) : "");
-  const venueText = field(cfg.venue, venue ?? "");
+}) => {
+  const effectiveTheme = theme ?? event.theme;
+  const effectiveCoverConfig = (coverConfig ?? (event.cover_config as CoverConfig | null)) ?? {};
+  const effectiveLogoConfig = (logoConfig ?? (event.logo_config as LogoConfig | null)) ?? {};
+  const effectiveCoverImage = coverImage ?? event.cover_image;
+
+  const eyebrow = resolveTypography(effectiveCoverConfig.eyebrow, "You're Invited");
+  const heading = resolveTypography(effectiveCoverConfig.heading, event.name || "Our Wedding");
+  const subheading = resolveTypography(effectiveCoverConfig.subheading, "");
+
+  const overlayOpacity = effectiveCoverConfig.overlayOpacity ?? 0.4;
+  const bg = effectiveCoverConfig.background ?? {};
+  const bgImage = bg.image ?? effectiveCoverImage;
+  const bgPosition = bg.position ?? "center center";
+  const bgFit = bg.fit ?? "cover";
+
+  const logo = effectiveLogoConfig;
+  const logoAlign = logo.align ?? "center";
+  const logoSize = logo.size ?? 80;
+
+  const ctaText = effectiveCoverConfig.ctaText ?? "View Invitation";
+
+  const eventDate = event.event_date ? formatDate(event.event_date) : "";
+  const eventTime = event.event_time ? formatTime12(event.event_time) : "";
 
   return (
-    <div
-      className="relative flex min-h-[400px] flex-col items-center justify-center overflow-hidden rounded-lg bg-cover bg-center"
-      style={coverImage ? { backgroundImage: `url(${coverImage})` } : { background: "var(--event-surface-alt)" }}
-    >
-      <div className="absolute inset-0 bg-black/30" />
-      <div className="relative z-10 flex flex-col items-center gap-3 px-6 py-12 text-center">
-        <h1 className="guest-title" style={title.style}>
-          {title.text}
-        </h1>
-        {subtitle.text && (
-          <p className="guest-subtitle" style={subtitle.style}>
-            {subtitle.text}
-          </p>
-        )}
-        {(dateText.text || timeText.text) && (
-          <div className="flex flex-col items-center gap-1">
-            {dateText.text && (
-              <p style={dateText.style}>{dateText.text}</p>
-            )}
-            {timeText.text && (
-              <p style={timeText.style}>{timeText.text}</p>
-            )}
-          </div>
-        )}
-        {venueText.text && (
-          <p style={venueText.style}>{venueText.text}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-interface LoginPreviewProps {
-  loginConfig?: Json | null;
-  eventName?: string;
-}
-
-export function LoginPreview({ loginConfig, eventName }: LoginPreviewProps) {
-  const cfg = (loginConfig ?? {}) as Record<string, unknown>;
-  const heading = field(cfg.heading, "Welcome");
-  const subheading = field(cfg.subheading, `Please sign in to view ${eventName ?? "the event"}.`);
-  const inputLabel = field(cfg.inputLabel, "Enter your username");
-  const buttonText = field(cfg.buttonText, "Sign In");
-
-  return (
-    <div className="guest-section flex flex-col items-center justify-center">
-      <div className="event-card w-full max-w-md">
-        <h2 className="guest-title mb-2 text-center" style={heading.style}>
-          {heading.text}
-        </h2>
-        <p className="guest-subtitle mb-6 text-center" style={subheading.style}>
-          {subheading.text}
-        </p>
-        <div className="flex flex-col gap-3">
-          <label className="text-sm font-medium" style={inputLabel.style}>
-            {inputLabel.text}
-          </label>
-          <input
-            type="text"
-            className="event-input"
-            placeholder="Username"
-            disabled
+    <EventThemeProvider theme={effectiveTheme}>
+      <div
+        className="relative flex min-h-[600px] flex-col items-center justify-center overflow-hidden px-6 py-16"
+        style={{
+          backgroundColor: bg.color || "var(--event-bg)",
+          backgroundImage: bgImage ? `url(${bgImage})` : undefined,
+          backgroundSize: bgFit,
+          backgroundPosition: bgPosition,
+        }}
+      >
+        {bgImage && (
+          <div
+            className="absolute inset-0"
+            style={{ backgroundColor: "black", opacity: overlayOpacity }}
           />
-          <button type="button" className="event-btn-primary" disabled>
-            {buttonText.text}
-          </button>
+        )}
+
+        {logo.url && (
+          <div
+            className="relative z-10 mb-8"
+            style={{ textAlign: logoAlign as React.CSSProperties["textAlign"], width: "100%" }}
+          >
+            <img
+              src={logo.url}
+              alt="Event logo"
+              style={{ width: `${logoSize}px`, height: "auto", margin: logoAlign === "center" ? "0 auto" : undefined }}
+            />
+          </div>
+        )}
+
+        <div className="relative z-10 flex max-w-2xl flex-col items-center text-center">
+          {eyebrow.text && (
+            <p
+              className="guest-eyebrow mb-3"
+              style={eyebrow.style}
+            >
+              {eyebrow.text}
+            </p>
+          )}
+
+          <h1
+            className="guest-title"
+            style={heading.style}
+          >
+            {heading.text}
+          </h1>
+
+          {subheading.text && (
+            <p
+              className="guest-subtitle mt-2"
+              style={subheading.style}
+            >
+              {subheading.text}
+            </p>
+          )}
+
+          {(eventDate || eventTime) && (
+            <div className="mt-6 flex items-center gap-3 text-sm" style={{ color: "var(--event-muted)" }}>
+              {eventDate && <span>{eventDate}</span>}
+              {eventDate && eventTime && <span>·</span>}
+              {eventTime && <span>{eventTime}</span>}
+            </div>
+          )}
+
+          {event.venue && (
+            <p className="mt-2 text-sm" style={{ color: "var(--event-muted)" }}>
+              {event.venue}
+            </p>
+          )}
+
+          {effectiveCoverConfig.bodyHtml && (
+            <div className="mt-6">
+              <RichTextContent html={effectiveCoverConfig.bodyHtml} />
+            </div>
+          )}
+
+          {ctaText && (
+            <button
+              type="button"
+              className="event-btn-primary mt-8"
+            >
+              {ctaText}
+            </button>
+          )}
         </div>
       </div>
-    </div>
+    </EventThemeProvider>
   );
-}
+};
 
-interface HomePreviewProps {
-  content?: Json | null;
-  eventName?: string;
-  eventDate?: string | null;
-  venue?: string | null;
-}
-
-export function HomePreview({
-  content,
-  eventName,
-  eventDate,
-  venue,
-}: HomePreviewProps) {
-  const cfg = (content ?? {}) as Record<string, unknown>;
-  const greeting = field(cfg.greeting, "Welcome to our wedding");
-  const title = field(cfg.title, eventName ?? "Our Special Day");
-  const intro = field(cfg.intro, "");
-  const countdown = getCountdown(eventDate);
-
+export const LoginPreview: React.FC<{ event: UserEvent; theme?: Json | null }> = ({ event, theme }) => {
+  const effectiveTheme = theme ?? event.theme;
+  const loginConfig = (event.login_config as { heading?: string; body?: string; ctaText?: string } | null) ?? {};
   return (
-    <div className="guest-section">
-      <div className="mx-auto max-w-2xl text-center">
-        <p className="guest-eyebrow" style={greeting.style}>
-          {greeting.text}
-        </p>
-        <h1 className="guest-title" style={title.style}>
-          {title.text}
-        </h1>
-        {intro.text && (
-          <p className="guest-subtitle mx-auto" style={intro.style}>
-            {intro.text}
-          </p>
-        )}
-        {eventDate && !countdown.expired && (
-          <div className="mt-8 flex justify-center gap-6">
-            <div className="text-center">
-              <div className="text-3xl font-bold">{countdown.days}</div>
-              <div className="text-xs uppercase tracking-wider">Days</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold">{countdown.hours}</div>
-              <div className="text-xs uppercase tracking-wider">Hours</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold">{countdown.minutes}</div>
-              <div className="text-xs uppercase tracking-wider">Minutes</div>
-            </div>
-            <div className="text-center">
-              <div className="text-3xl font-bold">{countdown.seconds}</div>
-              <div className="text-xs uppercase tracking-wider">Seconds</div>
-            </div>
+    <EventThemeProvider theme={effectiveTheme}>
+      <div className="guest-section flex min-h-[400px] flex-col items-center justify-center">
+        <div className="event-card w-full max-w-md">
+          <h2 className="guest-title text-center" style={{ fontSize: "1.5rem" }}>
+            {resolveTypography(loginConfig.heading, "Enter Your Username").text}
+          </h2>
+          {loginConfig.body && (
+            <p className="guest-subtitle mt-2 text-center">{loginConfig.body}</p>
+          )}
+          <div className="mt-6 space-y-3">
+            <input
+              type="text"
+              placeholder="Your username"
+              className="event-input"
+              readOnly
+            />
+            <button type="button" className="event-btn-primary w-full">
+              {loginConfig.ctaText ?? "Sign In"}
+            </button>
           </div>
-        )}
-        {venue && (
-          <p className="mt-6" style={field(cfg.venue).style}>
-            {venue}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-interface RsvpPreviewProps {
-  content?: Json | null;
-  eventName?: string;
-}
-
-export function RsvpPreview({ content, eventName }: RsvpPreviewProps) {
-  const cfg = (content ?? {}) as Record<string, unknown>;
-  const heading = field(cfg.heading, "RSVP");
-  const subheading = field(cfg.subheading, `Let us know if you can make it to ${eventName ?? "our event"}.`);
-  const attendingLabel = field(cfg.attendingLabel, "Will you attend?");
-  const plusOnesLabel = field(cfg.plusOnesLabel, "Number of plus ones");
-  const dietaryLabel = field(cfg.dietaryLabel, "Dietary requirements");
-  const messageLabel = field(cfg.messageLabel, "Message");
-  const buttonText = field(cfg.buttonText, "Submit RSVP");
-
-  return (
-    <div className="guest-section">
-      <div className="mx-auto max-w-xl">
-        <h1 className="guest-title mb-2 text-center" style={heading.style}>
-          {heading.text}
-        </h1>
-        <p className="guest-subtitle mb-6 text-center" style={subheading.style}>
-          {subheading.text}
-        </p>
-        <div className="event-card flex flex-col gap-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium" style={attendingLabel.style}>
-              {attendingLabel.text}
-            </label>
-            <div className="flex gap-2">
-              <button type="button" className="event-btn-secondary" disabled>Yes</button>
-              <button type="button" className="event-btn-secondary" disabled>No</button>
-            </div>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium" style={plusOnesLabel.style}>
-              {plusOnesLabel.text}
-            </label>
-            <input type="number" className="event-input" disabled defaultValue={0} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium" style={dietaryLabel.style}>
-              {dietaryLabel.text}
-            </label>
-            <input type="text" className="event-input" disabled />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium" style={messageLabel.style}>
-              {messageLabel.text}
-            </label>
-            <textarea className="event-input min-h-[80px]" disabled />
-          </div>
-          <button type="button" className="event-btn-primary mt-2" disabled>
-            {buttonText.text}
-          </button>
         </div>
       </div>
-    </div>
+    </EventThemeProvider>
   );
-}
+};
+
+export const HomePreview: React.FC<{ event: UserEvent; theme?: Json | null }> = ({ event, theme }) => {
+  const effectiveTheme = theme ?? event.theme;
+  const content = (event.content as { intro?: string; body?: string } | null) ?? {};
+  return (
+    <EventThemeProvider theme={effectiveTheme}>
+      <div className="guest-section">
+        <div className="mx-auto max-w-2xl text-center">
+          <h1 className="guest-title">{event.name}</h1>
+          {content.intro && <p className="guest-subtitle mt-2">{content.intro}</p>}
+          {content.body && (
+            <div className="rich-content mt-6">
+              <RichTextContent html={content.body} />
+            </div>
+          )}
+          {event.event_date && (
+            <p className="mt-6 text-sm" style={{ color: "var(--event-muted)" }}>
+              {formatDate(event.event_date)}
+            </p>
+          )}
+        </div>
+      </div>
+    </EventThemeProvider>
+  );
+};
+
+export const RsvpPreview: React.FC<{ event: UserEvent; theme?: Json | null }> = ({ event, theme }) => {
+  const effectiveTheme = theme ?? event.theme;
+  return (
+    <EventThemeProvider theme={effectiveTheme}>
+      <div className="guest-section">
+        <div className="mx-auto max-w-lg">
+          <h1 className="guest-title text-center">RSVP</h1>
+          <p className="guest-subtitle mt-2 text-center">
+            Will you be joining us for {event.name}?
+          </p>
+          <div className="mt-6 flex gap-3">
+            <button type="button" className="event-btn-primary flex-1">Joyfully Accepts</button>
+            <button type="button" className="event-btn-secondary flex-1">Regretfully Declines</button>
+          </div>
+        </div>
+      </div>
+    </EventThemeProvider>
+  );
+};

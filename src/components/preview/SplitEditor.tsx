@@ -8,39 +8,29 @@ interface SplitEditorProps {
   editorRatio?: number;
 }
 
-export function SplitEditor({
+export const SplitEditor: React.FC<SplitEditorProps> = ({
   editor,
   preview,
   previewClassName,
-  editorRatio = 0.4,
-}: SplitEditorProps) {
-  const editorStyle: React.CSSProperties = {
-    flexBasis: `${editorRatio * 100}%`,
-  };
-  const previewStyle: React.CSSProperties = {
-    flexBasis: `${(1 - editorRatio) * 100}%`,
-  };
+  editorRatio = 0.5,
+}) => {
+  const editorWidth = `${editorRatio * 100}%`;
+  const previewWidth = `${(1 - editorRatio) * 100}%`;
 
   return (
-    <div className="flex h-full w-full flex-col gap-4 lg:flex-row">
+    <div className="flex h-full w-full overflow-hidden rounded-lg border border-dash-border">
       <div
-        className={cn(
-          "min-h-0 overflow-y-auto rounded-lg border border-dash-border bg-dash-surface p-4 scrollbar-thin",
-          "lg:max-h-full"
-        )}
-        style={editorStyle}
+        className="overflow-y-auto border-r border-dash-border bg-dash-surface p-4 scrollbar-thin"
+        style={{ width: editorWidth, minWidth: "320px" }}
       >
         {editor}
       </div>
       <div
-        className={cn(
-          "min-h-0 overflow-y-auto rounded-lg border border-dash-border bg-dash-bg p-4 scrollbar-thin",
-          previewClassName
-        )}
-        style={previewStyle}
+        className={cn("overflow-y-auto bg-dash-bg scrollbar-thin", previewClassName)}
+        style={{ width: previewWidth, minWidth: "320px" }}
       >
         {preview}
       </div>
     </div>
   );
-}
+};

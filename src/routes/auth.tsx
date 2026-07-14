@@ -2,8 +2,7 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui/Input";
-import { LoadingSpinner } from "../components/ui";
+import { Input, Card } from "../components/ui";
 
 export function AuthPage() {
   const navigate = useNavigate();
@@ -11,8 +10,8 @@ export function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,21 +27,21 @@ export function AuthPage() {
         });
         if (signUpError) throw signUpError;
         if (data.user) {
+          // Insert profile
           await supabase.from("profiles").upsert({
             id: data.user.id,
             email,
             full_name: fullName,
           });
         }
-        navigate("/dashboard");
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (signInError) throw signInError;
-        navigate("/dashboard");
       }
+      navigate("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
@@ -51,25 +50,22 @@ export function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <Link to="/" className="text-2xl font-bold text-dash-primary">
-            MyWedly
+          <Link to="/" className="inline-flex items-center gap-2 text-2xl font-bold text-dash-text">
+            <span className="text-dash-primary">My</span>Wedly
           </Link>
-          <p className="mt-2 text-sm text-dash-muted">
-            {mode === "signin" ? "Sign in to your account" : "Create your account"}
-          </p>
         </div>
 
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm">
-          <div className="mb-6 flex rounded-lg border border-dash-border p-1">
+        <Card>
+          <div className="mb-6 flex gap-1 rounded-md bg-dash-bg p-1">
             <button
               type="button"
               onClick={() => setMode("signin")}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+              className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                 mode === "signin"
-                  ? "bg-dash-primary text-dash-primary-fg"
+                  ? "bg-dash-surface text-dash-text shadow-sm"
                   : "text-dash-muted hover:text-dash-text"
               }`}
             >
@@ -78,9 +74,9 @@ export function AuthPage() {
             <button
               type="button"
               onClick={() => setMode("signup")}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+              className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
                 mode === "signup"
-                  ? "bg-dash-primary text-dash-primary-fg"
+                  ? "bg-dash-surface text-dash-text shadow-sm"
                   : "text-dash-muted hover:text-dash-text"
               }`}
             >
@@ -118,31 +114,27 @@ export function AuthPage() {
             />
 
             {error && (
-              <p className="rounded-md bg-dash-danger/10 px-3 py-2 text-sm text-dash-danger">
+              <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
-              </p>
+              </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <LoadingSpinner className="h-4 w-4" />
-                  <span>{mode === "signin" ? "Signing in…" : "Creating account…"}</span>
-                </>
-              ) : mode === "signin" ? (
-                "Sign In"
-              ) : (
-                "Create Account"
-              )}
+            <Button type="submit" className="w-full" loading={loading}>
+              {mode === "signin" ? "Sign In" : "Create Account"}
             </Button>
           </form>
-        </div>
 
-        <p className="mt-4 text-center text-sm text-dash-muted">
-          <Link to="/" className="hover:text-dash-text">
-            ← Back to home
-          </Link>
-        </p>
+          <p className="mt-4 text-center text-sm text-dash-muted">
+            {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
+            <button
+              type="button"
+              onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+              className="font-medium text-dash-primary hover:underline"
+            >
+              {mode === "signin" ? "Sign up" : "Sign in"}
+            </button>
+          </p>
+        </Card>
       </div>
     </div>
   );

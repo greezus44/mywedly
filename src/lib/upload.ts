@@ -1,112 +1,98 @@
 import { supabase } from "./supabase";
 
-interface CompressOptions {
-  maxWidth?: number;
-  maxHeight?: number;
-  quality?: number;
-}
+const MAX_DIMENSION = 1920;
+const JPEG_QUALITY = 0.82;
 
-function loadImage(file: File): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve(img);
-    };
-    img.onerror = (e) => {
-      URL.revokeObjectURL(url);
-      reject(e);
-    };
-    img.src = url;
-  });
-}
-
-export async function compressImage(
-  file: File,
-  options: CompressOptions = {}
-): Promise<File> {
-  const { maxWidth = 1920, maxHeight = 1920, quality = 0.85 } = options;
-
-  // Bypass SVG entirely
+async function compressImage(file: File): Promise<Blob> {
   if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")) {
     return file;
   }
-
-  // For non-image files, return as-is
-  if (!file.type.startsWith("image/")) {
-    return file;
-  }
-
-  const img = await loadImage(file);
-  let { width, height } = img;
-
-  if (width > maxWidth || height > maxHeight) {
-    const ratio = Math.min(maxWidth / width, maxHeight / height);
-    width = Math.round(width * ratio);
-    height = Math.round(height * ratio);
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return file;
-
-  ctx.drawImage(img, 0, 0, width, height);
-
-  // Preserve alpha for PNGs; use JPEG for opaque images
-  const isPng = file.type === "image/png";
-  const hasAlpha = isPng;
-
-  if (hasAlpha) {
-    const blob: Blob | null = await new Promise((resolve) =>
-      canvas.toBlob((b) => resolve(b), "image/png")
-    );
-    if (!blob) return file;
-    return new File([blob], file.name.replace(/\.\w+$/, ".png"), {
-      type: "image/png",
-    });
-  }
-
-  const blob: Blob | null = await new Promise((resolve) =>
-    canvas.toBlob((b) => resolve(b), "image/jpeg", quality)
-  );
-  if (!blob) return file;
-  return new File([blob], file.name.replace(/\.\w+$/, ".jpg"), {
-    type: "image/jpeg",
+  const hasAlpha = file.type === "image/png";
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
+          const ratio = Math.min(MAX_DIMENSION / width, MAX_DIMENSION / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Canvas context unavailable"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        if (hasAlpha) {
+          canvas.toBlob(
+            (blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error("Failed to compress PNG"));
+            },
+            "image/png",
+          );
+        } else {
+          canvas.toBlob(
+            (blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error("Failed to compress JPEG"));
+            },
+            "image/jpeg",
+            JPEG_QUALITY,
+          );
+        }
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
   });
 }
 
 export async function uploadImage(
   file: File,
   bucket: string,
-  path: string
-): Promise<string> {
-  const compressed = await compressImage(file);
-  const { error } = await supabase.storage
-    .from(bucket)
-    .upload(path, compressed, {
-      cacheControl: "3600",
-      upsert: true,
-    });
-  if (error) throw error;
-  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-  return data.publicUrl;
+  pathPrefix: string,
+): Promise<{ url: string; path: string } | { error: string }> {
+  try {
+    const compressed = await compressImage(file);
+    const ext = file.name.toLowerCase().endsWith(".svg")
+      ? "svg"
+      : file.type === "image/png"
+        ? "png"
+        : "jpg";
+    const fileName = `${pathPrefix}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(fileName, compressed, {
+        contentType: ext === "svg" ? "image/svg+xml" : ext === "png" ? "image/png" : "image/jpeg",
+        upsert: false,
+      });
+    if (error) return { error: error.message };
+    const { data } = supabase.storage.from(bucket).getPublicUrl(fileName);
+    return { url: data.publicUrl, path: fileName };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Upload failed" };
+  }
 }
 
-export async function removeImage(bucket: string, path: string): Promise<void> {
+export async function removeImage(bucket: string, path: string): Promise<{ error: string | null }> {
   const { error } = await supabase.storage.from(bucket).remove([path]);
-  if (error) throw error;
+  return { error: error?.message ?? null };
 }
 
 export function extractPathFromUrl(url: string, bucket: string): string | null {
   try {
     const u = new URL(url);
-    const prefix = `/object/public/${bucket}/`;
-    const idx = u.pathname.indexOf(prefix);
-    if (idx === -1) return null;
-    return u.pathname.slice(idx + prefix.length);
+    const parts = u.pathname.split(`/${bucket}/`);
+    if (parts.length < 2) return null;
+    return parts[parts.length - 1];
   } catch {
     return null;
   }

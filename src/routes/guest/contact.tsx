@@ -1,113 +1,99 @@
 import { useGuestOutletContext } from "./guest-layout";
 
 interface ContactConfig {
-  phone?: string;
-  email?: string;
-  venue?: string;
-  address?: string;
-  mapQuery?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  contact_address?: string;
+  map_embed_url?: string;
 }
 
 export default function GuestContact() {
   const { event } = useGuestOutletContext();
-
+  const config = (event.content ?? {}) as ContactConfig;
   const sharingConfig = (event.sharing_config ?? {}) as ContactConfig;
-  const contact: ContactConfig = {
-    phone: sharingConfig.phone ?? undefined,
-    email: sharingConfig.email ?? undefined,
-    venue: sharingConfig.venue ?? event.venue ?? undefined,
-    address: sharingConfig.address ?? event.address ?? undefined,
-    mapQuery: sharingConfig.mapQuery ?? sharingConfig.address ?? event.address ?? event.venue ?? undefined,
-  };
 
-  const hasVenue = !!contact.venue;
-  const hasAddress = !!contact.address;
-  const hasPhone = !!contact.phone;
-  const hasEmail = !!contact.email;
-  const hasMap = !!contact.mapQuery;
+  const email = config.contact_email || sharingConfig.contact_email || null;
+  const phone = config.contact_phone || sharingConfig.contact_phone || null;
+  const address = config.contact_address || sharingConfig.contact_address || event.address || event.venue || null;
+  const mapUrl = config.map_embed_url || sharingConfig.map_embed_url || null;
+
+  const hasContact = email || phone || address;
 
   return (
-    <div className="guest-section">
-      <div className="mx-auto max-w-3xl">
-        {/* Header */}
-        <div className="mb-12 text-center">
+    <div>
+      <section className="guest-section text-center">
+        <div className="mx-auto max-w-2xl">
           <p className="guest-eyebrow">Contact</p>
           <h1 className="guest-title">Get in Touch</h1>
           <p className="guest-subtitle mx-auto">
-            Have questions? Here's how to reach us.
+            Have a question about {event.name}? Reach out using the details below.
           </p>
         </div>
+      </section>
 
-        {/* Venue & Address */}
-        {(hasVenue || hasAddress) && (
-          <section className="mb-10">
-            <p className="guest-eyebrow mb-3">Venue</p>
-            <div className="event-card">
-              {hasVenue && (
-                <h2 className="mb-1 text-lg font-semibold" style={{ color: "var(--event-heading)" }}>
-                  {contact.venue}
-                </h2>
-              )}
-              {hasAddress && (
-                <p style={{ color: "var(--event-muted)" }}>{contact.address}</p>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Phone & Email */}
-        {(hasPhone || hasEmail) && (
-          <section className="mb-10">
-            <p className="guest-eyebrow mb-3">Reach Us</p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {hasPhone && (
-                <div className="event-card">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>
-                    Phone
-                  </p>
-                  <a href={`tel:${contact.phone}`} className="font-medium hover:underline" style={{ color: "var(--event-primary)" }}>
-                    {contact.phone}
-                  </a>
-                </div>
-              )}
-              {hasEmail && (
-                <div className="event-card">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>
-                    Email
-                  </p>
-                  <a href={`mailto:${contact.email}`} className="font-medium hover:underline break-all" style={{ color: "var(--event-primary)" }}>
-                    {contact.email}
-                  </a>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* Map */}
-        {hasMap && (
-          <section>
-            <p className="guest-eyebrow mb-3">Location</p>
-            <div className="overflow-hidden" style={{ borderRadius: "var(--event-radius)", border: "1px solid var(--event-border)" }}>
-              <iframe
-                src={`https://maps.google.com/maps?q=${encodeURIComponent(contact.mapQuery!)}&output=embed`}
-                className="h-72 w-full"
-                loading="lazy"
-                title="Event location map"
-              />
-            </div>
-          </section>
-        )}
-
-        {/* Fallback */}
-        {!hasVenue && !hasAddress && !hasPhone && !hasEmail && !hasMap && (
-          <div className="text-center">
-            <p className="guest-subtitle mx-auto">
-              Contact information will be available soon. Please check back later.
-            </p>
+      <section className="guest-section-tight" style={{ backgroundColor: "var(--event-surface-alt)" }}>
+        <div className="mx-auto max-w-3xl">
+          <div className="grid gap-6 md:grid-cols-3">
+            {email && (
+              <div className="event-card text-center">
+                <p className="guest-eyebrow mb-2">Email</p>
+                <a href={`mailto:${email}`} className="text-sm hover:underline break-words" style={{ color: "var(--event-primary)" }}>
+                  {email}
+                </a>
+              </div>
+            )}
+            {phone && (
+              <div className="event-card text-center">
+                <p className="guest-eyebrow mb-2">Phone</p>
+                <a href={`tel:${phone}`} className="text-sm hover:underline" style={{ color: "var(--event-primary)" }}>
+                  {phone}
+                </a>
+              </div>
+            )}
+            {address && (
+              <div className="event-card text-center">
+                <p className="guest-eyebrow mb-2">Address</p>
+                <p className="text-sm" style={{ color: "var(--event-text)" }}>{address}</p>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+          {!hasContact && (
+            <div className="text-center">
+              <p className="guest-subtitle mx-auto">No contact information has been provided yet.</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {address && (
+        <section className="guest-section-tight">
+          <div className="mx-auto max-w-3xl">
+            <div className="mb-4 text-center">
+              <p className="guest-eyebrow">Location</p>
+              <h2 className="text-xl font-semibold" style={{ color: "var(--event-heading)" }}>{address}</h2>
+            </div>
+            <div className="overflow-hidden rounded-2xl" style={{ borderRadius: "var(--event-radius)" }}>
+              {mapUrl ? (
+                <iframe
+                  src={mapUrl}
+                  title="Event location map"
+                  className="h-80 w-full"
+                  loading="lazy"
+                  frameBorder={0}
+                />
+              ) : (
+                <iframe
+                  src={`https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed`}
+                  title="Event location map"
+                  className="h-80 w-full"
+                  loading="lazy"
+                  frameBorder={0}
+                />
+              )}
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
