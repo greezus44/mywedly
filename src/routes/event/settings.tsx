@@ -1,97 +1,175 @@
-import { useState, useEffect } from "react";
-import { useOutletContext, useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import React, { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input, DatePicker, TimePicker, DateTimePicker } from "../../components/ui";
-import { Modal } from "../../components/ui";
+import { Input } from "../../components/ui/Input";
 import { isValidSlug, slugify } from "../../lib/utils";
 
-interface EventContextValue { event: UserEvent; eventId: string; }
+const EVENT_TYPES = ["Wedding", "Birthday", "Anniversary", "Engagement", "Other"];
 
 export function SettingsPage() {
-  const { event, eventId } = useOutletContext<EventContextValue>();
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const [name, setName] = useState(event.draft_name ?? event.name ?? "");
-  const [slug, setSlug] = useState(event.draft_slug ?? event.slug ?? "");
-  const [eventType, setEventType] = useState(event.draft_event_type ?? event.event_type ?? "");
-  const [eventDate, setEventDate] = useState(event.draft_event_date ?? event.event_date ?? "");
-  const [eventTime, setEventTime] = useState(event.draft_event_time ?? event.event_time ?? "");
-  const [venue, setVenue] = useState(event.draft_venue ?? event.venue ?? "");
-  const [address, setAddress] = useState(event.draft_address ?? event.address ?? "");
-  const [rsvpDeadline, setRsvpDeadline] = useState(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "");
-  const [showDelete, setShowDelete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { eventId } = useParams<{ eventId: string }>();
+  const qc = useQueryClient();
+  const [form, setForm] = useState({
+    name: "",
+    event_type: "",
+    event_date: "",
+    event_time: "",
+    venue: "",
+    address: "",
+    slug: "",
+    rsvp_deadline: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [slugError, setSlugError] = useState<string | null>(null);
+
+  const { data: event } = useQuery({
+    queryKey: ["event", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
+      if (error) throw error;
+      return data as UserEvent;
+    },
+    enabled: !!eventId,
+  });
 
   useEffect(() => {
-    setName(event.draft_name ?? event.name ?? "");
-    setSlug(event.draft_slug ?? event.slug ?? "");
-    setEventType(event.draft_event_type ?? event.event_type ?? "");
-    setEventDate(event.draft_event_date ?? event.event_date ?? "");
-    setEventTime(event.draft_event_time ?? event.event_time ?? "");
-    setVenue(event.draft_venue ?? event.venue ?? "");
-    setAddress(event.draft_address ?? event.address ?? "");
-    setRsvpDeadline(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "");
+    if (event) {
+      setForm({
+        name: event.draft_name ?? event.name ?? "",
+        event_type: event.draft_event_type ?? event.event_type ?? "",
+        event_date: event.draft_event_date ?? event.event_date ?? "",
+        event_time: event.draft_event_time ?? event.event_time ?? "",
+        venue: event.draft_venue ?? event.venue ?? "",
+        address: event.draft_address ?? event.address ?? "",
+        slug: event.draft_slug ?? event.slug ?? "",
+        rsvp_deadline: event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "",
+      });
+    }
   }, [event]);
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (slug && !isValidSlug(slug)) throw new Error("Invalid slug. Use lowercase letters, numbers, and hyphens only.");
-      const { error } = await supabase.from("user_events").update({
-        draft_name: name, draft_slug: slug || slugify(name), draft_event_type: eventType,
-        draft_event_date: eventDate, draft_event_time: eventTime, draft_venue: venue,
-        draft_address: address, draft_rsvp_deadline: rsvpDeadline,
-      }).eq("id", eventId);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event", eventId] }); setError(null); },
-    onError: (e) => setError(e instanceof Error ? e.message : "Save failed"),
-  });
+  const update = (field: keyof typeof form, value: string) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    if (field === "slug") setSlugError(null);
+  };
 
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("user_events").delete().eq("id", eventId);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["events"] }); navigate("/dashboard"); },
-  });
+  const save = async () => {
+    if (!event) return;
+    if (form.slug && !isValidSlug(form.slug)) {
+      setSlugError("Slug can only contain lowercase letters, numbers, and hyphens.");
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from("user_events")
+      .update({
+        draft_name: form.name,
+        draft_event_type: form.event_type || null,
+        draft_event_date: form.event_date || null,
+        draft_event_time: form.event_time || null,
+        draft_venue: form.venue || null,
+        draft_address: form.address || null,
+        draft_slug: form.slug || slugify(form.name),
+        draft_rsvp_deadline: form.rsvp_deadline || null,
+      })
+      .eq("id", event.id);
+    setSaving(false);
+    if (!error) qc.invalidateQueries({ queryKey: ["event", eventId] });
+  };
+
+  if (!event) return <div>Loading…</div>;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-dash-text">Settings</h2>
-        <Button size="sm" onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>Save</Button>
+      <div>
+        <h2 className="text-lg font-semibold text-gray-800 mb-1">Settings</h2>
+        <p className="text-sm text-gray-500">Update the details of your event.</p>
       </div>
-      {error && <p className="text-sm text-dash-danger">{error}</p>}
-      {saveMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
-      <div className="space-y-4 rounded-lg border border-dash-border bg-dash-surface p-4">
-        <Input label="Event Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Event name" />
-        <Input label="Slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="url-slug" />
-        <Input label="Event Type" value={eventType} onChange={(e) => setEventType(e.target.value)} placeholder="e.g. Wedding, Birthday" />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <DatePicker label="Event Date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
-          <TimePicker label="Event Time" value={eventTime} onChange={setEventTime} />
+
+      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+        <Input
+          label="Event Name"
+          value={form.name}
+          onChange={(e) => update("name", e.target.value)}
+          placeholder="e.g. Jane & John's Wedding"
+        />
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Event Type</label>
+          <select
+            value={form.event_type}
+            onChange={(e) => update("event_type", e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--event-primary,#8B7355)]"
+          >
+            <option value="">Select type…</option>
+            {EVENT_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
         </div>
-        <Input label="Venue" value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue name" />
-        <Input label="Address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Full address" />
-        <DateTimePicker label="RSVP Deadline" value={rsvpDeadline} onChange={setRsvpDeadline} />
-      </div>
-      <div className="rounded-lg border border-dash-border border-red-200 bg-dash-surface p-4">
-        <h3 className="mb-2 text-sm font-semibold text-dash-danger">Danger Zone</h3>
-        <p className="mb-3 text-sm text-dash-muted">Permanently delete this event and all its data. This cannot be undone.</p>
-        <Button variant="danger" onClick={() => setShowDelete(true)}>Delete Event</Button>
-      </div>
-      <Modal open={showDelete} onClose={() => setShowDelete(false)} title="Delete Event">
-        <div className="space-y-4">
-          <p className="text-sm text-dash-muted">Are you sure you want to permanently delete "{name}"? All guests, RSVPs, and pages will be lost.</p>
-          {deleteMutation.isError && <p className="text-sm text-dash-danger">{deleteMutation.error instanceof Error ? deleteMutation.error.message : "Delete failed"}</p>}
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setShowDelete(false)}>Cancel</Button>
-            <Button variant="danger" onClick={() => deleteMutation.mutate()} loading={deleteMutation.isPending}>Delete Permanently</Button>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input
+            label="Event Date"
+            type="date"
+            value={form.event_date}
+            onChange={(e) => update("event_date", e.target.value)}
+          />
+          <Input
+            label="Event Time"
+            type="time"
+            value={form.event_time}
+            onChange={(e) => update("event_time", e.target.value)}
+          />
+        </div>
+
+        <Input
+          label="Venue"
+          value={form.venue}
+          onChange={(e) => update("venue", e.target.value)}
+          placeholder="e.g. The Grand Ballroom"
+        />
+        <Input
+          label="Address"
+          value={form.address}
+          onChange={(e) => update("address", e.target.value)}
+          placeholder="e.g. 123 Main Street, City"
+        />
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">URL Slug</label>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-400">/e/</span>
+            <input
+              value={form.slug}
+              onChange={(e) => update("slug", e.target.value)}
+              placeholder="auto-generated"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--event-primary,#8B7355)]"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => update("slug", slugify(form.name))}
+              disabled={!form.name.trim()}
+            >
+              Auto
+            </Button>
           </div>
+          {slugError && <p className="mt-1 text-xs text-red-500">{slugError}</p>}
         </div>
-      </Modal>
+
+        <Input
+          label="RSVP Deadline"
+          type="date"
+          value={form.rsvp_deadline}
+          onChange={(e) => update("rsvp_deadline", e.target.value)}
+        />
+
+        <Button onClick={save} disabled={saving}>
+          {saving ? "Saving…" : "Save Settings"}
+        </Button>
+      </div>
     </div>
   );
 }

@@ -1,101 +1,78 @@
-import type { TypographyStyle } from "../../lib/typography";
-import { Input } from "./Input";
-import { FontSelect } from "./FontSelect";
-import { ColorInput, RangeInput, Toggle } from "./index";
-import { HEADING_FONT_OPTIONS } from "../../lib/theme";
-import { cn } from "../../lib/utils";
+import React from "react";
+import { type TypographyStyle } from "../../lib/typography";
 
 interface TypographyControlsProps {
-  label?: string;
   value: TypographyStyle;
   onChange: (value: TypographyStyle) => void;
-  showText?: boolean;
 }
 
-const WEIGHTS = [400, 500, 700];
-const ALIGNS = [
-  { value: "left", label: "L" },
-  { value: "center", label: "C" },
-  { value: "right", label: "R" },
-];
-
-export function TypographyControls({ label, value, onChange, showText }: TypographyControlsProps) {
-  const update = (patch: Partial<TypographyStyle>) => onChange({ ...value, ...patch });
-
+export function TypographyControls({ value, onChange }: TypographyControlsProps) {
   return (
-    <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-3">
-      {label && <h4 className="text-xs font-semibold text-dash-text">{label}</h4>}
-      {showText && (
-        <Input
-          label="Text"
-          value={value.text ?? ""}
-          onChange={(e) => update({ text: e.target.value })}
-          placeholder="Enter text"
-        />
-      )}
+    <div className="space-y-3">
       <div>
-        <label className="mb-1 block text-xs font-medium text-dash-muted">Font Family</label>
-        <FontSelect
-          value={value.fontFamily ?? ""}
-          onChange={(v) => update({ fontFamily: v })}
-          options={HEADING_FONT_OPTIONS}
-        />
+        <label className="block text-xs font-medium text-gray-600 mb-1">Font Family</label>
+        <select
+          value={value.fontFamily}
+          onChange={(e) => onChange({ ...value, fontFamily: e.target.value })}
+          className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+        >
+          <option value="'Playfair Display', serif">Playfair Display</option>
+          <option value="'Cormorant Garamond', serif">Cormorant Garamond</option>
+          <option value="'Lora', serif">Lora</option>
+          <option value="'Inter', sans-serif">Inter</option>
+          <option value="'Lato', sans-serif">Lato</option>
+          <option value="'Montserrat', sans-serif">Montserrat</option>
+        </select>
       </div>
-      <RangeInput
-        label="Font Size"
-        value={value.fontSize ?? 16}
-        onChange={(v) => update({ fontSize: v })}
-        min={8}
-        max={72}
-      />
-      <div>
-        <label className="mb-1 block text-xs font-medium text-dash-muted">Weight</label>
-        <div className="flex gap-1">
-          {WEIGHTS.map((w) => (
-            <button
-              key={w}
-              type="button"
-              onClick={() => update({ fontWeight: w })}
-              className={cn(
-                "rounded border px-3 py-1 text-xs transition-colors",
-                (value.fontWeight ?? 400) === w
-                  ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
-                  : "border-dash-border text-dash-muted hover:bg-dash-bg",
-              )}
-              style={{ fontWeight: w }}
-            >
-              {w}
-            </button>
-          ))}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Size</label>
+          <input type="text" value={value.fontSize} onChange={(e) => onChange({ ...value, fontSize: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Weight</label>
+          <select value={value.fontWeight} onChange={(e) => onChange({ ...value, fontWeight: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+            <option value="300">Light</option>
+            <option value="400">Regular</option>
+            <option value="500">Medium</option>
+            <option value="600">Semibold</option>
+            <option value="700">Bold</option>
+          </select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Line Height</label>
+          <input type="text" value={value.lineHeight} onChange={(e) => onChange({ ...value, lineHeight: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Letter Spacing</label>
+          <input type="text" value={value.letterSpacing} onChange={(e) => onChange({ ...value, letterSpacing: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Text Transform</label>
+          <select value={value.textTransform} onChange={(e) => onChange({ ...value, textTransform: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+            <option value="none">None</option>
+            <option value="uppercase">Uppercase</option>
+            <option value="lowercase">Lowercase</option>
+            <option value="capitalize">Capitalize</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Align</label>
+          <select value={value.textAlign} onChange={(e) => onChange({ ...value, textAlign: e.target.value })} className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+            <option value="left">Left</option>
+            <option value="center">Center</option>
+            <option value="right">Right</option>
+            <option value="justify">Justify</option>
+          </select>
         </div>
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-dash-muted">Colour</label>
-        <ColorInput value={value.color ?? "#000000"} onChange={(v) => update({ color: v })} />
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-dash-muted">Alignment</label>
-        <div className="flex gap-1">
-          {ALIGNS.map((a) => (
-            <button
-              key={a.value}
-              type="button"
-              onClick={() => update({ align: a.value })}
-              className={cn(
-                "rounded border px-3 py-1 text-xs transition-colors",
-                (value.align ?? "left") === a.value
-                  ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
-                  : "border-dash-border text-dash-muted hover:bg-dash-bg",
-              )}
-            >
-              {a.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex gap-4">
-        <Toggle checked={value.italic ?? false} onChange={(v) => update({ italic: v })} label="Italic" />
-        <Toggle checked={value.underline ?? false} onChange={(v) => update({ underline: v })} label="Underline" />
+        <label className="block text-xs font-medium text-gray-600 mb-1">Colour</label>
+        <input type="color" value={value.color} onChange={(e) => onChange({ ...value, color: e.target.value })} className="w-full h-8 border border-gray-300 rounded cursor-pointer" />
       </div>
     </div>
   );

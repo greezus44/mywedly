@@ -1,96 +1,60 @@
-import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate, NavLink, Outlet, Link, useOutletContext } from "react-router-dom";
+import React from "react";
+import { useParams, useNavigate, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
-import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME } from "../../lib/theme";
-import { resolveGuestInvitations, getInvitedSubEventIds, type ResolveResult } from "../../lib/invitations";
+import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { LoadingSpinner } from "../../components/ui";
-
-export { useGuestOutletContext } from "./guest-layout";
+import { EventThemeProvider } from "../../lib/theme-context";
 
 export default function RustyLayout() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { guest, eventId, loading: authLoading } = useGuestAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const { guest, loading } = useGuestAuth();
 
-  const { data: event, isLoading, isError, error } = useQuery({
-    queryKey: ["published-event", slug],
+  const { data: event } = useQuery({
+    queryKey: ["event_by_slug", slug],
     queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle();
+      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug!).single();
       if (error) throw error;
-      return data as UserEvent | null;
+      return data as UserEvent;
     },
     enabled: !!slug,
   });
 
-  const { data: customPages } = useQuery({
-    queryKey: ["custom-pages-nav", event?.id],
-    queryFn: async () => {
-      if (!event) return [];
-      const { data, error } = await supabase.from("custom_pages").select("id, title, slug, show_in_nav, is_published").eq("event_id", event.id).eq("is_published", true).eq("show_in_nav", true).order("title", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as CustomPage[];
-    },
-    enabled: !!event,
-  });
+  React.useEffect(() => {
+    if (!loading && !guest && slug) {
+      navigate(`/r/${slug}/signin`, { replace: true });
+    }
+  }, [loading, guest, slug, navigate]);
 
-  const { data: invitations } = useQuery({
-    queryKey: ["guest-invitations", guest?.id, event?.id],
-    queryFn: async (): Promise<ResolveResult> => {
-      if (!guest || !event) return { invitations: [], error: null };
-      return resolveGuestInvitations(supabase, guest.id, event.id);
-    },
-    enabled: !!guest && !!event,
-  });
-
-  const invitedSubEventIds = invitations ? getInvitedSubEventIds(invitations) : [];
-
-  useEffect(() => {
-    if (!authLoading && event && (!guest || eventId !== event.id)) navigate(`/r/${slug}/signin`, { replace: true });
-  }, [authLoading, guest, eventId, event, slug, navigate]);
-
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
-  useEffect(() => { document.body.style.overflow = menuOpen ? "hidden" : ""; return () => { document.body.style.overflow = ""; }; }, [menuOpen]);
-
-  if (isLoading || authLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><LoadingSpinner /></div>;
-  if (isError) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Something went wrong</h1><p className="text-dash-muted">{error instanceof Error ? error.message : "Please try again later."}</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
-  if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
-  if (!guest || eventId !== event.id) return null;
-
-  const navLinks = [
-    { label: "Home", to: `/r/${slug}/home` },
-    ...(invitedSubEventIds.length > 0 ? [{ label: "RSVP", to: `/r/${slug}/rsvp` }] : []),
-    { label: "Wishes", to: `/r/${slug}/wishes` },
-    ...(customPages ?? []).map((p) => ({ label: p.title, to: `/r/${slug}/p/${p.slug}` })),
-  ];
+  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
+  if (!guest) return null;
+  if (!event) return <div className="min-h-screen flex items-center justify-center">Event not found</div>;
 
   return (
-    <EventThemeProvider theme={RUSTY_THEME}>
-      <button onClick={() => setMenuOpen(true)} aria-label="Open navigation menu" className="fixed left-4 top-4 z-40 flex h-8 w-8 items-center justify-center transition-all hover:scale-105" style={{ color: "var(--event-accent)" }}>
-        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-      </button>
-      {menuOpen && (
-        <div className="fixed inset-0 z-50 animate-fadeIn">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeMenu} />
-          <div className="absolute left-0 top-0 h-full w-full max-w-sm overflow-y-auto shadow-2xl scrollbar-thin" style={{ backgroundColor: "var(--event-bg)", borderRight: "1px solid var(--event-border)" }}>
-            <div className="flex items-center justify-between p-5">
-              <h2 className="text-lg font-semibold" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{event.name || "Menu"}</h2>
-              <button onClick={closeMenu} aria-label="Close navigation menu" className="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:opacity-70" style={{ color: "var(--event-text)", backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}>
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+    <EventThemeProvider themeJson={event.theme}>
+      <div className="min-h-screen" style={{ backgroundColor: "var(--event-bg)" }}>
+        <nav className="sticky top-0 z-20 bg-[var(--event-surface)] border-b border-[var(--event-border)] px-4 h-14 flex items-center justify-between">
+          <span className="text-lg font-semibold text-[var(--event-text)]" style={{ fontFamily: "var(--event-heading-font)" }}>
+            {event.name}
+          </span>
+          <div className="flex gap-1">
+            {[
+              { to: "home", label: "Home" },
+              { to: "rsvp", label: "RSVP" },
+              { to: "wishes", label: "Wishes" },
+            ].map((item) => (
+              <button
+                key={item.to}
+                onClick={() => navigate(`/r/${slug}/${item.to}`)}
+                className="px-3 py-1.5 rounded text-sm text-[var(--event-text-muted)] hover:text-[var(--event-primary)]"
+              >
+                {item.label}
               </button>
-            </div>
-            <nav className="flex flex-col gap-1 px-3 pb-8">
-              {navLinks.map((link) => (
-                <NavLink key={link.to} to={link.to} onClick={closeMenu} className={({ isActive }) => `rounded-lg px-4 py-3 text-base font-medium transition-colors ${isActive ? "opacity-100" : "opacity-70 hover:opacity-100"}`} style={({ isActive }) => ({ color: isActive ? "var(--event-primary)" : "var(--event-text)", backgroundColor: isActive ? "var(--event-surface-alt)" : "transparent" })}>{link.label}</NavLink>
-              ))}
-            </nav>
+            ))}
           </div>
-        </div>
-      )}
-      <Outlet context={{ event, slug: slug!, theme: RUSTY_THEME, invitedSubEventIds } satisfies { event: UserEvent; slug: string; theme: unknown; invitedSubEventIds: string[] }} />
+        </nav>
+        <Outlet />
+      </div>
     </EventThemeProvider>
   );
 }

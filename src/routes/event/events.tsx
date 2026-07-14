@@ -1,190 +1,234 @@
-import { useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type SubEvent, type EventSchedule } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventSchedule } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui";
-import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
-import { formatDate, formatTime12 } from "../../lib/utils";
-
-interface EventContextValue { event: UserEvent; eventId: string; }
+import { Input } from "../../components/ui/Input";
+import { DatePicker } from "../../components/ui/DatePicker";
+import { TimePicker } from "../../components/ui/TimePicker";
+import { formatDate, formatTime } from "../../lib/utils";
 
 export function EventsPage() {
-  const { event, eventId } = useOutletContext<EventContextValue>();
-  const queryClient = useQueryClient();
+  const { eventId } = useParams<{ eventId: string }>();
+  const qc = useQueryClient();
+
+  const { data: event } = useQuery({
+    queryKey: ["event", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
+      if (error) throw error;
+      return data as UserEvent;
+    },
+    enabled: !!eventId,
+  });
+
+  const { data: schedule, isLoading: schedLoading } = useQuery({
+    queryKey: ["schedule", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_schedule")
+        .select("*")
+        .eq("event_id", eventId!)
+        .order("order_index", { ascending: true });
+      if (error) throw error;
+      return data as EventSchedule[];
+    },
+    enabled: !!eventId,
+  });
+
   const [showForm, setShowForm] = useState(false);
-  const [showScheduleForm, setShowScheduleForm] = useState(false);
-  const [editEvent, setEditEvent] = useState<SubEvent | null>(null);
-  const [editSchedule, setEditSchedule] = useState<EventSchedule | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
-
-  // Event form state
-  const [name, setName] = useState(""); const [date, setDate] = useState(""); const [time, setTime] = useState("");
-  const [venue, setVenue] = useState(""); const [address, setAddress] = useState(""); const [description, setDescription] = useState("");
-
-  // Schedule form state
-  const [schedTitle, setSchedTitle] = useState(""); const [schedDate, setSchedDate] = useState("");
-  const [schedStart, setSchedStart] = useState(""); const [schedEnd, setSchedEnd] = useState("");
-  const [schedVenue, setSchedVenue] = useState(""); const [schedAddress, setSchedAddress] = useState("");
-  const [schedDesc, setSchedDesc] = useState("");
-
-  const { data: subEvents, isLoading, isError, error } = useQuery({
-    queryKey: ["sub-events", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("sub_events").select("*").eq("parent_event_id", eventId).order("display_order", { ascending: true }); if (error) throw error; return data as SubEvent[]; },
+  const [editingItem, setEditingItem] = useState<EventSchedule | null>(null);
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    schedule_date: "",
+    start_time: "",
+    end_time: "",
+    venue: "",
+    address: "",
   });
 
-  // FIX #3: Load event schedule
-  const { data: schedule } = useQuery({
-    queryKey: ["event-schedule", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("event_schedule").select("*").eq("event_id", eventId).order("order_index", { ascending: true }); if (error) throw error; return data as EventSchedule[]; },
+  const addMutation = useMutation({
+    mutationFn: async () => {
+      const maxOrder = schedule?.reduce((mx, s) => Math.max(mx, s.order_index), -1) ?? -1;
+      const { error } = await supabase.from("event_schedule").insert({
+        event_id: eventId,
+        title: form.title,
+        description: form.description || null,
+        schedule_date: form.schedule_date || null,
+        start_time: form.start_time || null,
+        end_time: form.end_time || null,
+        venue: form.venue || null,
+        address: form.address || null,
+        order_index: maxOrder + 1,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedule", eventId] });
+      setShowForm(false);
+      resetForm();
+    },
   });
 
-  const today = new Date().toISOString().split("T")[0];
-  const upcoming = (subEvents ?? []).filter((e) => (e.date ?? "") >= today);
-  const previous = (subEvents ?? []).filter((e) => (e.date ?? "") < today).reverse();
-
-  const resetForm = () => { setName(""); setDate(""); setTime(""); setVenue(""); setAddress(""); setDescription(""); setEditEvent(null); setFormError(null); };
-  const openAdd = () => { resetForm(); setShowForm(true); };
-  const openEdit = (e: SubEvent) => { setEditEvent(e); setName(e.name ?? ""); setDate(e.date ?? ""); setTime(e.time ?? e.start_time ?? ""); setVenue(e.venue ?? ""); setAddress(e.address ?? ""); setDescription(e.description ?? ""); setFormError(null); setShowForm(true); };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setSubmitting(true); setFormError(null);
-    try {
-      const payload = { parent_event_id: eventId, name, date: date || null, time: time || null, venue: venue || null, address: address || null, description: description || null, rsvp_enabled: true };
-      if (editEvent) { const { error } = await supabase.from("sub_events").update(payload).eq("id", editEvent.id); if (error) throw error; }
-      else { const { error } = await supabase.from("sub_events").insert(payload); if (error) throw error; }
-      queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] }); setShowForm(false); resetForm();
-    } catch (err) { setFormError(err instanceof Error ? err.message : "Failed to save event"); }
-    finally { setSubmitting(false); }
-  };
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingItem) return;
+      const { error } = await supabase
+        .from("event_schedule")
+        .update({
+          title: form.title,
+          description: form.description || null,
+          schedule_date: form.schedule_date || null,
+          start_time: form.start_time || null,
+          end_time: form.end_time || null,
+          venue: form.venue || null,
+          address: form.address || null,
+        })
+        .eq("id", editingItem.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["schedule", eventId] });
+      setShowForm(false);
+      setEditingItem(null);
+      resetForm();
+    },
+  });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("sub_events").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] }),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("event_schedule").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["schedule", eventId] }),
   });
 
-  // FIX #3: Schedule management
-  const resetSchedForm = () => { setSchedTitle(""); setSchedDate(""); setSchedStart(""); setSchedEnd(""); setSchedVenue(""); setSchedAddress(""); setSchedDesc(""); setEditSchedule(null); setFormError(null); };
-  const openAddSchedule = () => { resetSchedForm(); setShowScheduleForm(true); };
-  const openEditSchedule = (s: EventSchedule) => { setEditSchedule(s); setSchedTitle(s.title ?? ""); setSchedDate(s.schedule_date ?? ""); setSchedStart(s.start_time ?? ""); setSchedEnd(s.end_time ?? ""); setSchedVenue(s.venue ?? ""); setSchedAddress(s.address ?? ""); setSchedDesc(s.description ?? ""); setFormError(null); setShowScheduleForm(true); };
-
-  const handleScheduleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setSubmitting(true); setFormError(null);
-    try {
-      const payload = {
-        event_id: eventId, title: schedTitle,
-        schedule_date: schedDate || null,
-        start_time: schedStart || null, end_time: schedEnd || null,
-        venue: schedVenue || null, address: schedAddress || null,
-        description: schedDesc || null,
-        order_index: editSchedule?.order_index ?? (schedule?.length ?? 0),
-      };
-      if (editSchedule) { const { error } = await supabase.from("event_schedule").update(payload).eq("id", editSchedule.id); if (error) throw error; }
-      else { const { error } = await supabase.from("event_schedule").insert(payload); if (error) throw error; }
-      queryClient.invalidateQueries({ queryKey: ["event-schedule", eventId] }); setShowScheduleForm(false); resetSchedForm();
-    } catch (err) { setFormError(err instanceof Error ? err.message : "Failed to save schedule item"); }
-    finally { setSubmitting(false); }
+  const resetForm = () => {
+    setForm({ title: "", description: "", schedule_date: "", start_time: "", end_time: "", venue: "", address: "" });
   };
 
-  const deleteScheduleMutation = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("event_schedule").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event-schedule", eventId] }),
-  });
+  const startEdit = (item: EventSchedule) => {
+    setEditingItem(item);
+    setForm({
+      title: item.title,
+      description: item.description ?? "",
+      schedule_date: item.schedule_date ?? "",
+      start_time: item.start_time ?? "",
+      end_time: item.end_time ?? "",
+      venue: item.venue ?? "",
+      address: item.address ?? "",
+    });
+    setShowForm(true);
+  };
 
-  const renderEventCard = (e: SubEvent) => (
-    <div key={e.id} className="rounded-lg border border-dash-border bg-dash-surface p-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="font-semibold text-dash-text">{e.name}</h3>
-          {e.date && <p className="text-sm text-dash-muted">{formatDate(e.date)}{e.time ? ` at ${formatTime12(e.time)}` : ""}</p>}
-          {e.venue && <p className="text-sm text-dash-muted">{e.venue}</p>}
-          {e.address && <p className="text-sm text-dash-muted">{e.address}</p>}
-          {e.description && <p className="mt-2 text-sm text-dash-muted">{e.description}</p>}
-        </div>
-        <div className="flex gap-2"><button onClick={() => openEdit(e)} className="text-xs text-dash-primary hover:underline">Edit</button><button onClick={() => deleteMutation.mutate(e.id)} className="text-xs text-dash-danger hover:underline">Delete</button></div>
-      </div>
-    </div>
-  );
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingItem) updateMutation.mutate();
+    else addMutation.mutate();
+  };
 
-  if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
-  if (isError) return <ErrorState title="Failed to load events" message={error instanceof Error ? error.message : "Unknown error"} />;
+  const draftEvent = event ? {
+    name: event.draft_name ?? event.name,
+    date: event.draft_event_date ?? event.event_date,
+    time: event.draft_event_time ?? event.event_time,
+    venue: event.draft_venue ?? event.venue,
+    address: event.draft_address ?? event.address,
+  } : null;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between"><h2 className="text-lg font-semibold text-dash-text">Events</h2><Button size="sm" onClick={openAdd}>Add Event</Button></div>
-
-      {/* Event details summary */}
-      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
-        <h3 className="mb-2 text-sm font-semibold text-dash-text">Main Event Details</h3>
-        <div className="grid grid-cols-2 gap-2 text-sm text-dash-muted">
-          {event.event_date && <div><span className="font-medium text-dash-text">Date:</span> {formatDate(event.event_date)}</div>}
-          {event.event_time && <div><span className="font-medium text-dash-text">Time:</span> {formatTime12(event.event_time)}</div>}
-          {event.venue && <div><span className="font-medium text-dash-text">Venue:</span> {event.venue}</div>}
-          {event.address && <div><span className="font-medium text-dash-text">Address:</span> {event.address}</div>}
-        </div>
+      <div>
+        <h2 className="text-lg font-semibold text-gray-800">Events</h2>
+        <p className="text-sm text-gray-500">Manage your main event details and schedule.</p>
       </div>
 
-      <div><h3 className="mb-3 text-sm font-medium text-dash-muted">Upcoming Events</h3>{upcoming.length === 0 ? <p className="text-sm text-dash-muted">No upcoming events.</p> : <div className="grid gap-3 sm:grid-cols-2">{upcoming.map(renderEventCard)}</div>}</div>
-      <div><h3 className="mb-3 text-sm font-medium text-dash-muted">Previous Events</h3>{previous.length === 0 ? <p className="text-sm text-dash-muted">No previous events.</p> : <div className="grid gap-3 sm:grid-cols-2">{previous.map(renderEventCard)}</div>}</div>
+      {draftEvent && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
+          <h3 className="text-sm font-medium text-gray-700">Main Event Details</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+            <div><span className="text-gray-500">Event Name:</span> <span className="font-medium">{draftEvent.name}</span></div>
+            <div><span className="text-gray-500">Date:</span> <span className="font-medium">{formatDate(draftEvent.date)}</span></div>
+            <div><span className="text-gray-500">Time:</span> <span className="font-medium">{formatTime(draftEvent.time)}</span></div>
+            <div><span className="text-gray-500">Venue:</span> <span className="font-medium">{draftEvent.venue || "—"}</span></div>
+            <div className="sm:col-span-2"><span className="text-gray-500">Address:</span> <span className="font-medium">{draftEvent.address || "—"}</span></div>
+          </div>
+          <p className="text-xs text-gray-400">Edit these in the Settings tab.</p>
+        </div>
+      )}
 
-      {/* FIX #3: Schedule section */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-medium text-dash-muted">Schedule / Timeline</h3>
-          <Button size="sm" variant="secondary" onClick={openAddSchedule}>Add Schedule Item</Button>
+          <h3 className="text-sm font-medium text-gray-700">Event Schedule</h3>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => { setShowForm(!showForm); setEditingItem(null); resetForm(); }}
+          >
+            {showForm ? "Cancel" : "Add Schedule Item"}
+          </Button>
         </div>
-        {!schedule || schedule.length === 0 ? (
-          <p className="text-sm text-dash-muted">No schedule items yet.</p>
-        ) : (
+
+        {showForm && (
+          <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-lg p-4 space-y-3 mb-4">
+            <Input label="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                rows={2}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <DatePicker label="Date" value={form.schedule_date} onChange={(v) => setForm({ ...form, schedule_date: v })} />
+              <TimePicker label="Start Time" value={form.start_time} onChange={(v) => setForm({ ...form, start_time: v })} />
+              <TimePicker label="End Time" value={form.end_time} onChange={(v) => setForm({ ...form, end_time: v })} />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input label="Venue" value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} />
+              <Input label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+            </div>
+            <Button type="submit" size="sm" disabled={addMutation.isPending || updateMutation.isPending}>
+              {editingItem ? "Update" : "Add"} Item
+            </Button>
+          </form>
+        )}
+
+        {schedLoading ? (
+          <p className="text-sm text-gray-500">Loading schedule…</p>
+        ) : schedule && schedule.length > 0 ? (
           <div className="space-y-2">
             {schedule.map((item) => (
-              <div key={item.id} className="rounded-lg border border-dash-border bg-dash-surface p-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-medium text-dash-text">{item.title}</p>
-                    <p className="text-sm text-dash-muted">
-                      {item.schedule_date && formatDate(item.schedule_date)}{item.start_time ? ` ${formatTime12(item.start_time)}` : ""}{item.end_time ? ` - ${formatTime12(item.end_time)}` : ""}
-                    </p>
-                    {item.venue && <p className="text-sm text-dash-muted">{item.venue}</p>}
-                    {item.address && <p className="text-sm text-dash-muted">{item.address}</p>}
-                    {item.description && <p className="mt-1 text-sm text-dash-muted">{item.description}</p>}
+              <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-4 flex items-start justify-between">
+                <div className="flex-1">
+                  <h4 className="text-sm font-medium text-gray-800">{item.title}</h4>
+                  {item.description && <p className="text-xs text-gray-500 mt-1">{item.description}</p>}
+                  <div className="text-xs text-gray-500 mt-2 space-x-3">
+                    {item.schedule_date && <span>{formatDate(item.schedule_date)}</span>}
+                    {item.start_time && <span>{formatTime(item.start_time)}{item.end_time ? ` – ${formatTime(item.end_time)}` : ""}</span>}
+                    {item.venue && <span>{item.venue}</span>}
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => openEditSchedule(item)} className="text-xs text-dash-primary hover:underline">Edit</button>
-                    <button onClick={() => deleteScheduleMutation.mutate(item.id)} className="text-xs text-dash-danger hover:underline">Delete</button>
-                  </div>
+                  {item.address && <p className="text-xs text-gray-400 mt-1">{item.address}</p>}
+                </div>
+                <div className="flex gap-2 ml-4">
+                  <Button size="sm" variant="ghost" onClick={() => startEdit(item)}>Edit</Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => { if (confirm("Delete this schedule item?")) deleteMutation.mutate(item.id); }}
+                  >
+                    Delete
+                  </Button>
                 </div>
               </div>
             ))}
           </div>
+        ) : (
+          <p className="text-sm text-gray-500">No schedule items yet. Add one to show guests the timeline of your event.</p>
         )}
       </div>
-
-      {/* Event Form Modal */}
-      <Modal open={showForm} onClose={() => { setShowForm(false); resetForm(); }} title={editEvent ? "Edit Event" : "Add Event"}>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input label="Event Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
-          <div className="grid grid-cols-2 gap-3"><Input label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /><Input label="Time" type="time" value={time} onChange={(e) => setTime(e.target.value)} /></div>
-          <Input label="Venue" value={venue} onChange={(e) => setVenue(e.target.value)} /><Input label="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
-          <div><label className="mb-1.5 block text-sm font-medium text-dash-text">Description</label><textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-dash-text focus:border-dash-primary focus:outline-none" /></div>
-          {formError && <p className="text-sm text-dash-danger">{formError}</p>}
-          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => { setShowForm(false); resetForm(); }}>Cancel</Button><Button type="submit" loading={submitting}>{editEvent ? "Update" : "Add"}</Button></div>
-        </form>
-      </Modal>
-
-      {/* Schedule Form Modal */}
-      <Modal open={showScheduleForm} onClose={() => { setShowScheduleForm(false); resetSchedForm(); }} title={editSchedule ? "Edit Schedule Item" : "Add Schedule Item"}>
-        <form onSubmit={handleScheduleSubmit} className="space-y-4">
-          <Input label="Title" value={schedTitle} onChange={(e) => setSchedTitle(e.target.value)} placeholder="e.g. Ceremony" required autoFocus />
-          <Input label="Date" type="date" value={schedDate} onChange={(e) => setSchedDate(e.target.value)} />
-          <div className="grid grid-cols-2 gap-3"><Input label="Start Time" type="time" value={schedStart} onChange={(e) => setSchedStart(e.target.value)} /><Input label="End Time" type="time" value={schedEnd} onChange={(e) => setSchedEnd(e.target.value)} /></div>
-          <Input label="Venue" value={schedVenue} onChange={(e) => setSchedVenue(e.target.value)} /><Input label="Address" value={schedAddress} onChange={(e) => setSchedAddress(e.target.value)} />
-          <div><label className="mb-1.5 block text-sm font-medium text-dash-text">Description</label><textarea value={schedDesc} onChange={(e) => setSchedDesc(e.target.value)} rows={3} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-dash-text focus:border-dash-primary focus:outline-none" /></div>
-          {formError && <p className="text-sm text-dash-danger">{formError}</p>}
-          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => { setShowScheduleForm(false); resetSchedForm(); }}>Cancel</Button><Button type="submit" loading={submitting}>{editSchedule ? "Update" : "Add"}</Button></div>
-        </form>
-      </Modal>
     </div>
   );
 }

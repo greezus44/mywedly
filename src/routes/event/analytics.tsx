@@ -1,67 +1,92 @@
-import { useOutletContext } from "react-router-dom";
+import React from "react";
+import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventRsvp, type EventMessage } from "../../lib/supabase";
-import { Card, LoadingSpinner, ErrorState } from "../../components/ui";
-
-interface EventContextValue { event: UserEvent; eventId: string; }
+import { supabase, type UserEvent } from "../../lib/supabase";
 
 export function AnalyticsPage() {
-  const { event, eventId } = useOutletContext<EventContextValue>();
+  const { eventId } = useParams<{ eventId: string }>();
 
-  const { data: guests } = useQuery({
-    queryKey: ["event-guests-analytics", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId); if (error) throw error; return data ?? []; },
-  });
-  const { data: rsvps } = useQuery({
-    queryKey: ["event-rsvps-analytics", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("event_rsvps").select("*").eq("event_id", eventId); if (error) throw error; return data as EventRsvp[]; },
-  });
-  const { data: messages } = useQuery({
-    queryKey: ["event-messages-analytics", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("event_messages").select("*").eq("event_id", eventId); if (error) throw error; return data as EventMessage[]; },
+  const { data: event } = useQuery({
+    queryKey: ["event", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
+      if (error) throw error;
+      return data as UserEvent;
+    },
+    enabled: !!eventId,
   });
 
-  const totalGuests = guests?.length ?? 0;
-  const attending = rsvps?.filter((r) => r.status === "attending").length ?? 0;
-  const declined = rsvps?.filter((r) => r.status === "declined").length ?? 0;
-  const pending = totalGuests - attending - declined;
-  const totalMessages = messages?.length ?? 0;
+  const { data: guestCount } = useQuery({
+    queryKey: ["guest-count", eventId],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("event_guests")
+        .select("id", { count: "exact", head: true })
+        .eq("event_id", eventId!);
+      if (error) throw error;
+      return count ?? 0;
+    },
+    enabled: !!eventId,
+  });
+
+  const { data: rsvpCount } = useQuery({
+    queryKey: ["rsvp-count", eventId],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("event_guests")
+        .select("id", { count: "exact", head: true })
+        .eq("event_id", eventId!)
+        .in("rsvp_status", ["attending", "declined"]);
+      if (error) throw error;
+      return count ?? 0;
+    },
+    enabled: !!eventId,
+  });
+
+  const { data: wishesCount } = useQuery({
+    queryKey: ["wishes-count", eventId],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("event_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("event_id", eventId!);
+      if (error) throw error;
+      return count ?? 0;
+    },
+    enabled: !!eventId,
+  });
+
+  if (!event) return <div>Loading…</div>;
 
   const stats = [
-    { label: "Total Guests", value: totalGuests },
-    { label: "Attending", value: attending },
-    { label: "Declined", value: declined },
-    { label: "Pending", value: pending },
-    { label: "Wishes", value: totalMessages },
+    { label: "Page Views", value: "—", note: "Coming soon" },
+    { label: "Guests", value: guestCount ?? "—" },
+    { label: "RSVPs", value: rsvpCount ?? "—" },
+    { label: "Wishes", value: wishesCount ?? "—" },
   ];
-
-  if (!guests) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-dash-text">Analytics</h2>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        {stats.map((s) => (
-          <Card key={s.label} className="text-center">
-            <p className="text-2xl font-bold text-dash-text">{s.value}</p>
-            <p className="mt-1 text-xs text-dash-muted">{s.label}</p>
-          </Card>
+      <div>
+        <h2 className="text-lg font-semibold text-gray-800 mb-1">Analytics</h2>
+        <p className="text-sm text-gray-500">An overview of your event's activity.</p>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {stats.map((stat) => (
+          <div key={stat.label} className="bg-white border border-gray-200 rounded-xl p-5">
+            <p className="text-3xl font-semibold text-gray-800">{stat.value}</p>
+            <p className="text-sm text-gray-500 mt-1">{stat.label}</p>
+            {stat.note && <p className="text-xs text-gray-400 mt-1">{stat.note}</p>}
+          </div>
         ))}
       </div>
-      <Card>
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">RSVP Breakdown</h3>
-        <div className="space-y-2">
-          {stats.slice(1, 4).map((s) => {
-            const pct = totalGuests > 0 ? Math.round((s.value / totalGuests) * 100) : 0;
-            return (
-              <div key={s.label}>
-                <div className="flex justify-between text-xs text-dash-muted"><span>{s.label}</span><span>{s.value} ({pct}%)</span></div>
-                <div className="mt-1 h-2 rounded-full bg-dash-bg"><div className="h-2 rounded-full bg-dash-primary" style={{ width: `${pct}%` }} /></div>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+
+      <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
+        <p className="text-sm text-gray-500">
+          Detailed analytics — including traffic sources and visitor trends — will appear here soon.
+        </p>
+      </div>
     </div>
   );
 }

@@ -1,68 +1,82 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import React, { useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME } from "../../lib/theme";
-import { resolveTypography } from "../../lib/typography";
-
-interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; }
+import { RUSTY_THEME, themeToEventCssVars } from "../../lib/theme";
 
 export default function RustySignIn() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { guest, eventId, signIn } = useGuestAuth();
+  const { signIn } = useGuestAuth();
   const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const { data: event, isLoading } = useQuery({
-    queryKey: ["published-event", slug],
-    queryFn: async () => { const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle(); if (error) throw error; return data as UserEvent | null; },
+  const { data: event } = useQuery({
+    queryKey: ["event_by_slug", slug],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug!).single();
+      if (error) throw error;
+      return data as UserEvent;
+    },
     enabled: !!slug,
   });
 
-  useEffect(() => { if (event && guest && eventId === event.id) navigate(`/r/${slug}/home`, { replace: true }); }, [event, guest, eventId, slug, navigate]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!event || !username.trim()) return;
-    setError(null); setSubmitting(true);
-    const result = await signIn(event.id, username.trim());
-    setSubmitting(false);
-    if (result.error) setError(result.error);
-    else navigate(`/r/${slug}/home`, { replace: true });
+    if (!username.trim() || !event) return;
+    setLoading(true);
+    setError(null);
+    const { error: err } = await signIn(event.id, username.trim());
+    setLoading(false);
+    if (err) {
+      setError(err);
+    } else {
+      navigate(`/r/${slug}/home`);
+    }
   };
 
-  if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
-  if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
+  if (!event) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
 
-  const loginConfig = (event.login_config ?? {}) as LoginConfig;
-  const heading = resolveTypography(loginConfig.heading, (event.name ?? undefined) || "Welcome");
-  const subheading = resolveTypography(loginConfig.subheading, "Please sign in to view your invitation");
-  const placeholder = loginConfig.placeholder || "Enter your username";
-  const buttonLabel = loginConfig.buttonLabel || "Sign In";
+  const theme = RUSTY_THEME;
+  const loginConfig = (event.login_config ?? {}) as Record<string, unknown>;
 
   return (
-    <EventThemeProvider theme={RUSTY_THEME}>
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
-        <div className="w-full max-w-md">
-          <div className="mb-8 text-center">
-            <h1 className="guest-title mb-2" style={heading.style}>{heading.text}</h1>
-            <p className="guest-subtitle" style={subheading.style}>{subheading.text}</p>
-          </div>
-          <form onSubmit={handleSubmit} className="event-card space-y-4">
-            <div>
-              <label className="mb-1.5 block text-center text-sm font-medium" style={{ color: "var(--event-text)" }}>{placeholder}</label>
-              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus style={{ textAlign: "center" }} />
-            </div>
-            {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
-            <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1 }}>{submitting ? "Signing in..." : buttonLabel}</button>
-          </form>
-          <div className="mt-6 text-center"><Link to={`/r/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>Back to cover</Link></div>
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{ ...themeToEventCssVars(theme), backgroundColor: theme.background, color: theme.text, fontFamily: theme.bodyFont }}
+    >
+      <div className="max-w-md w-full">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-semibold mb-2" style={{ fontFamily: theme.headingFont, color: theme.text }}>
+            {(loginConfig.title as string) || "Welcome"}
+          </h1>
+          <p className="text-sm" style={{ color: theme.textMuted }}>
+            {(loginConfig.subtitle as string) || "Please enter your name to continue"}
+          </p>
         </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Enter your name"
+            className="w-full px-4 py-3 border rounded-lg text-sm focus:outline-none focus:ring-2"
+            style={{ borderColor: theme.border, backgroundColor: theme.surface, color: theme.text }}
+            autoFocus
+          />
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          <button
+            type="submit"
+            disabled={loading || !username.trim()}
+            className="w-full py-3 rounded-lg text-base font-medium transition-colors disabled:opacity-50"
+            style={{ backgroundColor: theme.primary, color: "#fff", borderRadius: theme.buttonRadius }}
+          >
+            {loading ? "Signing in…" : "Enter"}
+          </button>
+        </form>
       </div>
-    </EventThemeProvider>
+    </div>
   );
 }

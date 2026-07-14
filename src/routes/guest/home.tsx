@@ -1,42 +1,65 @@
-import { useNavigate } from "react-router-dom";
-import { useGuestOutletContext } from "./guest-layout";
-import { getTypographyText, getTypographyStyle } from "../../lib/typography";
-import type { EventContent } from "../../components/preview/PreviewRenderers";
+import React from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase, type UserEvent } from "../../lib/supabase";
+import { formatDate, formatTime } from "../../lib/utils";
 
 export default function GuestHome() {
-  const { event, slug, invitedSubEventIds } = useGuestOutletContext();
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const content = (event.content ?? {}) as EventContent;
-  const sections = content.sections ?? ((content.heading !== undefined || content.body !== undefined) ? [{ heading: content.heading, body: content.body }] : []);
-  const logo = content.logo;
+
+  const { data: event } = useQuery({
+    queryKey: ["event_by_slug", slug],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug!).single();
+      if (error) throw error;
+      return data as UserEvent;
+    },
+    enabled: !!slug,
+  });
+
+  if (!event) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
+
+  const content = (event.content ?? {}) as Record<string, unknown>;
+  const bodyHtml = (content.body as string) || "";
+  const logoConfig = (event.logo_config ?? {}) as Record<string, unknown>;
 
   return (
-    <div>
-      {logo?.url && (
-        <div style={{ paddingTop: logo.marginTop ? `${logo.marginTop}px` : undefined, paddingBottom: logo.marginBottom != null ? `${Math.min(logo.marginBottom, 8)}px` : "0.5rem", display: "flex", justifyContent: "center" }}>
-          <img src={logo.url} alt="" className="home-logo" style={{ maxWidth: logo.size ? `${logo.size}px` : "140px", height: "auto", width: "auto" }} />
+    <div className="max-w-2xl mx-auto px-4">
+      {/* Logo */}
+      {typeof logoConfig.imageUrl === "string" && logoConfig.imageUrl && (
+        <div className="text-center pt-6 pb-3">
+          <img src={logoConfig.imageUrl} alt="Logo" className="mx-auto max-h-20 object-contain" />
         </div>
       )}
-      {sections.length === 0 && !logo?.url && (
-        <section className="guest-section text-center"><div className="mx-auto max-w-md"><p className="guest-subtitle">Welcome to {event.name}. Check back soon for updates.</p></div></section>
+
+      {/* Body content */}
+      {bodyHtml && (
+        <div
+          className="prose prose-sm max-w-none text-[var(--event-text)]"
+          dangerouslySetInnerHTML={{ __html: bodyHtml }}
+        />
       )}
-      {sections.map((section, i) => {
-        const headingText = getTypographyText(section.heading, "");
-        const headingStyle = getTypographyStyle(section.heading);
-        return (
-          <section key={i} className="guest-section">
-            <div className="mx-auto max-w-3xl">
-              {headingText && <h2 className="guest-title mb-4" style={headingStyle}>{headingText}</h2>}
-              {section.body && <div className="rich-content" dangerouslySetInnerHTML={{ __html: section.body }} />}
-            </div>
-          </section>
-        );
-      })}
-      {invitedSubEventIds.length > 0 && (
-        <section className="rsvp-section text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
-          <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">RSVP Now</button>
-        </section>
-      )}
+
+      {/* RSVP section */}
+      <div className="rsvp-section text-center py-6 mt-4 rounded-lg">
+        <h2 className="text-xl font-semibold text-[var(--event-text)] mb-2" style={{ fontFamily: "var(--event-heading-font)" }}>
+          {event.event_date && formatDate(event.event_date)}
+        </h2>
+        {event.event_time && (
+          <p className="text-sm text-[var(--event-text-muted)] mb-3">{formatTime(event.event_time)}</p>
+        )}
+        {event.venue && (
+          <p className="text-sm text-[var(--event-text-muted)] mb-3">{event.venue}</p>
+        )}
+        <button
+          onClick={() => navigate(`/e/${slug}/rsvp`)}
+          className="px-6 py-2.5 rounded-lg text-sm font-medium transition-colors"
+          style={{ backgroundColor: "var(--event-primary)", color: "#fff", borderRadius: "var(--event-button-radius)" }}
+        >
+          RSVP Now
+        </button>
+      </div>
     </div>
   );
 }

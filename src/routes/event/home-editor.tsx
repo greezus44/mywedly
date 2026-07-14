@@ -1,81 +1,104 @@
-import { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type Json } from "../../lib/supabase";
-import { Button } from "../../components/ui/Button";
-import { RangeInput } from "../../components/ui";
-import { ImageUpload } from "../../components/ui/ImageUpload";
+import React, { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase, type UserEvent } from "../../lib/supabase";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
-import { TypographyControls } from "../../components/ui/TypographyControls";
+import { Button } from "../../components/ui/Button";
+import { ImageUpload } from "../../components/ui/ImageUpload";
 import { SplitEditor } from "../../components/preview/SplitEditor";
-import { HomePreview, type EventContent, type HomeSection, type HomeLogo } from "../../components/preview/PreviewRenderers";
-import type { TypographyStyle } from "../../lib/typography";
-
-interface EventContextValue { event: UserEvent; eventId: string; }
+import { jsonToTheme } from "../../lib/theme";
+import { formatDate, formatTime } from "../../lib/utils";
 
 export function HomeEditor() {
-  const { event, eventId } = useOutletContext<EventContextValue>();
-  const queryClient = useQueryClient();
-  const [content, setContent] = useState<EventContent>(() => ((event.draft_content ?? event.content) as EventContent) ?? { sections: [] });
+  const { eventId } = useParams<{ eventId: string }>();
+  const qc = useQueryClient();
+  const [bodyHtml, setBodyHtml] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => { setContent(((event.draft_content ?? event.content) as EventContent) ?? { sections: [] }); }, [event.draft_content, event.content]);
-
-  const updateLogo = (patch: Partial<HomeLogo>) => setContent((p) => ({ ...p, logo: { ...(p.logo ?? {}), ...patch } }));
-  const updateSection = (i: number, patch: Partial<HomeSection>) => setContent((p) => {
-    const sections = [...(p.sections ?? [])];
-    sections[i] = { ...sections[i], ...patch };
-    return { ...p, sections };
-  });
-  const addSection = () => setContent((p) => ({ ...p, sections: [...(p.sections ?? []), { heading: { text: "New Section" }, body: "" }] }));
-  const removeSection = (i: number) => setContent((p) => ({ ...p, sections: (p.sections ?? []).filter((_, idx) => idx !== i) }));
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const existing = ((event.draft_content ?? event.content) as Record<string, unknown> | null) ?? {};
-      const updated = { ...existing, ...content };
-      const { error } = await supabase.from("user_events").update({ draft_content: updated as unknown as Json }).eq("id", eventId);
+  const { data: event } = useQuery({
+    queryKey: ["event", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
       if (error) throw error;
+      return data as UserEvent;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", eventId] }),
+    enabled: !!eventId,
   });
+
+  useEffect(() => {
+    if (event) {
+      const content = (event.draft_content ?? event.content ?? {}) as Record<string, unknown>;
+      setBodyHtml((content.body as string) || "");
+      const logoConfig = (event.draft_logo_config ?? event.logo_config ?? {}) as Record<string, unknown>;
+      setLogoUrl((logoConfig.imageUrl as string) || "");
+    }
+  }, [event]);
+
+  const save = async () => {
+    if (!event) return;
+    setSaving(true);
+    const content = { ...((event.draft_content ?? event.content ?? {}) as Record<string, unknown>), body: bodyHtml };
+    const logoConfig = { ...((event.draft_logo_config ?? event.logo_config ?? {}) as Record<string, unknown>), imageUrl: logoUrl };
+    const { error } = await supabase
+      .from("user_events")
+      .update({ draft_content: content, draft_logo_config: logoConfig })
+      .eq("id", event.id);
+    setSaving(false);
+    if (!error) qc.invalidateQueries({ queryKey: ["event", eventId] });
+  };
+
+  if (!event) return <div>Loading…</div>;
+
+  const theme = jsonToTheme((event.draft_theme ?? event.theme) as Record<string, unknown> | null);
+
+  const preview = (
+    <div style={{ backgroundColor: theme.background, color: theme.text, fontFamily: theme.bodyFont, minHeight: "100%", padding: "1rem" }}>
+      {logoUrl && (
+        <div className="text-center mb-3">
+          <img src={logoUrl} alt="Logo" className="mx-auto max-h-20 object-contain" />
+        </div>
+      )}
+      {bodyHtml ? (
+        <div dangerouslySetInnerHTML={{ __html: bodyHtml }} />
+      ) : (
+        <p className="text-center text-gray-400 text-sm">Start typing to see a live preview…</p>
+      )}
+      <div className="text-center py-4 mt-3" style={{ backgroundColor: theme.background, borderRadius: "8px" }}>
+        <h2 className="text-lg font-semibold" style={{ fontFamily: theme.headingFont }}>
+          {event.event_date && formatDate(event.event_date)}
+        </h2>
+        {event.event_time && <p className="text-sm" style={{ color: theme.textMuted }}>{formatTime(event.event_time)}</p>}
+        {event.venue && <p className="text-sm" style={{ color: theme.textMuted }}>{event.venue}</p>}
+        <button
+          className="mt-3 px-6 py-2.5 rounded-lg text-sm font-medium"
+          style={{ backgroundColor: theme.primary, color: "#fff", borderRadius: theme.buttonRadius }}
+        >
+          RSVP Now
+        </button>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-dash-text">Home</h2>
-        <Button size="sm" onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>Save</Button>
-      </div>
-      {saveMutation.isError && <p className="text-sm text-dash-danger">{saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}</p>}
-      {saveMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
-
-      <SplitEditor
-        editor={
-          <div className="space-y-6">
-            <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-4">
-              <h3 className="text-sm font-semibold text-dash-text">Home Page Logo</h3>
-              <ImageUpload userId={event.creator_id} value={content.logo?.url ?? null} onChange={(url) => updateLogo({ url })} label="Logo Image" />
-              <RangeInput label="Logo Size" value={content.logo?.size ?? 140} onChange={(v) => updateLogo({ size: v })} min={40} max={400} />
-              <RangeInput label="Top Margin" value={content.logo?.marginTop ?? 0} onChange={(v) => updateLogo({ marginTop: v })} min={0} max={120} />
-              <RangeInput label="Bottom Margin" value={content.logo?.marginBottom ?? 8} onChange={(v) => updateLogo({ marginBottom: v })} min={0} max={80} />
-            </div>
-            {(content.sections ?? []).map((section, i) => (
-              <div key={i} className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-dash-text">Section {i + 1}</h3>
-                  <button onClick={() => removeSection(i)} className="text-xs text-dash-danger hover:underline">Remove</button>
-                </div>
-                <TypographyControls label="Heading" value={(section.heading as TypographyStyle) ?? {}} onChange={(v) => updateSection(i, { heading: v })} showText />
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-dash-muted">Body Content</label>
-                  <RichTextEditor value={section.body ?? ""} onChange={(html) => updateSection(i, { body: html })} />
-                </div>
-              </div>
-            ))}
-            <Button variant="secondary" onClick={addSection}>+ Add Section</Button>
+    <SplitEditor
+      title="Home Page Editor"
+      editor={
+        <div className="space-y-4 pr-2">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Logo Image</label>
+            <ImageUpload value={logoUrl} onChange={setLogoUrl} label="" bucket="event-assets" />
           </div>
-        }
-        preview={<HomePreview content={content} theme={event.draft_theme ?? event.theme} />}
-      />
-    </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Body Content</label>
+            <RichTextEditor value={bodyHtml} onChange={setBodyHtml} placeholder="Write your welcome message…" />
+          </div>
+          <Button onClick={save} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      }
+      preview={preview}
+    />
   );
 }
