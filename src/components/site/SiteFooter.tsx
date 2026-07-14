@@ -1,98 +1,70 @@
+import React from "react";
 import { Link } from "react-router-dom";
 import { cn } from "../../lib/utils";
 
-interface SiteFooterProps {
+export interface SiteFooterProps {
   className?: string;
 }
 
-export function SiteFooter({ className }: SiteFooterProps) {
+export function SiteFooter({ className }: SiteFooterProps): React.ReactElement {
   return (
-    <footer
-      className={cn(
-        "w-full border-t border-dash-border bg-dash-surface",
-        className
-      )}
-    >
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 md:grid-cols-4">
-          <div>
+    <footer className={cn("border-t border-dash-border bg-dash-surface", className)}>
+      <div className="mx-auto max-w-6xl px-4 py-12">
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
+          <div className="md:col-span-2">
             <Link to="/" className="flex items-center gap-2">
-              <span className="text-lg font-bold tracking-tight text-dash-text">
+              <span className="text-xl font-bold text-dash-text">
                 My<span className="text-dash-primary">Wedly</span>
               </span>
             </Link>
-            <p className="mt-3 text-sm text-dash-muted">
-              Beautiful wedding websites for your special day.
+            <p className="mt-3 max-w-xs text-sm text-dash-muted">
+              Beautiful invitation websites for weddings and events. Create, share, and manage your special day.
             </p>
           </div>
-
           <div>
-            <h3 className="mb-3 text-sm font-semibold text-dash-text">Product</h3>
-            <ul className="space-y-2">
+            <h3 className="text-sm font-semibold text-dash-text">Product</h3>
+            <ul className="mt-3 space-y-2">
               <li>
-                <Link to="/features" className="text-sm text-dash-muted hover:text-dash-text">
-                  Features
-                </Link>
-              </li>
-              <li>
-                <Link to="/templates" className="text-sm text-dash-muted hover:text-dash-text">
+                <Link to="/templates" className="text-sm text-dash-muted hover:text-dash-text transition-colors">
                   Templates
                 </Link>
               </li>
               <li>
-                <Link to="/pricing" className="text-sm text-dash-muted hover:text-dash-text">
+                <Link to="/pricing" className="text-sm text-dash-muted hover:text-dash-text transition-colors">
                   Pricing
                 </Link>
               </li>
-            </ul>
-          </div>
-
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-dash-text">Support</h3>
-            <ul className="space-y-2">
               <li>
-                <Link to="/help" className="text-sm text-dash-muted hover:text-dash-text">
-                  Help Center
-                </Link>
-              </li>
-              <li>
-                <Link to="/contact" className="text-sm text-dash-muted hover:text-dash-text">
-                  Contact Us
-                </Link>
-              </li>
-              <li>
-                <Link to="/faq" className="text-sm text-dash-muted hover:text-dash-text">
-                  FAQ
+                <Link to="/features" className="text-sm text-dash-muted hover:text-dash-text transition-colors">
+                  Features
                 </Link>
               </li>
             </ul>
           </div>
-
           <div>
-            <h3 className="mb-3 text-sm font-semibold text-dash-text">Company</h3>
-            <ul className="space-y-2">
+            <h3 className="text-sm font-semibold text-dash-text">Company</h3>
+            <ul className="mt-3 space-y-2">
               <li>
-                <Link to="/about" className="text-sm text-dash-muted hover:text-dash-text">
+                <Link to="/about" className="text-sm text-dash-muted hover:text-dash-text transition-colors">
                   About
                 </Link>
               </li>
               <li>
-                <Link to="/privacy" className="text-sm text-dash-muted hover:text-dash-text">
-                  Privacy Policy
+                <Link to="/contact" className="text-sm text-dash-muted hover:text-dash-text transition-colors">
+                  Contact
                 </Link>
               </li>
               <li>
-                <Link to="/terms" className="text-sm text-dash-muted hover:text-dash-text">
-                  Terms of Service
+                <Link to="/privacy" className="text-sm text-dash-muted hover:text-dash-text transition-colors">
+                  Privacy
                 </Link>
               </li>
             </ul>
           </div>
         </div>
-
         <div className="mt-8 border-t border-dash-border pt-6">
-          <p className="text-center text-sm text-dash-muted">
-            &copy; {new Date().getFullYear()} MyWedly. All rights reserved.
+          <p className="text-center text-xs text-dash-muted">
+            © {new Date().getFullYear()} MyWedly. All rights reserved.
           </p>
         </div>
       </div>

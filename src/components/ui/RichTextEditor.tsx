@@ -1,171 +1,110 @@
-import { useEffect, useRef, type KeyboardEvent } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 
-interface RichTextEditorProps {
+export interface RichTextEditorProps {
   value: string;
   onChange: (html: string) => void;
-  className?: string;
   placeholder?: string;
+  className?: string;
 }
 
-function execCommand(command: string, value?: string) {
-  document.execCommand(command, false, value);
+interface ToolbarButtonProps {
+  command: string;
+  label: string;
+  onClick: () => void;
+}
+
+function ToolbarButton({ command, label, onClick }: ToolbarButtonProps) {
+  return (
+    <button
+      type="button"
+      data-command={command}
+      onMouseDown={(e) => {
+        e.preventDefault();
+        onClick();
+      }}
+      className="rounded px-2 py-1 text-sm text-dash-text hover:bg-dash-bg transition-colors"
+      title={label}
+    >
+      {label}
+    </button>
+  );
 }
 
 export function RichTextEditor({
   value,
   onChange,
+  placeholder = "Write something...",
   className,
-  placeholder = "Start typing...",
-}: RichTextEditorProps) {
+}: RichTextEditorProps): React.ReactElement {
   const editorRef = useRef<HTMLDivElement>(null);
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = value;
+      editorRef.current.innerHTML = value || "";
     }
   }, [value]);
 
-  const handleInput = () => {
+  const exec = useCallback((command: string, val?: string) => {
+    document.execCommand(command, false, val);
     if (editorRef.current) {
       onChange(editorRef.current.innerHTML);
     }
-  };
+  }, [onChange]);
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "b") {
-      e.preventDefault();
-      execCommand("bold");
+  const handleInput = useCallback(() => {
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
     }
-    if ((e.metaKey || e.ctrlKey) && e.key === "i") {
-      e.preventDefault();
-      execCommand("italic");
-    }
-    if ((e.metaKey || e.ctrlKey) && e.key === "u") {
-      e.preventDefault();
-      execCommand("underline");
-    }
-  };
-
-  const toolbarButtons = [
-    { label: "B", command: "bold", className: "font-bold" },
-    { label: "I", command: "italic", className: "italic" },
-    { label: "U", command: "underline", className: "underline" },
-    { label: "S", command: "strikeThrough", className: "line-through" },
-  ];
-
-  const blockButtons = [
-    { label: "H1", command: "formatBlock", value: "H1" },
-    { label: "H2", command: "formatBlock", value: "H2" },
-    { label: "H3", command: "formatBlock", value: "H3" },
-    { label: "P", command: "formatBlock", value: "P" },
-  ];
-
-  const listButtons = [
-    { label: "• List", command: "insertUnorderedList" },
-    { label: "1. List", command: "insertOrderedList" },
-  ];
-
-  const handleLink = () => {
-    const url = window.prompt("Enter URL:");
-    if (url) execCommand("createLink", url);
-  };
-
-  const handleImage = () => {
-    const url = window.prompt("Enter image URL:");
-    if (url) execCommand("insertImage", url);
-  };
+  }, [onChange]);
 
   return (
-    <div className={cn("w-full overflow-hidden rounded-lg border border-dash-border bg-dash-surface", className)}>
-      <div className="flex flex-wrap items-center gap-1 border-b border-dash-border bg-dash-bg px-2 py-1.5">
-        {toolbarButtons.map((btn) => (
-          <button
-            key={btn.command}
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              execCommand(btn.command);
-            }}
-            className={cn(
-              "rounded px-2 py-1 text-sm hover:bg-dash-surface",
-              btn.className
-            )}
-          >
-            {btn.label}
-          </button>
-        ))}
+    <div className={cn("rounded-lg border border-dash-border bg-dash-surface overflow-hidden", className)}>
+      <div className="flex flex-wrap items-center gap-0.5 border-b border-dash-border bg-dash-bg px-2 py-1.5">
+        <ToolbarButton command="bold" label="B" onClick={() => exec("bold")} />
+        <ToolbarButton command="italic" label="I" onClick={() => exec("italic")} />
+        <ToolbarButton command="underline" label="U" onClick={() => exec("underline")} />
+        <ToolbarButton command="strikeThrough" label="S" onClick={() => exec("strikeThrough")} />
         <div className="mx-1 h-5 w-px bg-dash-border" />
-        {blockButtons.map((btn) => (
-          <button
-            key={btn.label}
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              execCommand(btn.command, btn.value);
-            }}
-            className="rounded px-2 py-1 text-xs font-medium hover:bg-dash-surface"
-          >
-            {btn.label}
-          </button>
-        ))}
+        <ToolbarButton command="formatBlock" label="H1" onClick={() => exec("formatBlock", "H1")} />
+        <ToolbarButton command="formatBlock" label="H2" onClick={() => exec("formatBlock", "H2")} />
+        <ToolbarButton command="formatBlock" label="H3" onClick={() => exec("formatBlock", "H3")} />
+        <ToolbarButton command="formatBlock" label="P" onClick={() => exec("formatBlock", "P")} />
         <div className="mx-1 h-5 w-px bg-dash-border" />
-        {listButtons.map((btn) => (
-          <button
-            key={btn.command}
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              execCommand(btn.command);
-            }}
-            className="rounded px-2 py-1 text-xs hover:bg-dash-surface"
-          >
-            {btn.label}
-          </button>
-        ))}
+        <ToolbarButton command="insertUnorderedList" label="• List" onClick={() => exec("insertUnorderedList")} />
+        <ToolbarButton command="insertOrderedList" label="1. List" onClick={() => exec("insertOrderedList")} />
+        <ToolbarButton command="formatBlock" label="❝" onClick={() => exec("formatBlock", "BLOCKQUOTE")} />
         <div className="mx-1 h-5 w-px bg-dash-border" />
-        <button
-          type="button"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            handleLink();
+        <ToolbarButton
+          command="createLink"
+          label="Link"
+          onClick={() => {
+            const url = window.prompt("Enter URL:");
+            if (url) exec("createLink", url);
           }}
-          className="rounded px-2 py-1 text-xs hover:bg-dash-surface"
-        >
-          Link
-        </button>
-        <button
-          type="button"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            handleImage();
+        />
+        <ToolbarButton
+          command="insertImage"
+          label="Image"
+          onClick={() => {
+            const url = window.prompt("Enter image URL:");
+            if (url) exec("insertImage", url);
           }}
-          className="rounded px-2 py-1 text-xs hover:bg-dash-surface"
-        >
-          Image
-        </button>
-        <button
-          type="button"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            execCommand("formatBlock", "BLOCKQUOTE");
-          }}
-          className="rounded px-2 py-1 text-xs hover:bg-dash-surface"
-        >
-          Quote
-        </button>
+        />
       </div>
       <div
         ref={editorRef}
         contentEditable
+        suppressContentEditableWarning
         onInput={handleInput}
-        onKeyDown={handleKeyDown}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         data-placeholder={placeholder}
         className={cn(
-          "rich-content min-h-[120px] px-4 py-3 outline-none",
-          "empty:before:content-[attr(data-placeholder)] empty:before:text-dash-muted"
+          "rich-content min-h-[120px] px-4 py-3 outline-none text-sm text-dash-text",
+          "[&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-dash-muted/60",
         )}
-        suppressContentEditableWarning
       />
     </div>
   );

@@ -2,78 +2,17 @@ import { supabase } from "./supabase";
 
 const BUCKET = "event-images";
 
-async function fileToDataURL(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function dataURLToCanvas(dataUrl: string, maxDim: number): Promise<HTMLCanvasElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      let { width, height } = img;
-      if (width > height && width > maxDim) {
-        height = Math.round((height * maxDim) / width);
-        width = maxDim;
-      } else if (height > maxDim) {
-        width = Math.round((width * maxDim) / height);
-        height = maxDim;
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error("Could not get canvas context"));
-        return;
-      }
-      ctx.drawImage(img, 0, 0, width, height);
-      resolve(canvas);
-    };
-    img.onerror = reject;
-    img.src = dataUrl;
-  });
-}
-
-export async function compressImage(
-  file: File,
-  maxDim = 1600,
-  quality = 0.82
-): Promise<File> {
-  if (!file.type.startsWith("image/")) return file;
-  const dataUrl = await fileToDataURL(file);
-  const canvas = await dataURLToCanvas(dataUrl, maxDim);
-  const blob: Blob = await new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error("Compression failed"))),
-      "image/jpeg",
-      quality
-    );
-  });
-  const name = file.name.replace(/\.[^.]+$/, ".jpg");
-  return new File([blob], name, { type: "image/jpeg" });
-}
-
-export async function uploadImage(
-  file: File,
-  eventId: string
-): Promise<string> {
-  const compressed = await compressImage(file);
-  const ext = compressed.name.split(".").pop() ?? "jpg";
-  const fileName = `${eventId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(fileName, compressed, { upsert: false });
-
-  if (error) throw error;
-
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
-  return data.publicUrl;
+export function extractPathFromUrl(url: string): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split("/");
+    const bucketIdx = parts.indexOf(BUCKET);
+    if (bucketIdx === -1 || bucketIdx + 1 >= parts.length) return null;
+    return parts.slice(bucketIdx + 1).join("/");
+  } catch {
+    return null;
+  }
 }
 
 export async function removeImage(url: string): Promise<void> {
@@ -83,15 +22,78 @@ export async function removeImage(url: string): Promise<void> {
   if (error) throw error;
 }
 
-export function extractPathFromUrl(url: string): string | null {
-  try {
-    const u = new URL(url);
-    const parts = u.pathname.split("/");
-    const bucketIdx = parts.indexOf(BUCKET);
-    if (bucketIdx === -1) return null;
-    const pathParts = parts.slice(bucketIdx + 1);
-    return decodeURIComponent(pathParts.join("/"));
-  } catch {
-    return null;
-  }
+export interface CompressedImage {
+  blob: Blob;
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
+export async function compressImage(
+  file: File,
+  maxWidth = 1920,
+  quality = 0.82,
+): Promise<CompressedImage> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Canvas not supported"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error("Compression failed"));
+              return;
+            }
+            const dataUrl = canvas.toDataURL("image/jpeg", quality);
+            resolve({ blob, dataUrl, width, height });
+          },
+          "image/jpeg",
+          quality,
+        );
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+export async function uploadImage(
+  file: File,
+  eventId: string,
+  folder = "covers",
+): Promise<string> {
+  const compressed = await compressImage(file);
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
+  const path = `${eventId}/${folder}/${fileName}`;
+
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, compressed.blob, {
+      contentType: "image/jpeg",
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+  if (error) throw error;
+
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  return data.publicUrl;
 }

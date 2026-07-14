@@ -1,203 +1,173 @@
+import React, { useMemo } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type EventRsvp, type SharingEvent } from "../../lib/supabase";
-import { useEventContext } from "./event-layout";
-import {
-  LoadingSpinner,
-  ErrorState,
-  Card,
-  Badge,
-  EmptyState,
-} from "../../components/ui";
-import { formatDateTime } from "../../lib/utils";
+import { supabase, type SharingEvent, type EventRsvp } from "../../lib/supabase";
+import { Card, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
+import { formatDate } from "../../lib/utils";
+import type { EventOutletContext } from "./event-layout";
 
-export default function Analytics() {
-  const { eventId } = useEventContext();
+export default function Analytics(): React.ReactElement {
+  const { eventId } = useOutletContext<EventOutletContext>();
 
-  const { data: stats, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["analytics", eventId],
+  const { data: sharingEvents, isLoading: sharingLoading, error: sharingError } = useQuery({
+    queryKey: ["analytics-sharing", eventId],
     queryFn: async () => {
-      // Fetch sharing events (page views)
-      const { data: views, error: viewsError } = await supabase
+      const { data, error } = await supabase
         .from("sharing_events")
         .select("*")
         .eq("wedding_id", eventId)
         .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as SharingEvent[];
+    },
+  });
 
-      if (viewsError) throw viewsError;
-
-      // Fetch RSVPs
-      const { data: rsvps, error: rsvpError } = await supabase
+  const { data: rsvps, isLoading: rsvpsLoading, error: rsvpsError } = useQuery({
+    queryKey: ["analytics-rsvps", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from("event_rsvps")
         .select("*")
         .eq("event_id", eventId)
         .order("submitted_at", { ascending: false });
-
-      if (rsvpError) throw rsvpError;
-
-      const viewList = (views ?? []) as SharingEvent[];
-      const rsvpList = (rsvps ?? []) as EventRsvp[];
-
-      const uniqueVisitors = new Set(
-        viewList.map((v) => v.guest_id ?? v.id)
-      ).size;
-
-      const accepted = rsvpList.filter((r) => r.status === "attending").length;
-      const declined = rsvpList.filter((r) => r.status === "declined").length;
-      const pending = rsvpList.filter(
-        (r) => r.status !== "attending" && r.status !== "declined"
-      ).length;
-      const totalPlusOnes = rsvpList.reduce(
-        (sum, r) => sum + (r.plus_ones ?? 0),
-        0
-      );
-
-      // Device breakdown
-      const deviceCounts: Record<string, number> = {};
-      for (const v of viewList) {
-        const dt = v.device_type ?? "unknown";
-        deviceCounts[dt] = (deviceCounts[dt] ?? 0) + 1;
-      }
-
-      // Source breakdown
-      const sourceCounts: Record<string, number> = {};
-      for (const v of viewList) {
-        const src = v.source ?? "direct";
-        sourceCounts[src] = (sourceCounts[src] ?? 0) + 1;
-      }
-
-      return {
-        totalViews: viewList.length,
-        uniqueVisitors,
-        totalRsvps: rsvpList.length,
-        accepted,
-        declined,
-        pending,
-        totalPlusOnes,
-        recentViews: viewList.slice(0, 10),
-        recentRsvps: rsvpList.slice(0, 10),
-        deviceCounts,
-        sourceCounts,
-      };
+      if (error) throw error;
+      return data as EventRsvp[];
     },
   });
 
+  const stats = useMemo(() => {
+    const totalViews = sharingEvents?.length ?? 0;
+    const uniqueGuests = new Set(sharingEvents?.map((e) => e.guest_id).filter(Boolean) ?? []).size;
+    const totalRsvps = rsvps?.length ?? 0;
+    const attending = rsvps?.filter((r) => r.status === "attending").length ?? 0;
+    const declined = rsvps?.filter((r) => r.status === "declined").length ?? 0;
+    const totalPlusOnes = rsvps?.reduce((sum, r) => sum + (r.plus_ones || 0), 0) ?? 0;
+    return { totalViews, uniqueGuests, totalRsvps, attending, declined, totalPlusOnes };
+  }, [sharingEvents, rsvps]);
+
+  const deviceBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const e of sharingEvents ?? []) {
+      const dt = e.device_type ?? "unknown";
+      counts[dt] = (counts[dt] ?? 0) + 1;
+    }
+    return counts;
+  }, [sharingEvents]);
+
+  const isLoading = sharingLoading || rsvpsLoading;
+  const error = sharingError || rsvpsError;
+
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center p-8">
-        <LoadingSpinner size="lg" />
+      <div className="flex items-center justify-center py-12">
+        <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
 
-  if (isError) {
-    return (
-      <div className="p-8">
-        <ErrorState
-          message={error instanceof Error ? error.message : "Failed to load analytics"}
-          onRetry={() => refetch()}
-        />
-      </div>
-    );
+  if (error) {
+    return <ErrorState message={error.message} />;
   }
-
-  if (!stats) return null;
 
   const statCards = [
-    { label: "Total Views", value: stats.totalViews, color: "text-dash-primary" },
-    { label: "Unique Visitors", value: stats.uniqueVisitors, color: "text-blue-600" },
-    { label: "RSVPs Received", value: stats.totalRsvps, color: "text-green-600" },
-    { label: "Attending", value: stats.accepted, color: "text-green-600" },
-    { label: "Declined", value: stats.declined, color: "text-red-600" },
-    { label: "Plus Ones", value: stats.totalPlusOnes, color: "text-purple-600" },
+    { label: "Total Views", value: stats.totalViews, icon: "👁" },
+    { label: "Unique Guests", value: stats.uniqueGuests, icon: "👥" },
+    { label: "Total RSVPs", value: stats.totalRsvps, icon: "✉" },
+    { label: "Attending", value: stats.attending, icon: "✓" },
+    { label: "Declined", value: stats.declined, icon: "✗" },
+    { label: "Plus Ones", value: stats.totalPlusOnes, icon: "+" },
   ];
 
   return (
-    <div className="mx-auto max-w-4xl p-4 lg:p-8">
+    <div className="max-w-4xl">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-dash-text">Analytics</h1>
+        <h2 className="text-xl font-bold text-dash-text">Analytics</h2>
         <p className="mt-1 text-sm text-dash-muted">
-          Track views, RSVPs, and visitor engagement.
+          Track views and RSVP responses for your website
         </p>
       </div>
 
-      {/* Stat cards */}
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
         {statCards.map((stat) => (
-          <Card key={stat.label} className="p-4">
-            <p className="text-xs font-medium text-dash-muted">{stat.label}</p>
-            <p className={`mt-1 text-2xl font-bold ${stat.color}`}>
-              {stat.value}
-            </p>
+          <Card key={stat.label} className="text-center">
+            <div className="text-2xl mb-1">{stat.icon}</div>
+            <div className="text-2xl font-bold text-dash-text">{stat.value}</div>
+            <div className="text-xs text-dash-muted mt-1">{stat.label}</div>
           </Card>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Recent Views */}
-        <Card className="p-5">
-          <h2 className="mb-4 text-sm font-semibold text-dash-text">Recent Views</h2>
-          {stats.recentViews.length === 0 ? (
-            <EmptyState title="No views yet" description="Share your link to start tracking views." />
-          ) : (
-            <div className="space-y-2">
-              {stats.recentViews.map((view) => (
-                <div
-                  key={view.id}
-                  className="flex items-center justify-between rounded-lg bg-dash-bg px-3 py-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <Badge variant="info">{view.device_type ?? "unknown"}</Badge>
-                    <span className="text-xs text-dash-muted">
-                      {view.source ?? "direct"}
-                    </span>
+      {/* Device breakdown */}
+      {Object.keys(deviceBreakdown).length > 0 && (
+        <Card className="mt-6">
+          <h3 className="text-sm font-semibold text-dash-text mb-4">Device Breakdown</h3>
+          <div className="space-y-2">
+            {Object.entries(deviceBreakdown).map(([device, count]) => {
+              const pct = stats.totalViews > 0 ? Math.round((count / stats.totalViews) * 100) : 0;
+              return (
+                <div key={device} className="flex items-center gap-3">
+                  <span className="text-sm text-dash-text w-24 capitalize">{device}</span>
+                  <div className="flex-1 h-4 rounded-full bg-dash-bg overflow-hidden">
+                    <div
+                      className="h-full bg-dash-primary rounded-full"
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
-                  <span className="text-xs text-dash-muted">
-                    {formatDateTime(view.created_at)}
-                  </span>
+                  <span className="text-sm text-dash-muted w-12 text-right">{count}</span>
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </Card>
+      )}
 
-        {/* Recent RSVPs */}
-        <Card className="p-5">
-          <h2 className="mb-4 text-sm font-semibold text-dash-text">Recent RSVPs</h2>
-          {stats.recentRsvps.length === 0 ? (
-            <EmptyState title="No RSVPs yet" description="RSVPs will appear here once guests respond." />
-          ) : (
-            <div className="space-y-2">
-              {stats.recentRsvps.map((rsvp) => (
-                <div
-                  key={rsvp.id}
-                  className="flex items-center justify-between rounded-lg bg-dash-bg px-3 py-2"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-dash-text">
-                      {rsvp.guest_name}
-                    </p>
-                    <p className="text-xs text-dash-muted">
-                      {rsvp.plus_ones > 0 && `+${rsvp.plus_ones} guest(s) · `}
-                      {formatDateTime(rsvp.submitted_at)}
-                    </p>
-                  </div>
-                  <Badge
-                    variant={
-                      rsvp.status === "attending"
-                        ? "success"
-                        : rsvp.status === "declined"
-                        ? "danger"
-                        : "warning"
-                    }
-                  >
-                    {rsvp.status}
+      {/* Recent views */}
+      <Card className="mt-6">
+        <h3 className="text-sm font-semibold text-dash-text mb-4">Recent Views</h3>
+        {sharingEvents && sharingEvents.length > 0 ? (
+          <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-thin">
+            {sharingEvents.slice(0, 20).map((e) => (
+              <div key={e.id} className="flex items-center justify-between border-b border-dash-border pb-2 last:border-0">
+                <div className="flex items-center gap-2">
+                  <Badge variant={e.device_type === "mobile" ? "primary" : "default"}>
+                    {e.device_type ?? "unknown"}
                   </Badge>
+                  <span className="text-sm text-dash-muted">{e.source ?? "direct"}</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
+                <span className="text-xs text-dash-muted">{formatDate(e.created_at)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No views yet" description="Share your website to start tracking views." />
+        )}
+      </Card>
+
+      {/* Recent RSVPs */}
+      <Card className="mt-6">
+        <h3 className="text-sm font-semibold text-dash-text mb-4">Recent RSVPs</h3>
+        {rsvps && rsvps.length > 0 ? (
+          <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-thin">
+            {rsvps.slice(0, 20).map((r) => (
+              <div key={r.id} className="flex items-center justify-between border-b border-dash-border pb-2 last:border-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-dash-text">{r.guest_name}</span>
+                  <Badge variant={r.status === "attending" ? "success" : r.status === "declined" ? "danger" : "default"}>
+                    {r.status}
+                  </Badge>
+                  {r.plus_ones > 0 && (
+                    <span className="text-xs text-dash-muted">+{r.plus_ones}</span>
+                  )}
+                </div>
+                <span className="text-xs text-dash-muted">{formatDate(r.submitted_at)}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No RSVPs yet" description="RSVP responses will appear here." />
+        )}
+      </Card>
     </div>
   );
 }

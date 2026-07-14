@@ -1,14 +1,4 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-
-const STORAGE_KEY = "mywedly-guest-auth";
+import React, { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 
 interface GuestAuthState {
   guestName: string | null;
@@ -22,40 +12,33 @@ interface GuestAuthContextValue extends GuestAuthState {
   signOut: () => void;
 }
 
-const GuestAuthContext = createContext<GuestAuthContextValue>({
-  guestName: null,
-  guestId: null,
-  eventId: null,
-  token: null,
-  signIn: () => {},
-  signOut: () => {},
-});
+const STORAGE_KEY = "mywedly-guest-auth";
 
-function loadState(): GuestAuthState {
-  if (typeof window === "undefined") {
+const GuestAuthContext = createContext<GuestAuthContextValue | undefined>(undefined);
+
+function loadFromStorage(): GuestAuthState {
+  if (typeof localStorage === "undefined") {
     return { guestName: null, guestId: null, eventId: null, token: null };
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { guestName: null, guestId: null, eventId: null, token: null };
     const parsed = JSON.parse(raw) as GuestAuthState;
-    return parsed;
+    return {
+      guestName: parsed.guestName ?? null,
+      guestId: parsed.guestId ?? null,
+      eventId: parsed.eventId ?? null,
+      token: parsed.token ?? null,
+    };
   } catch {
     return { guestName: null, guestId: null, eventId: null, token: null };
   }
 }
 
-function saveState(state: GuestAuthState): void {
+function saveToStorage(state: GuestAuthState): void {
+  if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // ignore
-  }
-}
-
-function clearState(): void {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
   } catch {
     // ignore
   }
@@ -65,59 +48,49 @@ interface GuestAuthProviderProps {
   children: ReactNode;
 }
 
-export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
-  const [state, setState] = useState<GuestAuthState>(() => loadState());
-
-  useEffect(() => {
-    saveState(state);
-  }, [state]);
+export function GuestAuthProvider({ children }: GuestAuthProviderProps): React.ReactElement {
+  const [state, setState] = React.useState<GuestAuthState>(() => loadFromStorage());
 
   const signIn = useCallback(
     (name: string, eventId: string, guestId?: string, token?: string) => {
-      setState({
+      const next: GuestAuthState = {
         guestName: name,
         guestId: guestId ?? null,
         eventId,
         token: token ?? null,
-      });
+      };
+      setState(next);
+      saveToStorage(next);
     },
-    []
+    [],
   );
 
   const signOut = useCallback(() => {
-    clearState();
-    setState({ guestName: null, guestId: null, eventId: null, token: null });
+    const empty: GuestAuthState = { guestName: null, guestId: null, eventId: null, token: null };
+    setState(empty);
+    saveToStorage(empty);
   }, []);
 
   const value = useMemo<GuestAuthContextValue>(
-    () => ({
-      guestName: state.guestName,
-      guestId: state.guestId,
-      eventId: state.eventId,
-      token: state.token,
-      signIn,
-      signOut,
-    }),
-    [state, signIn, signOut]
+    () => ({ ...state, signIn, signOut }),
+    [state, signIn, signOut],
   );
 
-  return (
-    <GuestAuthContext.Provider value={value}>
-      {children}
-    </GuestAuthContext.Provider>
-  );
+  return <GuestAuthContext.Provider value={value}>{children}</GuestAuthContext.Provider>;
 }
 
 export function useGuestAuth(): GuestAuthContextValue {
-  return useContext(GuestAuthContext);
+  const ctx = useContext(GuestAuthContext);
+  if (!ctx) {
+    throw new Error("useGuestAuth must be used within a GuestAuthProvider");
+  }
+  return ctx;
 }
 
-export function useSignIn() {
-  const { signIn } = useGuestAuth();
-  return signIn;
+export function useSignIn(): GuestAuthContextValue["signIn"] {
+  return useGuestAuth().signIn;
 }
 
-export function useGuestSignIn() {
-  const { signIn } = useGuestAuth();
-  return signIn;
+export function useGuestSignIn(): GuestAuthContextValue["signIn"] {
+  return useGuestAuth().signIn;
 }

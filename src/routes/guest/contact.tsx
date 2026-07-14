@@ -1,66 +1,90 @@
+import React from "react";
 import { useGuestOutletContext } from "./guest-layout";
-import { formatDate, formatTime12 } from "../../lib/utils";
+import { RichTextContent } from "../../lib/sanitize";
 
-export default function GuestContact() {
+export default function Contact(): React.ReactElement {
   const { event } = useGuestOutletContext();
+  const content = (event.content as Record<string, unknown> | null) ?? {};
+  const contactHtml = (content.contact as string) || "";
+
+  const mapUrl = event.address
+    ? `https://maps.google.com/maps?q=${encodeURIComponent(event.address)}&output=embed`
+    : null;
 
   return (
-    <div>
-      <section className="guest-section-tight text-center">
+    <div className="guest-section">
+      {/* Header */}
+      <div className="mx-auto max-w-2xl text-center animate-fadeIn">
         <p className="guest-eyebrow">Contact</p>
-        <h1 className="guest-title">Find Your Way</h1>
-        <p className="guest-subtitle mx-auto">Venue details and directions for the celebration.</p>
-      </section>
+        <h2 className="guest-title">Get In Touch</h2>
+        <p className="guest-subtitle mt-2 mx-auto">
+          If you have any questions, here's how to reach us.
+        </p>
+      </div>
 
-      <section className="guest-section-tight">
-        <div className="event-card mx-auto max-w-lg space-y-5">
-          {event.venue && (
-            <div>
+      {/* Venue Section */}
+      {event.venue && (
+        <div className="mx-auto mt-12 max-w-3xl animate-slideUp">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="event-info-card">
               <p className="guest-eyebrow">Venue</p>
-              <p className="text-lg font-medium">{event.venue}</p>
+              <h3 className="mt-2 text-lg font-semibold text-event-heading">{event.venue}</h3>
+              {event.address && (
+                <p className="mt-2 text-sm text-event-muted">{event.address}</p>
+              )}
             </div>
-          )}
-          {event.address && (
-            <div>
-              <p className="guest-eyebrow">Address</p>
-              <p className="text-base leading-relaxed">{event.address}</p>
+            <div className="event-info-card">
+              <p className="guest-eyebrow">Date & Time</p>
+              <h3 className="mt-2 text-lg font-semibold text-event-heading">
+                {event.event_date
+                  ? new Date(event.event_date).toLocaleDateString("en-US", {
+                      weekday: "long",
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })
+                  : "TBD"}
+              </h3>
+              {event.event_time && (
+                <p className="mt-2 text-sm text-event-muted">
+                  {(() => {
+                    const [h, m] = event.event_time.split(":");
+                    const hh = parseInt(h, 10);
+                    const period = hh >= 12 ? "PM" : "AM";
+                    const h12 = hh % 12 === 0 ? 12 : hh % 12;
+                    return `${h12}:${m} ${period}`;
+                  })()}
+                </p>
+              )}
             </div>
-          )}
-          {event.event_date && (
-            <div>
-              <p className="guest-eyebrow">Date</p>
-              <p className="text-base">{formatDate(event.event_date)}</p>
-            </div>
-          )}
-          {event.event_time && (
-            <div>
-              <p className="guest-eyebrow">Time</p>
-              <p className="text-base">{formatTime12(event.event_time)}</p>
-            </div>
-          )}
-          {event.address && (
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="event-btn-secondary inline-block"
-            >
-              Open in Google Maps
-            </a>
-          )}
+          </div>
         </div>
+      )}
 
-        {event.address && (
-          <div className="mx-auto mt-6 max-w-lg overflow-hidden rounded-2xl border" style={{ borderColor: "var(--event-border)" }}>
+      {/* Map */}
+      {mapUrl && (
+        <div className="mx-auto mt-8 max-w-3xl animate-fadeIn">
+          <div className="overflow-hidden rounded-2xl border border-event-border" style={{ borderRadius: "calc(var(--event-radius) * 2)" }}>
             <iframe
-              title="Map"
-              src={`https://maps.google.com/maps?q=${encodeURIComponent(event.address)}&output=embed`}
-              className="h-72 w-full"
+              src={mapUrl}
+              title="Venue Map"
+              className="h-80 w-full"
               loading="lazy"
+              style={{ border: 0 }}
             />
           </div>
-        )}
-      </section>
+        </div>
+      )}
+
+      {/* Contact content */}
+      {contactHtml && (
+        <div className="mx-auto mt-12 max-w-2xl text-center animate-slideUp">
+          <p className="guest-eyebrow">Additional Info</p>
+          <div className="mt-4">
+            <RichTextContent html={contactHtml} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -17,23 +17,14 @@
 body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
 * { box-sizing: border-box; }
 
-/* === Guest theme wrapper === */
 .event-themed {
-  min-height: 100vh;
-  background-color: var(--event-bg);
-  color: var(--event-text);
-  font-family: var(--event-font-body);
-  border-radius: var(--event-radius);
-  line-height: 1.7;
+  min-height: 100vh; background-color: var(--event-bg); color: var(--event-text);
+  font-family: var(--event-font-body); border-radius: var(--event-radius); line-height: 1.7;
 }
 .event-themed h1,.event-themed h2,.event-themed h3,.event-themed h4,.event-themed h5,.event-themed h6 {
-  font-family: var(--event-font-heading);
-  color: var(--event-heading);
-  font-size: calc(1em * var(--event-font-scale, 1));
-  line-height: 1.2;
+  font-family: var(--event-font-heading); color: var(--event-heading);
+  font-size: calc(1em * var(--event-font-scale, 1)); line-height: 1.2;
 }
-
-/* === Guest buttons === */
 .event-themed .event-btn-primary {
   background-color: var(--event-primary); color: var(--event-primary-fg);
   padding: 0.75rem 2rem; border-radius: var(--event-radius); font-weight: 600;
@@ -41,7 +32,6 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
   letter-spacing: 0.05em; font-size: 0.875rem; text-transform: uppercase;
 }
 .event-themed .event-btn-primary:hover { background-color: var(--event-primary-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-.event-themed .event-btn-primary:active { transform: translateY(0); }
 .event-themed .event-btn-secondary {
   background-color: transparent; color: var(--event-primary);
   padding: 0.75rem 2rem; border-radius: var(--event-radius); font-weight: 600;
@@ -49,26 +39,18 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
   letter-spacing: 0.05em; font-size: 0.875rem; text-transform: uppercase;
 }
 .event-themed .event-btn-secondary:hover { background-color: var(--event-surface-alt); border-color: var(--event-primary); }
-
-/* === Guest inputs === */
 .event-themed .event-input {
   background-color: var(--event-surface); border: 1px solid var(--event-border);
   color: var(--event-text); padding: 0.75rem 1rem; border-radius: var(--event-radius);
-  width: 100%; outline: none; transition: border-color 0.2s; font-family: var(--event-font-body);
-  font-size: 1rem;
+  width: 100%; outline: none; transition: border-color 0.2s; font-family: var(--event-font-body); font-size: 1rem;
 }
 .event-themed .event-input:focus { border-color: var(--event-primary); box-shadow: 0 0 0 3px rgba(0,0,0,0.03); }
 .event-themed .event-input::placeholder { color: var(--event-muted); opacity: 0.6; }
-
-/* === Guest cards === */
 .event-themed .event-card {
   background-color: var(--event-surface); border: 1px solid var(--event-border);
-  border-radius: var(--event-radius); padding: 2rem;
-  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  border-radius: var(--event-radius); padding: 2rem; transition: box-shadow 0.3s ease, transform 0.3s ease;
 }
 .event-themed .event-card-hover:hover { box-shadow: 0 8px 30px rgba(0,0,0,0.06); transform: translateY(-2px); }
-
-/* === Rich text === */
 .event-themed .rich-content { font-family: var(--event-font-rich); line-height: 1.8; color: var(--event-text); }
 .event-themed .rich-content h1 { font-size: calc(2rem * var(--event-font-scale, 1)); font-weight: 700; margin: 0.5em 0; }
 .event-themed .rich-content h2 { font-size: calc(1.5rem * var(--event-font-scale, 1)); font-weight: 600; margin: 0.5em 0; }
@@ -78,31 +60,26 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
 .event-themed .rich-content a { color: var(--event-primary); text-decoration: underline; }
 .event-themed .rich-content img { max-width: 100%; border-radius: var(--event-radius); margin: 1em 0; }
 .event-themed .rich-content blockquote { border-left: 3px solid var(--event-border); padding-left: 1em; margin: 1em 0; font-style: italic; color: var(--event-muted); }
-
-/* === Guest section spacing === */
 .event-themed .guest-section { padding: 4rem 1.5rem; }
 @media (min-width: 768px) { .event-themed .guest-section { padding: 5rem 2rem; } }
 .event-themed .guest-section-tight { padding: 2.5rem 1.5rem; }
 @media (min-width: 768px) { .event-themed .guest-section-tight { padding: 3rem 2rem; } }
-
-/* === Guest typography helpers === */
-.event-themed .guest-eyebrow {
-  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase;
-  color: var(--event-muted); margin-bottom: 0.75rem;
-}
+.event-themed .guest-eyebrow { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; color: var(--event-muted); margin-bottom: 0.75rem; }
 .event-themed .guest-title { font-size: calc(2rem * var(--event-font-scale, 1)); font-weight: 700; margin-bottom: 1rem; }
 .event-themed .guest-subtitle { font-size: calc(1.125rem * var(--event-font-scale, 1)); color: var(--event-muted); max-width: 36rem; }
-@media (min-width: 768px) {
-  .event-themed .guest-title { font-size: calc(2.5rem * var(--event-font-scale, 1)); }
-}
+@media (min-width: 768px) { .event-themed .guest-title { font-size: calc(2.5rem * var(--event-font-scale, 1)); } }
+.event-themed .guest-nav-link { position: relative; padding: 0.5rem 0.875rem; font-size: 0.875rem; font-weight: 500; color: var(--event-text); opacity: 0.7; transition: opacity 0.2s; }
+.event-themed .guest-nav-link:hover { opacity: 1; }
+.event-themed .guest-nav-link.active { opacity: 1; }
+.event-themed .guest-nav-link.active::after { content: ""; position: absolute; bottom: -2px; left: 0.875rem; right: 0.875rem; height: 2px; background-color: var(--event-primary); border-radius: 1px; }
+.event-themed .event-info-card { background-color: var(--event-surface); border: 1px solid var(--event-border); border-radius: var(--event-radius); padding: 1.75rem; transition: all 0.3s ease; }
+.event-themed .event-info-card:hover { box-shadow: 0 8px 30px rgba(0,0,0,0.06); transform: translateY(-2px); }
 
-/* === Scrollbar === */
 .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--dash-border); border-radius: 3px; }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: var(--dash-muted); }
 
-/* === Animations === */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .animate-fadeIn { animation: fadeIn 0.4s ease-in; }
 @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
@@ -111,27 +88,4 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
 .animate-slideUpStagger { animation: slideUpStagger 0.5s ease-out both; }
 @keyframes scaleIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
 .animate-scaleIn { animation: scaleIn 0.4s ease-out; }
-@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-.animate-shimmer { background: linear-gradient(90deg, var(--dash-border) 25%, var(--dash-bg) 50%, var(--dash-border) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
-
-/* === Smooth scroll === */
 html { scroll-behavior: smooth; }
-
-/* === Guest nav link === */
-.event-themed .guest-nav-link {
-  position: relative; padding: 0.5rem 0.875rem; font-size: 0.875rem; font-weight: 500;
-  color: var(--event-text); opacity: 0.7; transition: opacity 0.2s;
-}
-.event-themed .guest-nav-link:hover { opacity: 1; }
-.event-themed .guest-nav-link.active { opacity: 1; }
-.event-themed .guest-nav-link.active::after {
-  content: ""; position: absolute; bottom: -2px; left: 0.875rem; right: 0.875rem;
-  height: 2px; background-color: var(--event-primary); border-radius: 1px;
-}
-
-/* === Event card === */
-.event-themed .event-info-card {
-  background-color: var(--event-surface); border: 1px solid var(--event-border);
-  border-radius: var(--event-radius); padding: 1.75rem; transition: all 0.3s ease;
-}
-.event-themed .event-info-card:hover { box-shadow: 0 8px 30px rgba(0,0,0,0.06); transform: translateY(-2px); }

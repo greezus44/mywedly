@@ -1,173 +1,189 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { DEFAULT_THEME, jsonToTheme } from "../../lib/theme";
-import { formatDate } from "../../lib/utils";
+import { jsonToTheme } from "../../lib/theme";
+import { LoadingSpinner } from "../../components/ui";
 
-export default function GuestCover() {
+export default function Cover(): React.ReactElement {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { guestId, eventId, signIn } = useGuestAuth();
+  const { guestName, eventId, signIn } = useGuestAuth();
   const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [signInError, setSignInError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const { data: event, isLoading } = useQuery({
-    queryKey: ["published-event", slug],
+  const { data: event, isLoading, error } = useQuery({
+    queryKey: ["guest-event", slug],
+    enabled: !!slug,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("slug", slug)
+        .eq("slug", slug!)
         .eq("is_published", true)
         .maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
-    enabled: !!slug,
   });
 
+  // Auto-redirect if already signed in for this event
   useEffect(() => {
-    if (event && guestId && eventId === event.id) {
+    if (event && eventId === event.id && guestName) {
       navigate(`/e/${slug}/home`, { replace: true });
     }
-  }, [event, guestId, eventId, slug, navigate]);
+  }, [event, eventId, guestName, slug, navigate]);
+
+  const handleSignIn = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    if (!event || !username.trim()) return;
+    setSubmitting(true);
+    setSignInError(null);
+    const trimmed = username.trim();
+    try {
+      const { data: guest, error: guestError } = await supabase
+        .from("event_guests")
+        .select("*")
+        .ilike("username", trimmed)
+        .eq("event_id", event.id)
+        .maybeSingle();
+      if (guestError) throw guestError;
+      if (!guest) {
+        setSignInError("We couldn't find that username. Please check and try again.");
+        return;
+      }
+      signIn(guest.name, event.id, guest.id, guest.token);
+      navigate(`/e/${slug}/home`, { replace: true });
+    } catch {
+      setSignInError("Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center bg-gray-900">
+        <LoadingSpinner className="h-8 w-8 text-white" />
       </div>
     );
   }
 
-  if (!event) {
+  if (error || !event) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
-        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
-        <p className="text-dash-muted">This invitation website could not be found or is no longer available.</p>
-        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
+      <div className="flex min-h-screen items-center justify-center bg-gray-900 px-6 text-center">
+        <p className="text-lg text-white/80">
+          This invitation website could not be found or is no longer available.
+        </p>
       </div>
     );
   }
 
   const theme = jsonToTheme(event.theme);
-  const coverConfig = (event.cover_config ?? {}) as { subtitle?: string; overlayOpacity?: number };
-  const loginConfig = (event.login_config ?? {}) as { passwordMode?: string; password?: string; signInText?: string };
-  const logoConfig = (event.logo_config ?? {}) as { url?: string };
-  const overlay = coverConfig.overlayOpacity ?? 0.3;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
-    try {
-      if (loginConfig.passwordMode && loginConfig.passwordMode !== "none" && password !== (loginConfig.password ?? "")) {
-        setError("Incorrect password.");
-        setSubmitting(false);
-        return;
-      }
-      const { data: guest, error: gError } = await supabase
-        .from("event_guests")
-        .select("id, name, username")
-        .ilike("username", username.trim())
-        .eq("event_id", event.id)
-        .maybeSingle();
-      if (gError) throw gError;
-      if (!guest) {
-        setError("Username not found. Please check your invitation.");
-        setSubmitting(false);
-        return;
-      }
-      signIn(guest.name, event.id, guest.id);
-      navigate(`/e/${slug}/home`, { replace: true });
-    } catch {
-      setError("Sign-in failed. Please try again.");
-      setSubmitting(false);
-    }
-  };
+  const coverConfig = (event.cover_config as Record<string, unknown> | null) ?? {};
+  const overlay = typeof coverConfig.overlay === "number" ? coverConfig.overlay : 0.4;
 
   return (
     <EventThemeProvider initialTheme={theme}>
-      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
+      <div className="event-themed relative min-h-screen overflow-hidden">
+        {/* Background */}
         {event.cover_image ? (
-          <>
-            <div className="absolute inset-0">
-              <img src={event.cover_image} alt={event.name} className="h-full w-full object-cover" />
-              <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />
-            </div>
-          </>
-        ) : null}
+          <img
+            src={event.cover_image}
+            alt={event.name}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 to-black/80" />
+        )}
+        <div
+          className="absolute inset-0"
+          style={{ background: `rgba(0,0,0,${overlay})` }}
+        />
 
-        <div className="relative z-10 flex w-full max-w-md flex-col items-center px-6 py-16 text-center animate-fadeIn">
-          {logoConfig.url && (
-            <img src={logoConfig.url} alt="Logo" className="mb-8 h-16 w-auto object-contain opacity-90" />
-          )}
+        {/* Content */}
+        <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-6 py-16 text-center">
+          {/* Logo */}
+          {(() => {
+            const logoConfig = (event.logo_config as Record<string, unknown> | null) ?? {};
+            if (logoConfig.url) {
+              return (
+                <img
+                  src={logoConfig.url as string}
+                  alt="Logo"
+                  className="mb-8 h-16 w-auto object-contain animate-fadeIn"
+                />
+              );
+            }
+            return null;
+          })()}
 
-          <p className="guest-eyebrow" style={{ color: "var(--event-primary-fg)" }}>
+          {/* Eyebrow */}
+          <p className="guest-eyebrow text-white/70 animate-fadeIn">
             {event.event_type || "Invitation"}
           </p>
 
-          <h1 className="mb-4 text-4xl font-bold leading-tight md:text-5xl" style={{ color: "var(--event-primary-fg)" }}>
+          {/* Title */}
+          <h1
+            className="mt-4 text-4xl font-bold text-white drop-shadow-lg animate-slideUp md:text-6xl"
+            style={{ fontFamily: theme.fontHeading }}
+          >
             {event.name}
           </h1>
 
+          {/* Date */}
           {event.event_date && (
-            <p className="mb-2 text-lg opacity-90" style={{ color: "var(--event-primary-fg)" }}>
-              {formatDate(event.event_date)}
+            <p className="mt-6 text-lg text-white/90 drop-shadow animate-fadeIn">
+              {new Date(event.event_date).toLocaleDateString("en-US", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
             </p>
           )}
 
-          {coverConfig.subtitle && (
-            <p className="mb-10 text-base opacity-80" style={{ color: "var(--event-primary-fg)" }}>
-              {coverConfig.subtitle}
-            </p>
+          {/* Subtitle */}
+          {event.venue && (
+            <p className="mt-2 text-sm text-white/70 animate-fadeIn">{event.venue}</p>
           )}
 
-          <form onSubmit={handleSubmit} className="w-full space-y-4 rounded-2xl border border-white/20 bg-white/10 p-6 backdrop-blur-md" style={{ borderColor: "var(--event-primary-fg)", opacity: 0.95 }}>
-            <div className="text-left">
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-primary-fg)" }}>
-                Username
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
-                className="event-input"
-                style={{ backgroundColor: "rgba(255,255,255,0.95)" }}
-                required
-              />
-            </div>
-            {loginConfig.passwordMode && loginConfig.passwordMode !== "none" && (
-              <div className="text-left">
-                <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-primary-fg)" }}>
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  className="event-input"
-                  style={{ backgroundColor: "rgba(255,255,255,0.95)" }}
-                  required
-                />
-              </div>
-            )}
-            {error && <p className="text-sm text-red-300">{error}</p>}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="event-btn-primary w-full disabled:opacity-50"
+          {/* Sign-in card */}
+          <div className="mt-12 w-full max-w-sm animate-slideUp">
+            <div
+              className="rounded-2xl border border-white/20 p-8 shadow-2xl"
+              style={{
+                background: "rgba(255,255,255,0.1)",
+                backdropFilter: "blur(16px)",
+                WebkitBackdropFilter: "blur(16px)",
+              }}
             >
-              {submitting ? "Signing in..." : (loginConfig.signInText || "Enter")}
-            </button>
-          </form>
+              <h2 className="text-xl font-semibold text-white">Welcome</h2>
+              <p className="mt-1 text-sm text-white/70">
+                Enter your username to view your invitation
+              </p>
+              <form onSubmit={handleSignIn} className="mt-6 space-y-4">
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Your username"
+                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder-white/50 outline-none transition focus:border-white/40 focus:bg-white/15"
+                />
+                {signInError && <p className="text-sm text-red-200">{signInError}</p>}
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full rounded-lg bg-white px-4 py-3 text-sm font-semibold uppercase tracking-wider text-gray-900 transition hover:bg-white/90 disabled:opacity-60"
+                >
+                  {submitting ? "Loading…" : "View Invitation"}
+                </button>
+              </form>
+            </div>
+          </div>
         </div>
       </div>
     </EventThemeProvider>

@@ -1,274 +1,264 @@
-import { useParams, Link } from "react-router-dom";
+import React from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type CustomPage, type UserEvent, type SubEvent } from "../../lib/supabase";
-import { EventThemeProvider } from "../../lib/theme-context";
-import { jsonToTheme } from "../../lib/theme";
+import { supabase, type CustomPage, type EventSchedule } from "../../lib/supabase";
+import { useGuestOutletContext } from "./guest-layout";
 import { RichTextContent } from "../../lib/sanitize";
-import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
-import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
-import { useGuestAuth } from "../../lib/guest-auth";
-import { useState, useEffect } from "react";
+import { LoadingSpinner } from "../../components/ui";
+import { cn, formatDate, formatTime12, getCountdown } from "../../lib/utils";
+import type { Block, BlockType } from "../event/block-types";
 
-interface Block {
-  id: string;
-  type: string;
-  data: Record<string, unknown>;
+interface BlockRendererProps {
+  block: Block;
+  invitedSubEventIds: string[];
+  eventId: string;
 }
 
-export default function GuestCustomPage() {
-  const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
-  const { guestId } = useGuestAuth();
+function BlockRenderer({ block, invitedSubEventIds, eventId }: BlockRendererProps): React.ReactElement | null {
+  const d = block.data;
+  switch (block.type as BlockType) {
+    case "heading": {
+      const level = (d.level as string) || "h2";
+      const align = (d.align as string) || "center";
+      const text = (d.text as string) || "";
+      const Tag = (level === "h1" ? "h1" : level === "h3" ? "h3" : "h2") as keyof React.JSX.IntrinsicElements;
+      return React.createElement(Tag, {
+        className: "event-font",
+        style: { textAlign: align as React.CSSProperties["textAlign"] },
+        children: text || "Heading",
+      });
+    }
+    case "paragraph":
+      return <RichTextContent html={(d.html as string) || ""} />;
+    case "image":
+      return d.url ? (
+        <img src={d.url as string} alt={(d.alt as string) || ""} className="w-full rounded-lg" />
+      ) : (
+        <div className="flex h-48 items-center justify-center rounded-lg border-2 border-dashed border-event-border text-event-muted">Image placeholder</div>
+      );
+    case "spacer":
+      return <div style={{ height: Number(d.height) || 40 }} />;
+    case "divider":
+      return <hr className="border-event-border my-4" />;
+    case "gallery": {
+      const images = (d.images as { url: string; alt?: string }[]) || [];
+      return images.length > 0 ? (
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+          {images.map((img, i) => <img key={i} src={img.url} alt={img.alt ?? ""} className="w-full rounded-lg" />)}
+        </div>
+      ) : (
+        <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-event-border text-event-muted">Gallery placeholder</div>
+      );
+    }
+    case "video":
+      return d.url ? (
+        <div className="aspect-video w-full overflow-hidden rounded-lg">
+          <iframe src={d.url as string} title={(d.title as string) || "Video"} className="h-full w-full" allowFullScreen />
+        </div>
+      ) : (
+        <div className="flex h-48 items-center justify-center rounded-lg border-2 border-dashed border-event-border text-event-muted">Video placeholder</div>
+      );
+    case "button":
+      return (
+        <div className="text-center">
+          <button type="button" className={cn("event-btn-primary", d.style === "secondary" && "event-btn-secondary")} onClick={() => d.url && window.open(d.url as string, "_blank")}>
+            {(d.text as string) || "Button"}
+          </button>
+        </div>
+      );
+    case "columns":
+      return (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div><RichTextContent html={(d.left as string) || ""} /></div>
+          <div><RichTextContent html={(d.right as string) || ""} /></div>
+        </div>
+      );
+    case "list": {
+      const items = (d.items as string[]) || [];
+      return d.ordered ? (
+        <ol className="list-decimal pl-6 space-y-1">{items.map((item, i) => <li key={i}>{item}</li>)}</ol>
+      ) : (
+        <ul className="list-disc pl-6 space-y-1">{items.map((item, i) => <li key={i}>{item}</li>)}</ul>
+      );
+    }
+    case "quote":
+      return (
+        <blockquote className="border-l-4 border-event-border pl-4 italic text-event-muted">
+          "{(d.text as string) || "Quote"}"
+          {(d.author as string) && <footer className="mt-2 text-sm not-italic">— {d.author as string}</footer>}
+        </blockquote>
+      );
+    case "countdown": {
+      const c = getCountdown(d.targetDate as string);
+      return (
+        <div className="text-center">
+          {!c.isPast ? (
+            <div className="flex items-center justify-center gap-6">
+              {(["days", "hours", "minutes", "seconds"] as const).map((unit) => (
+                <div key={unit} className="text-center">
+                  <div className="text-4xl font-bold event-font">{c[unit]}</div>
+                  <div className="mt-1 text-xs uppercase tracking-wider text-event-muted">{unit.charAt(0).toUpperCase() + unit.slice(1)}</div>
+                </div>
+              ))}
+            </div>
+          ) : <p className="text-event-muted">Countdown complete</p>}
+        </div>
+      );
+    }
+    case "map":
+      return d.url ? (
+        <div className="aspect-video w-full overflow-hidden rounded-lg">
+          <iframe src={d.url as string} title="Map" className="h-full w-full" loading="lazy" />
+        </div>
+      ) : (
+        <div className="flex h-48 items-center justify-center rounded-lg border-2 border-dashed border-event-border text-event-muted">Map placeholder</div>
+      );
+    case "rsvp-form":
+      return (
+        <div className="event-card mx-auto max-w-lg text-center">
+          <h2 className="guest-title">{(d.heading as string) || "RSVP"}</h2>
+          <p className="guest-subtitle mt-2">Will you be joining us?</p>
+        </div>
+      );
+    case "guest-list":
+      return <div className="text-center"><h2 className="guest-title">{(d.title as string) || "Guest List"}</h2></div>;
+    case "schedule":
+      return <ScheduleBlock invitedSubEventIds={invitedSubEventIds} eventId={eventId} title={(d.title as string) || "Schedule"} />;
+    case "venue":
+      return (
+        <div className="event-info-card mx-auto max-w-2xl text-center">
+          <p className="guest-eyebrow">Venue</p>
+          <h3 className="guest-title">{(d.name as string) || "Venue"}</h3>
+          {(d.address as string) && <p className="guest-subtitle mt-2">{d.address as string}</p>}
+        </div>
+      );
+    case "faq": {
+      const items = (d.items as { question: string; answer: string }[]) || [];
+      return items.length > 0 ? (
+        <div className="mx-auto max-w-2xl space-y-4">
+          {items.map((item, i) => (
+            <div key={i} className="event-card">
+              <h3 className="text-sm font-semibold text-event-heading">{item.question}</h3>
+              <p className="mt-2 text-sm text-event-text">{item.answer}</p>
+            </div>
+          ))}
+        </div>
+      ) : <p className="text-center text-event-muted">FAQ items will appear here</p>;
+    }
+    default:
+      return null;
+  }
+}
 
-  const { data: event, isLoading: eventLoading } = useQuery({
-    queryKey: ["published-event", slug],
+function ScheduleBlock({ invitedSubEventIds, eventId, title }: { invitedSubEventIds: string[]; eventId: string; title: string }): React.ReactElement {
+  const { data: schedules } = useQuery({
+    queryKey: ["page-schedules", eventId, invitedSubEventIds],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("user_events")
+        .from("event_schedules")
         .select("*")
-        .eq("slug", slug)
-        .eq("is_published", true)
-        .maybeSingle();
+        .eq("event_id", eventId)
+        .order("order_index", { ascending: true });
       if (error) throw error;
-      return data as UserEvent | null;
+      return (data ?? []) as EventSchedule[];
     },
   });
+  const visible = (schedules ?? []).filter(
+    (s) => !s.sub_event_id || invitedSubEventIds.length === 0 || invitedSubEventIds.includes(s.sub_event_id),
+  );
+  return (
+    <div className="mx-auto max-w-2xl">
+      <h2 className="guest-title text-center">{title}</h2>
+      <div className="mt-6 space-y-4">
+        {visible.map((s) => (
+          <div key={s.id} className="event-card">
+            <h3 className="font-semibold text-event-heading">{s.title}</h3>
+            {s.schedule_date && <p className="mt-1 text-sm text-event-muted">{formatDate(s.schedule_date)} {s.start_time && `• ${formatTime12(s.start_time)}`}</p>}
+            {s.venue && <p className="mt-1 text-sm text-event-muted">{s.venue}</p>}
+            {s.description && <p className="mt-2 text-sm text-event-text">{s.description}</p>}
+          </div>
+        ))}
+        {visible.length === 0 && <p className="text-center text-event-muted">No schedule items available.</p>}
+      </div>
+    </div>
+  );
+}
 
-  const { data: page, isLoading: pageLoading } = useQuery({
-    queryKey: ["guest-custom-page", event?.id, pageSlug],
+export default function CustomPageRenderer(): React.ReactElement {
+  const { event, invitedSubEventIds } = useGuestOutletContext();
+  const { pageSlug } = useParams<{ pageSlug: string }>();
+  const navigate = useNavigate();
+
+  const { data: page, isLoading, error } = useQuery({
+    queryKey: ["guest-custom-page", event.id, pageSlug],
+    enabled: !!pageSlug,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
         .select("*")
-        .eq("event_id", event!.id)
-        .eq("slug", pageSlug)
+        .eq("event_id", event.id)
+        .eq("slug", pageSlug!)
         .eq("is_published", true)
         .maybeSingle();
       if (error) throw error;
       return data as CustomPage | null;
     },
-    enabled: !!event?.id && !!pageSlug,
   });
 
-  const { data: invitedSubEventIds } = useQuery({
-    queryKey: ["guest-invited-sub-events", event?.id, guestId],
-    queryFn: async () => {
-      const invitations = await resolveGuestInvitations(supabase, guestId!, event!.id);
-      return getInvitedSubEventIds(invitations);
-    },
-    enabled: !!event?.id && !!guestId,
-  });
+  if (isLoading) {
+    return <div className="flex min-h-[50vh] items-center justify-center"><LoadingSpinner className="h-8 w-8" /></div>;
+  }
 
-  const { data: subEvents } = useQuery({
-    queryKey: ["guest-page-sub-events", event?.id, invitedSubEventIds],
-    queryFn: async () => {
-      if (!invitedSubEventIds || invitedSubEventIds.length === 0) return [];
-      const { data, error } = await supabase
-        .from("sub_events")
-        .select("*")
-        .in("id", invitedSubEventIds)
-        .order("display_order", { ascending: true });
-      if (error) throw error;
-      return data as SubEvent[];
-    },
-    enabled: !!event?.id && !!invitedSubEventIds && invitedSubEventIds.length > 0,
-  });
-
-  if (eventLoading || pageLoading) {
+  if (error || !page) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
+      <div className="guest-section text-center">
+        <p className="guest-eyebrow">Page Not Found</p>
+        <h2 className="guest-title">This page could not be found</h2>
+        <button onClick={() => navigate(-1)} className="event-btn-primary mt-6">Go Back</button>
       </div>
     );
   }
 
-  if (!event) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg text-center">
-        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
-        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
-      </div>
-    );
-  }
-
-  if (!page) {
-    return (
-      <EventThemeProvider initialTheme={jsonToTheme(event.theme)}>
-        <div className="flex min-h-screen flex-col items-center justify-center gap-4 text-center">
-          <h1 className="text-2xl font-bold">Page Not Found</h1>
-          <Link to={`/e/${slug}/home`} className="hover:underline" style={{ color: "var(--event-primary)" }}>Return to home</Link>
-        </div>
-      </EventThemeProvider>
-    );
-  }
-
-  const theme = jsonToTheme(event.theme);
-  const blocks = (page.blocks ?? []) as unknown as Block[];
+  const rawBlocks = page.blocks as unknown;
+  const blockList: Block[] = Array.isArray(rawBlocks) ? (rawBlocks as Block[]) : [];
 
   return (
-    <EventThemeProvider initialTheme={theme}>
-      <div>
-        {page.cover_image_url && (
-          <div className="h-64 w-full overflow-hidden md:h-80">
-            <img src={page.cover_image_url} alt={page.title} className="h-full w-full object-cover" />
+    <div>
+      {page.cover_image_url && (
+        <div className="relative h-64 overflow-hidden">
+          <img src={page.cover_image_url} alt={page.title} className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-black/30" />
+        </div>
+      )}
+
+      <section className="guest-section">
+        <div className="mx-auto max-w-3xl">
+          <div className="text-center animate-fadeIn">
+            <p className="guest-eyebrow">{page.nav_label || "Page"}</p>
+            <h1 className="guest-title">{page.title}</h1>
           </div>
-        )}
 
-        <section className="guest-section">
-          <div className="mx-auto max-w-2xl">
-            <p className="guest-eyebrow text-center">{page.nav_label || "Page"}</p>
-            <h1 className="guest-title text-center">{page.title}</h1>
-
-            {page.body && (
-              <div className="mt-6 animate-slideUp">
-                <RichTextContent html={page.body} />
-              </div>
-            )}
-
-            {blocks.length > 0 && (
-              <div className="mt-8 space-y-8">
-                {blocks.map((block, i) => (
-                  <div key={block.id} className="animate-slideUpStagger" style={{ animationDelay: `${i * 0.08}s` }}>
-                    <BlockRenderer block={block} event={event} subEvents={subEvents ?? []} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-    </EventThemeProvider>
-  );
-}
-
-function BlockRenderer({ block, event, subEvents }: { block: Block; event: UserEvent; subEvents: SubEvent[] }) {
-  const data = block.data;
-  switch (block.type) {
-    case "heading": {
-      const level = (data.level as string) || "h2";
-      const text = (data.text as string) || "";
-      const Tag = level as "h1" | "h2" | "h3";
-      return <Tag className="font-bold">{String(text)}</Tag>;
-    }
-    case "paragraph":
-      return <RichTextContent html={(data.text as string) || ""} />;
-    case "image":
-      return (
-        <figure>
-          {(data.url as string) && <img src={data.url as string} alt={(data.alt as string) || ""} className="w-full rounded-lg" />}
-          {(data.caption as string) && <figcaption className="mt-2 text-center text-sm opacity-70">{String(data.caption)}</figcaption>}
-        </figure>
-      );
-    case "spacer":
-      return <div style={{ height: (data.height as number) || 40 }} />;
-    case "divider":
-      return <hr style={{ borderColor: "var(--event-border)" }} />;
-    case "video":
-      return (
-        <div>
-          {(data.url as string) && <iframe src={data.url as string} className="aspect-video w-full rounded-lg" allowFullScreen />}
-          {(data.caption as string) && <p className="mt-2 text-center text-sm opacity-70">{String(data.caption)}</p>}
-        </div>
-      );
-    case "button":
-      return (
-        <a href={(data.url as string) || "#"} target="_blank" rel="noopener noreferrer" className="event-btn-primary inline-block">
-          {String(data.text)}
-        </a>
-      );
-    case "columns":
-      return (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div><RichTextContent html={(data.left as string) || ""} /></div>
-          <div><RichTextContent html={(data.right as string) || ""} /></div>
-        </div>
-      );
-    case "list":
-      return (
-        <ul className="list-disc space-y-1 pl-6">
-          {(data.items as string[] | undefined)?.map((item, i) => <li key={i}>{item}</li>)}
-        </ul>
-      );
-    case "quote":
-      return (
-        <blockquote className="border-l-4 pl-4 italic opacity-80" style={{ borderColor: "var(--event-border)" }}>
-          <p>{String(data.text)}</p>
-          {(data.author as string) && <footer className="mt-2 text-sm">— {String(data.author)}</footer>}
-        </blockquote>
-      );
-    case "countdown": {
-      const target = data.targetDate as string;
-      const [cd, setCd] = useState(getCountdown(target));
-      useEffect(() => {
-        if (!target) return;
-        const t = setInterval(() => setCd(getCountdown(target)), 1000);
-        return () => clearInterval(t);
-      }, [target]);
-      if (!cd) return null;
-      return (
-        <div className="event-card text-center">
-          <div className="flex justify-center gap-4 text-2xl font-bold">
-            {cd.days > 0 && <span>{cd.days}d</span>}
-            <span>{cd.hours}h</span>
-            <span>{cd.minutes}m</span>
-            <span>{cd.seconds}s</span>
-          </div>
-        </div>
-      );
-    }
-    case "map":
-      return (
-        <div className="overflow-hidden rounded-lg border" style={{ borderColor: "var(--event-border)" }}>
-          <iframe
-            title="Map"
-            src={`https://maps.google.com/maps?q=${encodeURIComponent((data.address as string) || event.address || "")}&output=embed`}
-            className="h-64 w-full"
-            loading="lazy"
-          />
-        </div>
-      );
-    case "schedule":
-      return (
-        <div className="space-y-3">
-          {subEvents.map((sub) => (
-            <div key={sub.id} className="event-info-card">
-              <h3 className="font-semibold">{sub.name}</h3>
-              {sub.date && <p className="text-sm opacity-70">{formatDate(sub.date)}</p>}
-              {sub.time && <p className="text-sm opacity-70">{formatTime12(sub.time)}</p>}
-              {sub.venue && <p className="text-sm opacity-70">{sub.venue}</p>}
+          {page.inline_image_url && (
+            <div className="mt-8 animate-slideUp">
+              <img src={page.inline_image_url} alt={page.title} className="w-full rounded-lg" />
             </div>
-          ))}
+          )}
+
+          {page.body && blockList.length === 0 && (
+            <div className="mt-8 animate-slideUp"><RichTextContent html={page.body} /></div>
+          )}
+
+          {blockList.length > 0 && (
+            <div className="mt-8 space-y-8">
+              {blockList.map((block) => (
+                <div key={block.id} className="animate-slideUp">
+                  <BlockRenderer block={block} invitedSubEventIds={invitedSubEventIds} eventId={event.id} />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      );
-    case "venue":
-      return (
-        <div className="event-card">
-          {(data.name as string) && <p className="text-lg font-semibold">{String(data.name)}</p>}
-          {(data.address as string) && <p className="text-sm opacity-70">{String(data.address)}</p>}
-        </div>
-      );
-    case "faq":
-      return (
-        <div className="space-y-2">
-          {(data.items as string[] | undefined)?.map((item, i) => (
-            <div key={i} className="rounded-lg border p-3 text-sm" style={{ borderColor: "var(--event-border)" }}>{item}</div>
-          ))}
-        </div>
-      );
-    case "gallery": {
-      const images = (data.images as string[] | undefined) ?? [];
-      if (images.length === 0) return null;
-      return (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {images.map((url, i) => (
-            <img key={i} src={url} alt="" className="aspect-square w-full rounded-lg object-cover" />
-          ))}
-        </div>
-      );
-    }
-    case "rsvp-form":
-    case "guest-list":
-      return null;
-    default:
-      return null;
-  }
+      </section>
+    </div>
+  );
 }

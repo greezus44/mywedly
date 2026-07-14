@@ -1,7 +1,7 @@
-import { type ReactNode } from "react";
+import React from "react";
 import type { Json } from "../../lib/supabase";
 import { RichTextContent } from "../../lib/sanitize";
-import { cn } from "../../lib/utils";
+import { cn, formatDate, formatTime12, getCountdown } from "../../lib/utils";
 
 export type BlockType =
   | "heading"
@@ -26,422 +26,255 @@ export type BlockType =
 export interface Block {
   id: string;
   type: BlockType;
-  props: Record<string, unknown>;
+  data: Record<string, unknown>;
 }
 
-export interface BlockTypeDef {
+export interface BlockTypeMeta {
   type: BlockType;
   label: string;
   icon: string;
   description: string;
-  defaultProps: Record<string, unknown>;
 }
 
-export const BLOCK_TYPES: BlockTypeDef[] = [
-  {
-    type: "heading",
-    label: "Heading",
-    icon: "H",
-    description: "A section heading",
-    defaultProps: { text: "Heading", level: "h2", align: "center" },
-  },
-  {
-    type: "paragraph",
-    label: "Paragraph",
-    icon: "¶",
-    description: "Rich text paragraph",
-    defaultProps: { html: "" },
-  },
-  {
-    type: "image",
-    label: "Image",
-    icon: "🖼",
-    description: "A single image",
-    defaultProps: { src: "", alt: "", width: "full", rounded: true },
-  },
-  {
-    type: "spacer",
-    label: "Spacer",
-    icon: "↕",
-    description: "Vertical spacing",
-    defaultProps: { height: 48 },
-  },
-  {
-    type: "divider",
-    label: "Divider",
-    icon: "—",
-    description: "Horizontal line",
-    defaultProps: { style: "solid" },
-  },
-  {
-    type: "gallery",
-    label: "Gallery",
-    icon: "▦",
-    description: "Image gallery grid",
-    defaultProps: { images: [], columns: 3 },
-  },
-  {
-    type: "video",
-    label: "Video",
-    icon: "▶",
-    description: "Embedded video",
-    defaultProps: { url: "", autoplay: false },
-  },
-  {
-    type: "button",
-    label: "Button",
-    icon: "▢",
-    description: "Call to action button",
-    defaultProps: { text: "Click here", url: "", style: "primary" },
-  },
-  {
-    type: "columns",
-    label: "Columns",
-    icon: "▥",
-    description: "Multi-column layout",
-    defaultProps: { columns: 2, items: [] },
-  },
-  {
-    type: "list",
-    label: "List",
-    icon: "•",
-    description: "Bullet or numbered list",
-    defaultProps: { items: [], ordered: false },
-  },
-  {
-    type: "quote",
-    label: "Quote",
-    icon: "❝",
-    description: "Blockquote",
-    defaultProps: { text: "", author: "" },
-  },
-  {
-    type: "countdown",
-    label: "Countdown",
-    icon: "⏰",
-    description: "Countdown timer",
-    defaultProps: { targetDate: "" },
-  },
-  {
-    type: "map",
-    label: "Map",
-    icon: "📍",
-    description: "Embedded map",
-    defaultProps: { address: "", query: "" },
-  },
-  {
-    type: "rsvp-form",
-    label: "RSVP Form",
-    icon: "✓",
-    description: "RSVP form embed",
-    defaultProps: {},
-  },
-  {
-    type: "guest-list",
-    label: "Guest List",
-    icon: "👥",
-    description: "Guest list display",
-    defaultProps: {},
-  },
-  {
-    type: "schedule",
-    label: "Schedule",
-    icon: "📅",
-    description: "Event schedule embed",
-    defaultProps: {},
-  },
-  {
-    type: "venue",
-    label: "Venue",
-    icon: "🏛",
-    description: "Venue information",
-    defaultProps: { name: "", address: "", image: "" },
-  },
-  {
-    type: "faq",
-    label: "FAQ",
-    icon: "?",
-    description: "Frequently asked questions",
-    defaultProps: { items: [] },
-  },
+export const BLOCK_TYPES: BlockTypeMeta[] = [
+  { type: "heading", label: "Heading", icon: "H", description: "A section heading" },
+  { type: "paragraph", label: "Paragraph", icon: "¶", description: "Rich text paragraph" },
+  { type: "image", label: "Image", icon: "🖼", description: "A single image" },
+  { type: "spacer", label: "Spacer", icon: "↕", description: "Vertical spacing" },
+  { type: "divider", label: "Divider", icon: "—", description: "A horizontal line" },
+  { type: "gallery", label: "Gallery", icon: "▦", description: "Multiple images" },
+  { type: "video", label: "Video", icon: "▶", description: "Embedded video" },
+  { type: "button", label: "Button", icon: "⬚", description: "A call-to-action button" },
+  { type: "columns", label: "Columns", icon: "▥", description: "Two-column layout" },
+  { type: "list", label: "List", icon: "☰", description: "Bullet or numbered list" },
+  { type: "quote", label: "Quote", icon: "❝", description: "A blockquote" },
+  { type: "countdown", label: "Countdown", icon: "⏱", description: "Countdown timer" },
+  { type: "map", label: "Map", icon: "📍", description: "Embedded map" },
+  { type: "rsvp-form", label: "RSVP Form", icon: "✓", description: "RSVP form block" },
+  { type: "guest-list", label: "Guest List", icon: "👥", description: "Display guest list" },
+  { type: "schedule", label: "Schedule", icon: "📅", description: "Event schedule" },
+  { type: "venue", label: "Venue", icon: "🏛", description: "Venue information" },
+  { type: "faq", label: "FAQ", icon: "?", description: "Frequently asked questions" },
 ];
 
 export function createBlock(type: BlockType): Block {
-  const def = BLOCK_TYPES.find((b) => b.type === type);
+  const defaults: Record<BlockType, Record<string, unknown>> = {
+    heading: { text: "", level: "h2", align: "center" },
+    paragraph: { html: "" },
+    image: { url: "", alt: "", width: "full" },
+    spacer: { height: 40 },
+    divider: { style: "solid" },
+    gallery: { images: [] },
+    video: { url: "", title: "" },
+    button: { text: "Click here", url: "", style: "primary" },
+    columns: { left: "", right: "" },
+    list: { items: [], ordered: false },
+    quote: { text: "", author: "" },
+    countdown: { targetDate: "" },
+    map: { address: "", url: "" },
+    "rsvp-form": { heading: "RSVP", submitText: "Send RSVP" },
+    "guest-list": { title: "Guest List" },
+    schedule: { title: "Schedule" },
+    venue: { name: "", address: "", mapUrl: "" },
+    faq: { items: [] },
+  };
   return {
     id: crypto.randomUUID(),
     type,
-    props: def ? { ...def.defaultProps } : {},
+    data: defaults[type] ?? {},
   };
 }
 
-interface BlockContentProps {
+export interface BlockContentProps {
   block: Block;
   className?: string;
 }
 
-export function BlockContent({ block, className }: BlockContentProps): ReactNode {
-  const { props } = block;
-
+export function BlockContent({ block, className }: BlockContentProps): React.ReactElement {
+  const d = block.data;
   switch (block.type) {
     case "heading": {
-      const text = (props.text as string) ?? "";
-      const level = (props.level as string) ?? "h2";
-      const align = (props.align as string) ?? "center";
-      const alignClass =
-        align === "left" ? "text-left" : align === "right" ? "text-right" : "text-center";
-      const Tag = (level as keyof JSX.IntrinsicElements) ?? "h2";
-      return (
-        <div className={cn("guest-section-tight", alignClass, className)}>
-          <Tag className="guest-title">{text}</Tag>
+      const level = (d.level as string) || "h2";
+      const align = (d.align as string) || "center";
+      const text = (d.text as string) || "";
+      const Tag = (level === "h1" ? "h1" : level === "h3" ? "h3" : "h2") as keyof React.JSX.IntrinsicElements;
+      return React.createElement(Tag, {
+        className: cn("event-font", className),
+        style: { textAlign: align as React.CSSProperties["textAlign"] },
+        children: text || "Heading text",
+      });
+    }
+    case "paragraph":
+      return <RichTextContent html={(d.html as string) || ""} className={className} />;
+    case "image":
+      return d.url ? (
+        <img
+          src={d.url as string}
+          alt={(d.alt as string) || ""}
+          className={cn("w-full rounded-lg", className)}
+        />
+      ) : (
+        <div className={cn("flex h-48 items-center justify-center rounded-lg border-2 border-dashed border-dash-border bg-dash-bg text-dash-muted", className)}>
+          Image placeholder
         </div>
       );
-    }
-
-    case "paragraph": {
-      const html = (props.html as string) ?? "";
-      return <RichTextContent html={html} className={cn("guest-section-tight", className)} />;
-    }
-
-    case "image": {
-      const src = (props.src as string) ?? "";
-      const alt = (props.alt as string) ?? "";
-      const rounded = (props.rounded as boolean) ?? true;
-      if (!src) {
-        return (
-          <div className="flex items-center justify-center bg-dash-bg p-8 text-sm text-dash-muted">
-            No image selected
-          </div>
-        );
-      }
-      return (
-        <div className={cn("guest-section-tight", className)}>
-          <img
-            src={src}
-            alt={alt}
-            className={cn("w-full", rounded && "rounded-lg")}
-          />
-        </div>
-      );
-    }
-
-    case "spacer": {
-      const height = (props.height as number) ?? 48;
-      return <div style={{ height }} className={className} />;
-    }
-
-    case "divider": {
-      return <hr className="border-dash-border" />;
-    }
-
+    case "spacer":
+      return <div style={{ height: Number(d.height) || 40 }} className={className} />;
+    case "divider":
+      return <hr className={cn("border-dash-border my-4", className)} />;
     case "gallery": {
-      const images = (props.images as string[]) ?? [];
-      const columns = (props.columns as number) ?? 3;
-      if (images.length === 0) {
-        return (
-          <div className="p-4 text-center text-sm text-dash-muted">
-            No images in gallery
-          </div>
-        );
-      }
-      return (
-        <div
-          className={cn("grid gap-2", className)}
-          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-        >
-          {images.map((src, i) => (
-            <img key={i} src={src} alt="" className="aspect-square w-full rounded-lg object-cover" />
+      const images = (d.images as { url: string; alt?: string }[]) || [];
+      return images.length > 0 ? (
+        <div className={cn("grid grid-cols-2 gap-2", className)}>
+          {images.map((img, i) => (
+            <img key={i} src={img.url} alt={img.alt ?? ""} className="w-full rounded-lg" />
           ))}
         </div>
+      ) : (
+        <div className={cn("flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-dash-border bg-dash-bg text-dash-muted", className)}>
+          Gallery placeholder
+        </div>
       );
     }
-
-    case "video": {
-      const url = (props.url as string) ?? "";
-      if (!url) {
-        return (
-          <div className="p-4 text-center text-sm text-dash-muted">
-            No video URL
-          </div>
-        );
-      }
-      const isYouTube = url.includes("youtube.com") || url.includes("youtu.be");
-      if (isYouTube) {
-        const videoId = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)?.[1];
-        return (
-          <div className={cn("aspect-video w-full", className)}>
-            <iframe
-              src={`https://www.youtube.com/embed/${videoId}`}
-              className="h-full w-full rounded-lg"
-              allowFullScreen
-            />
-          </div>
-        );
-      }
-      return (
-        <video src={url} controls className="w-full rounded-lg" />
+    case "video":
+      return d.url ? (
+        <div className={cn("aspect-video w-full rounded-lg overflow-hidden", className)}>
+          <iframe src={d.url as string} title={(d.title as string) || "Video"} className="h-full w-full" allowFullScreen />
+        </div>
+      ) : (
+        <div className={cn("flex h-48 items-center justify-center rounded-lg border-2 border-dashed border-dash-border bg-dash-bg text-dash-muted", className)}>
+          Video placeholder
+        </div>
       );
-    }
-
-    case "button": {
-      const text = (props.text as string) ?? "Click here";
-      const url = (props.url as string) ?? "#";
-      const style = (props.style as string) ?? "primary";
+    case "button":
       return (
         <div className={cn("text-center", className)}>
-          <a
-            href={url}
+          <button
+            type="button"
             className={cn(
-              "inline-block px-6 py-3 font-medium transition-colors",
-              style === "primary"
-                ? "bg-dash-primary text-dash-primary-fg rounded-lg hover:bg-dash-primary-hover"
-                : "border border-dash-border text-dash-text rounded-lg hover:bg-dash-bg"
+              "event-btn-primary",
+              d.style === "secondary" && "event-btn-secondary",
             )}
+            onClick={() => d.url && window.open(d.url as string, "_blank")}
           >
-            {text}
-          </a>
+            {(d.text as string) || "Button"}
+          </button>
         </div>
       );
-    }
-
-    case "columns": {
-      const items = (props.items as string[]) ?? [];
-      const colCount = (props.columns as number) ?? 2;
+    case "columns":
       return (
-        <div
-          className={cn("grid gap-4", className)}
-          style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
-        >
-          {items.map((item, i) => (
-            <RichTextContent key={i} html={item} />
-          ))}
+        <div className={cn("grid grid-cols-1 gap-4 md:grid-cols-2", className)}>
+          <div><RichTextContent html={(d.left as string) || ""} /></div>
+          <div><RichTextContent html={(d.right as string) || ""} /></div>
         </div>
       );
-    }
-
     case "list": {
-      const items = (props.items as string[]) ?? [];
-      const ordered = (props.ordered as boolean) ?? false;
-      const Tag = ordered ? "ol" : "ul";
-      return (
-        <div className={cn("rich-content", className)}>
-          <Tag className={ordered ? "list-decimal" : "list-disc"}>
-            {items.map((item, i) => (
-              <li key={i}>{item}</li>
-            ))}
-          </Tag>
-        </div>
+      const items = (d.items as string[]) || [];
+      const ordered = d.ordered as boolean;
+      return ordered ? (
+        <ol className={cn("list-decimal pl-6 space-y-1", className)}>
+          {items.map((item, i) => <li key={i}>{item}</li>)}
+        </ol>
+      ) : (
+        <ul className={cn("list-disc pl-6 space-y-1", className)}>
+          {items.map((item, i) => <li key={i}>{item}</li>)}
+        </ul>
       );
     }
-
-    case "quote": {
-      const text = (props.text as string) ?? "";
-      const author = (props.author as string) ?? "";
+    case "quote":
       return (
-        <blockquote className={cn("rich-content border-l-4 pl-4 italic text-dash-muted", className)}>
-          {text}
-          {author && <footer className="mt-2 text-sm">— {author}</footer>}
+        <blockquote className={cn("border-l-4 border-event-border pl-4 italic text-event-muted", className)}>
+          "{(d.text as string) || "Quote text"}"
+          {(d.author as string) && <footer className="mt-2 text-sm not-italic">— {d.author as string}</footer>}
         </blockquote>
       );
-    }
-
     case "countdown": {
-      const targetDate = (props.targetDate as string) ?? "";
-      if (!targetDate) return null;
-      const diff = new Date(targetDate).getTime() - Date.now();
-      if (diff <= 0) return <p className="text-center text-dash-muted">Event has passed</p>;
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const target = d.targetDate as string;
+      const c = getCountdown(target);
       return (
-        <div className={cn("flex justify-center gap-4", className)}>
-          {[
-            { label: "Days", value: days },
-            { label: "Hours", value: hours },
-            { label: "Minutes", value: mins },
-          ].map((item) => (
-            <div key={item.label} className="event-info-card min-w-[72px] text-center">
-              <div className="text-2xl font-bold text-dash-primary">
-                {String(item.value).padStart(2, "0")}
-              </div>
-              <div className="text-xs text-dash-muted">{item.label}</div>
+        <div className={cn("text-center", className)}>
+          {!c.isPast ? (
+            <div className="flex items-center justify-center gap-6">
+              {(["days", "hours", "minutes", "seconds"] as const).map((unit) => (
+                <div key={unit} className="text-center">
+                  <div className="text-4xl font-bold event-font">{c[unit]}</div>
+                  <div className="text-xs uppercase tracking-wider text-event-muted mt-1">
+                    {unit.charAt(0).toUpperCase() + unit.slice(1)}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          ) : (
+            <p className="text-event-muted">Countdown complete</p>
+          )}
         </div>
       );
     }
-
-    case "map": {
-      const query = (props.query as string) ?? (props.address as string) ?? "";
-      if (!query) return null;
-      return (
-        <iframe
-          src={`https://maps.google.com/maps?q=${encodeURIComponent(query)}&output=embed`}
-          className={cn("h-64 w-full rounded-lg", className)}
-        />
+    case "map":
+      return d.url ? (
+        <div className={cn("aspect-video w-full rounded-lg overflow-hidden", className)}>
+          <iframe src={d.url as string} title="Map" className="h-full w-full" loading="lazy" />
+        </div>
+      ) : (
+        <div className={cn("flex h-48 items-center justify-center rounded-lg border-2 border-dashed border-dash-border bg-dash-bg text-dash-muted", className)}>
+          Map placeholder
+        </div>
       );
-    }
-
     case "rsvp-form":
       return (
-        <div className={cn("rounded-lg border border-dash-border bg-dash-bg p-4 text-center text-sm text-dash-muted", className)}>
-          [RSVP Form — visible to guests]
+        <div className={cn("event-card max-w-lg mx-auto", className)}>
+          <h2 className="guest-title text-center">{(d.heading as string) || "RSVP"}</h2>
+          <p className="guest-subtitle text-center mt-2">Will you be joining us?</p>
+          <div className="mt-6 space-y-3">
+            <input type="text" className="event-input" placeholder="Your name" readOnly />
+            <div className="flex gap-2">
+              <button className="event-btn-secondary flex-1">Accept</button>
+              <button className="event-btn-secondary flex-1">Decline</button>
+            </div>
+            <button className="event-btn-primary w-full">{(d.submitText as string) || "Send RSVP"}</button>
+          </div>
         </div>
       );
-
     case "guest-list":
       return (
-        <div className={cn("rounded-lg border border-dash-border bg-dash-bg p-4 text-center text-sm text-dash-muted", className)}>
-          [Guest List — visible to guests]
+        <div className={cn("text-center", className)}>
+          <h2 className="guest-title">{(d.title as string) || "Guest List"}</h2>
+          <p className="guest-subtitle mt-2">Guest list will appear here</p>
         </div>
       );
-
     case "schedule":
       return (
-        <div className={cn("rounded-lg border border-dash-border bg-dash-bg p-4 text-center text-sm text-dash-muted", className)}>
-          [Schedule — visible to guests]
+        <div className={cn("text-center", className)}>
+          <h2 className="guest-title">{(d.title as string) || "Schedule"}</h2>
+          <p className="guest-subtitle mt-2">Event schedule will appear here</p>
         </div>
       );
-
-    case "venue": {
-      const name = (props.name as string) ?? "";
-      const address = (props.address as string) ?? "";
-      const image = (props.image as string) ?? "";
+    case "venue":
       return (
-        <div className={cn("event-info-card", className)}>
-          {image && (
-            <img src={image} alt={name} className="mb-3 w-full rounded-lg" />
-          )}
-          {name && <h3 className="font-semibold text-dash-text">{name}</h3>}
-          {address && <p className="text-sm text-dash-muted">{address}</p>}
+        <div className={cn("event-info-card max-w-2xl mx-auto text-center", className)}>
+          <p className="guest-eyebrow">Venue</p>
+          <h3 className="guest-title">{(d.name as string) || "Venue name"}</h3>
+          {(d.address as string) && <p className="guest-subtitle mt-2">{d.address as string}</p>}
         </div>
       );
-    }
-
     case "faq": {
-      const items = (props.items as { question: string; answer: string }[]) ?? [];
-      return (
-        <div className={cn("space-y-3", className)}>
+      const items = (d.items as { question: string; answer: string }[]) || [];
+      return items.length > 0 ? (
+        <div className={cn("space-y-4 max-w-2xl mx-auto", className)}>
           {items.map((item, i) => (
-            <div key={i} className="rounded-lg border border-dash-border p-4">
-              <h4 className="font-semibold text-dash-text">{item.question}</h4>
-              <p className="mt-1 text-sm text-dash-muted">{item.answer}</p>
+            <div key={i} className="event-card">
+              <h3 className="text-sm font-semibold text-event-heading">{item.question}</h3>
+              <p className="mt-2 text-sm text-event-text">{item.answer}</p>
             </div>
           ))}
         </div>
+      ) : (
+        <div className={cn("text-center", className)}>
+          <p className="text-event-muted">FAQ items will appear here</p>
+        </div>
       );
     }
-
     default:
-      return null;
+      return <div className={className}>Unknown block type</div>;
   }
-}
-
-export function blocksToJson(blocks: Block[]): Json {
-  return blocks as unknown as Json;
-}
-
-export function jsonToBlocks(json: Json | null | undefined): Block[] {
-  if (!json || !Array.isArray(json)) return [];
-  return json as unknown as Block[];
 }

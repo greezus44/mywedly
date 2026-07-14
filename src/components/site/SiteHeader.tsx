@@ -1,53 +1,48 @@
+import React from "react";
 import { Link } from "react-router-dom";
 import { cn } from "../../lib/utils";
 
-interface SiteHeaderProps {
+export interface SiteHeaderProps {
   className?: string;
 }
 
-export function SiteHeader({ className }: SiteHeaderProps) {
+export function SiteHeader({ className }: SiteHeaderProps): React.ReactElement {
   return (
-    <header
-      className={cn(
-        "sticky top-0 z-40 w-full border-b border-dash-border bg-dash-surface/80 backdrop-blur",
-        className
-      )}
-    >
+    <header className={cn("sticky top-0 z-40 border-b border-dash-border bg-dash-surface/80 backdrop-blur", className)}>
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-2">
-          <span className="text-xl font-bold tracking-tight text-dash-text">
+          <span className="text-xl font-bold text-dash-text">
             My<span className="text-dash-primary">Wedly</span>
           </span>
         </Link>
-
         <nav className="flex items-center gap-1">
           <Link
-            to="/features"
-            className="rounded-lg px-3 py-2 text-sm font-medium text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text"
+            to="/"
+            className="rounded-md px-3 py-2 text-sm font-medium text-dash-muted hover:text-dash-text hover:bg-dash-bg transition-colors"
           >
-            Features
+            Home
           </Link>
           <Link
             to="/templates"
-            className="rounded-lg px-3 py-2 text-sm font-medium text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text"
+            className="rounded-md px-3 py-2 text-sm font-medium text-dash-muted hover:text-dash-text hover:bg-dash-bg transition-colors"
           >
             Templates
           </Link>
           <Link
             to="/pricing"
-            className="rounded-lg px-3 py-2 text-sm font-medium text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text"
+            className="rounded-md px-3 py-2 text-sm font-medium text-dash-muted hover:text-dash-text hover:bg-dash-bg transition-colors"
           >
             Pricing
           </Link>
           <Link
             to="/login"
-            className="rounded-lg px-3 py-2 text-sm font-medium text-dash-text transition-colors hover:bg-dash-bg"
+            className="rounded-md px-3 py-2 text-sm font-medium text-dash-muted hover:text-dash-text hover:bg-dash-bg transition-colors"
           >
             Sign in
           </Link>
           <Link
             to="/signup"
-            className="rounded-lg bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg transition-colors hover:bg-dash-primary-hover"
+            className="rounded-md bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg hover:bg-dash-primary-hover transition-colors"
           >
             Get started
           </Link>

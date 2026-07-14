@@ -1,18 +1,19 @@
-import { useState } from "react";
-import { useGuestOutletContext } from "./guest-layout";
-import { useGuestAuth } from "../../lib/guest-auth";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type EventMessage } from "../../lib/supabase";
-import { formatDate } from "../../lib/utils";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { useGuestOutletContext } from "./guest-layout";
+import { LoadingSpinner, ErrorState } from "../../components/ui";
 
-export default function GuestWishes() {
+export default function Wishes(): React.ReactElement {
   const { event } = useGuestOutletContext();
   const { guestName } = useGuestAuth();
   const queryClient = useQueryClient();
+  const [name, setName] = useState(guestName ?? "");
   const [message, setMessage] = useState("");
 
-  const { data: messages, isLoading } = useQuery({
-    queryKey: ["guest-wishes", event.id],
+  const { data: messages, isLoading, error } = useQuery({
+    queryKey: ["guest-messages", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_messages")
@@ -20,79 +21,119 @@ export default function GuestWishes() {
         .eq("event_id", event.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as EventMessage[];
+      return (data ?? []) as EventMessage[];
     },
   });
 
-  const postMessage = useMutation({
+  const submitMutation = useMutation({
     mutationFn: async () => {
+      if (!message.trim() || !name.trim()) return;
       const { error } = await supabase.from("event_messages").insert({
         event_id: event.id,
-        guest_name: guestName || "Anonymous",
+        guest_name: name.trim(),
         message: message.trim(),
       });
       if (error) throw error;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guest-messages", event.id] });
       setMessage("");
-      queryClient.invalidateQueries({ queryKey: ["guest-wishes", event.id] });
     },
   });
 
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <LoadingSpinner className="h-8 w-8" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="guest-section">
+        <ErrorState message={error.message} />
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <section className="guest-section-tight text-center">
+    <div className="guest-section">
+      {/* Header */}
+      <div className="mx-auto max-w-2xl text-center animate-fadeIn">
         <p className="guest-eyebrow">Wishes</p>
-        <h1 className="guest-title">Share Your Wishes</h1>
-        <p className="guest-subtitle mx-auto">Leave a heartfelt message for the happy couple.</p>
-      </section>
+        <h2 className="guest-title">Share Your Wishes</h2>
+        <p className="guest-subtitle mt-2 mx-auto">
+          Leave a message for the hosts and other guests to see.
+        </p>
+      </div>
 
-      <section className="guest-section-tight">
-        <div className="event-card mx-auto max-w-lg">
-          <h2 className="mb-3 text-lg font-semibold">Leave a Wish</h2>
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            className="event-input"
-            rows={4}
-            placeholder="Write your wishes here..."
-          />
-          <button
-            onClick={() => postMessage.mutate()}
-            disabled={!message.trim() || postMessage.isPending}
-            className="event-btn-primary mt-4 disabled:opacity-50"
-          >
-            {postMessage.isPending ? "Posting..." : "Post Wish"}
-          </button>
-          {postMessage.isError && <p className="mt-2 text-sm text-red-600">Failed to post. Please try again.</p>}
-        </div>
-      </section>
-
-      <section className="guest-section-tight space-y-4">
-        {isLoading ? (
-          <div className="flex justify-center py-8">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-event-primary border-t-transparent" />
-          </div>
-        ) : messages?.length === 0 ? (
-          <p className="text-center text-base opacity-60" style={{ color: "var(--event-muted)" }}>
-            No wishes yet. Be the first to leave a wish!
-          </p>
-        ) : (
-          messages?.map((msg, i) => (
-            <div
-              key={msg.id}
-              className="event-card mx-auto max-w-lg animate-slideUpStagger"
-              style={{ animationDelay: `${i * 0.05}s` }}
-            >
-              <p className="font-semibold">{msg.guest_name}</p>
-              <p className="mt-2 text-sm leading-relaxed opacity-80">{msg.message}</p>
-              <p className="mt-3 text-xs opacity-50" style={{ color: "var(--event-muted)" }}>
-                {formatDate(msg.created_at)}
-              </p>
+      {/* Form */}
+      <div className="mx-auto mt-12 max-w-xl">
+        <div className="event-card animate-slideUp">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-event-muted mb-1.5">
+                Your Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="event-input"
+                placeholder="Your name"
+              />
             </div>
-          ))
-        )}
-      </section>
+            <div>
+              <label className="block text-sm font-medium text-event-muted mb-1.5">
+                Your Message
+              </label>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                className="event-input"
+                rows={4}
+                placeholder="Write your wish..."
+              />
+            </div>
+            <button
+              onClick={() => submitMutation.mutate()}
+              disabled={!message.trim() || !name.trim() || submitMutation.isPending}
+              className="event-btn-primary w-full disabled:opacity-50"
+            >
+              {submitMutation.isPending ? "Sending…" : "Send Wish"}
+            </button>
+            {submitMutation.isError && (
+              <p className="text-sm text-red-500">Failed to send. Please try again.</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      {(messages ?? []).length > 0 && (
+        <div className="mx-auto mt-12 max-w-2xl">
+          <div className="grid gap-4">
+            {(messages ?? []).map((msg, i) => (
+              <div
+                key={msg.id}
+                className="event-card animate-slideUpStagger"
+                style={{ animationDelay: `${i * 0.06}s` }}
+              >
+                <p className="text-event-text">{msg.message}</p>
+                <p className="mt-3 text-sm font-medium text-event-muted">— {msg.guest_name}</p>
+                <p className="mt-1 text-xs text-event-muted">
+                  {new Date(msg.created_at).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,45 +1,41 @@
-import {
-  createContext,
-  useContext,
-  useMemo,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
-import {
-  DEFAULT_THEME,
-  themeToEventCssVars,
-  type ThemeConfig,
-} from "./theme";
+import React, { createContext, useContext, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { DEFAULT_THEME, themeToEventCssVars, type ThemeConfig } from "./theme";
 
 interface EventThemeContextValue {
   theme: ThemeConfig;
+  setTheme: (theme: ThemeConfig) => void;
 }
 
-const EventThemeContext = createContext<EventThemeContextValue>({
-  theme: DEFAULT_THEME,
-});
+const EventThemeContext = createContext<EventThemeContextValue | undefined>(undefined);
 
 interface EventThemeProviderProps {
   children: ReactNode;
   initialTheme?: ThemeConfig;
 }
 
-export function EventThemeProvider({
-  children,
-  initialTheme,
-}: EventThemeProviderProps) {
-  const theme = useMemo(() => initialTheme ?? DEFAULT_THEME, [initialTheme]);
+export function EventThemeProvider({ children, initialTheme }: EventThemeProviderProps) {
+  const [theme, setTheme] = useState<ThemeConfig>(initialTheme ?? DEFAULT_THEME);
 
-  const cssVars = useMemo(() => {
-    const vars = themeToEventCssVars(theme);
+  const style = useMemo<CSSProperties>(() => {
+    const vars = themeToEventCssVars(theme) as Record<string, string>;
+    let background = theme.bg;
+    if (theme.bgType === "gradient" && theme.bgGradient) {
+      background = theme.bgGradient;
+    } else if (theme.bgType === "image" && theme.bgImage) {
+      const overlay = theme.bgOverlayOpacity ?? 0;
+      const overlayColor = `rgba(0,0,0,${overlay})`;
+      background = `linear-gradient(${overlayColor}, ${overlayColor}), url("${theme.bgImage}")`;
+      vars["--event-bg-image-position"] = theme.bgImagePosition ?? "center center";
+    }
+    vars["background"] = background;
     return vars as CSSProperties;
   }, [theme]);
 
-  const value = useMemo(() => ({ theme }), [theme]);
+  const value = useMemo<EventThemeContextValue>(() => ({ theme, setTheme }), [theme]);
 
   return (
     <EventThemeContext.Provider value={value}>
-      <div className="event-themed" style={cssVars}>
+      <div className="event-themed" style={style}>
         {children}
       </div>
     </EventThemeContext.Provider>
@@ -47,5 +43,9 @@ export function EventThemeProvider({
 }
 
 export function useEventTheme(): EventThemeContextValue {
-  return useContext(EventThemeContext);
+  const ctx = useContext(EventThemeContext);
+  if (!ctx) {
+    throw new Error("useEventTheme must be used within an EventThemeProvider");
+  }
+  return ctx;
 }
