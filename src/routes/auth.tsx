@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
-import { Input, Card } from "../components/ui";
+import { Input } from "../components/ui/Input";
+import { LoadingSpinner } from "../components/ui";
 
 export function AuthPage() {
   const navigate = useNavigate();
@@ -20,28 +21,27 @@ export function AuthPage() {
 
     try {
       if (mode === "signup") {
-        const { data, error: signUpError } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName } },
+          options: {
+            data: { full_name: fullName || undefined },
+          },
         });
-        if (signUpError) throw signUpError;
+        if (error) throw error;
         if (data.user) {
-          // Insert profile
-          await supabase.from("profiles").upsert({
-            id: data.user.id,
-            email,
-            full_name: fullName,
-          });
+          navigate("/dashboard");
         }
       } else {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-        if (signInError) throw signInError;
+        if (error) throw error;
+        if (data.user) {
+          navigate("/dashboard");
+        }
       }
-      navigate("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
@@ -50,51 +50,35 @@ export function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
+    <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4 py-12">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <Link to="/" className="inline-flex items-center gap-2 text-2xl font-bold text-dash-text">
-            <span className="text-dash-primary">My</span>Wedly
+          <Link to="/" className="inline-block">
+            <span className="text-2xl font-bold text-dash-primary">MyWedly</span>
           </Link>
+          <h1 className="mt-4 text-2xl font-bold text-dash-text">
+            {mode === "signin" ? "Welcome back" : "Create your account"}
+          </h1>
+          <p className="mt-2 text-sm text-dash-muted">
+            {mode === "signin"
+              ? "Sign in to manage your invitation websites"
+              : "Start building your invitation website today"}
+          </p>
         </div>
 
-        <Card>
-          <div className="mb-6 flex gap-1 rounded-md bg-dash-bg p-1">
-            <button
-              type="button"
-              onClick={() => setMode("signin")}
-              className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                mode === "signin"
-                  ? "bg-dash-surface text-dash-text shadow-sm"
-                  : "text-dash-muted hover:text-dash-text"
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("signup")}
-              className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
-                mode === "signup"
-                  ? "bg-dash-surface text-dash-text shadow-sm"
-                  : "text-dash-muted hover:text-dash-text"
-              }`}
-            >
-              Sign Up
-            </button>
-          </div>
-
+        <div className="rounded-xl border border-dash-border bg-dash-surface p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "signup" && (
               <Input
-                label="Full Name"
+                label="Full name"
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Jane Doe"
-                required
+                autoComplete="name"
               />
             )}
+
             <Input
               label="Email"
               type="email"
@@ -102,7 +86,9 @@ export function AuthPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               required
+              autoComplete="email"
             />
+
             <Input
               label="Password"
               type="password"
@@ -110,31 +96,66 @@ export function AuthPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
               minLength={6}
             />
 
             {error && (
-              <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-lg border border-dash-danger/20 bg-dash-danger/5 px-3 py-2 text-sm text-dash-danger">
                 {error}
               </div>
             )}
 
-            <Button type="submit" className="w-full" loading={loading}>
-              {mode === "signin" ? "Sign In" : "Create Account"}
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? (
+                <>
+                  <LoadingSpinner className="h-4 w-4" />
+                  {mode === "signin" ? "Signing in…" : "Creating account…"}
+                </>
+              ) : mode === "signin" ? (
+                "Sign in"
+              ) : (
+                "Create account"
+              )}
             </Button>
           </form>
 
-          <p className="mt-4 text-center text-sm text-dash-muted">
-            {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
-            <button
-              type="button"
-              onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-              className="font-medium text-dash-primary hover:underline"
-            >
-              {mode === "signin" ? "Sign up" : "Sign in"}
-            </button>
-          </p>
-        </Card>
+          <div className="mt-6 text-center text-sm text-dash-muted">
+            {mode === "signin" ? (
+              <>
+                Don't have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signup");
+                    setError(null);
+                  }}
+                  className="font-medium text-dash-primary hover:underline"
+                >
+                  Sign up
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signin");
+                    setError(null);
+                  }}
+                  className="font-medium text-dash-primary hover:underline"
+                >
+                  Sign in
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <p className="mt-6 text-center text-xs text-dash-muted">
+          By continuing, you agree to MyWedly's Terms of Service and Privacy Policy.
+        </p>
       </div>
     </div>
   );

@@ -1,97 +1,108 @@
 import React from "react";
 
 const ALLOWED_TAGS = new Set([
-  "P", "BR", "STRONG", "B", "EM", "I", "U", "S", "SPAN",
-  "UL", "OL", "LI", "A", "H1", "H2", "H3", "H4", "H5", "H6",
-  "BLOCKQUOTE", "IMG", "DIV",
+  "a", "abbr", "b", "blockquote", "br", "cite", "code", "dd", "del", "div", "dl", "dt",
+  "em", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img", "ins", "kbd", "li", "mark",
+  "ol", "p", "pre", "q", "s", "samp", "small", "span", "strong", "sub", "sup", "table",
+  "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul", "br",
 ]);
 
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
-  A: new Set(["href", "target", "rel"]),
-  IMG: new Set(["src", "alt", "width", "height"]),
-  SPAN: new Set(["style", "class"]),
-  DIV: new Set(["style", "class"]),
-  P: new Set(["style", "class"]),
-  H1: new Set(["style", "class"]),
-  H2: new Set(["style", "class"]),
-  H3: new Set(["style", "class"]),
-  H4: new Set(["style", "class"]),
-  H5: new Set(["style", "class"]),
-  H6: new Set(["style", "class"]),
-  LI: new Set(["style", "class"]),
-  UL: new Set(["style", "class"]),
-  OL: new Set(["style", "class"]),
-  BLOCKQUOTE: new Set(["style", "class"]),
+  a: new Set(["href", "title", "target", "rel"]),
+  img: new Set(["src", "alt", "title", "width", "height"]),
+  span: new Set(["style", "class"]),
+  div: new Set(["style", "class"]),
+  p: new Set(["style", "class"]),
+  h1: new Set(["style", "class"]),
+  h2: new Set(["style", "class"]),
+  h3: new Set(["style", "class"]),
+  h4: new Set(["style", "class"]),
+  h5: new Set(["style", "class"]),
+  h6: new Set(["style", "class"]),
+  blockquote: new Set(["style", "class"]),
+  li: new Set(["style", "class"]),
+  ul: new Set(["style", "class"]),
+  ol: new Set(["style", "class"]),
+  td: new Set(["style", "class", "colspan", "rowspan"]),
+  th: new Set(["style", "class", "colspan", "rowspan"]),
+  table: new Set(["style", "class"]),
+  b: new Set(["style", "class"]),
+  strong: new Set(["style", "class"]),
+  em: new Set(["style", "class"]),
+  i: new Set(["style", "class"]),
+  u: new Set(["style", "class"]),
+  s: new Set(["style", "class"]),
+  mark: new Set(["style", "class"]),
+  code: new Set(["style", "class"]),
+  pre: new Set(["style", "class"]),
 };
 
 const ALLOWED_STYLE_PROPS = new Set([
   "color", "background-color", "font-size", "font-weight", "font-style",
-  "text-decoration", "text-align", "line-height", "letter-spacing",
-  "margin", "padding", "font-family",
+  "text-align", "text-decoration", "line-height", "letter-spacing",
+  "margin", "margin-top", "margin-bottom", "margin-left", "margin-right",
+  "padding", "padding-top", "padding-bottom", "padding-left", "padding-right",
+  "border", "border-color", "border-radius", "width", "height", "max-width",
 ]);
 
-function sanitizeStyle(style: string): string {
-  return style
+function sanitizeStyle(styleStr: string): string {
+  return styleStr
     .split(";")
     .map((decl) => {
       const [prop, ...valParts] = decl.split(":");
-      const propName = prop?.trim().toLowerCase();
-      const val = valParts.join(":").trim();
-      if (!propName || !val) return "";
-      if (!ALLOWED_STYLE_PROPS.has(propName)) return "";
-      if (val.includes("javascript:") || val.includes("expression(")) return "";
-      return `${propName}: ${val}`;
+      const p = prop?.trim().toLowerCase();
+      const v = valParts.join(":").trim();
+      if (!p || !v) return "";
+      if (!ALLOWED_STYLE_PROPS.has(p)) return "";
+      if (/javascript:|expression\(|url\(/i.test(v)) return "";
+      return `${p}: ${v}`;
     })
     .filter(Boolean)
     .join("; ");
 }
 
 export function sanitizeHtml(html: string): string {
-  if (typeof document === "undefined") return html;
+  if (!html) return "";
+  if (typeof window === "undefined" || typeof DOMParser === "undefined") return html;
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
-  function walk(node: Element): void {
-    const children = Array.from(node.children);
-    for (const child of children) {
-      const tag = child.tagName;
+
+  function walk(node: Node) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as Element;
+      const tag = el.tagName.toLowerCase();
       if (!ALLOWED_TAGS.has(tag)) {
-        const parent = child.parentNode;
+        const parent = el.parentNode;
         if (parent) {
-          while (child.firstChild) {
-            parent.insertBefore(child.firstChild, child);
+          while (el.firstChild) {
+            parent.insertBefore(el.firstChild, el);
           }
-          parent.removeChild(child);
+          parent.removeChild(el);
+          return;
         }
-        continue;
-      }
-      const allowed = ALLOWED_ATTRS[tag] ?? new Set<string>();
-      for (const attr of Array.from(child.attributes)) {
-        const name = attr.name.toLowerCase();
-        if (!allowed.has(name)) {
-          child.removeAttribute(attr.name);
-          continue;
-        }
-        if (name === "href" || name === "src") {
-          const val = attr.value.trim().toLowerCase();
-          if (val.startsWith("javascript:") || val.startsWith("data:text/html")) {
-            child.removeAttribute(attr.name);
+      } else {
+        const allowed = ALLOWED_ATTRS[tag] ?? new Set<string>();
+        const attrs = Array.from(el.attributes);
+        for (const attr of attrs) {
+          if (!allowed.has(attr.name.toLowerCase())) {
+            el.removeAttribute(attr.name);
+          } else if (attr.name.toLowerCase() === "href") {
+            const val = attr.value;
+            if (/javascript:|data:/i.test(val)) {
+              el.removeAttribute(attr.name);
+            }
+          } else if (attr.name.toLowerCase() === "style") {
+            el.setAttribute("style", sanitizeStyle(attr.value));
           }
-        }
-        if (name === "style") {
-          const sanitized = sanitizeStyle(attr.value);
-          if (sanitized) {
-            child.setAttribute("style", sanitized);
-          } else {
-            child.removeAttribute("style");
-          }
-        }
-        if (tag === "A" && name === "target" && attr.value === "_blank") {
-          child.setAttribute("rel", "noopener noreferrer");
         }
       }
+    }
+    const children = Array.from(node.childNodes);
+    for (const child of children) {
       walk(child);
     }
   }
+
   walk(doc.body);
   return doc.body.innerHTML;
 }
@@ -101,12 +112,16 @@ interface RichTextContentProps {
   className?: string;
 }
 
-export const RichTextContent: React.FC<RichTextContentProps> = ({ html, className }) => {
+export function RichTextContent({ html, className }: RichTextContentProps) {
   const sanitized = React.useMemo(() => sanitizeHtml(html), [html]);
   return (
     <div
-      className={`rich-content ${className ?? ""}`}
+      className={cn("rich-content", className)}
       dangerouslySetInnerHTML={{ __html: sanitized }}
     />
   );
-};
+}
+
+function cn(...inputs: (string | undefined | null | false)[]): string {
+  return inputs.filter(Boolean).join(" ");
+}

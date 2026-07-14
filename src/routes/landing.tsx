@@ -4,109 +4,105 @@ import { SiteHeader } from "../components/site/SiteHeader";
 import { SiteFooter } from "../components/site/SiteFooter";
 import { Button } from "../components/ui/Button";
 
-const features = [
-  {
-    icon: "💌",
-    title: "Beautiful Invitation Websites",
-    description: "Create a stunning invitation website for your wedding or special event in minutes.",
-  },
-  {
-    icon: "👥",
-    title: "Guest Management",
-    description: "Manage your guest list, track RSVPs, and organize guests into groups with ease.",
-  },
-  {
-    icon: "🎨",
-    title: "Custom Themes",
-    description: "Choose from 10 elegant presets or customise colors and fonts to match your style.",
-  },
-  {
-    icon: "📅",
-    title: "Event Schedule",
-    description: "Build a timeline for your big day so guests always know what's happening and when.",
-  },
-  {
-    icon: "📊",
-    title: "Analytics",
-    description: "Track page views, RSVP responses, and guest engagement with built-in analytics.",
-  },
-  {
-    icon: "🔗",
-    title: "Easy Sharing",
-    description: "Share your invitation with a custom URL, QR code, or direct link to guests.",
-  },
-];
-
 export function LandingPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-dash-bg">
+    <div className="flex min-h-screen flex-col">
       <SiteHeader />
 
       <main className="flex-1">
         {/* Hero */}
-        <section className="relative overflow-hidden py-20">
-          <div className="mx-auto max-w-6xl px-4 text-center">
-            <h1 className="text-4xl font-bold tracking-tight text-dash-text sm:text-5xl md:text-6xl">
-              Beautiful Invitation Websites
-              <br />
-              <span className="text-dash-primary">for Every Celebration</span>
-            </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-lg text-dash-muted">
-              MyWedly helps you create a stunning, personalised invitation website for your wedding
-              or special event. Manage guests, track RSVPs, and share your big day with ease.
-            </p>
-            <div className="mt-8 flex items-center justify-center gap-4">
-              <Link to="/auth">
-                <Button size="lg">Get Started Free</Button>
-              </Link>
-              <Link to="/features">
-                <Button variant="secondary" size="lg">
-                  Learn More
-                </Button>
-              </Link>
+        <section className="relative overflow-hidden">
+          <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-28">
+            <div className="mx-auto max-w-3xl text-center">
+              <h1 className="text-4xl font-bold tracking-tight text-dash-text sm:text-5xl lg:text-6xl">
+                Beautiful invitation websites
+                <span className="block text-dash-primary">for your special events</span>
+              </h1>
+              <p className="mx-auto mt-6 max-w-2xl text-lg text-dash-muted">
+                Create a stunning, personalised invitation website in minutes.
+                Share your love story, collect RSVPs, and keep guests informed —
+                all in one place.
+              </p>
+              <div className="mt-10 flex items-center justify-center gap-4">
+                <Link to="/auth">
+                  <Button size="lg">Get started free</Button>
+                </Link>
+                <Link to="/auth">
+                  <Button variant="secondary" size="lg">
+                    Sign in
+                  </Button>
+                </Link>
+              </div>
             </div>
           </div>
         </section>
 
         {/* Features */}
-        <section className="py-16">
-          <div className="mx-auto max-w-6xl px-4">
-            <h2 className="text-center text-3xl font-bold text-dash-text">
-              Everything you need
-            </h2>
-            <p className="mx-auto mt-3 max-w-xl text-center text-dash-muted">
-              All the tools you need to create and manage your invitation website in one place.
-            </p>
-            <div className="mt-12 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-              {features.map((feature) => (
-                <div
-                  key={feature.title}
-                  className="rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm"
-                >
-                  <div className="text-3xl">{feature.icon}</div>
-                  <h3 className="mt-4 text-lg font-semibold text-dash-text">
-                    {feature.title}
-                  </h3>
-                  <p className="mt-2 text-sm text-dash-muted">{feature.description}</p>
-                </div>
-              ))}
+        <section className="border-t border-dash-border bg-dash-surface">
+          <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-24">
+            <div className="mx-auto max-w-2xl text-center">
+              <h2 className="text-3xl font-bold text-dash-text">
+                Everything you need
+              </h2>
+              <p className="mt-4 text-lg text-dash-muted">
+                Powerful tools to make your event unforgettable.
+              </p>
+            </div>
+
+            <div className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+              <FeatureCard
+                icon="🎨"
+                title="Customisable Themes"
+                description="Choose from dozens of beautiful themes and customise colours, fonts, and layouts to match your style."
+              />
+              <FeatureCard
+                icon="💌"
+                title="Smart RSVPs"
+                description="Collect and track RSVPs with ease. Guests can respond online and you get real-time updates."
+              />
+              <FeatureCard
+                icon="📱"
+                title="Share Anywhere"
+                description="Generate a shareable link or QR code. Your guests can access the website from any device."
+              />
+              <FeatureCard
+                icon="📅"
+                title="Event Schedule"
+                description="Build a detailed timeline so guests know exactly when and where each part of the celebration happens."
+              />
+              <FeatureCard
+                icon="👥"
+                title="Guest Management"
+                description="Organise guests into groups, manage invitations, and track who's coming at a glance."
+              />
+              <FeatureCard
+                icon="📊"
+                title="Analytics"
+                description="See how many guests viewed your invitation, responded, and more with built-in analytics."
+              />
             </div>
           </div>
         </section>
 
         {/* CTA */}
-        <section className="py-16">
-          <div className="mx-auto max-w-4xl px-4">
-            <div className="rounded-lg border border-dash-border bg-dash-surface p-12 text-center shadow-sm">
-              <h2 className="text-3xl font-bold text-dash-text">
+        <section className="bg-dash-primary">
+          <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-20">
+            <div className="mx-auto max-w-2xl text-center">
+              <h2 className="text-3xl font-bold text-dash-primary-fg">
                 Ready to create your invitation website?
               </h2>
-              <p className="mx-auto mt-3 max-w-xl text-dash-muted">
-                Get started for free and have your invitation website up and running in minutes.
+              <p className="mt-4 text-lg text-dash-primary-fg/80">
+                Join thousands of couples who chose MyWedly for their special day.
               </p>
-              <div className="mt-6">
+              <div className="mt-8">
                 <Link to="/auth">
-                  <Button size="lg">Create Your Website</Button>
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    className="bg-white text-dash-primary hover:bg-white/90"
+                  >
+                    Start building — it's free
+                  </Button>
                 </Link>
               </div>
             </div>
@@ -115,6 +111,24 @@ export function LandingPage() {
       </main>
 
       <SiteFooter />
+    </div>
+  );
+}
+
+function FeatureCard({
+  icon,
+  title,
+  description,
+}: {
+  icon: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-xl border border-dash-border bg-dash-surface p-6 shadow-sm transition-shadow hover:shadow-md">
+      <div className="text-3xl">{icon}</div>
+      <h3 className="mt-4 text-lg font-semibold text-dash-text">{title}</h3>
+      <p className="mt-2 text-sm text-dash-muted">{description}</p>
     </div>
   );
 }

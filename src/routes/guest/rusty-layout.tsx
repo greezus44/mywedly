@@ -1,114 +1,162 @@
-import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate, NavLink, Link, Outlet, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate, Outlet, NavLink, Link, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { RUSTY_THEME } from "../../lib/theme";
 import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
-import { cn } from "../../lib/utils";
-import { themeToEventCssVars } from "../../lib/theme";
-import type { GuestOutletContext } from "./guest-layout";
 
-// Re-export so rusty child routes can import from "./rusty-layout"
 export { useGuestOutletContext } from "./guest-layout";
-export type { GuestOutletContext } from "./guest-layout";
-
-const RUSTY_CSS_VARS = themeToEventCssVars(RUSTY_THEME) as React.CSSProperties;
 
 export default function RustyLayout() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const { guest, eventId, loading: authLoading } = useGuestAuth();
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  const { data: event, isLoading: eventLoading, error: eventError } = useQuery({
+  const { data: event, isLoading: eventLoading } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle();
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("slug", slug)
+        .eq("is_published", true)
+        .maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
     enabled: !!slug,
   });
 
+  // Redirect to rustic signin if not authenticated
+  useEffect(() => {
+    if (!authLoading && !guest && event && eventId !== event.id) {
+      navigate(`/r/${slug}/signin`, { replace: true });
+    }
+  }, [authLoading, guest, event, eventId, slug, navigate]);
+
+  // Fetch custom pages for nav
   const { data: customPages } = useQuery({
     queryKey: ["guest-custom-pages", event?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("custom_pages").select("*").eq("event_id", event!.id).eq("is_published", true).eq("show_in_nav", true).order("sort_order", { ascending: true });
+      const { data, error } = await supabase
+        .from("custom_pages")
+        .select("*")
+        .eq("event_id", event!.id)
+        .eq("is_published", true)
+        .eq("show_in_nav", true)
+        .order("sort_order", { ascending: true });
       if (error) throw error;
       return (data ?? []) as CustomPage[];
     },
     enabled: !!event?.id,
   });
 
-  const { data: invitedSubEventIds, isLoading: invitationsLoading } = useQuery({
-    queryKey: ["guest-invitations", event?.id, guest?.id],
+  // Resolve guest invitations
+  const { data: invitedSubEventIds } = useQuery({
+    queryKey: ["guest-invitations", guest?.id, event?.id],
     queryFn: async () => {
-      if (!event || !guest) return [];
-      const result = await resolveGuestInvitations(supabase, guest.id, event.id);
-      return getInvitedSubEventIds(result.invitations);
+      if (!guest || !event) return [];
+      const { invitations } = await resolveGuestInvitations(supabase, guest.id, event.id);
+      return getInvitedSubEventIds(invitations);
     },
-    enabled: !!event?.id && !!guest?.id,
+    enabled: !!guest && !!event,
   });
 
-  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [menuOpen]);
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [menuOpen]);
+  if (eventLoading || authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
+      </div>
+    );
+  }
 
-  if (!authLoading && !guest && event) { navigate(`/r/${slug}/signin`, { replace: true }); return null; }
-  if (authLoading || eventLoading || (event && guest && eventId === event.id && invitationsLoading)) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
-  if (eventError || !event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
-  if (!guest || eventId !== event.id) { navigate(`/r/${slug}/signin`, { replace: true }); return null; }
+  if (!event) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
+      </div>
+    );
+  }
 
-  const invitedIds = invitedSubEventIds ?? [];
-  const hasInvitedEvents = invitedIds.length > 0;
-  const headerPages = (customPages ?? []).filter((p) => !p.is_footer);
-  const footerPages = (customPages ?? []).filter((p) => p.is_footer);
-  const menuItems = [
-    { to: `/r/${slug}/home`, label: "Home" },
-    ...(hasInvitedEvents ? [{ to: `/r/${slug}/rsvp`, label: "RSVP" }] : []),
-    { to: `/r/${slug}/wishes`, label: "Wishes" },
-    { to: `/r/${slug}/contact`, label: "Contact" },
-    ...headerPages.map((p) => ({ to: `/r/${slug}/p/${p.slug}`, label: p.nav_label || p.title })),
+  if (!guest) {
+    return null; // redirecting to signin
+  }
+
+  const base = `/r/${slug}`;
+  const navLinks = [
+    { label: "Home", to: `${base}/home` },
+    { label: "RSVP", to: `${base}/rsvp` },
+    { label: "Wishes", to: `${base}/wishes` },
+    { label: "Contact", to: `${base}/contact` },
+    ...(customPages ?? []).map((p) => ({
+      label: p.nav_label || p.title,
+      to: `${base}/p/${p.slug}`,
+    })),
   ];
-  const contextValue: GuestOutletContext = { event, slug: slug!, theme: RUSTY_THEME, invitedSubEventIds: invitedIds };
 
   return (
-    <div className="event-themed min-h-screen" style={RUSTY_CSS_VARS}>
-      <div ref={menuRef} className="fixed left-4 top-4 z-50">
-        <button onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle navigation menu" aria-expanded={menuOpen} aria-controls="rusty-nav-menu"
-          className="flex h-11 w-11 items-center justify-center rounded-full transition-all duration-300 hover:scale-105 focus:outline-none focus-visible:ring-2"
-          style={{ backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)", color: "var(--event-text)", boxShadow: menuOpen ? "0 4px 20px rgba(0,0,0,0.08)" : "0 2px 8px rgba(0,0,0,0.04)" }}>
-          <div className="flex h-5 w-5 flex-col items-center justify-center gap-[5px]">
-            <span className="block h-[2px] w-5 rounded-full transition-all duration-300" style={{ backgroundColor: "var(--event-text)", transform: menuOpen ? "translateY(7px) rotate(45deg)" : "none" }} />
-            <span className="block h-[2px] w-5 rounded-full transition-all duration-300" style={{ backgroundColor: "var(--event-text)", opacity: menuOpen ? 0 : 1 }} />
-            <span className="block h-[2px] w-5 rounded-full transition-all duration-300" style={{ backgroundColor: "var(--event-text)", transform: menuOpen ? "translateY(-7px) rotate(-45deg)" : "none" }} />
+    <EventThemeProvider theme={RUSTY_THEME as unknown as Json}>
+      <div className="min-h-screen">
+        {/* Header with hamburger */}
+        <header className="sticky top-0 z-30 border-b" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
+          <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-4">
+            <Link to={`${base}/home`} className="font-semibold" style={{ color: "var(--event-heading)" }}>
+              {event.name}
+            </Link>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="p-2"
+              aria-label="Toggle menu"
+              style={{ color: "var(--event-text)" }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                {menuOpen ? (
+                  <>
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </>
+                ) : (
+                  <>
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <line x1="3" y1="18" x2="21" y2="18" />
+                  </>
+                )}
+              </svg>
+            </button>
           </div>
-        </button>
+        </header>
+
+        {/* Slide-down menu */}
         {menuOpen && (
-          <nav id="rusty-nav-menu" role="menu" aria-label="Guest navigation" className="absolute left-0 top-14 w-64 origin-top-left animate-scaleIn rounded-2xl py-2 shadow-xl" style={{ backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}>
-            {menuItems.map((item) => (
-              <NavLink key={item.to} to={item.to} role="menuitem" className={({ isActive }) => cn("block px-5 py-3 text-sm font-medium transition-colors", isActive && "font-semibold")}
-                style={({ isActive }) => ({ color: isActive ? "var(--event-primary)" : "var(--event-text)", backgroundColor: isActive ? "var(--event-surface-alt)" : "transparent" })}>{item.label}</NavLink>
-            ))}
+          <nav className="sticky top-16 z-20 border-b px-4 py-3" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
+            <div className="mx-auto flex max-w-4xl flex-col gap-1">
+              {navLinks.map((link) => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  onClick={() => setMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `rounded-lg px-3 py-2 text-sm font-medium ${isActive ? "" : ""}`
+                  }
+                  style={({ isActive }) => ({ color: isActive ? "var(--event-primary)" : "var(--event-text)" })}
+                >
+                  {link.label}
+                </NavLink>
+              ))}
+            </div>
           </nav>
         )}
+
+        {/* Content */}
+        <main>
+          <Outlet context={{ event, slug: slug!, theme: RUSTY_THEME, invitedSubEventIds: invitedSubEventIds ?? [] }} />
+        </main>
       </div>
-      <main><Outlet context={contextValue} /></main>
-      {footerPages.length > 0 && <footer className="border-t px-4 py-6" style={{ borderColor: "var(--event-border)" }}><div className="mx-auto flex max-w-5xl flex-wrap gap-4">{footerPages.map((page) => <Link key={page.id} to={`/r/${slug}/p/${page.slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>{page.nav_label || page.title}</Link>)}</div></footer>}
-    </div>
+    </EventThemeProvider>
   );
 }

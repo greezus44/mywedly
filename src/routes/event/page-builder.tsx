@@ -1,13 +1,41 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type CustomPage, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Card, Input, Textarea, LoadingSpinner, ErrorState, EmptyState } from "../../components/ui";
-import { ImageUpload } from "../../components/ui/ImageUpload";
+import { Input, Textarea } from "../../components/ui/Input";
+import {
+  Card,
+  LoadingSpinner,
+  ErrorState,
+  Badge,
+  Toggle,
+} from "../../components/ui";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
-import { BLOCK_TYPES, createBlock, jsonToBlocks, blocksToJson, type Block, type BlockType } from "./block-types";
+import { ImageUpload } from "../../components/ui/ImageUpload";
+import { uploadImage } from "../../lib/upload";
+import {
+  type Block,
+  type BlockContent,
+  BLOCK_TYPES,
+  createBlock,
+  blocksToJson,
+  jsonToBlocks,
+} from "./block-types";
+import { slugify } from "../../lib/theme";
+import { cn } from "../../lib/utils";
+
+async function fetchPage(pageId: string): Promise<CustomPage> {
+  const { data, error } = await supabase
+    .from("custom_pages")
+    .select("*")
+    .eq("id", pageId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Page not found");
+  return data as CustomPage;
+}
 
 export function PageBuilder() {
   const { eventId } = useEventContext();
@@ -15,100 +43,94 @@ export function PageBuilder() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: page, isLoading, isError, refetch } = useQuery({
+  const { data: page, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["custom-page", pageId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("custom_pages")
-        .select("*")
-        .eq("id", pageId!)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) throw new Error("Page not found");
-      return data as CustomPage;
-    },
+    queryFn: () => fetchPage(pageId!),
     enabled: !!pageId,
   });
 
   const [title, setTitle] = useState("");
-  const [navLabel, setNavLabel] = useState("");
   const [slug, setSlug] = useState("");
-  const [body, setBody] = useState("");
-  const [coverImage, setCoverImage] = useState<string | null>(null);
-  const [inlineImage, setInlineImage] = useState<string | null>(null);
-  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [navLabel, setNavLabel] = useState("");
   const [showInNav, setShowInNav] = useState(true);
-  const [icon, setIcon] = useState("");
+  const [isPublished, setIsPublished] = useState(false);
+  const [isFooter, setIsFooter] = useState(false);
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (page) {
       setTitle(page.title);
-      setNavLabel(page.nav_label ?? page.title);
       setSlug(page.slug);
-      setBody(page.body ?? "");
-      setCoverImage(page.cover_image_url);
-      setInlineImage(page.inline_image_url);
-      setBlocks(jsonToBlocks(page.blocks));
+      setNavLabel(page.nav_label ?? "");
       setShowInNav(page.show_in_nav);
-      setIcon(page.icon ?? "");
+      setIsPublished(page.is_published);
+      setIsFooter(page.is_footer);
+      setBlocks(jsonToBlocks(page.blocks));
     }
   }, [page]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("custom_pages")
         .update({
-          title,
-          nav_label: navLabel || title,
-          slug,
-          body,
-          cover_image_url: coverImage,
-          inline_image_url: inlineImage,
-          blocks: blocksToJson(blocks),
+          title: title.trim(),
+          slug: slugify(slug) || slugify(title),
+          nav_label: navLabel || null,
           show_in_nav: showInNav,
-          icon: icon || null,
-          updated_at: new Date().toISOString(),
+          is_published: isPublished,
+          is_footer: isFooter,
+          blocks: blocksToJson(blocks),
         })
-        .eq("id", pageId!);
+        .eq("id", pageId!)
+        .select("*")
+        .maybeSingle();
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom-page", pageId] });
       queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  const addBlock = (type: BlockType) => {
-    setBlocks((prev) => [...prev, createBlock(type)]);
+  const addBlock = (type: Block["type"]) => {
+    const newBlock = createBlock(type, blocks.length);
+    setBlocks([...blocks, newBlock]);
+    setSelectedBlockId(newBlock.id);
   };
 
-  const updateBlock = (id: string, content: Partial<Block["content"]>) => {
-    setBlocks((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, content: { ...b.content, ...content } } : b)),
-    );
+  const updateBlock = (id: string, content: BlockContent) => {
+    setBlocks(blocks.map((b) => (b.id === id ? { ...b, content } : b)));
   };
 
-  const removeBlock = (id: string) => {
-    setBlocks((prev) => prev.filter((b) => b.id !== id));
+  const deleteBlock = (id: string) => {
+    setBlocks(blocks.filter((b) => b.id !== id).map((b, i) => ({ ...b, order: i })));
+    if (selectedBlockId === id) setSelectedBlockId(null);
   };
 
   const moveBlock = (id: string, direction: "up" | "down") => {
-    setBlocks((prev) => {
-      const index = prev.findIndex((b) => b.id === id);
-      if (index === -1) return prev;
-      const newIndex = direction === "up" ? index - 1 : index + 1;
-      if (newIndex < 0 || newIndex >= prev.length) return prev;
-      const newBlocks = [...prev];
-      [newBlocks[index], newBlocks[newIndex]] = [newBlocks[newIndex], newBlocks[index]];
-      return newBlocks;
-    });
+    const index = blocks.findIndex((b) => b.id === id);
+    if (index === -1) return;
+    const swapIndex = direction === "up" ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= blocks.length) return;
+    const newBlocks = [...blocks];
+    [newBlocks[index], newBlocks[swapIndex]] = [newBlocks[swapIndex], newBlocks[index]];
+    setBlocks(newBlocks.map((b, i) => ({ ...b, order: i })));
+  };
+
+  const handleImageUpload = async (file: File): Promise<string | null> => {
+    return uploadImage(file, "pages", eventId).then((r) => r?.url ?? null);
   };
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <LoadingSpinner size={32} />
+        <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
@@ -116,240 +138,307 @@ export function PageBuilder() {
   if (isError || !page) {
     return (
       <ErrorState
-        title="Page not found"
-        message="This custom page could not be loaded."
+        message={error instanceof Error ? error.message : "Failed to load page"}
         onRetry={() => refetch()}
       />
     );
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <button
-            type="button"
-            onClick={() => navigate(`/event/${eventId}/pages`)}
-            className="text-sm text-dash-muted hover:text-dash-text"
-          >
-            ← Back to Pages
-          </button>
-          <h2 className="mt-1 text-xl font-bold text-dash-text">Edit Page</h2>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => navigate(`/event/${eventId}/pages`)}>
+            ← Pages
+          </Button>
+          <h1 className="text-xl font-bold text-dash-text">Page Builder</h1>
         </div>
-        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-          Save Page
-        </Button>
+        <div className="flex items-center gap-3">
+          {saved && <span className="text-sm text-green-600">✓ Saved</span>}
+          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+            Save Page
+          </Button>
+        </div>
       </div>
-
-      {saveMutation.isError && (
-        <p className="text-sm text-dash-danger">
-          Error: {(saveMutation.error as Error)?.message}
-        </p>
-      )}
-      {saveMutation.isSuccess && (
-        <p className="text-sm text-green-600">Page saved successfully!</p>
-      )}
 
       {/* Page Settings */}
       <Card>
-        <h3 className="text-sm font-medium text-dash-text mb-4">Page Settings</h3>
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             label="Page Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Page title"
           />
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Navigation Label"
-              value={navLabel}
-              onChange={(e) => setNavLabel(e.target.value)}
-              placeholder="Label shown in nav"
-            />
-            <Input
-              label="URL Slug"
-              value={slug}
-              onChange={(e) => setSlug(e.target.value)}
-              placeholder="page-slug"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Icon (emoji)"
-              value={icon}
-              onChange={(e) => setIcon(e.target.value)}
-              placeholder="📄"
-            />
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 text-sm text-dash-text">
-                <input
-                  type="checkbox"
-                  checked={showInNav}
-                  onChange={(e) => setShowInNav(e.target.checked)}
-                  className="h-4 w-4 rounded border-dash-border"
-                />
-                Show in navigation
-              </label>
-            </div>
+          <Input
+            label="Slug"
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            placeholder={slugify(title) || "page-slug"}
+          />
+          <Input
+            label="Nav Label"
+            value={navLabel}
+            onChange={(e) => setNavLabel(e.target.value)}
+            placeholder="Label shown in navigation"
+          />
+          <div className="flex items-end gap-4">
+            <Toggle label="Show in Nav" checked={showInNav} onChange={setShowInNav} />
+            <Toggle label="Published" checked={isPublished} onChange={setIsPublished} />
+            <Toggle label="Footer" checked={isFooter} onChange={setIsFooter} />
           </div>
         </div>
       </Card>
 
-      {/* Cover Image */}
+      {/* Block Palette */}
       <Card>
-        <h3 className="text-sm font-medium text-dash-text mb-4">Cover Image</h3>
-        <ImageUpload
-          value={coverImage}
-          onChange={setCoverImage}
-          bucket="event-assets"
-          pathPrefix={`events/${eventId}/pages/${pageId}`}
-          label="Cover Image"
-        />
-      </Card>
-
-      {/* Body (legacy rich text) */}
-      <Card>
-        <h3 className="text-sm font-medium text-dash-text mb-4">Page Content</h3>
-        <RichTextEditor
-          value={body}
-          onChange={setBody}
-          placeholder="Write your page content..."
-        />
-      </Card>
-
-      {/* Inline Image */}
-      <Card>
-        <h3 className="text-sm font-medium text-dash-text mb-4">Inline Image</h3>
-        <ImageUpload
-          value={inlineImage}
-          onChange={setInlineImage}
-          bucket="event-assets"
-          pathPrefix={`events/${eventId}/pages/${pageId}/inline`}
-          label="Inline Image"
-        />
-      </Card>
-
-      {/* Blocks */}
-      <Card>
-        <h3 className="text-sm font-medium text-dash-text mb-4">Content Blocks</h3>
-
-        {/* Add block buttons */}
-        <div className="mb-4 flex flex-wrap gap-2">
+        <h3 className="mb-3 text-sm font-semibold text-dash-text">Add Block</h3>
+        <div className="flex flex-wrap gap-2">
           {BLOCK_TYPES.map((bt) => (
-            <Button
+            <button
               key={bt.type}
-              variant="secondary"
-              size="sm"
+              type="button"
               onClick={() => addBlock(bt.type)}
+              className="flex items-center gap-2 rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm font-medium text-dash-text transition-colors hover:border-dash-primary hover:bg-dash-bg"
             >
-              {bt.icon} {bt.label}
-            </Button>
+              <span className="text-base">{bt.icon}</span>
+              {bt.label}
+            </button>
           ))}
         </div>
-
-        {/* Block list */}
-        {blocks.length === 0 ? (
-          <EmptyState
-            title="No blocks yet"
-            description="Add content blocks above to build your page."
-            className="py-8"
-          />
-        ) : (
-          <div className="space-y-3">
-            {blocks.map((block, index) => (
-              <div
-                key={block.id}
-                className="rounded-md border border-dash-border bg-dash-bg p-3"
-              >
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-medium uppercase text-dash-muted">
-                    {block.type}
-                  </span>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => moveBlock(block.id, "up")}
-                      disabled={index === 0}
-                    >
-                      ↑
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => moveBlock(block.id, "down")}
-                      disabled={index === blocks.length - 1}
-                    >
-                      ↓
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeBlock(block.id)}
-                    >
-                      ✕
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Block editors */}
-                {(block.type === "heading" || block.type === "paragraph") && (
-                  <Input
-                    value={block.content.text ?? ""}
-                    onChange={(e) => updateBlock(block.id, { text: e.target.value })}
-                    placeholder={block.type === "heading" ? "Heading text" : "Paragraph text"}
-                  />
-                )}
-                {block.type === "image" && (
-                  <Input
-                    label="Image URL"
-                    value={block.content.url ?? ""}
-                    onChange={(e) => updateBlock(block.id, { url: e.target.value })}
-                    placeholder="https://..."
-                  />
-                )}
-                {block.type === "button" && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <Input
-                      label="Button Label"
-                      value={block.content.label ?? ""}
-                      onChange={(e) => updateBlock(block.id, { label: e.target.value })}
-                      placeholder="Click Here"
-                    />
-                    <Input
-                      label="Link URL"
-                      value={block.content.href ?? ""}
-                      onChange={(e) => updateBlock(block.id, { href: e.target.value })}
-                      placeholder="https://..."
-                    />
-                  </div>
-                )}
-                {block.type === "spacer" && (
-                  <Input
-                    label="Height (px)"
-                    type="number"
-                    value={block.content.height ?? 40}
-                    onChange={(e) => updateBlock(block.id, { height: Number(e.target.value) })}
-                  />
-                )}
-                {block.type === "html" && (
-                  <Textarea
-                    label="Custom HTML"
-                    value={block.content.html ?? ""}
-                    onChange={(e) => updateBlock(block.id, { html: e.target.value })}
-                    placeholder="<p>Custom HTML</p>"
-                  />
-                )}
-                {block.type === "divider" && (
-                  <p className="text-sm text-dash-muted">A horizontal divider line will appear here.</p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
       </Card>
+
+      {/* Blocks List */}
+      <div className="space-y-3">
+        {blocks.length === 0 ? (
+          <Card className="text-center">
+            <p className="text-sm text-dash-muted">
+              No blocks yet. Use the palette above to add content blocks.
+            </p>
+          </Card>
+        ) : (
+          blocks.map((block, index) => (
+            <BlockEditor
+              key={block.id}
+              block={block}
+              isSelected={selectedBlockId === block.id}
+              onSelect={() => setSelectedBlockId(block.id)}
+              onUpdate={(content) => updateBlock(block.id, content)}
+              onDelete={() => deleteBlock(block.id)}
+              onMoveUp={() => moveBlock(block.id, "up")}
+              onMoveDown={() => moveBlock(block.id, "down")}
+              canMoveUp={index > 0}
+              canMoveDown={index < blocks.length - 1}
+              onImageUpload={handleImageUpload}
+            />
+          ))
+        )}
+      </div>
     </div>
+  );
+}
+
+interface BlockEditorProps {
+  block: Block;
+  isSelected: boolean;
+  onSelect: () => void;
+  onUpdate: (content: BlockContent) => void;
+  onDelete: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onImageUpload: (file: File) => Promise<string | null>;
+}
+
+function BlockEditor({
+  block,
+  isSelected,
+  onSelect,
+  onUpdate,
+  onDelete,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
+  onImageUpload,
+}: BlockEditorProps) {
+  const meta = BLOCK_TYPES.find((b) => b.type === block.type);
+  const content = block.content;
+
+  return (
+    <Card
+      className={cn(
+        "transition-all",
+        isSelected ? "border-dash-primary ring-2 ring-dash-primary/20" : "",
+      )}
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={onSelect}
+          className="flex items-center gap-2 text-sm font-semibold text-dash-text"
+        >
+          <span className="text-base">{meta?.icon}</span>
+          {meta?.label}
+        </button>
+        <div className="flex gap-1">
+          <Button variant="ghost" size="sm" onClick={onMoveUp} disabled={!canMoveUp}>
+            ↑
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onMoveDown} disabled={!canMoveDown}>
+            ↓
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onDelete}>
+            Delete
+          </Button>
+        </div>
+      </div>
+
+      {/* Block-specific editors */}
+      {block.type === "heading" && (
+        <Input
+          value={content.text ?? ""}
+          onChange={(e) => onUpdate({ ...content, text: e.target.value })}
+          placeholder="Heading text"
+        />
+      )}
+
+      {block.type === "paragraph" && (
+        <RichTextEditor
+          value={content.html ?? ""}
+          onChange={(html) => onUpdate({ ...content, html })}
+          placeholder="Write your paragraph…"
+        />
+      )}
+
+      {block.type === "image" && (
+        <div className="space-y-3">
+          <ImageUpload
+            value={content.url}
+            onChange={(url) => onUpdate({ ...content, url: url ?? "" })}
+            onUpload={onImageUpload}
+          />
+          <Input
+            label="Alt Text"
+            value={content.alt ?? ""}
+            onChange={(e) => onUpdate({ ...content, alt: e.target.value })}
+            placeholder="Image description"
+          />
+          <Input
+            label="Caption"
+            value={content.caption ?? ""}
+            onChange={(e) => onUpdate({ ...content, caption: e.target.value })}
+            placeholder="Optional caption"
+          />
+        </div>
+      )}
+
+      {block.type === "gallery" && (
+        <div className="space-y-3">
+          {(content.images ?? []).map((img, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <img src={img} alt="" className="h-16 w-16 rounded-lg object-cover" />
+              <Input
+                value={img}
+                onChange={(e) => {
+                  const images = [...(content.images ?? [])];
+                  images[i] = e.target.value;
+                  onUpdate({ ...content, images });
+                }}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const images = (content.images ?? []).filter((_, idx) => idx !== i);
+                  onUpdate({ ...content, images });
+                }}
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
+          <ImageUpload
+            value={null}
+            onChange={(url) => {
+              if (url) {
+                onUpdate({ ...content, images: [...(content.images ?? []), url] });
+              }
+            }}
+            onUpload={onImageUpload}
+            label="Add Image"
+          />
+        </div>
+      )}
+
+      {block.type === "button" && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Input
+            label="Label"
+            value={content.label ?? ""}
+            onChange={(e) => onUpdate({ ...content, label: e.target.value })}
+            placeholder="Button text"
+          />
+          <Input
+            label="Link URL"
+            value={content.href ?? ""}
+            onChange={(e) => onUpdate({ ...content, href: e.target.value })}
+            placeholder="https://…"
+          />
+        </div>
+      )}
+
+      {block.type === "video" && (
+        <div className="space-y-3">
+          <Input
+            label="Embed URL"
+            value={content.embed ?? ""}
+            onChange={(e) => onUpdate({ ...content, embed: e.target.value })}
+            placeholder="YouTube or Vimeo URL"
+          />
+          <Input
+            label="Caption"
+            value={content.caption ?? ""}
+            onChange={(e) => onUpdate({ ...content, caption: e.target.value })}
+            placeholder="Optional caption"
+          />
+        </div>
+      )}
+
+      {block.type === "quote" && (
+        <div className="space-y-3">
+          <Textarea
+            label="Quote"
+            value={content.text ?? ""}
+            onChange={(e) => onUpdate({ ...content, text: e.target.value })}
+            placeholder="Quote text"
+            rows={3}
+          />
+          <Input
+            label="Attribution"
+            value={content.caption ?? ""}
+            onChange={(e) => onUpdate({ ...content, caption: e.target.value })}
+            placeholder="— Author"
+          />
+        </div>
+      )}
+
+      {block.type === "spacer" && (
+        <Input
+          label="Height (px)"
+          type="number"
+          value={content.height ?? 32}
+          onChange={(e) => onUpdate({ ...content, height: parseInt(e.target.value, 10) || 32 })}
+        />
+      )}
+
+      {block.type === "divider" && (
+        <div className="border-t-2 border-dash-border py-2 text-center text-xs text-dash-muted">
+          Divider line
+        </div>
+      )}
+    </Card>
   );
 }

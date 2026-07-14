@@ -1,17 +1,14 @@
-import React from "react";
+import React, { forwardRef } from "react";
 import { cn } from "../../lib/utils";
-
-const baseFieldClass =
-  "w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted/60 focus:outline-none focus:ring-2 focus:ring-dash-primary/30 focus:border-dash-primary disabled:cursor-not-allowed disabled:opacity-50";
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
 }
 
-export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, className, id, ...props }, ref) => {
-    const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, "-") : undefined);
+export const Input = forwardRef<HTMLInputElement, InputProps>(
+  ({ className, label, error, id, ...props }, ref) => {
+    const inputId = id || props.name;
     return (
       <div className="w-full">
         {label && (
@@ -22,10 +19,14 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         <input
           ref={ref}
           id={inputId}
-          className={cn(baseFieldClass, error && "border-dash-danger focus:border-dash-danger focus:ring-dash-danger/30", className)}
+          className={cn(
+            "w-full rounded-lg border bg-dash-surface px-3 py-2 text-sm text-dash-text shadow-sm transition-colors placeholder:text-dash-muted/60 focus:outline-none focus:ring-2 focus:ring-dash-primary/20 disabled:cursor-not-allowed disabled:opacity-50",
+            error ? "border-dash-danger" : "border-dash-border",
+            className,
+          )}
           {...props}
         />
-        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
+        {error && <p className="mt-1 text-sm text-dash-danger">{error}</p>}
       </div>
     );
   },
@@ -37,9 +38,9 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
   error?: string;
 }
 
-export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ label, error, className, id, ...props }, ref) => {
-    const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, "-") : undefined);
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ className, label, error, id, ...props }, ref) => {
+    const inputId = id || props.name;
     return (
       <div className="w-full">
         {label && (
@@ -50,10 +51,14 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         <textarea
           ref={ref}
           id={inputId}
-          className={cn(baseFieldClass, "min-h-[80px] resize-y", error && "border-dash-danger focus:border-dash-danger focus:ring-dash-danger/30", className)}
+          className={cn(
+            "w-full rounded-lg border bg-dash-surface px-3 py-2 text-sm text-dash-text shadow-sm transition-colors placeholder:text-dash-muted/60 focus:outline-none focus:ring-2 focus:ring-dash-primary/20 disabled:cursor-not-allowed disabled:opacity-50",
+            error ? "border-dash-danger" : "border-dash-border",
+            className,
+          )}
           {...props}
         />
-        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
+        {error && <p className="mt-1 text-sm text-dash-danger">{error}</p>}
       </div>
     );
   },
@@ -65,9 +70,9 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   error?: string;
 }
 
-export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, className, id, children, ...props }, ref) => {
-    const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, "-") : undefined);
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(
+  ({ className, label, error, id, children, ...props }, ref) => {
+    const inputId = id || props.name;
     return (
       <div className="w-full">
         {label && (
@@ -78,12 +83,16 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
         <select
           ref={ref}
           id={inputId}
-          className={cn(baseFieldClass, "cursor-pointer", error && "border-dash-danger focus:border-dash-danger focus:ring-dash-danger/30", className)}
+          className={cn(
+            "w-full rounded-lg border bg-dash-surface px-3 py-2 text-sm text-dash-text shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-dash-primary/20 disabled:cursor-not-allowed disabled:opacity-50",
+            error ? "border-dash-danger" : "border-dash-border",
+            className,
+          )}
           {...props}
         >
           {children}
         </select>
-        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
+        {error && <p className="mt-1 text-sm text-dash-danger">{error}</p>}
       </div>
     );
   },

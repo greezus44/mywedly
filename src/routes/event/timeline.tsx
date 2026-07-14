@@ -1,116 +1,142 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type EventSchedule } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Card, Input, Textarea, Modal, Badge, EmptyState, LoadingSpinner, ErrorState } from "../../components/ui";
-import { ImageUpload } from "../../components/ui/ImageUpload";
-import { formatDate, formatTime12 } from "../../lib/utils";
+import { Input, Textarea, Select } from "../../components/ui/Input";
+import {
+  Card,
+  Modal,
+  LoadingSpinner,
+  ErrorState,
+  EmptyState,
+  Badge,
+} from "../../components/ui";
+import { DateTimePicker } from "../../components/ui/DateTimePicker";
+import { formatDate, formatTime12, cn } from "../../lib/utils";
 
-interface ScheduleFormData {
-  title: string;
-  description: string;
-  schedule_date: string;
-  start_time: string;
-  end_time: string;
-  venue: string;
-  address: string;
-  dress_code: string;
-  category: string;
-  cover_image: string | null;
+async function fetchSchedule(eventId: string): Promise<EventSchedule[]> {
+  const { data, error } = await supabase
+    .from("event_schedule")
+    .select("*")
+    .eq("event_id", eventId)
+    .order("order_index", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as EventSchedule[];
 }
 
-const emptyForm: ScheduleFormData = {
-  title: "",
-  description: "",
-  schedule_date: "",
-  start_time: "",
-  end_time: "",
-  venue: "",
-  address: "",
-  dress_code: "",
-  category: "",
-  cover_image: null,
-};
+const CATEGORIES = [
+  { value: "ceremony", label: "Ceremony", icon: "💒" },
+  { value: "reception", label: "Reception", icon: "🥂" },
+  { value: "dinner", label: "Dinner", icon: "🍽" },
+  { value: "party", label: "Party", icon: "🎉" },
+  { value: "other", label: "Other", icon: "📌" },
+];
 
 export function TimelinePage() {
   const { eventId } = useEventContext();
   const queryClient = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<ScheduleFormData>(emptyForm);
 
-  const { data: schedule, isLoading, isError, refetch } = useQuery({
+  const { data: items, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["event-schedule", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_schedule")
-        .select("*")
-        .eq("event_id", eventId!)
-        .order("order_index", { ascending: true });
-      if (error) throw error;
-      return data as EventSchedule[];
-    },
-    enabled: !!eventId,
+    queryFn: () => fetchSchedule(eventId),
   });
 
-  const createMutation = useMutation({
+  const [showEdit, setShowEdit] = useState(false);
+  const [editing, setEditing] = useState<EventSchedule | null>(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [scheduleDate, setScheduleDate] = useState<string | null>(null);
+  const [startTime, setStartTime] = useState<string | null>(null);
+  const [endTime, setEndTime] = useState<string | null>(null);
+  const [venue, setVenue] = useState("");
+  const [address, setAddress] = useState("");
+  const [dressCode, setDressCode] = useState("");
+  const [category, setCategory] = useState("other");
+
+  const resetForm = () => {
+    setTitle("");
+    setDescription("");
+    setScheduleDate(null);
+    setStartTime(null);
+    setEndTime(null);
+    setVenue("");
+    setAddress("");
+    setDressCode("");
+    setCategory("other");
+    setEditing(null);
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setShowEdit(true);
+  };
+
+  const openEdit = (item: EventSchedule) => {
+    setEditing(item);
+    setTitle(item.title);
+    setDescription(item.description ?? "");
+    setScheduleDate(item.schedule_date);
+    setStartTime(item.start_time);
+    setEndTime(item.end_time);
+    setVenue(item.venue ?? "");
+    setAddress(item.address ?? "");
+    setDressCode(item.dress_code ?? "");
+    setCategory(item.category ?? "other");
+    setShowEdit(true);
+  };
+
+  const saveMutation = useMutation({
     mutationFn: async () => {
-      const maxOrder = schedule?.length ?? 0;
-      const { error } = await supabase.from("event_schedule").insert({
-        event_id: eventId,
-        title: form.title,
-        description: form.description || null,
-        schedule_date: form.schedule_date,
-        start_time: form.start_time || null,
-        end_time: form.end_time || null,
-        venue: form.venue || null,
-        address: form.address || null,
-        dress_code: form.dress_code || null,
-        category: form.category || null,
-        cover_image: form.cover_image,
-        order_index: maxOrder,
-      });
-      if (error) throw error;
+      if (editing) {
+        const { error } = await supabase
+          .from("event_schedule")
+          .update({
+            title,
+            description: description || null,
+            schedule_date: scheduleDate,
+            start_time: startTime,
+            end_time: endTime,
+            venue: venue || null,
+            address: address || null,
+            dress_code: dressCode || null,
+            category: category,
+          })
+          .eq("id", editing.id);
+        if (error) throw error;
+      } else {
+        const maxOrder = items?.reduce((max, i) => Math.max(max, i.order_index), 0) ?? 0;
+        const { error } = await supabase
+          .from("event_schedule")
+          .insert({
+            event_id: eventId,
+            title,
+            description: description || null,
+            schedule_date: scheduleDate,
+            start_time: startTime,
+            end_time: endTime,
+            venue: venue || null,
+            address: address || null,
+            dress_code: dressCode || null,
+            category: category,
+            order_index: maxOrder + 1,
+          });
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-schedule", eventId] });
-      setShowForm(false);
-      setForm(emptyForm);
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from("event_schedule")
-        .update({
-          title: form.title,
-          description: form.description || null,
-          schedule_date: form.schedule_date,
-          start_time: form.start_time || null,
-          end_time: form.end_time || null,
-          venue: form.venue || null,
-          address: form.address || null,
-          dress_code: form.dress_code || null,
-          category: form.category || null,
-          cover_image: form.cover_image,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", editingId!);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event-schedule", eventId] });
-      setShowForm(false);
-      setEditingId(null);
-      setForm(emptyForm);
+      setShowEdit(false);
+      resetForm();
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("event_schedule").delete().eq("id", id);
+      const { error } = await supabase
+        .from("event_schedule")
+        .delete()
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -118,96 +144,72 @@ export function TimelinePage() {
     },
   });
 
-  const openEdit = (item: EventSchedule) => {
-    setEditingId(item.id);
-    setForm({
-      title: item.title,
-      description: item.description ?? "",
-      schedule_date: item.schedule_date,
-      start_time: item.start_time ?? "",
-      end_time: item.end_time ?? "",
-      venue: item.venue ?? "",
-      address: item.address ?? "",
-      dress_code: item.dress_code ?? "",
-      category: item.category ?? "",
-      cover_image: item.cover_image,
-    });
-    setShowForm(true);
-  };
-
-  const handleSubmit = () => {
-    if (editingId) {
-      updateMutation.mutate();
-    } else {
-      createMutation.mutate();
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <LoadingSpinner size={32} />
+        <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
 
   if (isError) {
-    return <ErrorState message="Failed to load schedule." onRetry={() => refetch()} />;
+    return (
+      <ErrorState
+        message={error instanceof Error ? error.message : "Failed to load schedule"}
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-dash-text">Schedule</h2>
+          <h1 className="text-xl font-bold text-dash-text">Schedule</h1>
           <p className="mt-1 text-sm text-dash-muted">
-            Build a timeline for your event day so guests know what to expect.
+            Build a timeline of your event day
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditingId(null);
-            setForm(emptyForm);
-            setShowForm(true);
-          }}
-        >
-          Add Item
-        </Button>
+        <Button onClick={openCreate}>Add Schedule Item</Button>
       </div>
 
-      {schedule && schedule.length === 0 ? (
+      {!items || items.length === 0 ? (
         <EmptyState
+          icon={<span className="text-4xl">📅</span>}
           title="No schedule items yet"
-          description="Add items to build your event day timeline."
-          icon={<div className="text-4xl">📅</div>}
-          action={<Button onClick={() => setShowForm(true)}>Add First Item</Button>}
+          description="Add items to create a timeline for your event day."
+          action={<Button onClick={openCreate}>Add Schedule Item</Button>}
         />
       ) : (
-        <div className="space-y-4">
-          {schedule?.map((item) => (
-            <Card key={item.id}>
-              <div className="flex items-start justify-between gap-4">
+        <div className="space-y-3">
+          {items.map((item) => {
+            const cat = CATEGORIES.find((c) => c.value === item.category);
+            return (
+              <Card key={item.id} className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-dash-text">{item.title}</h3>
-                    {item.category && <Badge variant="default">{item.category}</Badge>}
+                    <span className="text-lg">{cat?.icon ?? "📌"}</span>
+                    <h3 className="text-base font-semibold text-dash-text">{item.title}</h3>
+                    {cat && <Badge color="default">{cat.label}</Badge>}
                   </div>
-                  <p className="mt-1 text-sm text-dash-muted">
-                    {formatDate(item.schedule_date)}
-                    {item.start_time && ` · ${formatTime12(item.start_time)}`}
-                    {item.end_time && ` – ${formatTime12(item.end_time)}`}
-                  </p>
-                  {item.venue && (
-                    <p className="mt-1 text-sm text-dash-muted">📍 {item.venue}</p>
-                  )}
                   {item.description && (
-                    <p className="mt-2 text-sm text-dash-text">{item.description}</p>
+                    <p className="mt-1 text-sm text-dash-muted">{item.description}</p>
                   )}
-                  {item.dress_code && (
-                    <p className="mt-1 text-xs text-dash-muted">Dress code: {item.dress_code}</p>
-                  )}
+                  <div className="mt-2 flex flex-wrap gap-4 text-sm text-dash-muted">
+                    {item.schedule_date && (
+                      <span>📅 {formatDate(item.schedule_date)}</span>
+                    )}
+                    {item.start_time && (
+                      <span>🕒 {formatTime12(item.start_time)}</span>
+                    )}
+                    {item.end_time && (
+                      <span>→ {formatTime12(item.end_time)}</span>
+                    )}
+                    {item.venue && <span>📍 {item.venue}</span>}
+                    {item.dress_code && <span>👔 {item.dress_code}</span>}
+                  </div>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => openEdit(item)}>
                     Edit
                   </Button>
@@ -223,100 +225,89 @@ export function TimelinePage() {
                     Delete
                   </Button>
                 </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
-      {/* Form Modal */}
+      {/* Edit Modal */}
       <Modal
-        open={showForm}
-        onClose={() => setShowForm(false)}
-        title={editingId ? "Edit Schedule Item" : "Add Schedule Item"}
-        className="max-w-2xl"
+        open={showEdit}
+        onClose={() => setShowEdit(false)}
+        title={editing ? "Edit Schedule Item" : "Add Schedule Item"}
       >
         <div className="space-y-4">
           <Input
             label="Title"
-            value={form.title}
-            onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-            placeholder="Ceremony"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Ceremony"
+            required
           />
           <Textarea
             label="Description"
-            value={form.description}
-            onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-            placeholder="Brief description of this part of the event..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Additional details…"
+            rows={2}
           />
-          <div className="grid grid-cols-3 gap-4">
-            <Input
-              label="Date"
-              type="date"
-              value={form.schedule_date}
-              onChange={(e) => setForm((prev) => ({ ...prev, schedule_date: e.target.value }))}
-            />
-            <Input
-              label="Start Time"
+          <Select
+            label="Category"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.icon} {c.label}
+              </option>
+            ))}
+          </Select>
+          <DateTimePicker
+            label="Date & Start Time"
+            value={{ date: scheduleDate, time: startTime }}
+            onChange={({ date, time }) => {
+              setScheduleDate(date);
+              setStartTime(time);
+            }}
+          />
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-dash-text">End Time</label>
+            <input
               type="time"
-              value={form.start_time}
-              onChange={(e) => setForm((prev) => ({ ...prev, start_time: e.target.value }))}
-            />
-            <Input
-              label="End Time"
-              type="time"
-              value={form.end_time}
-              onChange={(e) => setForm((prev) => ({ ...prev, end_time: e.target.value }))}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Venue"
-              value={form.venue}
-              onChange={(e) => setForm((prev) => ({ ...prev, venue: e.target.value }))}
-              placeholder="The Grand Ballroom"
-            />
-            <Input
-              label="Category"
-              value={form.category}
-              onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
-              placeholder="Ceremony / Reception / etc."
+              value={endTime ?? ""}
+              onChange={(e) => setEndTime(e.target.value || null)}
+              className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
             />
           </div>
           <Input
+            label="Venue"
+            value={venue}
+            onChange={(e) => setVenue(e.target.value)}
+            placeholder="e.g. Main Hall"
+          />
+          <Input
             label="Address"
-            value={form.address}
-            onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
-            placeholder="123 Main Street, City"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="e.g. 123 Main St"
           />
           <Input
             label="Dress Code"
-            value={form.dress_code}
-            onChange={(e) => setForm((prev) => ({ ...prev, dress_code: e.target.value }))}
-            placeholder="Black Tie / Cocktail / Casual"
+            value={dressCode}
+            onChange={(e) => setDressCode(e.target.value)}
+            placeholder="e.g. Black Tie"
           />
-          <ImageUpload
-            label="Cover Image"
-            value={form.cover_image}
-            onChange={(url) => setForm((prev) => ({ ...prev, cover_image: url }))}
-            bucket="event-assets"
-            pathPrefix={`events/${eventId}/schedule`}
-          />
-          {(createMutation.isError || updateMutation.isError) && (
-            <p className="text-sm text-dash-danger">
-              Error: {((createMutation.error || updateMutation.error) as Error)?.message}
-            </p>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setShowForm(false)}>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" onClick={() => setShowEdit(false)}>
               Cancel
             </Button>
             <Button
-              onClick={handleSubmit}
-              loading={createMutation.isPending || updateMutation.isPending}
-              disabled={!form.title.trim() || !form.schedule_date}
+              onClick={() => saveMutation.mutate()}
+              loading={saveMutation.isPending}
+              disabled={!title.trim()}
             >
-              {editingId ? "Update" : "Add"}
+              {editing ? "Save" : "Add"}
             </Button>
           </div>
         </div>

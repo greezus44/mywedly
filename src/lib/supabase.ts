@@ -16,8 +16,8 @@ export type Json =
 export interface Profile {
   id: string;
   email: string;
-  full_name?: string | null;
-  avatar_url?: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -26,9 +26,9 @@ export interface UserEvent {
   id: string;
   creator_id: string;
   name: string;
-  draft_name: string;
-  event_type: string;
-  draft_event_type: string;
+  draft_name: string | null;
+  event_type: string | null;
+  draft_event_type: string | null;
   event_date: string | null;
   draft_event_date: string | null;
   event_time: string | null;
@@ -56,8 +56,8 @@ export interface UserEvent {
   published_at: string | null;
   created_at: string;
   updated_at: string;
-  slug: string;
-  draft_slug: string;
+  slug: string | null;
+  draft_slug: string | null;
   rsvp_deadline: string | null;
   draft_rsvp_deadline: string | null;
 }
@@ -92,10 +92,10 @@ export interface EventGuest {
   group_name: string | null;
   side: string | null;
   group_id: string | null;
-  token: string;
-  rsvp_status: string;
+  token: string | null;
+  rsvp_status: string | null;
   rsvp_submitted_at: string | null;
-  plus_ones: number;
+  plus_ones: number | null;
   dietary: string | null;
   message: string | null;
   created_at: string;
@@ -123,13 +123,13 @@ export interface EventRsvp {
   guest_id: string;
   guest_name: string;
   status: string;
-  plus_ones: number;
+  plus_ones: number | null;
   plus_one_names: string[];
   dietary: string | null;
   dietary_notes: string | null;
   message: string | null;
   answers: Json;
-  submitted_at: string;
+  submitted_at: string | null;
   responded_at: string | null;
   sub_event_id: string | null;
 }
@@ -139,7 +139,7 @@ export interface EventSchedule {
   event_id: string;
   title: string;
   description: string | null;
-  schedule_date: string;
+  schedule_date: string | null;
   start_time: string | null;
   end_time: string | null;
   venue: string | null;
@@ -199,7 +199,7 @@ export interface SharingEvent {
   event_id: string;
   event_type: string;
   guest_id: string | null;
-  source: string;
+  source: string | null;
   device_type: string | null;
   metadata: Json;
   created_at: string;

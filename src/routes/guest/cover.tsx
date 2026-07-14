@@ -7,15 +7,6 @@ import { jsonToTheme } from "../../lib/theme";
 import { resolveTypography } from "../../lib/typography";
 
 interface LogoConfig { url?: string | null; size?: number; align?: string; }
-interface CoverConfig {
-  eyebrow?: unknown;
-  heading?: unknown;
-  subheading?: unknown;
-  bodyHtml?: string;
-  ctaText?: string;
-  overlayOpacity?: number;
-  background?: { image?: string | null; color?: string; position?: string; fit?: string; };
-}
 
 export default function GuestCover() {
   const { slug } = useParams<{ slug: string }>();
@@ -54,7 +45,11 @@ export default function GuestCover() {
       <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden" style={bgStyle}>
         {bgConfig.image && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />}
         <div className="relative z-10 flex w-full max-w-lg flex-col items-center px-6 py-16 text-center animate-fadeIn">
-          {logoConfig.url && <div className="mb-8 w-full flex" style={{ justifyContent: logoAlign === "left" ? "flex-start" : logoAlign === "right" ? "flex-end" : "center" }}><img src={logoConfig.url} alt="Logo" style={{ height: `${logoSize}px`, width: "auto", maxHeight: "40vh" }} className="object-contain" /></div>}
+          {logoConfig.url && (
+            <div className="mb-8 w-full flex" style={{ justifyContent: logoAlign === "left" ? "flex-start" : logoAlign === "right" ? "flex-end" : "center" }}>
+              <img src={logoConfig.url} alt="Logo" style={{ height: `${logoSize}px`, width: "auto", maxHeight: "40vh", background: "transparent" }} className="object-contain" />
+            </div>
+          )}
           {eyebrow.text && <p className="guest-eyebrow mb-2" style={eyebrow.style}>{eyebrow.text}</p>}
           {heading.text && <h1 className="guest-title mb-3" style={heading.style}>{heading.text}</h1>}
           {subheading.text && <p className="guest-subtitle mb-3" style={subheading.style}>{subheading.text}</p>}

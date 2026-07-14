@@ -10,7 +10,7 @@ export function formatDate(dateStr: string | null | undefined): string {
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-US", {
-    weekday: "short",
+    weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -30,51 +30,51 @@ export function formatDateShort(dateStr: string | null | undefined): string {
 
 export function formatTime12(timeStr: string | null | undefined): string {
   if (!timeStr) return "";
-  const result = to12Hour(timeStr);
-  return result;
+  return to12Hour(timeStr);
 }
 
-export function to12Hour(timeStr: string): string {
-  const cleaned = timeStr.trim();
-  const match = cleaned.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return cleaned;
-  let hours = parseInt(match[1], 10);
-  const minutes = match[2];
-  if (hours === 24) hours = 0;
-  const period = hours >= 12 ? "PM" : "AM";
-  const displayHours = hours % 12 === 0 ? 12 : hours % 12;
-  return `${displayHours}:${minutes} ${period}`;
+export function formatDateTime(dateStr: string | null | undefined, timeStr?: string | null): string {
+  const date = formatDate(dateStr);
+  const time = timeStr ? formatTime12(timeStr) : "";
+  return [date, time].filter(Boolean).join(" at ");
 }
 
-export function to24Hour(timeStr: string): string {
-  const cleaned = timeStr.trim().toUpperCase();
-  const match = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
-  if (!match) {
-    const simpleMatch = cleaned.match(/^(\d{1,2}):(\d{2})$/);
-    if (simpleMatch) return `${simpleMatch[1].padStart(2, "0")}:${simpleMatch[2]}`;
-    return cleaned;
+export function to12Hour(time: string): string {
+  if (!time) return "";
+  const [hStr, m] = time.split(":");
+  const h = parseInt(hStr, 10);
+  if (isNaN(h)) return time;
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${m ?? "00"} ${period}`;
+}
+
+export function to24Hour(time12: string): string {
+  if (!time12) return "";
+  const match = time12.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return time12;
+  let h = parseInt(match[1], 10);
+  const m = match[2];
+  const period = match[3].toUpperCase();
+  if (period === "PM" && h !== 12) h += 12;
+  if (period === "AM" && h === 12) h = 0;
+  return `${String(h).padStart(2, "0")}:${m}`;
+}
+
+export function roundTo5Min(time: string): string {
+  if (!time) return "";
+  const [hStr, mStr] = time.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (isNaN(h) || isNaN(m)) return time;
+  const rounded = Math.round(m / 5) * 5;
+  let newH = h;
+  let newM = rounded;
+  if (newM === 60) {
+    newM = 0;
+    newH = (h + 1) % 24;
   }
-  let hours = parseInt(match[1], 10);
-  const minutes = match[2];
-  const period = match[3];
-  if (period === "PM" && hours !== 12) hours += 12;
-  if (period === "AM" && hours === 12) hours = 0;
-  return `${String(hours).padStart(2, "0")}:${minutes}`;
-}
-
-export function roundTo5Min(timeStr: string): string {
-  const cleaned = timeStr.trim();
-  const match = cleaned.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return cleaned;
-  let hours = parseInt(match[1], 10);
-  let minutes = parseInt(match[2], 10);
-  minutes = Math.round(minutes / 5) * 5;
-  if (minutes === 60) {
-    minutes = 0;
-    hours += 1;
-  }
-  if (hours === 24) hours = 0;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
 }
 
 export function getCountdown(targetDate: string | null | undefined): {
@@ -82,22 +82,19 @@ export function getCountdown(targetDate: string | null | undefined): {
   hours: number;
   minutes: number;
   seconds: number;
-  isPast: boolean;
+  done: boolean;
 } {
-  if (!targetDate) {
-    return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
-  }
+  if (!targetDate) return { days: 0, hours: 0, minutes: 0, seconds: 0, done: false };
   const target = new Date(targetDate).getTime();
+  if (isNaN(target)) return { days: 0, hours: 0, minutes: 0, seconds: 0, done: false };
   const now = Date.now();
   const diff = target - now;
-  if (diff <= 0) {
-    return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
-  }
+  if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, done: true };
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
   const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
   const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-  return { days, hours, minutes, seconds, isPast: false };
+  return { days, hours, minutes, seconds, done: false };
 }
 
 export function isRsvpClosed(deadline: string | null | undefined): boolean {
@@ -107,31 +104,24 @@ export function isRsvpClosed(deadline: string | null | undefined): boolean {
   return Date.now() > d.getTime();
 }
 
+const ADJECTIVES = ["Happy", "Bright", "Lovely", "Charming", "Sweet", "Golden", "Joyful", "Radiant"];
+const NOUNS = ["Couple", "Guest", "Host", "Party", "Duo", "Pair", "Crew", "Family"];
+
 export function generateUsername(name: string): string {
-  return name
+  const base = name
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9\s]/g, "")
-    .replace(/\s+/g, ".")
-    .replace(/\.+/g, ".")
-    .replace(/^\.+|\.+$/g, "");
+    .replace(/\s+/g, "");
+  if (!base) return "";
+  const suffix = Math.floor(Math.random() * 1000)
+    .toString()
+    .padStart(3, "0");
+  return `${base}${suffix}`;
 }
 
 export function truncate(str: string, maxLen: number): string {
+  if (!str) return "";
   if (str.length <= maxLen) return str;
   return str.slice(0, maxLen - 1).trimEnd() + "…";
-}
-
-export function formatDateTime(dateStr: string | null | undefined): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
 }

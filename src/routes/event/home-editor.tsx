@@ -1,97 +1,137 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
+import { Button } from "../../components/ui/Button";
+import { RichTextEditor } from "../../components/ui/RichTextEditor";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
-import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui";
-import { RichTextEditor } from "../../components/ui/RichTextEditor";
+import { ImageUpload } from "../../components/ui/ImageUpload";
+import { uploadImage } from "../../lib/upload";
 
 interface HomeContent {
-  intro?: string;
-  body?: string;
-  outro?: string;
+  introHtml?: string;
+  storyHtml?: string;
+  detailsHtml?: string;
 }
 
 export function HomeEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const [content, setContent] = useState<HomeContent>(
-    (event.draft_content ?? {}) as HomeContent,
-  );
+  const existing = (event.draft_content ?? event.content ?? {}) as HomeContent;
+
+  const [introHtml, setIntroHtml] = useState(existing.introHtml ?? "");
+  const [storyHtml, setStoryHtml] = useState(existing.storyHtml ?? "");
+  const [detailsHtml, setDetailsHtml] = useState(existing.detailsHtml ?? "");
+  const [saved, setSaved] = useState(false);
+
+  const liveContent: HomeContent = {
+    introHtml,
+    storyHtml,
+    detailsHtml,
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("user_events")
-        .update({
-          draft_content: content as unknown as Json,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", eventId);
+        .update({ draft_content: liveContent as unknown as Json })
+        .eq("id", eventId)
+        .select("*")
+        .maybeSingle();
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  const editor = (
-    <div className="space-y-6">
-      <Card>
-        <h3 className="text-sm font-medium text-dash-text mb-4">Introduction</h3>
-        <RichTextEditor
-          value={content.intro ?? ""}
-          onChange={(html) => setContent((prev) => ({ ...prev, intro: html }))}
-          placeholder="Write a warm welcome message for your guests..."
-        />
-      </Card>
-
-      <Card>
-        <h3 className="text-sm font-medium text-dash-text mb-4">Main Content</h3>
-        <RichTextEditor
-          value={content.body ?? ""}
-          onChange={(html) => setContent((prev) => ({ ...prev, body: html }))}
-          placeholder="Share the details of your celebration..."
-        />
-      </Card>
-
-      <Card>
-        <h3 className="text-sm font-medium text-dash-text mb-4">Closing Message</h3>
-        <RichTextEditor
-          value={content.outro ?? ""}
-          onChange={(html) => setContent((prev) => ({ ...prev, outro: html }))}
-          placeholder="Add a closing note or additional information..."
-        />
-      </Card>
-
-      <div className="space-y-2">
-        {saveMutation.isError && (
-          <p className="text-sm text-dash-danger">
-            Error: {(saveMutation.error as Error)?.message}
-          </p>
-        )}
-        {saveMutation.isSuccess && (
-          <p className="text-sm text-green-600">Changes saved successfully!</p>
-        )}
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-          className="w-full"
-        >
-          Save Changes
-        </Button>
-      </div>
-    </div>
-  );
-
-  const preview = <HomePreview event={event} />;
+  const handleImageUpload = async (file: File): Promise<string | null> => {
+    return uploadImage(file, "home", eventId).then((r) => r?.url ?? null);
+  };
 
   return (
-    <div className="h-[calc(100vh-8rem)]">
-      <SplitEditor editor={editor} preview={preview} previewClassName="overflow-hidden" />
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-dash-text">Home Editor</h1>
+          <p className="mt-1 text-sm text-dash-muted">
+            Customise the home page content sections
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {saved && <span className="text-sm text-green-600">✓ Saved</span>}
+          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+            Save Changes
+          </Button>
+        </div>
+      </div>
+
+      <div className="h-[calc(100vh-220px)] min-h-[500px]">
+        <SplitEditor
+          editor={
+            <div className="space-y-6">
+              {/* Intro Section */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-dash-text">Intro Section</h3>
+                <RichTextEditor
+                  value={introHtml}
+                  onChange={setIntroHtml}
+                  placeholder="Write a warm welcome message for your guests…"
+                />
+              </div>
+
+              {/* Story Section */}
+              <div className="space-y-2 border-t border-dash-border pt-4">
+                <h3 className="text-sm font-semibold text-dash-text">Our Story Section</h3>
+                <RichTextEditor
+                  value={storyHtml}
+                  onChange={setStoryHtml}
+                  placeholder="Share your love story…"
+                />
+              </div>
+
+              {/* Details Section */}
+              <div className="space-y-2 border-t border-dash-border pt-4">
+                <h3 className="text-sm font-semibold text-dash-text">Event Details Section</h3>
+                <RichTextEditor
+                  value={detailsHtml}
+                  onChange={setDetailsHtml}
+                  placeholder="Add venue, dress code, and other details…"
+                />
+              </div>
+
+              {/* Cover Image */}
+              <div className="space-y-2 border-t border-dash-border pt-4">
+                <h3 className="text-sm font-semibold text-dash-text">Home Cover Image</h3>
+                <ImageUpload
+                  value={event.draft_cover_image ?? event.cover_image}
+                  onChange={async (url) => {
+                    const { error } = await supabase
+                      .from("user_events")
+                      .update({ draft_cover_image: url })
+                      .eq("id", eventId);
+                    if (error) console.error(error);
+                    queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+                  }}
+                  onUpload={handleImageUpload}
+                />
+              </div>
+            </div>
+          }
+          preview={
+            <HomePreview
+              event={event}
+              theme={event.draft_theme ?? event.theme}
+              coverImage={event.draft_cover_image ?? event.cover_image}
+            />
+          }
+        />
+      </div>
     </div>
   );
 }
