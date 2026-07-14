@@ -1,101 +1,81 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { FontOption } from "../../lib/theme";
 import { cn } from "../../lib/utils";
 
 interface FontSelectProps {
   label?: string;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (v: string) => void;
   options: FontOption[];
   placeholder?: string;
-  className?: string;
 }
 
-/**
- * Custom font-preview dropdown. Each option is rendered in its own font family
- * via `option.stack`, giving a live preview of the typeface.
- */
-export function FontSelect({
-  label,
-  value,
-  onChange,
-  options,
-  placeholder = "Select a font…",
-  className,
-}: FontSelectProps) {
+export function FontSelect({ label, value, onChange, options, placeholder = "Select font…" }: FontSelectProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const selected = options.find((opt) => opt.value === value);
+  const selected = options.find((o) => o.value === value);
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
+    function handleClick(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
-    if (open) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [open]);
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   return (
-    <div className={cn("w-full", className)} ref={containerRef}>
-      {label && (
-        <label className="mb-1.5 block text-sm font-medium text-dash-text">
-          {label}
-        </label>
-      )}
+    <div className="w-full" ref={containerRef}>
+      {label && <label className="block text-sm font-medium text-dash-text mb-1">{label}</label>}
       <div className="relative">
         <button
           type="button"
-          onClick={() => setOpen((prev) => !prev)}
+          onClick={() => setOpen((o) => !o)}
           className={cn(
-            "flex h-10 w-full items-center justify-between rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text transition-colors",
-            "hover:border-dash-primary focus:border-dash-primary focus:outline-none focus:ring-1 focus:ring-dash-primary"
+            "w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-left",
+            "flex items-center justify-between gap-2",
+            "focus:outline-none focus:ring-2 focus:ring-dash-primary/50 focus:border-dash-primary",
+            "transition-colors hover:border-dash-primary/50",
           )}
         >
           <span
-            className="truncate"
-            style={selected ? { fontFamily: selected.stack } : undefined}
+            style={{ fontFamily: selected?.stack }}
+            className="truncate text-dash-text"
           >
             {selected ? selected.label : <span className="text-dash-muted">{placeholder}</span>}
           </span>
           <svg
-            className={cn("h-4 w-4 shrink-0 text-dash-muted transition-transform", open && "rotate-180")}
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            aria-hidden="true"
+            className={cn("h-4 w-4 text-dash-muted shrink-0 transition-transform", open && "rotate-180")}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
           >
-            <path
-              fillRule="evenodd"
-              d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-              clipRule="evenodd"
-            />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         </button>
 
         {open && (
-          <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-dash-border bg-dash-surface shadow-lg scrollbar-thin">
-            {options.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => {
-                  onChange(opt.value);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center px-3 py-2 text-sm transition-colors hover:bg-dash-bg",
-                  opt.value === value ? "bg-dash-bg font-medium text-dash-primary" : "text-dash-text"
-                )}
-                style={{ fontFamily: opt.stack }}
-              >
-                {opt.label}
-              </button>
-            ))}
+          <div className="absolute z-50 mt-1 w-full rounded-md border border-dash-border bg-dash-surface shadow-lg overflow-hidden">
+            <ul className="max-h-64 overflow-y-auto py-1 scrollbar-thin">
+              {options.map((opt) => (
+                <li key={opt.value}>
+                  <button
+                    type="button"
+                    onClick={() => { onChange(opt.value); setOpen(false); }}
+                    className={cn(
+                      "w-full px-3 py-2 text-sm text-left hover:bg-dash-surface-alt transition-colors",
+                      value === opt.value && "bg-dash-surface-alt font-medium text-dash-primary",
+                    )}
+                    style={{ fontFamily: opt.stack }}
+                  >
+                    {opt.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>

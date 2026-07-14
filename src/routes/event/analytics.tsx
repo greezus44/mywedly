@@ -1,132 +1,165 @@
+import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type SharingEvent } from "../../lib/supabase";
-import { useEventContext } from "./event-layout";
-import { Card, Badge, LoadingSpinner, ErrorState, EmptyState } from "../../components/ui";
-import { formatDateTime } from "../../lib/utils";
+import { supabase, type UserEvent } from "../../lib/supabase";
+import { Card, Badge, LoadingSpinner } from "../../components/ui";
+import { formatDateShort } from "../../lib/utils";
 
 export function AnalyticsPage() {
-  const { eventId } = useEventContext();
+  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
 
-  const { data: events, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["sharing-events", eventId],
+  const { data: guestStats, isLoading: guestsLoading } = useQuery({
+    queryKey: ["analytics-guests", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_guests")
+        .select("id, rsvp_status, is_attending")
+        .eq("event_id", eventId);
+      if (error) throw error;
+      const guests = data ?? [];
+      const total = guests.length;
+      const attending = guests.filter((g) => g.rsvp_status === "attending" || g.is_attending === true).length;
+      const declined = guests.filter((g) => g.rsvp_status === "declined" || g.is_attending === false).length;
+      const pending = guests.filter((g) => !g.rsvp_status && g.is_attending === null).length;
+      return { total, attending, declined, pending };
+    },
+  });
+
+  const { data: wishCount, isLoading: wishesLoading } = useQuery({
+    queryKey: ["analytics-wishes", eventId],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("event_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("event_id", eventId);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
+  const { data: sharingEvents, isLoading: sharingLoading } = useQuery({
+    queryKey: ["analytics-sharing", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sharing_events")
-        .select("*")
-        .eq("wedding_id", eventId)
-        .order("created_at", { ascending: false });
+        .select("type, created_at")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: false })
+        .limit(50);
       if (error) throw error;
-      return data as SharingEvent[];
+      return data ?? [];
     },
-    enabled: !!eventId,
   });
 
-  const { data: stats } = useQuery({
-    queryKey: ["sharing-stats", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sharing_events")
-        .select("source, device_type")
-        .eq("wedding_id", eventId);
-      if (error) throw error;
-      return data as Pick<SharingEvent, "source" | "device_type">[];
+  const isLoading = guestsLoading || wishesLoading || sharingLoading;
+
+  const stats = [
+    {
+      label: "Total Guests",
+      value: guestStats?.total ?? "—",
+      icon: "👥",
+      variant: "default" as const,
     },
-    enabled: !!eventId,
-  });
-
-  const totalVisits = events?.length ?? 0;
-  const uniqueSources = new Set(stats?.map((s) => s.source ?? "unknown") ?? []).size;
-  const deviceCounts = (stats ?? []).reduce<Record<string, number>>((acc, s) => {
-    const device = s.device_type ?? "unknown";
-    acc[device] = (acc[device] ?? 0) + 1;
-    return acc;
-  }, {});
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-20">
-        <LoadingSpinner />
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <ErrorState
-        title="Failed to load analytics"
-        message={error instanceof Error ? error.message : "An unexpected error occurred."}
-        onRetry={() => refetch()}
-      />
-    );
-  }
+    {
+      label: "Attending",
+      value: guestStats?.attending ?? "—",
+      icon: "✅",
+      variant: "success" as const,
+    },
+    {
+      label: "Declined",
+      value: guestStats?.declined ?? "—",
+      icon: "❌",
+      variant: "danger" as const,
+    },
+    {
+      label: "Pending",
+      value: guestStats?.pending ?? "—",
+      icon: "⏳",
+      variant: "warning" as const,
+    },
+    {
+      label: "Wishes",
+      value: wishCount ?? "—",
+      icon: "💌",
+      variant: "default" as const,
+    },
+  ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-dash-text">Analytics</h2>
-        <p className="text-sm text-dash-muted">Track visits and engagement for your invitation.</p>
-      </div>
-
-      {/* Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <p className="text-sm text-dash-muted">Total Visits</p>
-          <p className="mt-1 text-3xl font-bold text-dash-text">{totalVisits}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-dash-muted">Unique Sources</p>
-          <p className="mt-1 text-3xl font-bold text-dash-text">{uniqueSources}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-dash-muted">Devices</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {Object.entries(deviceCounts).map(([device, count]) => (
-              <Badge key={device} variant="primary">
-                {device}: {count}
-              </Badge>
-            ))}
-            {Object.keys(deviceCounts).length === 0 && (
-              <span className="text-sm text-dash-muted">No data yet</span>
-            )}
-          </div>
-        </Card>
-      </div>
-
-      {/* Visit Log */}
-      <Card>
-        <h3 className="mb-4 text-sm font-semibold text-dash-text">Recent Visits</h3>
-        {!events || events.length === 0 ? (
-          <EmptyState
-            title="No visits yet"
-            description="Once you publish and share your invitation, visits will appear here."
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-dash-border text-dash-muted">
-                <tr>
-                  <th className="pb-2 pr-4 font-medium">Date</th>
-                  <th className="pb-2 pr-4 font-medium">Source</th>
-                  <th className="pb-2 pr-4 font-medium">Device</th>
-                  <th className="pb-2 font-medium">Event Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.slice(0, 50).map((evt) => (
-                  <tr key={evt.id} className="border-b border-dash-border/50">
-                    <td className="py-2 pr-4 text-dash-text">{formatDateTime(evt.created_at)}</td>
-                    <td className="py-2 pr-4">
-                      <Badge variant="default">{evt.source ?? "unknown"}</Badge>
-                    </td>
-                    <td className="py-2 pr-4 text-dash-muted">{evt.device_type ?? "—"}</td>
-                    <td className="py-2 text-dash-muted">{evt.event_type ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+    <div className="max-w-3xl mx-auto p-6 space-y-8">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-dash-text">Analytics</h2>
+        {event.is_published && (
+          <Badge variant="success">Live</Badge>
         )}
-      </Card>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <LoadingSpinner />
+        </div>
+      ) : (
+        <>
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            {stats.map((s) => (
+              <Card key={s.label} className="text-center">
+                <div className="text-2xl mb-1">{s.icon}</div>
+                <div className="text-2xl font-bold text-dash-text">{s.value}</div>
+                <div className="text-xs text-dash-muted mt-1">{s.label}</div>
+              </Card>
+            ))}
+          </div>
+
+          {/* RSVP breakdown */}
+          {guestStats && guestStats.total > 0 && (
+            <Card>
+              <h3 className="font-semibold text-dash-text mb-3">RSVP Breakdown</h3>
+              <div className="space-y-2">
+                {[
+                  { label: "Attending", value: guestStats.attending, colour: "bg-green-500" },
+                  { label: "Declined", value: guestStats.declined, colour: "bg-red-400" },
+                  { label: "Pending", value: guestStats.pending, colour: "bg-yellow-400" },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-center gap-3">
+                    <span className="w-20 text-sm text-dash-muted">{row.label}</span>
+                    <div className="flex-1 h-2 rounded-full bg-dash-border overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${row.colour} transition-all`}
+                        style={{ width: `${guestStats.total > 0 ? Math.round((row.value / guestStats.total) * 100) : 0}%` }}
+                      />
+                    </div>
+                    <span className="w-8 text-right text-sm text-dash-text">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Sharing events */}
+          {sharingEvents && sharingEvents.length > 0 && (
+            <Card>
+              <h3 className="font-semibold text-dash-text mb-3">Recent Activity</h3>
+              <ul className="space-y-2">
+                {sharingEvents.slice(0, 10).map((e: { type: string; created_at: string }, i) => (
+                  <li key={i} className="flex items-center justify-between text-sm">
+                    <span className="text-dash-text capitalize">{e.type.replace(/_/g, " ")}</span>
+                    <span className="text-dash-muted">{formatDateShort(e.created_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
+          {(!sharingEvents || sharingEvents.length === 0) && (
+            <Card>
+              <p className="text-sm text-dash-muted text-center py-4">
+                No activity recorded yet. Publish your event and share it with guests.
+              </p>
+            </Card>
+          )}
+        </>
+      )}
     </div>
   );
 }

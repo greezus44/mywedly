@@ -1,29 +1,23 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
-import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { RUSTY_THEME } from "../../lib/theme";
-import type { Json } from "../../lib/supabase";
+import { useGuestAuth } from "../../lib/guest-auth";
+import { LoadingSpinner } from "../../components/ui";
 
-interface LoginConfig {
-  heading?: unknown;
-  subheading?: unknown;
-  placeholder?: string;
-  buttonLabel?: string;
-}
-
-export default function RustySignIn() {
+export default function RustySignInPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { guest, eventId, signIn } = useGuestAuth();
+  const { signIn } = useGuestAuth();
+
   const [username, setUsername] = useState("");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   const { data: event, isLoading } = useQuery({
-    queryKey: ["published-event", slug],
+    queryKey: ["rusty-event", slug],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
@@ -37,93 +31,81 @@ export default function RustySignIn() {
     enabled: !!slug,
   });
 
-  useEffect(() => {
-    if (event && guest && eventId === event.id) {
-      navigate(`/r/${slug}/home`, { replace: true });
-    }
-  }, [event, guest, eventId, slug, navigate]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!event) return;
+    if (!event || !username.trim()) return;
     setError(null);
-    setSubmitting(true);
+    setLoading(true);
     const result = await signIn(event.id, username.trim());
-    setSubmitting(false);
-    if (result.error) setError(result.error);
-    else navigate(`/r/${slug}/home`, { replace: true });
-  };
+    setLoading(false);
+    if (result.error) {
+      setError(result.error);
+    } else {
+      navigate(`/r/${slug}/home`);
+    }
+  }
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: RUSTY_THEME.colors.bg }}>
+        <LoadingSpinner />
       </div>
     );
   }
 
-  if (!event) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
-        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
-        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
-      </div>
-    );
-  }
-
-  const loginConfig = (event.login_config ?? {}) as LoginConfig;
-  const placeholder = loginConfig.placeholder || "Enter your username";
-  const buttonLabel = loginConfig.buttonLabel || "Sign In";
-  const headingText =
-    typeof loginConfig.heading === "string"
-      ? loginConfig.heading
-      : (loginConfig.heading as { text?: string } | null)?.text || event.name || "Welcome";
-  const subheadingText =
-    typeof loginConfig.subheading === "string"
-      ? loginConfig.subheading
-      : (loginConfig.subheading as { text?: string } | null)?.text || "Please sign in to view your invitation";
+  const loginConfig = (event?.login_config ?? {}) as Record<string, unknown>;
+  const headingRaw = loginConfig.heading;
+  const headingText = typeof headingRaw === "object" && headingRaw !== null
+    ? ((headingRaw as Record<string, unknown>).text as string) ?? "Welcome"
+    : typeof headingRaw === "string" ? headingRaw : "Welcome";
+  const placeholder = (loginConfig.placeholder as string) ?? "Enter your username";
+  const buttonLabel = (loginConfig.buttonLabel as string) ?? "Sign In";
 
   return (
-    <EventThemeProvider theme={RUSTY_THEME as unknown as Json}>
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
-        <div className="w-full max-w-md">
-          <div className="mb-8 text-center">
-            <h1 className="guest-title mb-2">{headingText}</h1>
-            <p className="guest-subtitle mx-auto">{subheadingText}</p>
-          </div>
-          <form onSubmit={handleSubmit} className="event-card space-y-4">
-            <div>
-              <label className="mb-1.5 block text-center text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                {placeholder}
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="event-input"
-                placeholder={placeholder}
-                required
-                autoFocus
-                style={{ textAlign: "center" }}
-              />
-            </div>
-            {error && (
-              <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>
-            )}
+    <EventThemeProvider theme={RUSTY_THEME}>
+      <div
+        className="flex min-h-screen flex-col items-center justify-center px-6 py-12"
+        style={{ backgroundColor: RUSTY_THEME.colors.bg }}
+      >
+        <div className="w-full max-w-sm text-center">
+          <h1
+            className="text-3xl font-bold mb-2"
+            style={{ fontFamily: RUSTY_THEME.fonts.heading, color: RUSTY_THEME.colors.heading }}
+          >
+            {headingText}
+          </h1>
+
+          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder={placeholder}
+              required
+              className="w-full rounded px-4 py-3 text-center text-base focus:outline-none"
+              style={{
+                border: `1px solid ${RUSTY_THEME.colors.border}`,
+                backgroundColor: RUSTY_THEME.colors.surface,
+                color: RUSTY_THEME.colors.text,
+                borderRadius: RUSTY_THEME.radius,
+              }}
+            />
+
+            {error && <p className="text-sm text-red-500">{error}</p>}
+
             <button
               type="submit"
-              disabled={submitting}
-              className="event-btn-primary w-full"
-              style={{ opacity: submitting ? 0.6 : 1 }}
+              disabled={loading || !username.trim()}
+              className="w-full py-3 text-base font-semibold transition-colors disabled:opacity-50"
+              style={{
+                backgroundColor: RUSTY_THEME.colors.primary,
+                color: RUSTY_THEME.colors.primaryFg,
+                borderRadius: RUSTY_THEME.radius,
+              }}
             >
-              {submitting ? "Signing in..." : buttonLabel}
+              {loading ? "Signing in…" : buttonLabel}
             </button>
           </form>
-          <div className="mt-6 text-center">
-            <Link to={`/r/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>
-              Back to cover
-            </Link>
-          </div>
         </div>
       </div>
     </EventThemeProvider>

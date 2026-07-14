@@ -1,120 +1,126 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type EventMessage } from "../../lib/supabase";
-import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { useGuestOutletContext } from "./guest-layout";
+import { LoadingSpinner } from "../../components/ui";
+import { formatDateTime } from "../../lib/utils";
 
-export default function GuestWishes() {
+interface WishesConfig {
+  heading?: string;
+  subheading?: string;
+  placeholder?: string;
+  submitLabel?: string;
+}
+
+function getWishesConfig(content: unknown): WishesConfig {
+  if (!content || typeof content !== "object" || Array.isArray(content)) return {};
+  return ((content as Record<string, unknown>).wishes ?? {}) as WishesConfig;
+}
+
+export default function GuestWishesPage() {
   const { event } = useGuestOutletContext();
   const { guest } = useGuestAuth();
   const queryClient = useQueryClient();
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
-  const { data: messages, isLoading, isError, error: queryError } = useQuery({
-    queryKey: ["event-messages", event.id],
+  const cfg = getWishesConfig(event.content);
+  const heading = cfg.heading ?? "Wishes & Messages";
+  const subheading = cfg.subheading ?? "Leave a heartfelt message for the couple";
+  const placeholder = cfg.placeholder ?? "Write your message here…";
+  const submitLabel = cfg.submitLabel ?? "Send wishes";
+
+  const [message, setMessage] = useState("");
+
+  const { data: wishes, isLoading } = useQuery({
+    queryKey: ["wishes", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_messages")
-        .select("*")
+        .select("*, event_guests(full_name, username)")
         .eq("event_id", event.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as EventMessage[];
+      return (data ?? []) as (EventMessage & { event_guests: { full_name: string; username: string } | null })[];
     },
-    enabled: !!event.id,
   });
 
   const postMutation = useMutation({
     mutationFn: async () => {
-      const trimmed = message.trim();
-      if (!trimmed) throw new Error("Please write a message.");
-      if (!guest) throw new Error("Please sign in to post a wish.");
+      if (!guest || !message.trim()) return;
       const { error } = await supabase.from("event_messages").insert({
         event_id: event.id,
-        guest_name: guest.name,
-        message: trimmed,
+        guest_id: guest.id,
+        message: message.trim(),
       });
       if (error) throw error;
     },
     onSuccess: () => {
       setMessage("");
-      setError(null);
-      queryClient.invalidateQueries({ queryKey: ["event-messages", event.id] });
+      queryClient.invalidateQueries({ queryKey: ["wishes", event.id] });
     },
-    onError: (err) => setError(err instanceof Error ? err.message : "Could not post your wish."),
   });
 
-  function formatDateShort(iso: string): string {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-  }
-
   return (
-    <section className="guest-section">
-      <div className="mx-auto max-w-2xl">
-        <div className="mb-8 text-center">
-          <h1 className="guest-title">Wishes</h1>
-          <p className="guest-subtitle mx-auto">Share your well wishes with us.</p>
+    <div className="min-h-screen px-6 py-12" style={{ backgroundColor: "var(--event-bg)" }}>
+      <div className="mx-auto max-w-lg">
+        <div className="text-center mb-8">
+          <h1 className="guest-title mb-2">{heading}</h1>
+          {subheading && <p style={{ color: "var(--event-muted)" }}>{subheading}</p>}
         </div>
 
-        {/* Compose */}
-        <div className="event-card mb-8 space-y-3">
-          <textarea
-            rows={4}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Write your wish…"
-            className="event-input"
-            maxLength={500}
-          />
-          {error && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
-          <div className="flex items-center justify-between">
-            <span className="text-xs" style={{ color: "var(--event-muted)" }}>{message.length}/500</span>
+        {/* Post form */}
+        {guest && (
+          <div className="event-card mb-8">
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder={placeholder}
+              rows={4}
+              className="event-input w-full resize-none mb-3"
+            />
+            {postMutation.isError && (
+              <p className="text-sm text-red-500 mb-2">{(postMutation.error as Error)?.message}</p>
+            )}
             <button
               type="button"
               onClick={() => postMutation.mutate()}
               disabled={postMutation.isPending || !message.trim()}
-              className="event-btn-primary"
-              style={{ opacity: postMutation.isPending || !message.trim() ? 0.6 : 1 }}
+              className="event-btn-primary w-full"
             >
-              {postMutation.isPending ? "Posting…" : "Post Wish"}
+              {postMutation.isPending ? "Sending…" : submitLabel}
             </button>
           </div>
-        </div>
+        )}
 
-        {/* List */}
+        {/* Wishes list */}
         {isLoading ? (
-          <div className="flex justify-center py-12">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--event-primary)] border-t-transparent" />
-          </div>
-        ) : isError ? (
-          <div className="event-card text-center">
-            <p style={{ color: "var(--event-muted)" }}>{queryError instanceof Error ? queryError.message : "Could not load wishes."}</p>
-          </div>
-        ) : !messages || messages.length === 0 ? (
-          <div className="event-card text-center">
-            <p className="guest-subtitle mx-auto">No wishes yet. Be the first to leave one!</p>
-          </div>
+          <div className="flex justify-center py-8"><LoadingSpinner /></div>
+        ) : !wishes || wishes.length === 0 ? (
+          <p className="text-center" style={{ color: "var(--event-muted)" }}>
+            No messages yet. Be the first to leave a wish!
+          </p>
         ) : (
           <div className="space-y-4">
-            {messages.map((m) => (
-              <div key={m.id} className="event-card animate-fadeIn">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold" style={{ color: "var(--event-heading)" }}>
-                    {m.guest_name || "Anonymous"}
+            {wishes.map((w) => (
+              <div
+                key={w.id}
+                className="rounded-lg border px-4 py-3"
+                style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <span className="font-medium text-sm" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>
+                    {w.event_guests?.full_name ?? "Guest"}
                   </span>
                   <span className="text-xs" style={{ color: "var(--event-muted)" }}>
-                    {formatDateShort(m.created_at)}
+                    {formatDateTime(w.created_at)}
                   </span>
                 </div>
-                <p className="whitespace-pre-wrap" style={{ color: "var(--event-text)" }}>{m.message}</p>
+                <p className="text-sm" style={{ color: "var(--event-text)" }}>{w.message}</p>
               </div>
             ))}
           </div>
         )}
       </div>
-    </section>
+    </div>
   );
 }

@@ -1,244 +1,197 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Json } from "../../lib/supabase";
-import { useEventContext } from "./event-layout";
-import { SplitEditor } from "../../components/preview/SplitEditor";
-import { HomePreview, type EventContent } from "../../components/preview/PreviewRenderers";
-import { EventThemeProvider } from "../../lib/theme-context";
-import { TypographyControls } from "../../components/ui/TypographyControls";
-import { RichTextEditor } from "../../components/ui/RichTextEditor";
-import { ImageUpload } from "../../components/ui/ImageUpload";
+import { useOutletContext } from "react-router-dom";
+import { supabase, type UserEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input, RangeInput, FormField, LoadingSpinner } from "../../components/ui";
-import { extractPathFromUrl, removeImage } from "../../lib/upload";
+import { ImageUpload } from "../../components/ui/ImageUpload";
+import { RichTextEditor } from "../../components/ui/RichTextEditor";
+import { TypographyControls } from "../../components/ui/TypographyControls";
+import { SplitEditor } from "../../components/preview/SplitEditor";
+import { HomePreview, type EventContent, type HomeLogo, type HomeSection } from "../../components/preview/PreviewRenderers";
 import type { TypographyStyle } from "../../lib/typography";
 
-interface HomeSection {
-  heading: TypographyStyle;
-  body: string;
-}
+interface EventContextValue { event: UserEvent; eventId: string; }
 
-interface HomeContent {
-  logo: {
-    url: string | null;
-    size: "Small" | "Medium" | "Large";
-    marginTop: number;
-    marginBottom: number;
-  } | null;
-  sections: HomeSection[];
-}
+const LOGO_SIZES: { label: string; value: number }[] = [
+  { label: "Small", value: 80 },
+  { label: "Medium", value: 140 },
+  { label: "Large", value: 200 },
+];
 
-const LOGO_SIZES: Record<"Small" | "Medium" | "Large", number> = {
-  Small: 80,
-  Medium: 140,
-  Large: 200,
-};
-
-const DEFAULT_SECTION: HomeSection = {
-  heading: { text: "", fontFamily: "Georgia, serif", fontSize: 28, fontWeight: 700, color: "#78350f", align: "center" },
-  body: "",
-};
-
-function parseContent(raw: Json | null | undefined): HomeContent {
-  const obj = (raw ?? {}) as Partial<HomeContent>;
+function initContent(raw: unknown): EventContent {
+  const obj = (raw ?? {}) as Record<string, unknown>;
+  const draftSections = (obj.sections as HomeSection[] | undefined);
   return {
-    logo: (obj.logo as HomeContent["logo"]) ?? null,
-    sections: Array.isArray(obj.sections) ? (obj.sections as HomeSection[]) : [],
+    logo: (obj.logo as HomeLogo | undefined),
+    sections: draftSections ?? [],
   };
 }
 
 export function HomeEditor() {
-  const { event, eventId } = useEventContext();
+  const { event, eventId } = useOutletContext<EventContextValue>();
   const queryClient = useQueryClient();
 
-  const [content, setContent] = useState<HomeContent>(() => parseContent(event.draft_content ?? event.content));
-  const [userId, setUserId] = useState<string | null>(null);
-  const [savedMsg, setSavedMsg] = useState(false);
+  // FIX #1: initialise from draft_content (the working copy), NOT content (published)
+  const [content, setContent] = useState<EventContent>(() => initContent(event.draft_content ?? event.content));
 
-  useEffect(() => {
-    let mounted = true;
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (mounted) setUserId(user?.id ?? null);
-    });
-    return () => { mounted = false; };
+  const update = useCallback((patch: Partial<EventContent>) => {
+    setContent((prev) => ({ ...prev, ...patch }));
   }, []);
 
-  function update<K extends keyof HomeContent>(key: K, val: HomeContent[K]) {
-    setContent((prev) => ({ ...prev, [key]: val }));
-  }
+  const setLogo = useCallback((patch: Partial<HomeLogo>) => {
+    setContent((prev) => ({ ...prev, logo: { ...(prev.logo ?? {}), ...patch } as HomeLogo }));
+  }, []);
 
-  function updateLogo<K extends keyof NonNullable<HomeContent["logo"]>>(key: K, val: NonNullable<HomeContent["logo"]>[K]) {
+  const setSection = useCallback((index: number, patch: Partial<HomeSection>) => {
+    setContent((prev) => {
+      const sections = [...(prev.sections ?? [])];
+      sections[index] = { ...sections[index], ...patch };
+      return { ...prev, sections };
+    });
+  }, []);
+
+  const addSection = useCallback(() => {
     setContent((prev) => ({
       ...prev,
-      logo: { enabled: true, ...(prev.logo ?? { url: null, size: "Medium" as const, marginTop: 0, marginBottom: 32 }), [key]: val },
+      sections: [...(prev.sections ?? []), { heading: {}, body: "" }],
     }));
-  }
+  }, []);
 
-  function updateSection(idx: number, patch: Partial<HomeSection>) {
-    setContent((prev) => ({
-      ...prev,
-      sections: prev.sections.map((s, i) => (i === idx ? { ...s, ...patch } : s)),
-    }));
-  }
-
-  function addSection() {
-    setContent((prev) => ({ ...prev, sections: [...prev.sections, { ...DEFAULT_SECTION }] }));
-  }
-
-  function removeSection(idx: number) {
-    setContent((prev) => ({ ...prev, sections: prev.sections.filter((_, i) => i !== idx) }));
-  }
+  const removeSection = useCallback((index: number) => {
+    setContent((prev) => {
+      const sections = [...(prev.sections ?? [])];
+      sections.splice(index, 1);
+      return { ...prev, sections };
+    });
+  }, []);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_content: content as unknown as Json })
+        .update({ draft_content: content as unknown as Record<string, unknown> })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSavedMsg(true);
-      setTimeout(() => setSavedMsg(false), 2000);
     },
   });
 
-  const handleLogoRemove = async () => {
-    if (content.logo?.url) {
-      const path = extractPathFromUrl(content.logo.url);
-      if (path) await removeImage(path);
-    }
-    update("logo", null);
-  };
-
-  // Build EventContent for preview
-  const previewContent = {
-    logo: content.logo
-      ? { enabled: true, src: content.logo.url ?? undefined, width: LOGO_SIZES[content.logo.size], alt: "Logo" }
-      : undefined,
-    sections: content.sections.map((s) => ({
-      id: String(Math.random()),
-      title: s.heading,
-      body: s.body,
-    })),
-  } as unknown as EventContent;
-
-  return (
-    <div className="space-y-4">
+  const editor = (
+    <div className="space-y-6 p-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-dash-text">Home Editor</h2>
-          <p className="text-sm text-dash-muted">Build the home page your guests land on.</p>
-        </div>
-        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-          {savedMsg ? "Saved!" : "Save Changes"}
+        <h2 className="text-lg font-semibold text-dash-text">Home Page</h2>
+        <Button size="sm" onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+          Save
         </Button>
       </div>
 
       {saveMutation.isError && (
         <p className="text-sm text-dash-danger">
-          {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save"}
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
         </p>
       )}
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-green-600">Saved successfully</p>
+      )}
 
-      <SplitEditor
-        editorRatio={5}
-        editor={
-          <div className="space-y-6">
-            {/* Home Page Logo Section */}
-            <div className="rounded-lg border border-dash-border p-4">
-              <h3 className="mb-3 text-sm font-semibold text-dash-text">Home Page Logo</h3>
-              <ImageUpload
-                userId={userId ?? ""}
-                value={content.logo?.url ?? undefined}
-                onChange={(url) => updateLogo("url", url)}
-                onRemove={handleLogoRemove}
-                label="Logo Image"
-                aspectRatio="square"
-              />
-              {content.logo?.url && (
-                <div className="mt-4 space-y-3">
-                  <FormField label="Logo Size">
-                    <div className="flex gap-2">
-                      {(["Small", "Medium", "Large"] as const).map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => updateLogo("size", s)}
-                          className={`flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
-                            content.logo?.size === s
-                              ? "border-dash-primary bg-dash-primary text-dash-primary-fg"
-                              : "border-dash-border bg-dash-surface text-dash-text hover:bg-dash-bg"
-                          }`}
-                        >
-                          {s} ({LOGO_SIZES[s]}px)
-                        </button>
-                      ))}
-                    </div>
-                  </FormField>
-                  <RangeInput
-                    label="Margin Top"
-                    min={0}
-                    max={80}
-                    step={4}
-                    unit="px"
-                    value={content.logo?.marginTop ?? 0}
-                    onChange={(e) => updateLogo("marginTop", parseInt(e.target.value, 10))}
-                  />
-                  <RangeInput
-                    label="Margin Bottom"
-                    min={0}
-                    max={80}
-                    step={4}
-                    unit="px"
-                    value={content.logo?.marginBottom ?? 32}
-                    onChange={(e) => updateLogo("marginBottom", parseInt(e.target.value, 10))}
-                  />
-                  <Button variant="danger" size="sm" onClick={handleLogoRemove}>
-                    Remove Logo
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            {/* Sections */}
-            {content.sections.map((section, idx) => (
-              <div key={idx} className="rounded-lg border border-dash-border p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-dash-text">Section {idx + 1}</h3>
-                  <Button variant="ghost" size="sm" onClick={() => removeSection(idx)}>Remove</Button>
-                </div>
-                <div className="space-y-4">
-                  <TypographyControls
-                    label="Heading"
-                    value={section.heading}
-                    onChange={(v) => updateSection(idx, { heading: v })}
-                    showText
-                  />
-                  <FormField label="Body">
-                    <RichTextEditor
-                      value={section.body}
-                      onChange={(html) => updateSection(idx, { body: html })}
-                      placeholder="Write your section content…"
-                    />
-                  </FormField>
-                </div>
+      {/* Logo Section */}
+      <div className="rounded-lg border border-dash-border p-4">
+        <h3 className="mb-3 text-sm font-semibold text-dash-text">Logo / Image</h3>
+        <ImageUpload
+          value={content.logo?.url ?? null}
+          onChange={(url) => setLogo({ url: url ?? undefined })}
+          label="Upload Logo"
+        />
+        {content.logo?.url && (
+          <>
+            <div className="mt-3">
+              <label className="mb-1 block text-xs font-medium text-dash-muted">Size</label>
+              <div className="flex gap-2">
+                {LOGO_SIZES.map((s) => (
+                  <button
+                    key={s.value}
+                    onClick={() => setLogo({ size: s.value })}
+                    className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
+                      (content.logo?.size ?? 140) === s.value
+                        ? "bg-dash-primary text-dash-primary-fg"
+                        : "bg-dash-bg text-dash-muted hover:text-dash-text"
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
               </div>
-            ))}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-dash-muted">Margin Top (px)</label>
+                <input
+                  type="number"
+                  value={content.logo?.marginTop ?? 0}
+                  onChange={(e) => setLogo({ marginTop: Number(e.target.value) })}
+                  className="w-full rounded border border-dash-border bg-dash-surface px-2 py-1 text-sm text-dash-text focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-dash-muted">Margin Bottom (px)</label>
+                <input
+                  type="number"
+                  value={content.logo?.marginBottom ?? 16}
+                  onChange={(e) => setLogo({ marginBottom: Number(e.target.value) })}
+                  className="w-full rounded border border-dash-border bg-dash-surface px-2 py-1 text-sm text-dash-text focus:outline-none"
+                />
+              </div>
+            </div>
+            <button
+              onClick={() => update({ logo: undefined })}
+              className="mt-2 text-xs text-dash-danger hover:underline"
+            >
+              Remove Logo
+            </button>
+          </>
+        )}
+      </div>
 
-            <Button variant="secondary" onClick={addSection} className="w-full">
-              + Add Section
-            </Button>
+      {/* Content Sections */}
+      {(content.sections ?? []).map((section, i) => (
+        <div key={i} className="rounded-lg border border-dash-border p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-dash-text">Section {i + 1}</h3>
+            <button onClick={() => removeSection(i)} className="text-xs text-dash-danger hover:underline">Remove</button>
           </div>
-        }
-        preview={
-          <EventThemeProvider theme={event.draft_theme ?? event.theme}>
-            <HomePreview content={previewContent} />
-          </EventThemeProvider>
-        }
-        previewHeader={<span className="text-sm font-medium text-dash-text">Live Preview</span>}
-      />
+          <div className="mb-3">
+            <label className="mb-1 block text-xs font-medium text-dash-muted">Heading</label>
+            {/* FIX #1: heading stored as TypographyStyle, text field is the actual content */}
+            <TypographyControls
+              label="Heading Style"
+              value={(section.heading as TypographyStyle) ?? {}}
+              onChange={(v) => setSection(i, { heading: v })}
+              showText
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-dash-muted">Body Text</label>
+            {/* FIX #2: RichTextEditor produces HTML with inline styles for font/color/alignment */}
+            <RichTextEditor
+              value={section.body ?? ""}
+              onChange={(html) => setSection(i, { body: html })}
+            />
+          </div>
+        </div>
+      ))}
+
+      <Button variant="secondary" size="sm" onClick={addSection}>+ Add Section</Button>
     </div>
   );
+
+  // FIX #1: preview receives live `content` state — no stale event data, no default fallbacks
+  const preview = (
+    <div className="event-themed h-full overflow-y-auto">
+      <HomePreview content={content} />
+    </div>
+  );
+
+  return <SplitEditor editor={editor} preview={preview} />;
 }

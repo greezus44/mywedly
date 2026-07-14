@@ -1,18 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, NavLink, Outlet, Link } from "react-router-dom";
+import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { RUSTY_THEME } from "../../lib/theme";
-import type { Json } from "../../lib/supabase";
-import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
+import { resolveGuestInvitations, getInvitedSubEventIds, type ResolveResult } from "../../lib/invitations";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { LoadingSpinner } from "../../components/ui";
 
-// Re-export the outlet context hook so child routes import from here.
+export type { GuestOutletContext } from "./guest-layout";
 export { useGuestOutletContext } from "./guest-layout";
-import { useOutletContext } from "react-router-dom";
-import type { GuestOutletContext } from "./guest-layout";
 
 export default function RustyLayout() {
   const { slug } = useParams<{ slug: string }>();
@@ -54,7 +52,7 @@ export default function RustyLayout() {
 
   const { data: invitations } = useQuery({
     queryKey: ["guest-invitations", guest?.id, event?.id],
-    queryFn: async () => {
+    queryFn: async (): Promise<ResolveResult> => {
       if (!guest || !event) return { invitations: [], error: null };
       return resolveGuestInvitations(supabase, guest.id, event.id);
     },
@@ -63,7 +61,6 @@ export default function RustyLayout() {
 
   const invitedSubEventIds = invitations ? getInvitedSubEventIds(invitations) : [];
 
-  // Redirect to rustic sign-in when not authenticated.
   useEffect(() => {
     if (!authLoading && !guest && event) {
       navigate(`/r/${slug}/signin`, { replace: true });
@@ -73,17 +70,13 @@ export default function RustyLayout() {
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   useEffect(() => {
-    if (menuOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
+    document.body.style.overflow = menuOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [menuOpen]);
 
   if (isLoading || authLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: RUSTY_THEME.colors.bg }}>
         <LoadingSpinner />
       </div>
     );
@@ -91,55 +84,46 @@ export default function RustyLayout() {
 
   if (isError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
-        <h1 className="text-2xl font-bold text-dash-text">Something went wrong</h1>
-        <p className="text-dash-muted">{error instanceof Error ? error.message : "Please try again later."}</p>
-        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center" style={{ backgroundColor: RUSTY_THEME.colors.bg }}>
+        <h1 className="text-2xl font-bold" style={{ color: RUSTY_THEME.colors.heading }}>Something went wrong</h1>
+        <p style={{ color: RUSTY_THEME.colors.muted }}>{error instanceof Error ? error.message : "Please try again later."}</p>
+        <Link to="/" style={{ color: RUSTY_THEME.colors.primary }}>Return home</Link>
       </div>
     );
   }
 
   if (!event) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
-        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
-        <p className="text-dash-muted">This invitation website could not be found or is no longer available.</p>
-        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center" style={{ backgroundColor: RUSTY_THEME.colors.bg }}>
+        <h1 className="text-2xl font-bold" style={{ color: RUSTY_THEME.colors.heading }}>Invitation Not Found</h1>
+        <p style={{ color: RUSTY_THEME.colors.muted }}>This invitation could not be found.</p>
+        <Link to="/" style={{ color: RUSTY_THEME.colors.primary }}>Return home</Link>
       </div>
     );
   }
 
-  if (!guest || eventId !== event.id) {
-    return null;
-  }
+  if (!guest || eventId !== event.id) return null;
 
   const navLinks = [
     { label: "Home", to: `/r/${slug}/home` },
     ...(invitedSubEventIds.length > 0 ? [{ label: "RSVP", to: `/r/${slug}/rsvp` }] : []),
     { label: "Wishes", to: `/r/${slug}/wishes` },
-    { label: "Contact", to: `/r/${slug}/contact` },
     ...(customPages ?? []).map((p) => ({ label: p.title, to: `/r/${slug}/p/${p.slug}` })),
   ];
 
   return (
-    <EventThemeProvider theme={RUSTY_THEME as unknown as Json}>
-      {/* Floating hamburger button */}
+    <EventThemeProvider theme={RUSTY_THEME}>
       <button
         onClick={() => setMenuOpen(true)}
         aria-label="Open navigation menu"
-        className="fixed left-4 top-4 z-40 flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-all hover:scale-105"
-        style={{
-          backgroundColor: "var(--event-surface)",
-          color: "var(--event-text)",
-          border: "1px solid var(--event-border)",
-        }}
+        className="fixed left-4 top-4 z-40 flex h-8 w-8 items-center justify-center transition-all hover:scale-105"
+        style={{ color: "var(--event-accent)" }}
       >
-        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
 
-      {/* Full-screen navigation overlay */}
       {menuOpen && (
         <div className="fixed inset-0 z-50 animate-fadeIn">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeMenu} />
@@ -169,9 +153,7 @@ export default function RustyLayout() {
                   to={link.to}
                   onClick={closeMenu}
                   className={({ isActive }) =>
-                    `rounded-lg px-4 py-3 text-base font-medium transition-colors ${
-                      isActive ? "opacity-100" : "opacity-70 hover:opacity-100"
-                    }`
+                    `rounded-lg px-4 py-3 text-base font-medium transition-colors ${isActive ? "opacity-100" : "opacity-70 hover:opacity-100"}`
                   }
                   style={({ isActive }) => ({
                     color: isActive ? "var(--event-primary)" : "var(--event-text)",
@@ -186,8 +168,7 @@ export default function RustyLayout() {
         </div>
       )}
 
-      {/* Page content */}
-      <Outlet context={{ event, slug: slug!, theme: event.theme, invitedSubEventIds } satisfies GuestOutletContext} />
+      <Outlet context={{ event, slug: slug!, theme: RUSTY_THEME, invitedSubEventIds }} />
     </EventThemeProvider>
   );
 }

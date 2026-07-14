@@ -1,21 +1,18 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate, NavLink, Outlet, Link } from "react-router-dom";
+import { useState } from "react";
+import { useParams, NavLink, Outlet, Link } from "react-router-dom";
+import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { LoadingSpinner, ErrorState, Modal, Input } from "../../components/ui";
+import { LoadingSpinner, ErrorState, Modal } from "../../components/ui";
 
-interface EventContextValue {
-  event: UserEvent;
-  eventId: string;
-}
+interface EventContextValue { event: UserEvent; eventId: string; }
 
 export function useEventContext(): EventContextValue {
   return useOutletContext<EventContextValue>();
 }
 
-import { useOutletContext } from "react-router-dom";
-
+// FIX #6: "Wishes" tab added to dashboard navigation
 const navTabs = [
   { label: "Cover", to: "" },
   { label: "Login", to: "login" },
@@ -26,6 +23,7 @@ const navTabs = [
   { label: "RSVP", to: "rsvp" },
   { label: "Schedule", to: "timeline" },
   { label: "Pages", to: "pages" },
+  { label: "Wishes", to: "wishes" },
   { label: "Theme", to: "theme" },
   { label: "Share", to: "sharing" },
   { label: "Analytics", to: "analytics" },
@@ -34,7 +32,6 @@ const navTabs = [
 
 export function EventLayout() {
   const { eventId } = useParams<{ eventId: string }>();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showPublish, setShowPublish] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -43,10 +40,7 @@ export function EventLayout() {
     queryKey: ["event", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("id", eventId)
-        .maybeSingle();
+        .from("user_events").select("*").eq("id", eventId).maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
@@ -56,7 +50,7 @@ export function EventLayout() {
   const publishMutation = useMutation({
     mutationFn: async () => {
       if (!event) throw new Error("Event not loaded");
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("user_events")
         .update({
           slug: event.draft_slug,
@@ -77,11 +71,8 @@ export function EventLayout() {
           is_published: true,
           published_at: new Date().toISOString(),
         })
-        .eq("id", event.id)
-        .select()
-        .single();
+        .eq("id", event.id);
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
@@ -91,84 +82,38 @@ export function EventLayout() {
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <LoadingSpinner />
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-4">
-        <ErrorState
-          title="Failed to load event"
-          message={error instanceof Error ? error.message : "An unexpected error occurred."}
-          onRetry={() => refetch()}
-        />
-      </div>
-    );
-  }
-
-  if (!event || !eventId) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
-        <h1 className="text-2xl font-bold text-dash-text">Event not found</h1>
-        <Link to="/dashboard">
-          <Button variant="secondary">Back to Dashboard</Button>
-        </Link>
-      </div>
-    );
-  }
+  if (isLoading) return <div className="flex min-h-screen items-center justify-center"><LoadingSpinner /></div>;
+  if (isError) return <div className="flex min-h-screen items-center justify-center px-4"><ErrorState title="Failed to load event" message={error instanceof Error ? error.message : "Unexpected error"} onRetry={() => refetch()} /></div>;
+  if (!event || !eventId) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Event not found</h1><Link to="/dashboard"><Button variant="secondary">Back to Dashboard</Button></Link></div>;
 
   return (
     <div className="min-h-screen bg-dash-bg">
-      {/* Top bar */}
       <header className="sticky top-0 z-30 border-b border-dash-border bg-dash-surface">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center gap-4">
-            <Link to="/dashboard" className="text-sm font-medium text-dash-muted hover:text-dash-text">
-              ← Dashboard
-            </Link>
+            <Link to="/dashboard" className="text-sm font-medium text-dash-muted hover:text-dash-text">← Dashboard</Link>
             <div className="hidden h-6 w-px bg-dash-border sm:block" />
-            <h1 className="hidden text-lg font-semibold text-dash-text sm:block">
-              {event.draft_name || event.name || "Untitled Event"}
-            </h1>
+            <h1 className="hidden text-lg font-semibold text-dash-text sm:block">{event.draft_name || event.name || "Untitled Event"}</h1>
           </div>
           <div className="flex items-center gap-2">
-            {event.is_published ? (
-              <a
-                href={`${window.location.origin}/e/${event.slug}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-dash-primary hover:underline"
-              >
-                View Live Site →
+            {event.is_published && (
+              <a href={`${window.location.origin}/e/${event.slug}`} target="_blank" rel="noopener noreferrer" className="text-sm text-dash-primary hover:underline">
+                View Live →
               </a>
-            ) : null}
-            <Button
-              size="sm"
-              onClick={() => setShowPublish(true)}
-              disabled={publishMutation.isPending}
-            >
+            )}
+            <Button size="sm" onClick={() => setShowPublish(true)} disabled={publishMutation.isPending}>
               {publishMutation.isPending ? "Publishing..." : "Publish"}
             </Button>
           </div>
         </div>
-        {/* Desktop nav */}
-        <nav className="mx-auto hidden max-w-7xl items-center gap-1 px-4 pb-2 sm:flex sm:px-6">
+        <nav className="mx-auto hidden max-w-7xl items-center gap-1 px-4 pb-2 sm:flex sm:px-6 overflow-x-auto scrollbar-thin">
           {navTabs.map((tab) => (
             <NavLink
               key={tab.to}
               to={tab.to}
               end={tab.to === ""}
               className={({ isActive }) =>
-                `rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-dash-primary/10 text-dash-primary"
-                    : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"
-                }`
+                `whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${isActive ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"}`
               }
             >
               {tab.label}
@@ -177,7 +122,6 @@ export function EventLayout() {
         </nav>
       </header>
 
-      {/* Mobile nav toggle */}
       <div className="sm:hidden">
         <button
           onClick={() => setMobileNavOpen(!mobileNavOpen)}
@@ -195,9 +139,7 @@ export function EventLayout() {
                 end={tab.to === ""}
                 onClick={() => setMobileNavOpen(false)}
                 className={({ isActive }) =>
-                  `rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                    isActive ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"
-                  }`
+                  `rounded-md px-3 py-2 text-sm font-medium transition-colors ${isActive ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"}`
                 }
               >
                 {tab.label}
@@ -207,21 +149,15 @@ export function EventLayout() {
         )}
       </div>
 
-      {/* Content */}
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         <Outlet context={{ event, eventId } satisfies EventContextValue} />
       </main>
 
-      {/* Publish modal */}
       <Modal open={showPublish} onClose={() => setShowPublish(false)} title="Publish Website">
         <div className="space-y-4">
-          <p className="text-sm text-dash-muted">
-            This will publish your invitation website with all current draft changes. Your guests will see the updated content immediately.
-          </p>
+          <p className="text-sm text-dash-muted">This will publish all current draft changes. Guests will see the updated content immediately.</p>
           {publishMutation.isError && (
-            <p className="text-sm text-dash-danger">
-              {publishMutation.error instanceof Error ? publishMutation.error.message : "Failed to publish"}
-            </p>
+            <p className="text-sm text-dash-danger">{publishMutation.error instanceof Error ? publishMutation.error.message : "Failed to publish"}</p>
           )}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setShowPublish(false)}>Cancel</Button>

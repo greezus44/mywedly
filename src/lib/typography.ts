@@ -1,24 +1,15 @@
 import type React from "react";
 
 export interface TypographyStyle {
-  text?: string;
-  align?: string;
-  color?: string;
-  fontSize?: number;
-  fontFamily?: string;
-  fontWeight?: number;
-  lineHeight?: number;
-  letterSpacing?: number;
-  italic?: boolean;
-  underline?: boolean;
+  text?: string; align?: string; color?: string; fontSize?: number;
+  fontFamily?: string; fontWeight?: number; lineHeight?: number;
+  letterSpacing?: number; italic?: boolean; underline?: boolean;
 }
 
 export function isTypographyObject(value: unknown): value is TypographyStyle {
-  if (value === null || value === undefined) return false;
-  if (typeof value !== "object") return false;
-  if (Array.isArray(value)) return false;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   if (typeof (value as { $$typeof?: unknown }).$$typeof === "symbol") return false;
-  const keys = ["text", "align", "color", "fontSize", "fontFamily", "fontWeight", "lineHeight", "letterSpacing", "italic", "underline"];
+  const keys = ["text","align","color","fontSize","fontFamily","fontWeight","lineHeight","letterSpacing","italic","underline"];
   return keys.some((k) => k in (value as Record<string, unknown>));
 }
 
@@ -38,7 +29,7 @@ export function getTypographyStyle(value: unknown): React.CSSProperties {
   if (value.color) style.color = value.color;
   if (value.letterSpacing !== undefined) style.letterSpacing = `${value.letterSpacing}em`;
   if (value.lineHeight !== undefined) style.lineHeight = value.lineHeight;
-  if (value.align) style.textAlign = value.align as "left" | "center" | "right";
+  if (value.align) style.textAlign = value.align as "left"|"center"|"right";
   if (value.italic) style.fontStyle = "italic";
   if (value.underline) style.textDecoration = "underline";
   return style;

@@ -1,92 +1,82 @@
 import type { TypographyStyle } from "../../lib/typography";
 import { HEADING_FONT_OPTIONS } from "../../lib/theme";
-import { cn } from "../../lib/utils";
-import { ColorInput } from "./index";
-import { FontSelect } from "./FontSelect";
 import { Input } from "./Input";
-import { RangeInput } from "./index";
-import { Toggle } from "./index";
+import { FontSelect } from "./FontSelect";
+import { cn } from "../../lib/utils";
 
 interface TypographyControlsProps {
   label?: string;
   value: TypographyStyle;
-  onChange: (value: TypographyStyle) => void;
+  onChange: (v: TypographyStyle) => void;
   showText?: boolean;
 }
 
-const WEIGHTS = [
+function set<K extends keyof TypographyStyle>(
+  current: TypographyStyle,
+  key: K,
+  val: TypographyStyle[K],
+  onChange: (v: TypographyStyle) => void,
+) {
+  onChange({ ...current, [key]: val });
+}
+
+const alignOptions = ["left", "center", "right"] as const;
+const weightOptions = [
   { label: "Regular", value: 400 },
   { label: "Medium", value: 500 },
   { label: "Bold", value: 700 },
 ];
 
-const ALIGNMENTS = [
-  { label: "Left", value: "left", icon: "M3.75 5.25h16.5m-16.5 4.5h9m-9 4.5h16.5m-16.5 4.5h9" },
-  { label: "Centre", value: "center", icon: "M7.5 5.25h9m-12 4.5h15m-15 4.5h12m-9 4.5h9" },
-  { label: "Right", value: "right", icon: "M7.5 5.25h16.5m-9 4.5h9m-16.5 4.5h9m-9 4.5h16.5" },
-];
-
-export function TypographyControls({
-  label,
-  value,
-  onChange,
-  showText = false,
-}: TypographyControlsProps) {
-  function update<K extends keyof TypographyStyle>(key: K, val: TypographyStyle[K]) {
-    onChange({ ...value, [key]: val });
-  }
-
+export function TypographyControls({ label, value, onChange, showText }: TypographyControlsProps) {
   return (
     <div className="space-y-3">
-      {label && (
-        <span className="block text-sm font-medium text-dash-text">{label}</span>
-      )}
+      {label && <p className="text-sm font-medium text-dash-text">{label}</p>}
 
-      {/* Text content */}
       {showText && (
         <Input
           label="Text"
           value={value.text ?? ""}
-          onChange={(e) => update("text", e.target.value)}
-          placeholder="Enter text…"
+          onChange={(e) => set(value, "text", e.target.value, onChange)}
         />
       )}
 
-      {/* Font family */}
       <FontSelect
         label="Font Family"
+        value={value.fontFamily ?? ""}
+        onChange={(v) => set(value, "fontFamily", v, onChange)}
         options={HEADING_FONT_OPTIONS}
-        value={value.fontFamily ?? HEADING_FONT_OPTIONS[0].value}
-        onChange={(v) => update("fontFamily", v)}
+        placeholder="Inherit"
       />
 
-      {/* Font size */}
-      <RangeInput
-        label="Font Size"
-        min={8}
-        max={72}
-        step={1}
-        unit="px"
-        value={value.fontSize ?? 16}
-        onChange={(e) => update("fontSize", parseInt(e.target.value, 10))}
-      />
-
-      {/* Font weight */}
       <div>
-        <span className="mb-1.5 block text-sm font-medium text-dash-text">Font Weight</span>
-        <div className="flex gap-2">
-          {WEIGHTS.map((w) => (
+        <label className="block text-sm font-medium text-dash-text mb-1">
+          Font Size: {value.fontSize ?? 16}px
+        </label>
+        <input
+          type="range"
+          min={8}
+          max={72}
+          step={1}
+          value={value.fontSize ?? 16}
+          onChange={(e) => set(value, "fontSize", Number(e.target.value), onChange)}
+          className="w-full accent-dash-primary"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-dash-text mb-1">Weight</label>
+        <div className="flex gap-1">
+          {weightOptions.map((w) => (
             <button
               key={w.value}
               type="button"
-              onClick={() => update("fontWeight", w.value)}
+              onClick={() => set(value, "fontWeight", w.value, onChange)}
               className={cn(
-                "flex-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
+                "flex-1 rounded border px-2 py-1 text-xs transition-colors",
                 value.fontWeight === w.value
-                  ? "border-dash-primary bg-dash-primary text-dash-primary-fg"
-                  : "border-dash-border bg-dash-surface text-dash-text hover:bg-dash-bg"
+                  ? "border-dash-primary bg-dash-primary text-white"
+                  : "border-dash-border bg-dash-surface text-dash-text hover:border-dash-primary/50",
               )}
-              style={{ fontWeight: w.value }}
             >
               {w.label}
             </button>
@@ -94,50 +84,69 @@ export function TypographyControls({
         </div>
       </div>
 
-      {/* Text colour */}
-      <ColorInput
-        label="Text Colour"
-        value={value.color ?? "#000000"}
-        onChange={(v) => update("color", v)}
-      />
-
-      {/* Text alignment */}
       <div>
-        <span className="mb-1.5 block text-sm font-medium text-dash-text">Text Alignment</span>
-        <div className="flex gap-2">
-          {ALIGNMENTS.map((a) => (
+        <label className="block text-sm font-medium text-dash-text mb-1">Color</label>
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={value.color ?? "#000000"}
+            onChange={(e) => set(value, "color", e.target.value, onChange)}
+            className="h-8 w-10 rounded border border-dash-border cursor-pointer"
+          />
+          <input
+            type="text"
+            value={value.color ?? ""}
+            onChange={(e) => set(value, "color", e.target.value, onChange)}
+            placeholder="#000000"
+            className="flex-1 rounded-md border border-dash-border bg-dash-surface px-2 py-1 text-xs text-dash-text focus:outline-none focus:ring-1 focus:ring-dash-primary/50"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-dash-text mb-1">Alignment</label>
+        <div className="flex gap-1">
+          {alignOptions.map((a) => (
             <button
-              key={a.value}
+              key={a}
               type="button"
-              onClick={() => update("align", a.value)}
+              onClick={() => set(value, "align", a, onChange)}
               className={cn(
-                "flex h-9 flex-1 items-center justify-center rounded-md border transition-colors",
-                value.align === a.value
-                  ? "border-dash-primary bg-dash-primary text-dash-primary-fg"
-                  : "border-dash-border bg-dash-surface text-dash-text hover:bg-dash-bg"
+                "flex flex-1 items-center justify-center rounded border py-1.5 transition-colors",
+                value.align === a
+                  ? "border-dash-primary bg-dash-primary text-white"
+                  : "border-dash-border bg-dash-surface text-dash-text hover:border-dash-primary/50",
               )}
-              title={a.label}
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d={a.icon} />
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                {a === "left" && <path strokeLinecap="round" d="M3 6h18M3 12h12M3 18h15" />}
+                {a === "center" && <path strokeLinecap="round" d="M3 6h18M6 12h12M4 18h16" />}
+                {a === "right" && <path strokeLinecap="round" d="M3 6h18M9 12h12M6 18h15" />}
               </svg>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Italic & Underline toggles */}
       <div className="flex gap-4">
-        <Toggle
-          label="Italic"
-          checked={value.italic ?? false}
-          onChange={(v) => update("italic", v)}
-        />
-        <Toggle
-          label="Underline"
-          checked={value.underline ?? false}
-          onChange={(v) => update("underline", v)}
-        />
+        <label className="flex items-center gap-2 text-sm text-dash-text cursor-pointer">
+          <input
+            type="checkbox"
+            checked={value.italic ?? false}
+            onChange={(e) => set(value, "italic", e.target.checked, onChange)}
+            className="accent-dash-primary"
+          />
+          Italic
+        </label>
+        <label className="flex items-center gap-2 text-sm text-dash-text cursor-pointer">
+          <input
+            type="checkbox"
+            checked={value.underline ?? false}
+            onChange={(e) => set(value, "underline", e.target.checked, onChange)}
+            className="accent-dash-primary"
+          />
+          Underline
+        </label>
       </div>
     </div>
   );

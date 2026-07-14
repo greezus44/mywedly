@@ -1,77 +1,57 @@
 import { useState } from "react";
-import { cn } from "../../lib/utils";
 import { DatePicker } from "./DatePicker";
 import { TimePicker } from "./TimePicker";
+import { cn } from "../../lib/utils";
 
 interface DateTimePickerProps {
-  /** ISO date string "YYYY-MM-DD" or null */
-  date: string | null;
-  /** 24-hour time string "HH:MM" or null */
-  time: string | null;
-  onChange: (date: string | null, time: string | null) => void;
+  dateValue: string;
+  timeValue: string;
+  onDateChange: (v: string) => void;
+  onTimeChange: (v: string) => void;
   label?: string;
-  className?: string;
 }
 
 type Tab = "date" | "time";
 
 export function DateTimePicker({
-  date,
-  time,
-  onChange,
+  dateValue,
+  timeValue,
+  onDateChange,
+  onTimeChange,
   label,
-  className,
 }: DateTimePickerProps) {
-  const [activeTab, setActiveTab] = useState<Tab>("date");
+  const [tab, setTab] = useState<Tab>("date");
 
   return (
-    <div className={cn("w-full", className)}>
-      {label && (
-        <label className="mb-1.5 block text-sm font-medium text-dash-text">{label}</label>
-      )}
-
-      {/* Tabs */}
-      <div className="mb-2 inline-flex rounded-md border border-dash-border bg-dash-bg p-0.5">
-        <button
-          type="button"
-          onClick={() => setActiveTab("date")}
-          className={cn(
-            "rounded px-3 py-1 text-sm font-medium transition-colors",
-            activeTab === "date"
-              ? "bg-dash-surface text-dash-text shadow-sm"
-              : "text-dash-muted hover:text-dash-text"
+    <div className="w-full">
+      {label && <label className="block text-sm font-medium text-dash-text mb-1">{label}</label>}
+      <div className="rounded-md border border-dash-border overflow-hidden">
+        {/* Tabs */}
+        <div className="flex border-b border-dash-border bg-dash-surface-alt">
+          {(["date", "time"] as Tab[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={cn(
+                "flex-1 px-4 py-2 text-sm font-medium transition-colors capitalize",
+                tab === t
+                  ? "bg-dash-surface text-dash-text border-b-2 border-dash-primary"
+                  : "text-dash-muted hover:text-dash-text",
+              )}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <div className="p-3">
+          {tab === "date" ? (
+            <DatePicker value={dateValue} onChange={onDateChange} />
+          ) : (
+            <TimePicker value={timeValue} onChange={onTimeChange} />
           )}
-        >
-          Date
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("time")}
-          className={cn(
-            "rounded px-3 py-1 text-sm font-medium transition-colors",
-            activeTab === "time"
-              ? "bg-dash-surface text-dash-text shadow-sm"
-              : "text-dash-muted hover:text-dash-text"
-          )}
-        >
-          Time
-        </button>
+        </div>
       </div>
-
-      {/* Active panel */}
-      {activeTab === "date" ? (
-        <DatePicker
-          value={date}
-          onChange={(d) => onChange(d, time)}
-          placeholder="Select a date"
-        />
-      ) : (
-        <TimePicker
-          value={time}
-          onChange={(t) => onChange(date, t)}
-          placeholder="Select a time"
-        />
-      )}
     </div>
   );
 }

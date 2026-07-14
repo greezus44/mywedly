@@ -1,82 +1,60 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
 interface SplitEditorProps {
-  /** Left panel: the editor form / controls */
   editor: ReactNode;
-  /** Right panel: the live preview */
   preview: ReactNode;
-  /** Ratio of the editor panel (out of 12). Default 5. */
-  editorRatio?: number;
-  className?: string;
-  /** Optional header rendered above the editor panel */
-  editorHeader?: ReactNode;
-  /** Optional header rendered above the preview panel */
-  previewHeader?: ReactNode;
 }
 
-// Pre-computed Tailwind classes for each possible ratio (avoids JIT purge issues)
-const editorColClasses: Record<number, string> = {
-  3: "lg:col-span-3",
-  4: "lg:col-span-4",
-  5: "lg:col-span-5",
-  6: "lg:col-span-6",
-  7: "lg:col-span-7",
-  8: "lg:col-span-8",
-  9: "lg:col-span-9",
-};
+type Tab = "edit" | "preview";
 
-const previewColClasses: Record<number, string> = {
-  3: "lg:col-span-3",
-  4: "lg:col-span-4",
-  5: "lg:col-span-5",
-  6: "lg:col-span-6",
-  7: "lg:col-span-7",
-  8: "lg:col-span-8",
-  9: "lg:col-span-9",
-};
-
-/**
- * Two-column editor/preview layout. On small screens, stacks vertically
- * with the editor on top and the preview below.
- */
-export function SplitEditor({
-  editor,
-  preview,
-  editorRatio = 5,
-  className,
-  editorHeader,
-  previewHeader,
-}: SplitEditorProps) {
-  const previewRatio = 12 - editorRatio;
-  const editorClass = editorColClasses[editorRatio] ?? "lg:col-span-5";
-  const previewClass = previewColClasses[previewRatio] ?? "lg:col-span-7";
+export function SplitEditor({ editor, preview }: SplitEditorProps) {
+  const [activeTab, setActiveTab] = useState<Tab>("edit");
 
   return (
-    <div className={cn("grid grid-cols-1 gap-4 lg:grid-cols-12", className)}>
-      {/* Editor panel */}
-      <div className={cn("flex flex-col rounded-lg border border-dash-border bg-dash-surface", editorClass)}>
-        {editorHeader && (
-          <div className="border-b border-dash-border px-4 py-3">
-            {editorHeader}
+    <>
+      {/* Desktop: two columns */}
+      <div className="hidden lg:flex h-full min-h-0">
+        {/* Left: scrollable editor */}
+        <div className="w-[420px] shrink-0 overflow-y-auto border-r border-dash-border bg-dash-bg">
+          <div className="p-6">{editor}</div>
+        </div>
+        {/* Right: sticky preview */}
+        <div className="flex-1 overflow-hidden bg-dash-surface-alt">
+          <div className="sticky top-0 h-screen flex flex-col items-center justify-start p-6 overflow-hidden">
+            {preview}
           </div>
-        )}
-        <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
-          {editor}
         </div>
       </div>
 
-      {/* Preview panel */}
-      <div className={cn("flex flex-col rounded-lg border border-dash-border bg-dash-surface", previewClass)}>
-        {previewHeader && (
-          <div className="border-b border-dash-border px-4 py-3">
-            {previewHeader}
-          </div>
-        )}
-        <div className="flex-1 overflow-y-auto scrollbar-thin">
-          {preview}
+      {/* Mobile: tabbed */}
+      <div className="flex flex-col h-full lg:hidden">
+        {/* Tab bar */}
+        <div className="flex border-b border-dash-border bg-dash-bg shrink-0">
+          {(["edit", "preview"] as Tab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setActiveTab(t)}
+              className={cn(
+                "flex-1 py-3 text-sm font-medium capitalize transition-colors",
+                activeTab === t
+                  ? "border-b-2 border-dash-primary text-dash-primary"
+                  : "text-dash-muted hover:text-dash-text",
+              )}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {activeTab === "edit" ? (
+            <div className="p-4">{editor}</div>
+          ) : (
+            <div className="p-4">{preview}</div>
+          )}
         </div>
       </div>
-    </div>
+    </>
   );
 }

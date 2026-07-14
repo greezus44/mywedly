@@ -1,66 +1,50 @@
 import { Link } from "react-router-dom";
-import { cn } from "../../lib/utils";
 
-interface SiteFooterProps {
-  className?: string;
-}
+const footerLinks = {
+  Product: [
+    { label: "Features", href: "#features" },
+    { label: "Pricing", href: "#pricing" },
+    { label: "Templates", href: "#templates" },
+    { label: "Examples", href: "#examples" },
+  ],
+  Company: [
+    { label: "About", href: "#about" },
+    { label: "Blog", href: "#blog" },
+  ],
+  Support: [
+    { label: "Help Center", href: "#help" },
+    { label: "Privacy Policy", href: "#privacy" },
+    { label: "Terms of Service", href: "#terms" },
+  ],
+};
 
-const FOOTER_SECTIONS = [
-  {
-    title: "Product",
-    links: [
-      { label: "Features", href: "/#features" },
-      { label: "Templates", href: "/#templates" },
-      { label: "Pricing", href: "/#pricing" },
-      { label: "Examples", href: "/#examples" },
-    ],
-  },
-  {
-    title: "Company",
-    links: [
-      { label: "About", href: "/about" },
-      { label: "Blog", href: "/blog" },
-      { label: "Contact", href: "/contact" },
-      { label: "Careers", href: "/careers" },
-    ],
-  },
-  {
-    title: "Support",
-    links: [
-      { label: "Help Centre", href: "/help" },
-      { label: "FAQ", href: "/#faq" },
-      { label: "Privacy", href: "/privacy" },
-      { label: "Terms", href: "/terms" },
-    ],
-  },
-];
+export function SiteFooter() {
+  const year = new Date().getFullYear();
 
-export function SiteFooter({ className }: SiteFooterProps) {
   return (
-    <footer className={cn("border-t border-dash-border bg-dash-surface", className)}>
-      <div className="mx-auto max-w-6xl px-4 py-12">
+    <footer className="border-t border-gray-200 bg-white">
+      <div className="mx-auto max-w-6xl px-6 py-12">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
-            <Link to="/" className="flex items-center gap-2">
-              <span className="text-xl font-bold text-dash-primary">MyWedly</span>
+            <Link to="/" className="text-xl font-bold text-amber-700">
+              MyWedly
             </Link>
-            <p className="mt-3 max-w-xs text-sm text-dash-muted">
-              Beautiful invitation websites for your special day. Create, share,
-              and celebrate with ease.
+            <p className="mt-3 text-sm text-gray-500 max-w-xs">
+              Beautiful wedding websites for your perfect day. Simple, elegant, and easy to share.
             </p>
           </div>
 
-          {/* Link sections */}
-          {FOOTER_SECTIONS.map((section) => (
-            <div key={section.title}>
-              <h3 className="text-sm font-semibold text-dash-text">{section.title}</h3>
-              <ul className="mt-3 space-y-2">
-                {section.links.map((link) => (
+          {/* Link columns */}
+          {Object.entries(footerLinks).map(([title, links]) => (
+            <div key={title}>
+              <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+              <ul className="mt-4 space-y-2">
+                {links.map((link) => (
                   <li key={link.label}>
                     <a
                       href={link.href}
-                      className="text-sm text-dash-muted transition-colors hover:text-dash-primary"
+                      className="text-sm text-gray-500 hover:text-amber-700 transition-colors"
                     >
                       {link.label}
                     </a>
@@ -72,19 +56,14 @@ export function SiteFooter({ className }: SiteFooterProps) {
         </div>
 
         {/* Bottom bar */}
-        <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-dash-border pt-6 sm:flex-row">
-          <p className="text-xs text-dash-muted">
-            © {new Date().getFullYear()} MyWedly. All rights reserved.
-          </p>
+        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-gray-200 pt-8 sm:flex-row">
+          <p className="text-sm text-gray-500">© {year} MyWedly. All rights reserved.</p>
           <div className="flex items-center gap-4">
-            <a href="/privacy" className="text-xs text-dash-muted hover:text-dash-primary">
+            <a href="#privacy" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
               Privacy
             </a>
-            <a href="/terms" className="text-xs text-dash-muted hover:text-dash-primary">
+            <a href="#terms" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
               Terms
-            </a>
-            <a href="/cookies" className="text-xs text-dash-muted hover:text-dash-primary">
-              Cookies
             </a>
           </div>
         </div>

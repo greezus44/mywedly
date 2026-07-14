@@ -1,177 +1,258 @@
-import { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Json } from "../../lib/supabase";
-import { useEventContext } from "./event-layout";
-import { Button } from "../../components/ui/Button";
-import { Input, Card, Badge, LoadingSpinner } from "../../components/ui";
+import { useState } from "react";
+import { useOutletContext } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase, type UserEvent, type Json } from "../../lib/supabase";
+import { Button, Card, Badge, Toggle, Modal, Input } from "../../components/ui";
 import { generateQrDataUrl, downloadQrCode, downloadQrSvg } from "../../lib/qr";
-
-interface SharingConfig {
-  message?: string;
-  subject?: string;
-}
+import { slugify, isValidSlug } from "../../lib/theme";
+import { cn } from "../../lib/utils";
 
 export function SharingPage() {
-  const { event, eventId } = useEventContext();
+  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
   const queryClient = useQueryClient();
 
-  const [config, setConfig] = useState<SharingConfig>(
-    (event.draft_sharing_config as SharingConfig | null) ?? (event.sharing_config as SharingConfig | null) ?? {}
-  );
+  const publishedSlug = event.slug;
+  const draftSlug = event.draft_slug ?? event.slug ?? "";
+  const [slug, setSlug] = useState(draftSlug);
+  const [slugError, setSlugError] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [savedMsg, setSavedMsg] = useState(false);
+  const [showPublishModal, setShowPublishModal] = useState(false);
 
-  const isPublished = event.is_published && !!event.slug;
-  const shareUrl = isPublished ? `${window.location.origin}/e/${event.slug}` : null;
+  const eventUrl = publishedSlug
+    ? `${window.location.origin}/e/${publishedSlug}`
+    : null;
 
-  useEffect(() => {
-    if (shareUrl) {
-      generateQrDataUrl(shareUrl).then(setQrDataUrl).catch(() => setQrDataUrl(null));
-    } else {
-      setQrDataUrl(null);
-    }
-  }, [shareUrl]);
-
-  function update<K extends keyof SharingConfig>(key: K, val: SharingConfig[K]) {
-    setConfig((prev) => ({ ...prev, [key]: val }));
-  }
-
-  const saveMutation = useMutation({
+  const publishMutation = useMutation({
     mutationFn: async () => {
+      if (!isValidSlug(slug)) throw new Error("Invalid slug");
+      // Check slug uniqueness
+      const { data: existing } = await supabase
+        .from("user_events")
+        .select("id")
+        .eq("slug", slug)
+        .neq("id", eventId)
+        .maybeSingle();
+      if (existing) throw new Error("This URL is already taken. Please choose another.");
+
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_sharing_config: config as unknown as Json })
+        .update({
+          slug,
+          draft_slug: slug,
+          is_published: true,
+          published_at: new Date().toISOString(),
+          // Publish draft -> live
+          name: event.draft_name ?? event.name,
+          event_date: event.draft_event_date ?? event.event_date,
+          event_time: event.draft_event_time ?? event.event_time,
+          venue: event.draft_venue ?? event.venue,
+          address: event.draft_address ?? event.address,
+          cover_config: (event.draft_cover_config ?? event.cover_config) as Json,
+          theme: (event.draft_theme ?? event.theme) as Json,
+          logo_config: (event.draft_logo_config ?? event.logo_config) as Json,
+          content: (event.draft_content ?? event.content) as Json,
+          login_config: (event.draft_login_config ?? event.login_config) as Json,
+        })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSavedMsg(true);
-      setTimeout(() => setSavedMsg(false), 2000);
+      setShowPublishModal(false);
     },
   });
 
-  const handleCopy = async () => {
-    if (!shareUrl) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Ignore clipboard errors
-    }
-  };
+  const unpublishMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("user_events")
+        .update({ is_published: false })
+        .eq("id", eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", eventId] }),
+  });
 
-  const handleShareNative = async () => {
-    if (!shareUrl) return;
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: event.draft_name || event.name || "Our Event",
-          text: config.message || "You're invited! View our invitation website:",
-          url: shareUrl,
-        });
-      } catch {
-        // User cancelled — ignore
-      }
+  const saveSlugMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("user_events")
+        .update({ draft_slug: slug })
+        .eq("id", eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", eventId] }),
+  });
+
+  async function handleGenerateQr() {
+    if (!eventUrl) return;
+    const url = await generateQrDataUrl(eventUrl);
+    setQrDataUrl(url);
+  }
+
+  function validateSlug(val: string) {
+    setSlug(val);
+    if (!val) { setSlugError(null); return; }
+    const s = slugify(val);
+    if (!isValidSlug(s)) {
+      setSlugError("Only lowercase letters, numbers and hyphens allowed.");
     } else {
-      handleCopy();
+      setSlugError(null);
     }
-  };
+  }
+
+  const copyToClipboard = (text: string) => navigator.clipboard?.writeText(text);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-dash-text">Sharing</h2>
-          <p className="text-sm text-dash-muted">Share your invitation with guests.</p>
-        </div>
-        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-          {savedMsg ? "Saved!" : "Save Changes"}
-        </Button>
-      </div>
+    <div className="max-w-2xl mx-auto p-6 space-y-6">
+      <h2 className="text-lg font-semibold text-dash-text">Sharing</h2>
 
-      {saveMutation.isError && (
-        <p className="text-sm text-dash-danger">
-          {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save"}
-        </p>
-      )}
-
-      {/* Publish status */}
-      {!isPublished ? (
-        <Card>
-          <div className="flex items-center gap-3">
-            <Badge variant="warning">Not Published</Badge>
-            <p className="text-sm text-dash-muted">
-              Your invitation website isn't published yet. Publish your event to get a shareable link.
+      {/* Status */}
+      <Card>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="font-semibold text-dash-text">Publication Status</h3>
+            <p className="text-sm text-dash-muted mt-0.5">
+              {event.is_published
+                ? "Your event is live and accessible to guests."
+                : "Your event is a draft and not yet visible to guests."}
             </p>
           </div>
-        </Card>
-      ) : (
-        <>
-          {/* Share Link */}
-          <Card>
-            <h3 className="mb-3 text-sm font-semibold text-dash-text">Share Link</h3>
-            <div className="flex items-center gap-2">
-              <Input
-                value={shareUrl ?? ""}
-                readOnly
-                className="flex-1"
-              />
-              <Button variant="secondary" onClick={handleCopy}>
-                {copied ? "Copied!" : "Copy"}
-              </Button>
-            </div>
-            <div className="mt-4">
-              <Button onClick={handleShareNative}>Share Link</Button>
-            </div>
-          </Card>
-
-          {/* QR Code */}
-          <Card>
-            <h3 className="mb-3 text-sm font-semibold text-dash-text">QR Code</h3>
-            {qrDataUrl ? (
-              <div className="flex flex-col items-center gap-4">
-                <img src={qrDataUrl} alt="QR Code" className="h-48 w-48 rounded-lg border border-dash-border" />
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={() => downloadQrCode(shareUrl!, `${event.slug}-qr.png`)}>
-                    Download PNG
-                  </Button>
-                  <Button variant="secondary" onClick={() => downloadQrSvg(shareUrl!, `${event.slug}-qr.svg`)}>
-                    Download SVG
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <LoadingSpinner />
-            )}
-          </Card>
-        </>
-      )}
-
-      {/* Sharing Message */}
-      <Card>
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Sharing Message</h3>
-        <div className="space-y-4">
-          <Input
-            label="Email Subject"
-            value={config.subject ?? ""}
-            onChange={(e) => update("subject", e.target.value)}
-            placeholder="You're invited to our wedding!"
-          />
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-dash-text">Message</label>
-            <textarea
-              value={config.message ?? ""}
-              onChange={(e) => update("message", e.target.value)}
-              placeholder="You're invited! View our invitation website:"
-              rows={4}
-              className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none focus:ring-1 focus:ring-dash-primary"
-            />
-          </div>
+          <Badge variant={event.is_published ? "success" : "default"}>
+            {event.is_published ? "Live" : "Draft"}
+          </Badge>
+        </div>
+        <div className="mt-4 flex gap-3">
+          {event.is_published ? (
+            <Button
+              variant="danger"
+              size="sm"
+              loading={unpublishMutation.isPending}
+              onClick={() => unpublishMutation.mutate()}
+            >
+              Unpublish
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => setShowPublishModal(true)}>
+              Publish event
+            </Button>
+          )}
+          {event.is_published && eventUrl && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => window.open(eventUrl, "_blank")}
+            >
+              View live site
+            </Button>
+          )}
         </div>
       </Card>
+
+      {/* URL Slug */}
+      <Card>
+        <h3 className="font-semibold text-dash-text mb-3">Event URL</h3>
+        <div className="space-y-3">
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <Input
+                value={slug}
+                onChange={(e) => validateSlug(e.target.value)}
+                placeholder="your-event-name"
+                error={slugError ?? undefined}
+              />
+              <p className="mt-1 text-xs text-dash-muted">
+                {window.location.origin}/e/<strong>{slug || "your-event-name"}</strong>
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mt-0.5 shrink-0"
+              onClick={() => saveSlugMutation.mutate()}
+              loading={saveSlugMutation.isPending}
+              disabled={!!slugError || !slug}
+            >
+              Save
+            </Button>
+          </div>
+
+          {eventUrl && (
+            <div className="flex items-center gap-2 rounded-md bg-dash-surface-alt border border-dash-border px-3 py-2">
+              <span className="flex-1 text-sm text-dash-text truncate">{eventUrl}</span>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(eventUrl)}
+                className="shrink-0 text-xs text-dash-primary hover:underline"
+              >
+                Copy
+              </button>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* QR Code */}
+      {eventUrl && (
+        <Card>
+          <h3 className="font-semibold text-dash-text mb-3">QR Code</h3>
+          {qrDataUrl ? (
+            <div className="flex flex-col items-center gap-4">
+              <img src={qrDataUrl} alt="QR code" className="h-48 w-48 rounded-md border border-dash-border" />
+              <div className="flex gap-2">
+                <Button variant="secondary" size="sm" onClick={() => downloadQrCode(eventUrl, `${slug}-qr`)}>
+                  Download PNG
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => downloadQrSvg(eventUrl, `${slug}-qr`)}>
+                  Download SVG
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="secondary" onClick={handleGenerateQr}>
+              Generate QR Code
+            </Button>
+          )}
+        </Card>
+      )}
+
+      {/* Publish modal */}
+      <Modal
+        open={showPublishModal}
+        onClose={() => setShowPublishModal(false)}
+        title="Publish Event"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-dash-muted">
+            Publishing will make your event live and accessible to guests. Make sure you have set a URL slug.
+          </p>
+          <Input
+            label="Event URL Slug"
+            value={slug}
+            onChange={(e) => validateSlug(e.target.value)}
+            placeholder="your-event-name"
+            error={slugError ?? undefined}
+          />
+          <p className="text-xs text-dash-muted">
+            Your event will be at: <strong>{window.location.origin}/e/{slug || "your-slug"}</strong>
+          </p>
+          {publishMutation.isError && (
+            <p className="text-sm text-red-500">
+              {publishMutation.error instanceof Error ? publishMutation.error.message : "Failed to publish"}
+            </p>
+          )}
+          <div className="flex gap-3 justify-end">
+            <Button variant="secondary" onClick={() => setShowPublishModal(false)}>Cancel</Button>
+            <Button
+              onClick={() => publishMutation.mutate()}
+              loading={publishMutation.isPending}
+              disabled={!!slugError || !slug}
+            >
+              Publish
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

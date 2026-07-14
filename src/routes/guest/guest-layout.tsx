@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, NavLink, Outlet, Link } from "react-router-dom";
+import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
+import { resolveGuestInvitations, getInvitedSubEventIds, type ResolveResult } from "../../lib/invitations";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { LoadingSpinner } from "../../components/ui";
 
@@ -17,8 +18,6 @@ export interface GuestOutletContext {
 export function useGuestOutletContext(): GuestOutletContext {
   return useOutletContext<GuestOutletContext>();
 }
-
-import { useOutletContext } from "react-router-dom";
 
 export default function GuestLayout() {
   const { slug } = useParams<{ slug: string }>();
@@ -60,7 +59,7 @@ export default function GuestLayout() {
 
   const { data: invitations } = useQuery({
     queryKey: ["guest-invitations", guest?.id, event?.id],
-    queryFn: async () => {
+    queryFn: async (): Promise<ResolveResult> => {
       if (!guest || !event) return { invitations: [], error: null };
       return resolveGuestInvitations(supabase, guest.id, event.id);
     },
@@ -78,11 +77,7 @@ export default function GuestLayout() {
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   useEffect(() => {
-    if (menuOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
+    document.body.style.overflow = menuOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [menuOpen]);
 
@@ -114,32 +109,26 @@ export default function GuestLayout() {
     );
   }
 
-  if (!guest || eventId !== event.id) {
-    return null;
-  }
+  if (!guest || eventId !== event.id) return null;
 
+  // FIX #5: Contact page removed from navigation
   const navLinks = [
     { label: "Home", to: `/e/${slug}/home` },
     ...(invitedSubEventIds.length > 0 ? [{ label: "RSVP", to: `/e/${slug}/rsvp` }] : []),
     { label: "Wishes", to: `/e/${slug}/wishes` },
-    { label: "Contact", to: `/e/${slug}/contact` },
     ...(customPages ?? []).map((p) => ({ label: p.title, to: `/e/${slug}/p/${p.slug}` })),
   ];
 
   return (
     <EventThemeProvider theme={event.theme}>
-      {/* Floating hamburger button - left side, no top bar */}
+      {/* FIX #4: Hamburger icon — no circular background/container, uses accent colour */}
       <button
         onClick={() => setMenuOpen(true)}
         aria-label="Open navigation menu"
-        className="fixed left-4 top-4 z-40 flex h-11 w-11 items-center justify-center rounded-full shadow-lg transition-all hover:scale-105"
-        style={{
-          backgroundColor: "var(--event-surface)",
-          color: "var(--event-text)",
-          border: "1px solid var(--event-border)",
-        }}
+        className="fixed left-4 top-4 z-40 flex h-8 w-8 items-center justify-center transition-all hover:scale-105"
+        style={{ color: "var(--event-accent)" }}
       >
-        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
@@ -147,22 +136,16 @@ export default function GuestLayout() {
       {/* Full-screen navigation overlay */}
       {menuOpen && (
         <div className="fixed inset-0 z-50 animate-fadeIn">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={closeMenu}
-          />
-          {/* Slide-in panel from left */}
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeMenu} />
           <div
             className="absolute left-0 top-0 h-full w-full max-w-sm overflow-y-auto shadow-2xl scrollbar-thin"
-            style={{
-              backgroundColor: "var(--event-bg)",
-              borderRight: "1px solid var(--event-border)",
-            }}
+            style={{ backgroundColor: "var(--event-bg)", borderRight: "1px solid var(--event-border)" }}
           >
-            {/* Close button */}
             <div className="flex items-center justify-between p-5">
-              <h2 className="text-lg font-semibold" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>
+              <h2
+                className="text-lg font-semibold"
+                style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}
+              >
                 {event.name || "Menu"}
               </h2>
               <button
@@ -176,7 +159,6 @@ export default function GuestLayout() {
                 </svg>
               </button>
             </div>
-            {/* Nav links */}
             <nav className="flex flex-col gap-1 px-3 pb-8">
               {navLinks.map((link) => (
                 <NavLink
@@ -201,7 +183,6 @@ export default function GuestLayout() {
         </div>
       )}
 
-      {/* Page content - no top bar, just the outlet */}
       <Outlet context={{ event, slug: slug!, theme: event.theme, invitedSubEventIds } satisfies GuestOutletContext} />
     </EventThemeProvider>
   );
