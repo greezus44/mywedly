@@ -1,185 +1,140 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "../../lib/supabase";
-import type { SubEvent, GuestGroup, GuestInvitationOverride } from "../../lib/supabase";
+import { supabase, type SubEvent, type GuestGroup, type SubEventGroupAssignment } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { Card, Badge, LoadingSpinner } from "../../components/ui";
 import { cn } from "../../lib/utils";
 
 interface InvitationManagerProps {
-  eventId: string;
-  subEvents: SubEvent[];
+  subEventId: string;
+  parentEventId: string;
 }
 
-export function InvitationManager({ eventId, subEvents }: InvitationManagerProps) {
+export function InvitationManager({ subEventId, parentEventId }: InvitationManagerProps) {
   const queryClient = useQueryClient();
-  const [selectedSubEventId, setSelectedSubEventId] = useState<string | null>(
-    subEvents[0]?.id ?? null
-  );
+  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
 
+  // Fetch groups for this event
   const { data: groups, isLoading: groupsLoading } = useQuery({
-    queryKey: ["guest-groups", eventId],
+    queryKey: ["guest-groups", parentEventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("guest_groups")
         .select("*")
-        .eq("event_id", eventId)
+        .eq("event_id", parentEventId)
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return data as GuestGroup[];
     },
   });
 
+  // Fetch existing assignments for this sub-event
   const { data: assignments, isLoading: assignmentsLoading } = useQuery({
-    queryKey: ["sub-event-group-assignments", selectedSubEventId],
+    queryKey: ["sub-event-group-assignments", subEventId],
     queryFn: async () => {
-      if (!selectedSubEventId) return [];
       const { data, error } = await supabase
         .from("sub_event_group_assignments")
         .select("*")
-        .eq("sub_event_id", selectedSubEventId);
+        .eq("sub_event_id", subEventId);
       if (error) throw error;
-      return data as { id: string; sub_event_id: string; group_id: string }[];
+      return data as SubEventGroupAssignment[];
     },
-    enabled: !!selectedSubEventId,
   });
 
-  const { data: overrides, isLoading: overridesLoading } = useQuery({
-    queryKey: ["guest-invitation-overrides", selectedSubEventId],
-    queryFn: async () => {
-      if (!selectedSubEventId) return [];
-      const { data, error } = await supabase
-        .from("guest_invitation_overrides")
-        .select("*")
-        .eq("sub_event_id", selectedSubEventId);
-      if (error) throw error;
-      return data as GuestInvitationOverride[];
-    },
-    enabled: !!selectedSubEventId,
-  });
+  useEffect(() => {
+    if (assignments) {
+      setSelectedGroups(new Set(assignments.map((a) => a.group_id)));
+    }
+  }, [assignments]);
 
-  const assignedGroupIds = useMemo(
-    () => new Set((assignments ?? []).map((a) => a.group_id)),
-    [assignments]
-  );
-
-  const toggleAssignmentMutation = useMutation({
-    mutationFn: async ({ groupId, assign }: { groupId: string; assign: boolean }) => {
-      if (!selectedSubEventId) throw new Error("No event selected");
-      if (assign) {
+  const toggleMutation = useMutation({
+    mutationFn: async (groupId: string) => {
+      const isAssigned = selectedGroups.has(groupId);
+      if (isAssigned) {
         const { error } = await supabase
           .from("sub_event_group_assignments")
-          .insert({ sub_event_id: selectedSubEventId, group_id: groupId });
+          .delete()
+          .eq("sub_event_id", subEventId)
+          .eq("group_id", groupId);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from("sub_event_group_assignments")
-          .delete()
-          .eq("sub_event_id", selectedSubEventId)
-          .eq("group_id", groupId);
+          .insert({ sub_event_id: subEventId, group_id: groupId });
         if (error) throw error;
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sub-event-group-assignments", selectedSubEventId] });
+      queryClient.invalidateQueries({ queryKey: ["sub-event-group-assignments", subEventId] });
     },
   });
 
-  if (subEvents.length === 0) {
-    return (
-      <Card className="p-6 text-center">
-        <p className="text-sm text-dash-muted">
-          Create Events first to manage group invitations.
-        </p>
-      </Card>
-    );
+  function handleToggle(groupId: string) {
+    const next = new Set(selectedGroups);
+    if (next.has(groupId)) {
+      next.delete(groupId);
+    } else {
+      next.add(groupId);
+    }
+    setSelectedGroups(next);
+    toggleMutation.mutate(groupId);
   }
 
-  if (groupsLoading || assignmentsLoading || overridesLoading) {
+  const isLoading = groupsLoading || assignmentsLoading;
+
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-10">
-        <LoadingSpinner />
+      <div className="flex items-center justify-center py-8">
+        <LoadingSpinner className="h-6 w-6" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div>
-        <h3 className="text-sm font-semibold text-dash-text mb-3">Invitation Manager</h3>
-        <p className="text-sm text-dash-muted mb-4">
-          Assign guest groups to each Event. All guests in an assigned group will be invited.
+        <h4 className="text-sm font-semibold text-dash-text mb-1">
+          Group Invitations
+        </h4>
+        <p className="text-xs text-dash-muted mb-3">
+          Select which guest groups are invited to this event. Guests in
+          unassigned groups will be invited by default.
         </p>
       </div>
 
-      {/* Event selector */}
-      <div className="flex flex-wrap gap-2">
-        {subEvents.map((se) => (
-          <button
-            key={se.id}
-            type="button"
-            onClick={() => setSelectedSubEventId(se.id)}
-            className={cn(
-              "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
-              selectedSubEventId === se.id
-                ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
-                : "border-dash-border bg-dash-surface text-dash-muted hover:bg-dash-bg"
-            )}
-          >
-            {se.name}
-          </button>
-        ))}
-      </div>
+      {groups && groups.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {groups.map((group) => {
+            const isSelected = selectedGroups.has(group.id);
+            return (
+              <button
+                key={group.id}
+                type="button"
+                onClick={() => handleToggle(group.id)}
+                disabled={toggleMutation.isPending}
+                className={cn(
+                  "px-3 py-1.5 text-sm rounded-full border transition-colors",
+                  isSelected
+                    ? "bg-dash-primary text-dash-primary-fg border-transparent"
+                    : "bg-dash-surface text-dash-text border-dash-border hover:bg-dash-bg",
+                )}
+              >
+                {group.name}
+                {isSelected && <span className="ml-1.5">✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm text-dash-muted">
+          No guest groups yet. Create groups in the Guest Groups tab to manage invitations.
+        </p>
+      )}
 
-      {/* Group assignments */}
-      {selectedSubEventId && (
-        <Card className="p-5">
-          <h4 className="text-sm font-semibold text-dash-text mb-3">Assigned Groups</h4>
-          {groups && groups.length > 0 ? (
-            <div className="space-y-2">
-              {groups.map((group) => {
-                const isAssigned = assignedGroupIds.has(group.id);
-                return (
-                  <div
-                    key={group.id}
-                    className="flex items-center justify-between rounded-lg border border-dash-border p-3"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-dash-text">{group.name}</span>
-                      {isAssigned && <Badge variant="success">Invited</Badge>}
-                    </div>
-                    <Button
-                      variant={isAssigned ? "secondary" : "primary"}
-                      size="sm"
-                      loading={toggleAssignmentMutation.isPending}
-                      onClick={() =>
-                        toggleAssignmentMutation.mutate({
-                          groupId: group.id,
-                          assign: !isAssigned,
-                        })
-                      }
-                    >
-                      {isAssigned ? "Remove" : "Invite"}
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-dash-muted">
-              No guest groups yet. Create groups in the Guest Groups tab.
-            </p>
-          )}
-
-          {overrides && overrides.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-dash-border">
-              <h4 className="text-sm font-semibold text-dash-text mb-2">Individual Overrides</h4>
-              <p className="text-sm text-dash-muted">
-                {overrides.length} guest(s) have individual invitation overrides for this event.
-              </p>
-            </div>
-          )}
-        </Card>
+      {toggleMutation.isError && (
+        <p className="text-xs text-dash-danger">
+          {toggleMutation.error instanceof Error ? toggleMutation.error.message : "Failed to update invitation"}
+        </p>
       )}
     </div>
   );

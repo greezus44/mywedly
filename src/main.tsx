@@ -79,7 +79,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/e/:slug" element={<GuestCover />} />
               <Route path="/e/:slug/signin" element={<GuestSignIn />} />
               <Route path="/e/:slug/home" element={<GuestLayout />}><Route index element={<GuestHome />} /></Route>
-              <Route path="/e/:slug/events" element={<GuestLayout />}><Route index element={<GuestHome />} /></Route>
               <Route path="/e/:slug/rsvp" element={<GuestLayout />}><Route index element={<GuestRsvp />} /></Route>
               <Route path="/e/:slug/wishes" element={<GuestLayout />}><Route index element={<GuestWishes />} /></Route>
               <Route path="/e/:slug/contact" element={<GuestLayout />}><Route index element={<GuestContact />} /></Route>

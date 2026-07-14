@@ -95,29 +95,19 @@ export default function GuestCover() {
         {bgConfig.image && (
           <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />
         )}
-
         <div className="relative z-10 flex w-full max-w-lg flex-col items-center px-6 py-16 text-center animate-fadeIn">
           {logoConfig.url && (
             <div className="mb-8 w-full flex" style={{ justifyContent: logoAlign === "left" ? "flex-start" : logoAlign === "right" ? "flex-end" : "center" }}>
-              <img
-                src={logoConfig.url}
-                alt="Logo"
-                style={{ height: `${logoSize}px`, width: "auto", maxHeight: "40vh" }}
-                className="object-contain"
-              />
+              <img src={logoConfig.url} alt="Logo" style={{ height: `${logoSize}px`, width: "auto", maxHeight: "40vh" }} className="object-contain" />
             </div>
           )}
-
           {coverConfig.eyebrow && <p className="guest-eyebrow mb-2">{coverConfig.eyebrow}</p>}
           {titleText && <h1 className="guest-title mb-3">{titleText}</h1>}
           {coverConfig.subheading && <p className="guest-subtitle mb-3">{coverConfig.subheading}</p>}
           {coverConfig.bodyHtml && (
             <div className="rich-content mb-8 max-w-md" dangerouslySetInnerHTML={{ __html: coverConfig.bodyHtml }} />
           )}
-
-          <button onClick={() => navigate(`/e/${slug}/signin`)} className="event-btn-primary">
-            {buttonText}
-          </button>
+          <button onClick={() => navigate(`/e/${slug}/signin`)} className="event-btn-primary">{buttonText}</button>
         </div>
       </div>
     </EventThemeProvider>

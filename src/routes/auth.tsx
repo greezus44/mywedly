@@ -1,9 +1,9 @@
 import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
-import { LoadingSpinner } from "../components/ui";
+import { Card } from "../components/ui";
 import { cn } from "../lib/utils";
 
 export function AuthPage() {
@@ -14,90 +14,75 @@ export function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     try {
       if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
           password,
         });
-        if (error) throw error;
-        // If session is returned, navigate to dashboard
-        if (data.session) {
+        if (signUpError) throw signUpError;
+        if (data.user) {
           navigate("/dashboard");
-          return;
         }
-        // If no session (email confirmation required), show a message
-        setError("Account created! Please check your email to confirm, then sign in.");
-        setMode("signin");
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-        if (error) throw error;
-        if (data.session) {
+        const { data, error: signInError } =
+          await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+        if (signInError) throw signInError;
+        if (data.user) {
           navigate("/dashboard");
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Something went wrong";
+      const message =
+        err instanceof Error ? err.message : "Authentication failed";
       setError(message);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-dash-bg px-4 py-12">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <Link to="/" className="inline-block">
-            <span className="text-2xl font-bold text-dash-primary">MyWedly</span>
-          </Link>
-          <h1 className="mt-4 text-2xl font-bold text-dash-text">
-            {mode === "signin" ? "Welcome back" : "Create your account"}
-          </h1>
+          <a href="/" className="inline-flex items-center gap-2 text-2xl font-bold text-dash-text">
+            <span className="text-dash-primary">My</span>Wedly
+          </a>
           <p className="mt-2 text-sm text-dash-muted">
-            {mode === "signin"
-              ? "Sign in to manage your invitation websites"
-              : "Sign up to start building your invitation website"}
+            {mode === "signin" ? "Sign in to your account" : "Create your account"}
           </p>
         </div>
 
-        <div className="rounded-xl border border-dash-border bg-dash-surface shadow-sm p-6">
-          {/* Mode toggle */}
-          <div className="flex rounded-lg border border-dash-border overflow-hidden mb-6">
+        <Card>
+          <div className="flex gap-1 p-1 rounded-md bg-dash-bg mb-6">
             <button
               type="button"
-              onClick={() => {
-                setMode("signin");
-                setError(null);
-              }}
+              onClick={() => { setMode("signin"); setError(null); }}
               className={cn(
-                "flex-1 px-4 py-2 text-sm font-medium transition-colors",
+                "flex-1 px-3 py-1.5 text-sm rounded transition-colors font-medium",
                 mode === "signin"
-                  ? "bg-dash-primary text-dash-primary-fg"
-                  : "bg-dash-surface text-dash-muted hover:bg-dash-bg"
+                  ? "bg-dash-surface text-dash-text shadow-sm"
+                  : "text-dash-muted hover:text-dash-text",
               )}
             >
               Sign In
             </button>
             <button
               type="button"
-              onClick={() => {
-                setMode("signup");
-                setError(null);
-              }}
+              onClick={() => { setMode("signup"); setError(null); }}
               className={cn(
-                "flex-1 px-4 py-2 text-sm font-medium transition-colors",
+                "flex-1 px-3 py-1.5 text-sm rounded transition-colors font-medium",
                 mode === "signup"
-                  ? "bg-dash-primary text-dash-primary-fg"
-                  : "bg-dash-surface text-dash-muted hover:bg-dash-bg"
+                  ? "bg-dash-surface text-dash-text shadow-sm"
+                  : "text-dash-muted hover:text-dash-text",
               )}
             >
               Sign Up
@@ -126,43 +111,42 @@ export function AuthPage() {
             />
 
             {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
                 {error}
               </div>
             )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <LoadingSpinner size="sm" />
-                  <span>{mode === "signin" ? "Signing in..." : "Signing up..."}</span>
-                </>
-              ) : mode === "signin" ? (
-                "Sign In"
-              ) : (
-                "Sign Up"
-              )}
+            <Button type="submit" className="w-full" loading={loading}>
+              {mode === "signin" ? "Sign In" : "Create Account"}
             </Button>
           </form>
 
-          <p className="mt-4 text-center text-sm text-dash-muted">
-            {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
-            <button
-              type="button"
-              onClick={() => {
-                setMode(mode === "signin" ? "signup" : "signin");
-                setError(null);
-              }}
-              className="font-medium text-dash-primary hover:underline"
-            >
-              {mode === "signin" ? "Sign up" : "Sign in"}
-            </button>
+          <p className="mt-4 text-center text-xs text-dash-muted">
+            {mode === "signin" ? (
+              <>
+                Don't have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => { setMode("signup"); setError(null); }}
+                  className="text-dash-primary hover:underline font-medium"
+                >
+                  Sign up
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  onClick={() => { setMode("signin"); setError(null); }}
+                  className="text-dash-primary hover:underline font-medium"
+                >
+                  Sign in
+                </button>
+              </>
+            )}
           </p>
-        </div>
-
-        <p className="mt-6 text-center text-xs text-dash-muted">
-          By continuing, you agree to MyWedly's Terms of Service and Privacy Policy.
-        </p>
+        </Card>
       </div>
     </div>
   );

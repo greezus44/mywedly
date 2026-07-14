@@ -1,16 +1,15 @@
 import React from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "../../lib/supabase";
-import type { UserEvent, SharingEvent, EventRsvp } from "../../lib/supabase";
-import { Card, LoadingSpinner, ErrorState, EmptyState } from "../../components/ui";
-import { formatDateTime } from "../../lib/utils";
+import { supabase, type UserEvent, type SharingEvent, type EventRsvp } from "../../lib/supabase";
+import { Card, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
+import { formatDate } from "../../lib/utils";
 
 export function AnalyticsPage() {
   const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
 
-  const { data: sharingEvents, isLoading: eventsLoading, isError: eventsError } = useQuery({
-    queryKey: ["sharing-events", eventId],
+  const { data: sharingEvents, isLoading: sharingLoading, isError: sharingError } = useQuery({
+    queryKey: ["analytics-sharing", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sharing_events")
@@ -23,7 +22,7 @@ export function AnalyticsPage() {
   });
 
   const { data: rsvps, isLoading: rsvpsLoading, isError: rsvpsError } = useQuery({
-    queryKey: ["event-rsvps-analytics", eventId],
+    queryKey: ["analytics-rsvps", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_rsvps")
@@ -35,161 +34,167 @@ export function AnalyticsPage() {
     },
   });
 
-  const isLoading = eventsLoading || rsvpsLoading;
-  const isError = eventsError || rsvpsError;
+  const isLoading = sharingLoading || rsvpsLoading;
+  const isError = sharingError || rsvpsError;
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <LoadingSpinner size="lg" />
+        <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
 
   if (isError) {
     return (
-      <ErrorState message="Failed to load analytics data" />
+      <div className="py-20">
+        <ErrorState message="Failed to load analytics data" />
+      </div>
     );
   }
 
-  const totalViews = sharingEvents?.length ?? 0;
-  const uniqueGuests = new Set(
-    (sharingEvents ?? []).filter((e) => e.guest_id).map((e) => e.guest_id)
+  // Compute stats
+  const totalVisits = sharingEvents?.length ?? 0;
+  const uniqueVisitors = new Set(
+    (sharingEvents ?? []).map((e) => e.guest_id).filter(Boolean),
   ).size;
+  const sourceCounts: Record<string, number> = {};
+  for (const e of sharingEvents ?? []) {
+    const src = e.source || "direct";
+    sourceCounts[src] = (sourceCounts[src] ?? 0) + 1;
+  }
+
   const totalRsvps = rsvps?.length ?? 0;
   const attending = (rsvps ?? []).filter((r) => r.status === "attending").length;
   const declined = (rsvps ?? []).filter((r) => r.status === "declined").length;
-  const pending = (rsvps ?? []).filter((r) => r.status === "pending" || !r.status).length;
+  const pending = (rsvps ?? []).filter(
+    (r) => r.status === "pending" || !r.status,
+  ).length;
+  const totalPlusOnes = (rsvps ?? []).reduce((sum, r) => sum + (r.plus_ones ?? 0), 0);
 
-  const deviceTypes = (sharingEvents ?? []).reduce<Record<string, number>>((acc, e) => {
-    const dt = e.device_type || "unknown";
-    acc[dt] = (acc[dt] ?? 0) + 1;
-    return acc;
-  }, {});
-
-  const sources = (sharingEvents ?? []).reduce<Record<string, number>>((acc, e) => {
-    const src = e.source || "direct";
-    acc[src] = (acc[src] ?? 0) + 1;
-    return acc;
-  }, {});
-
-  const recentViews = (sharingEvents ?? []).slice(0, 10);
+  const recentVisits = (sharingEvents ?? []).slice(0, 10);
+  const recentRsvps = (rsvps ?? []).slice(0, 10);
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="mb-6">
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 space-y-6">
+      <div>
         <h2 className="text-lg font-semibold text-dash-text">Analytics</h2>
-        <p className="mt-1 text-sm text-dash-muted">
-          Track views and RSVP responses for your website.
+        <p className="text-sm text-dash-muted mt-1">
+          Track visits and RSVP responses for your website.
         </p>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Total Views" value={totalViews} icon="👁" />
-        <StatCard label="Unique Guests" value={uniqueGuests} icon="👥" />
-        <StatCard label="Total RSVPs" value={totalRsvps} icon="📝" />
-        <StatCard label="Attending" value={attending} icon="✅" />
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="text-center">
+          <div className="text-3xl font-bold text-dash-primary">{totalVisits}</div>
+          <div className="text-sm text-dash-muted mt-1">Total Visits</div>
+        </Card>
+        <Card className="text-center">
+          <div className="text-3xl font-bold text-dash-primary">{uniqueVisitors}</div>
+          <div className="text-sm text-dash-muted mt-1">Unique Guests</div>
+        </Card>
+        <Card className="text-center">
+          <div className="text-3xl font-bold text-green-600">{attending}</div>
+          <div className="text-sm text-dash-muted mt-1">Attending</div>
+        </Card>
+        <Card className="text-center">
+          <div className="text-3xl font-bold text-red-600">{declined}</div>
+          <div className="text-sm text-dash-muted mt-1">Declined</div>
+        </Card>
       </div>
 
-      {/* RSVP breakdown */}
-      <Card className="p-6 mb-6">
-        <h3 className="text-sm font-semibold text-dash-text mb-4">RSVP Breakdown</h3>
-        <div className="space-y-3">
-          <StatBar label="Attending" value={attending} total={totalRsvps} color="bg-green-500" />
-          <StatBar label="Declined" value={declined} total={totalRsvps} color="bg-red-500" />
-          <StatBar label="Pending" value={pending} total={totalRsvps} color="bg-amber-500" />
+      {/* RSVP Summary */}
+      <Card>
+        <h3 className="text-sm font-semibold text-dash-text mb-4">RSVP Summary</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div>
+            <div className="text-lg font-semibold text-dash-text">{totalRsvps}</div>
+            <div className="text-xs text-dash-muted">Total Responses</div>
+          </div>
+          <div>
+            <div className="text-lg font-semibold text-green-600">{attending}</div>
+            <div className="text-xs text-dash-muted">Attending</div>
+          </div>
+          <div>
+            <div className="text-lg font-semibold text-red-600">{declined}</div>
+            <div className="text-xs text-dash-muted">Declined</div>
+          </div>
+          <div>
+            <div className="text-lg font-semibold text-dash-text">{totalPlusOnes}</div>
+            <div className="text-xs text-dash-muted">Plus Ones</div>
+          </div>
         </div>
       </Card>
 
-      {/* Device & Source breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <Card className="p-6">
-          <h3 className="text-sm font-semibold text-dash-text mb-4">Devices</h3>
-          {Object.keys(deviceTypes).length > 0 ? (
-            <div className="space-y-2">
-              {Object.entries(deviceTypes).map(([device, count]) => (
-                <div key={device} className="flex items-center justify-between text-sm">
-                  <span className="text-dash-muted capitalize">{device}</span>
-                  <span className="font-medium text-dash-text">{count}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-dash-muted">No data yet</p>
-          )}
-        </Card>
-        <Card className="p-6">
-          <h3 className="text-sm font-semibold text-dash-text mb-4">Sources</h3>
-          {Object.keys(sources).length > 0 ? (
-            <div className="space-y-2">
-              {Object.entries(sources).map(([source, count]) => (
-                <div key={source} className="flex items-center justify-between text-sm">
-                  <span className="text-dash-muted capitalize">{source}</span>
-                  <span className="font-medium text-dash-text">{count}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-dash-muted">No data yet</p>
-          )}
-        </Card>
-      </div>
-
-      {/* Recent views */}
-      <Card className="p-6">
-        <h3 className="text-sm font-semibold text-dash-text mb-4">Recent Views</h3>
-        {recentViews.length > 0 ? (
+      {/* Recent Visits */}
+      <Card>
+        <h3 className="text-sm font-semibold text-dash-text mb-4">Recent Visits</h3>
+        {recentVisits.length > 0 ? (
           <div className="space-y-2">
-            {recentViews.map((view) => (
+            {recentVisits.map((visit) => (
               <div
-                key={view.id}
-                className="flex items-center justify-between border-b border-dash-border pb-2 last:border-0 last:pb-0"
+                key={visit.id}
+                className="flex items-center justify-between py-2 border-b border-dash-border last:border-0"
               >
-                <div className="text-sm">
-                  <span className="text-dash-text">{view.event_type || "page_view"}</span>
-                  {view.device_type && (
-                    <span className="text-dash-muted ml-2 capitalize">· {view.device_type}</span>
-                  )}
-                  {view.source && (
-                    <span className="text-dash-muted ml-2 capitalize">· {view.source}</span>
-                  )}
+                <div className="flex items-center gap-3">
+                  <Badge variant="primary">{visit.source || "direct"}</Badge>
+                  <span className="text-sm text-dash-muted">
+                    {visit.device_type || "Unknown device"}
+                  </span>
                 </div>
                 <span className="text-xs text-dash-muted">
-                  {formatDateTime(view.created_at)}
+                  {formatDate(visit.created_at?.slice(0, 10))}
                 </span>
               </div>
             ))}
           </div>
         ) : (
-          <EmptyState title="No views yet" description="Share your website to start collecting data." />
+          <EmptyState title="No visits yet" description="Visits will appear here once guests view your site." />
         )}
       </Card>
-    </div>
-  );
-}
 
-function StatCard({ label, value, icon }: { label: string; value: number; icon: string }) {
-  return (
-    <Card className="p-5">
-      <div className="text-2xl mb-1">{icon}</div>
-      <div className="text-2xl font-bold text-dash-text">{value}</div>
-      <div className="text-sm text-dash-muted">{label}</div>
-    </Card>
-  );
-}
-
-function StatBar({ label, value, total, color }: { label: string; value: number; total: number; color: string }) {
-  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
-  return (
-    <div>
-      <div className="flex items-center justify-between text-sm mb-1">
-        <span className="text-dash-text">{label}</span>
-        <span className="text-dash-muted">{value} ({pct}%)</span>
-      </div>
-      <div className="h-2 rounded-full bg-dash-bg overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
+      {/* Recent RSVPs */}
+      <Card>
+        <h3 className="text-sm font-semibold text-dash-text mb-4">Recent RSVPs</h3>
+        {recentRsvps.length > 0 ? (
+          <div className="space-y-2">
+            {recentRsvps.map((rsvp) => (
+              <div
+                key={rsvp.id}
+                className="flex items-center justify-between py-2 border-b border-dash-border last:border-0"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-dash-text">
+                    {rsvp.guest_name}
+                  </span>
+                  <Badge
+                    variant={
+                      rsvp.status === "attending"
+                        ? "success"
+                        : rsvp.status === "declined"
+                          ? "danger"
+                          : "warning"
+                    }
+                  >
+                    {rsvp.status || "pending"}
+                  </Badge>
+                  {rsvp.plus_ones > 0 && (
+                    <span className="text-xs text-dash-muted">
+                      +{rsvp.plus_ones} guest{rsvp.plus_ones > 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-dash-muted">
+                  {formatDate(rsvp.submitted_at?.slice(0, 10))}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No RSVPs yet" description="RSVP responses will appear here once guests respond." />
+        )}
+      </Card>
     </div>
   );
 }

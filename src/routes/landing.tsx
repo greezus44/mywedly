@@ -7,39 +7,39 @@ import { Button } from "../components/ui/Button";
 const FEATURES = [
   {
     icon: "💌",
-    title: "Beautiful Invitation Websites",
+    title: "Beautiful Invitations",
     description:
-      "Create stunning, personalized invitation websites for your special day with our easy-to-use builder.",
+      "Create stunning, personalized invitation websites that reflect your unique style and story.",
   },
   {
-    icon: " Guests",
-    title: "Guest Management",
+    icon: "📅",
+    title: "Smart RSVPs",
     description:
-      "Manage your guest list, track RSVPs, and organize guests into groups — all in one place.",
+      "Collect and track RSVPs effortlessly. Manage guest lists, dietary needs, and plus ones.",
   },
   {
     icon: "🎨",
     title: "Custom Themes",
     description:
-      "Choose from 10 gorgeous presets or customize colors and fonts to match your style perfectly.",
-  },
-  {
-    icon: "📅",
-    title: "Event Schedule",
-    description:
-      "Build a detailed schedule for all your events so guests always know where to be and when.",
+      "Choose from gorgeous presets or fine-tune every color and font to match your vision.",
   },
   {
     icon: "📊",
-    title: "Analytics",
+    title: "Guest Analytics",
     description:
-      "Track page views, RSVP responses, and guest engagement with built-in analytics.",
+      "Track visits, responses, and engagement with built-in analytics dashboards.",
   },
   {
     icon: "🔗",
     title: "Easy Sharing",
     description:
-      "Share your website with a custom URL, QR codes, and direct links to individual guests.",
+      "Share your site with a custom URL or QR code. Reach every guest in seconds.",
+  },
+  {
+    icon: "✨",
+    title: "Custom Pages",
+    description:
+      "Build additional pages with a flexible block editor — stories, schedules, maps, and more.",
   },
 ];
 
@@ -48,74 +48,78 @@ export function LandingPage() {
     <div className="min-h-screen flex flex-col bg-dash-bg">
       <SiteHeader />
 
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="mx-auto max-w-6xl px-4 py-20 md:py-28 text-center">
-          <h1 className="text-4xl md:text-6xl font-bold text-dash-text tracking-tight">
-            Build your dream{" "}
-            <span className="text-dash-primary">invitation website</span>
-          </h1>
-          <p className="mt-6 text-lg md:text-xl text-dash-muted max-w-2xl mx-auto">
-            MyWedly lets you create a beautiful, personalized website for your special day —
-            manage guests, track RSVPs, and share every detail effortlessly.
+      <main className="flex-1">
+        {/* Hero */}
+        <section className="relative overflow-hidden">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 py-20 md:py-28 text-center">
+            <div className="inline-block px-3 py-1 rounded-full bg-dash-surface border border-dash-border text-xs font-medium text-dash-muted mb-6">
+              ✨ Create your dream invitation website
+            </div>
+            <h1 className="text-4xl md:text-6xl font-bold text-dash-text tracking-tight">
+              Your special day,
+              <br />
+              <span className="text-dash-primary">beautifully shared.</span>
+            </h1>
+            <p className="mt-6 text-lg text-dash-muted max-w-2xl mx-auto">
+              MyWedly helps you create a stunning invitation website, manage your
+              guest list, track RSVPs, and share every detail — all in one place.
+            </p>
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link to="/auth">
+                <Button size="lg">Get Started Free</Button>
+              </Link>
+              <a href="#features">
+                <Button variant="secondary" size="lg">
+                  Learn More
+                </Button>
+              </a>
+            </div>
+          </div>
+        </section>
+
+        {/* Features */}
+        <section id="features" className="bg-dash-surface border-y border-dash-border">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6 py-16 md:py-20">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold text-dash-text">
+                Everything you need
+              </h2>
+              <p className="mt-3 text-dash-muted">
+                Powerful tools to manage your invitation website with ease.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {FEATURES.map((f) => (
+                <div
+                  key={f.title}
+                  className="rounded-lg border border-dash-border bg-dash-bg p-6 transition-shadow hover:shadow-md"
+                >
+                  <div className="text-3xl mb-3">{f.icon}</div>
+                  <h3 className="text-lg font-semibold text-dash-text mb-2">
+                    {f.title}
+                  </h3>
+                  <p className="text-sm text-dash-muted">{f.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* CTA */}
+        <section className="mx-auto max-w-6xl px-4 sm:px-6 py-16 md:py-20 text-center">
+          <h2 className="text-3xl font-bold text-dash-text">
+            Ready to get started?
+          </h2>
+          <p className="mt-3 text-dash-muted">
+            Create your free invitation website in minutes.
           </p>
-          <div className="mt-8 flex items-center justify-center gap-4">
+          <div className="mt-6">
             <Link to="/auth">
-              <Button size="lg">Get Started Free</Button>
-            </Link>
-            <Link to="/auth">
-              <Button variant="secondary" size="lg">
-                Sign In
-              </Button>
+              <Button size="lg">Create Your Website</Button>
             </Link>
           </div>
-        </div>
-        <div className="absolute inset-0 -z-10 opacity-30">
-          <div className="absolute top-20 left-1/4 h-72 w-72 rounded-full bg-dash-primary/20 blur-3xl" />
-          <div className="absolute bottom-10 right-1/4 h-72 w-72 rounded-full bg-dash-primary/10 blur-3xl" />
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="mx-auto max-w-6xl w-full px-4 py-16">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-dash-text">
-            Everything you need for your big day
-          </h2>
-          <p className="mt-3 text-dash-muted">
-            Powerful tools to manage every aspect of your invitation website.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {FEATURES.map((feature) => (
-            <div
-              key={feature.title}
-              className="rounded-xl border border-dash-border bg-dash-surface p-6 shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="text-3xl mb-3">{feature.icon}</div>
-              <h3 className="text-lg font-semibold text-dash-text">
-                {feature.title}
-              </h3>
-              <p className="mt-2 text-sm text-dash-muted">{feature.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="mx-auto max-w-6xl w-full px-4 py-16">
-        <div className="rounded-2xl border border-dash-border bg-dash-surface p-10 text-center shadow-sm">
-          <h2 className="text-2xl md:text-3xl font-bold text-dash-text">
-            Ready to create your invitation website?
-          </h2>
-          <p className="mt-3 text-dash-muted">
-            Join MyWedly today and start building your perfect website in minutes.
-          </p>
-          <Link to="/auth" className="inline-block mt-6">
-            <Button size="lg">Get Started Now</Button>
-          </Link>
-        </div>
-      </section>
+        </section>
+      </main>
 
       <SiteFooter />
     </div>

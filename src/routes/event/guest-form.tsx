@@ -1,193 +1,270 @@
-import React, { useState, useEffect } from "react";
-import type { EventGuest, GuestGroup } from "../../lib/supabase";
-import { Input, Textarea, Select } from "../../components/ui/Input";
-import { FormField, Badge, Toggle } from "../../components/ui";
+import React from "react";
+import type { EventGuest } from "../../lib/supabase";
+import { Badge } from "../../components/ui";
 import { cn } from "../../lib/utils";
 
 export interface GuestFormData {
   name: string;
   email: string;
   phone: string;
-  group_id: string | null;
+  username: string;
+  group_id: string;
   group_name: string;
   side: string;
-  rsvp_status: string;
   plus_ones: number;
   dietary: string;
   message: string;
   table_number: string;
+  rsvp_status: string;
 }
 
 export function guestToForm(guest: EventGuest): GuestFormData {
   return {
-    name: guest.name || "",
-    email: guest.email || "",
-    phone: guest.phone || "",
-    group_id: guest.group_id,
-    group_name: guest.group_name || "",
-    side: guest.side || "",
-    rsvp_status: guest.rsvp_status || "pending",
+    name: guest.name ?? "",
+    email: guest.email ?? "",
+    phone: guest.phone ?? "",
+    username: guest.username ?? "",
+    group_id: guest.group_id ?? "",
+    group_name: guest.group_name ?? "",
+    side: guest.side ?? "",
     plus_ones: guest.plus_ones ?? 0,
-    dietary: guest.dietary || "",
-    message: guest.message || "",
-    table_number: guest.table_number || "",
+    dietary: guest.dietary ?? "",
+    message: guest.message ?? "",
+    table_number: guest.table_number?.toString() ?? "",
+    rsvp_status: guest.rsvp_status ?? "pending",
   };
 }
 
-export function emptyGuestForm(): GuestFormData {
+export function formToGuest(form: GuestFormData): Record<string, unknown> {
   return {
-    name: "",
-    email: "",
-    phone: "",
-    group_id: null,
-    group_name: "",
-    side: "",
-    rsvp_status: "pending",
-    plus_ones: 0,
-    dietary: "",
-    message: "",
-    table_number: "",
+    name: form.name.trim(),
+    email: form.email.trim(),
+    phone: form.phone.trim() || null,
+    username: form.username.trim() || null,
+    group_id: form.group_id || null,
+    group_name: form.group_name.trim() || null,
+    side: form.side || null,
+    plus_ones: form.plus_ones ?? 0,
+    dietary: form.dietary.trim() || null,
+    message: form.message.trim() || null,
+    table_number: form.table_number.trim() || null,
+    rsvp_status: form.rsvp_status || "pending",
   };
+}
+
+export function RsvpBadge({ status }: { status: string }) {
+  const variant: "success" | "danger" | "warning" | "default" =
+    status === "attending"
+      ? "success"
+      : status === "declined"
+        ? "danger"
+        : status === "pending"
+          ? "warning"
+          : "default";
+  return <Badge variant={variant}>{status || "pending"}</Badge>;
 }
 
 interface GuestFormProps {
-  initial: GuestFormData;
-  groups: GuestGroup[];
-  onChange: (data: GuestFormData) => void;
+  form: GuestFormData;
+  onChange: (form: GuestFormData) => void;
+  groups?: { id: string; name: string }[];
+  subEvents?: { id: string; name: string }[];
+  invitedEventIds?: Set<string>;
+  onToggleInvitedEvent?: (eventId: string) => void;
 }
 
-export function GuestForm({ initial, groups, onChange }: GuestFormProps) {
-  const [data, setData] = useState<GuestFormData>(initial);
-
-  useEffect(() => {
-    setData(initial);
-  }, [initial]);
-
-  const update = (patch: Partial<GuestFormData>) => {
-    const next = { ...data, ...patch };
-    setData(next);
-    onChange(next);
-  };
+export function GuestForm({
+  form,
+  onChange,
+  groups,
+  subEvents,
+  invitedEventIds,
+  onToggleInvitedEvent,
+}: GuestFormProps) {
+  const update = (patch: Partial<GuestFormData>) => onChange({ ...form, ...patch });
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="Name">
-          <Input
-            value={data.name}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-dash-text mb-1.5">
+            Name <span className="text-dash-danger">*</span>
+          </label>
+          <input
+            type="text"
+            value={form.name}
             onChange={(e) => update({ name: e.target.value })}
             placeholder="Guest name"
+            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
+            autoFocus
           />
-        </FormField>
-        <FormField label="Email">
-          <Input
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-dash-text mb-1.5">
+            Email
+          </label>
+          <input
             type="email"
-            value={data.email}
+            value={form.email}
             onChange={(e) => update({ email: e.target.value })}
-            placeholder="guest@email.com"
+            placeholder="guest@example.com"
+            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
           />
-        </FormField>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="Phone">
-          <Input
-            value={data.phone}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-dash-text mb-1.5">
+            Phone
+          </label>
+          <input
+            type="tel"
+            value={form.phone}
             onChange={(e) => update({ phone: e.target.value })}
-            placeholder="Optional"
+            placeholder="Phone number"
+            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
           />
-        </FormField>
-        <FormField label="Side">
-          <Select
-            value={data.side}
-            onChange={(e) => update({ side: e.target.value })}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-dash-text mb-1.5">
+            Username
+          </label>
+          <input
+            type="text"
+            value={form.username}
+            onChange={(e) => update({ username: e.target.value })}
+            placeholder="Auto-generated if empty"
+            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-dash-text mb-1.5">
+            Guest Group
+          </label>
+          <select
+            value={form.group_id}
+            onChange={(e) => {
+              const group = groups?.find((g) => g.id === e.target.value);
+              update({
+                group_id: e.target.value,
+                group_name: group?.name ?? "",
+              });
+            }}
+            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
           >
-            <option value="">—</option>
-            <option value="bride">Bride</option>
-            <option value="groom">Groom</option>
+            <option value="">No group</option>
+            {groups?.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-dash-text mb-1.5">
+            Side
+          </label>
+          <select
+            value={form.side}
+            onChange={(e) => update({ side: e.target.value })}
+            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
+          >
+            <option value="">No side</option>
+            <option value="bride">Bride's side</option>
+            <option value="groom">Groom's side</option>
             <option value="both">Both</option>
             <option value="other">Other</option>
-          </Select>
-        </FormField>
+          </select>
+        </div>
       </div>
 
-      <FormField label="Guest Group">
-        <Select
-          value={data.group_id ?? ""}
-          onChange={(e) => {
-            const groupId = e.target.value || null;
-            const group = groups.find((g) => g.id === groupId);
-            update({ group_id: groupId, group_name: group?.name ?? "" });
-          }}
-        >
-          <option value="">No group</option>
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </Select>
-      </FormField>
-
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="RSVP Status">
-          <Select
-            value={data.rsvp_status}
-            onChange={(e) => update({ rsvp_status: e.target.value })}
-          >
-            <option value="pending">Pending</option>
-            <option value="attending">Attending</option>
-            <option value="declined">Declined</option>
-          </Select>
-        </FormField>
-        <FormField label="Plus Ones">
-          <Input
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-dash-text mb-1.5">
+            Plus Ones
+          </label>
+          <input
             type="number"
             min={0}
-            value={data.plus_ones}
-            onChange={(e) => update({ plus_ones: parseInt(e.target.value) || 0 })}
+            value={form.plus_ones}
+            onChange={(e) => update({ plus_ones: Number(e.target.value) })}
+            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
           />
-        </FormField>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="Table Number">
-          <Input
-            value={data.table_number}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-dash-text mb-1.5">
+            Table Number
+          </label>
+          <input
+            type="text"
+            value={form.table_number}
             onChange={(e) => update({ table_number: e.target.value })}
-            placeholder="Optional"
+            placeholder="e.g. 5"
+            className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary"
           />
-        </FormField>
-        <FormField label="Dietary">
-          <Input
-            value={data.dietary}
-            onChange={(e) => update({ dietary: e.target.value })}
-            placeholder="e.g., Vegetarian"
-          />
-        </FormField>
+        </div>
       </div>
 
-      <FormField label="Message">
-        <Textarea
-          value={data.message}
-          onChange={(e) => update({ message: e.target.value })}
-          placeholder="Optional guest message"
-          rows={2}
+      <div>
+        <label className="block text-sm font-medium text-dash-text mb-1.5">
+          Dietary Requirements
+        </label>
+        <textarea
+          value={form.dietary}
+          onChange={(e) => update({ dietary: e.target.value })}
+          placeholder="Any dietary needs"
+          className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary min-h-[60px]"
         />
-      </FormField>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-dash-text mb-1.5">
+          Message
+        </label>
+        <textarea
+          value={form.message}
+          onChange={(e) => update({ message: e.target.value })}
+          placeholder="Optional message"
+          className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary min-h-[60px]"
+        />
+      </div>
+
+      {/* Invited Events as clickable chips */}
+      {subEvents && subEvents.length > 0 && onToggleInvitedEvent && (
+        <div>
+          <label className="block text-sm font-medium text-dash-text mb-1.5">
+            Invited Events
+          </label>
+          <p className="text-xs text-dash-muted mb-2">
+            Click to toggle which events this guest is invited to.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {subEvents.map((se) => {
+              const isInvited = invitedEventIds?.has(se.id) ?? true;
+              return (
+                <button
+                  key={se.id}
+                  type="button"
+                  onClick={() => onToggleInvitedEvent(se.id)}
+                  className={cn(
+                    "px-3 py-1.5 text-sm rounded-full border transition-colors",
+                    isInvited
+                      ? "bg-dash-primary text-dash-primary-fg border-transparent"
+                      : "bg-dash-surface text-dash-text border-dash-border hover:bg-dash-bg",
+                  )}
+                >
+                  {se.name}
+                  {isInvited && <span className="ml-1.5">✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
-}
-
-export function RsvpBadge({ status }: { status: string | null }) {
-  switch (status) {
-    case "attending":
-      return <Badge variant="success">Attending</Badge>;
-    case "declined":
-      return <Badge variant="danger">Declined</Badge>;
-    case "pending":
-      return <Badge variant="warning">Pending</Badge>;
-    default:
-      return <Badge variant="default">Pending</Badge>;
-  }
 }

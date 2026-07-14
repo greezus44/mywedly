@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { jsonToTheme } from "../../lib/theme";
 
 export default function GuestSignIn() {
   const { slug } = useParams<{ slug: string }>();
@@ -66,8 +65,6 @@ export default function GuestSignIn() {
     );
   }
 
-  const theme = jsonToTheme(event.theme);
-
   return (
     <EventThemeProvider theme={event.theme}>
       <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
@@ -76,41 +73,18 @@ export default function GuestSignIn() {
             <h1 className="guest-title mb-2">{event.name}</h1>
             <p className="guest-subtitle">Sign in to view your invitation</p>
           </div>
-
           <form onSubmit={handleSubmit} className="event-card space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="event-input"
-                placeholder="your@email.com"
-                required
-                autoFocus
-              />
+              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>Email Address</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="event-input" placeholder="your@email.com" required autoFocus />
             </div>
-
-            {error && (
-              <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="event-btn-primary w-full"
-              style={{ opacity: submitting ? 0.6 : 1 }}
-            >
+            {error && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
+            <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1 }}>
               {submitting ? "Signing in..." : "Sign In"}
             </button>
           </form>
-
           <div className="mt-6 text-center">
-            <Link to={`/e/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>
-              Back to cover
-            </Link>
+            <Link to={`/e/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>Back to cover</Link>
           </div>
         </div>
       </div>

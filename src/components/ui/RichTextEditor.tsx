@@ -1,112 +1,85 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useRef, useCallback, useEffect } from "react";
 import { cn } from "../../lib/utils";
 
 interface RichTextEditorProps {
-  value: string;
-  onChange: (html: string) => void;
-  placeholder?: string;
+  value?: string;
+  onChange?: (html: string) => void;
   className?: string;
+  placeholder?: string;
 }
 
-function execCommand(command: string, value?: string) {
-  document.execCommand(command, false, value);
-}
+const TOOLBAR_GROUPS: { label: string; cmd: string; arg?: string }[] = [
+  { label: "B", cmd: "bold" },
+  { label: "I", cmd: "italic" },
+  { label: "U", cmd: "underline" },
+  { label: "S", cmd: "strikeThrough" },
+  { label: "H1", cmd: "formatBlock", arg: "h1" },
+  { label: "H2", cmd: "formatBlock", arg: "h2" },
+  { label: "H3", cmd: "formatBlock", arg: "h3" },
+  { label: "P", cmd: "formatBlock", arg: "p" },
+  { label: "“ ”", cmd: "formatBlock", arg: "blockquote" },
+  { label: "• List", cmd: "insertUnorderedList" },
+  { label: "1. List", cmd: "insertOrderedList" },
+];
 
-export function RichTextEditor({ value, onChange, placeholder, className }: RichTextEditorProps) {
+export function RichTextEditor({
+  value = "",
+  onChange,
+  className,
+  placeholder = "Start typing...",
+}: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
-  const [focused, setFocused] = useState(false);
+  const isInternalChange = useRef(false);
 
-  // Sync external value when not focused
   useEffect(() => {
-    if (editorRef.current && !focused && editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = value || "";
+    if (editorRef.current && !isInternalChange.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value;
     }
-  }, [value, focused]);
+    isInternalChange.current = false;
+  }, [value]);
+
+  const exec = useCallback((cmd: string, arg?: string) => {
+    document.execCommand(cmd, false, arg);
+    if (editorRef.current) {
+      isInternalChange.current = true;
+      onChange?.(editorRef.current.innerHTML);
+    }
+    editorRef.current?.focus();
+  }, [onChange]);
 
   const handleInput = useCallback(() => {
     if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+      isInternalChange.current = true;
+      onChange?.(editorRef.current.innerHTML);
     }
   }, [onChange]);
 
-  const toolbarButtons = [
-    { label: "B", command: "bold", className: "font-bold" },
-    { label: "I", command: "italic", className: "italic" },
-    { label: "U", command: "underline", className: "underline" },
-    { label: "S", command: "strikeThrough", className: "line-through" },
-  ] as const;
-
-  const blockButtons = [
-    { label: "H1", command: "formatBlock", value: "h1" },
-    { label: "H2", command: "formatBlock", value: "h2" },
-    { label: "H3", command: "formatBlock", value: "h3" },
-    { label: "P", command: "formatBlock", value: "p" },
-  ] as const;
-
-  const listButtons = [
-    { label: "• List", command: "insertUnorderedList" },
-    { label: "1. List", command: "insertOrderedList" },
-  ] as const;
-
-  const handleLink = () => {
+  const handleLink = useCallback(() => {
     const url = window.prompt("Enter URL:");
-    if (url) execCommand("createLink", url);
-    handleInput();
-  };
+    if (url) {
+      exec("createLink", url);
+    }
+  }, [exec]);
 
-  const handleClearFormatting = () => {
-    execCommand("removeFormat");
-    handleInput();
-  };
+  const handleImage = useCallback(() => {
+    const url = window.prompt("Enter image URL:");
+    if (url) {
+      exec("insertImage", url);
+    }
+  }, [exec]);
 
   return (
-    <div className={cn("rounded-lg border border-dash-border bg-dash-surface overflow-hidden", className)}>
+    <div className={cn("rounded-lg border border-dash-border overflow-hidden", className)}>
       <div className="flex flex-wrap items-center gap-1 border-b border-dash-border bg-dash-bg px-2 py-1.5">
-        {toolbarButtons.map((btn) => (
+        {TOOLBAR_GROUPS.map((tool) => (
           <button
-            key={btn.command}
+            key={tool.label}
             type="button"
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              execCommand(btn.command);
-              handleInput();
-            }}
-            className={cn(
-              "rounded px-2 py-1 text-sm text-dash-text hover:bg-dash-surface transition-colors",
-              btn.className
-            )}
+            onClick={() => exec(tool.cmd, tool.arg)}
+            className="px-2 py-1 text-xs font-medium rounded hover:bg-dash-surface text-dash-text border border-transparent hover:border-dash-border transition-colors"
           >
-            {btn.label}
-          </button>
-        ))}
-        <div className="w-px h-5 bg-dash-border mx-1" />
-        {blockButtons.map((btn) => (
-          <button
-            key={btn.label}
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              execCommand(btn.command, btn.value);
-              handleInput();
-            }}
-            className="rounded px-2 py-1 text-xs font-medium text-dash-text hover:bg-dash-surface transition-colors"
-          >
-            {btn.label}
-          </button>
-        ))}
-        <div className="w-px h-5 bg-dash-border mx-1" />
-        {listButtons.map((btn) => (
-          <button
-            key={btn.command}
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => {
-              execCommand(btn.command);
-              handleInput();
-            }}
-            className="rounded px-2 py-1 text-xs text-dash-text hover:bg-dash-surface transition-colors"
-          >
-            {btn.label}
+            {tool.label}
           </button>
         ))}
         <div className="w-px h-5 bg-dash-border mx-1" />
@@ -114,15 +87,24 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={handleLink}
-          className="rounded px-2 py-1 text-xs text-dash-text hover:bg-dash-surface transition-colors"
+          className="px-2 py-1 text-xs font-medium rounded hover:bg-dash-surface text-dash-text border border-transparent hover:border-dash-border transition-colors"
         >
           Link
         </button>
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
-          onClick={handleClearFormatting}
-          className="rounded px-2 py-1 text-xs text-dash-text hover:bg-dash-surface transition-colors"
+          onClick={handleImage}
+          className="px-2 py-1 text-xs font-medium rounded hover:bg-dash-surface text-dash-text border border-transparent hover:border-dash-border transition-colors"
+        >
+          Image
+        </button>
+        <div className="w-px h-5 bg-dash-border mx-1" />
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => exec("removeFormat")}
+          className="px-2 py-1 text-xs font-medium rounded hover:bg-dash-surface text-dash-text border border-transparent hover:border-dash-border transition-colors"
         >
           Clear
         </button>
@@ -130,15 +112,10 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
       <div
         ref={editorRef}
         contentEditable
-        suppressContentEditableWarning
         onInput={handleInput}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
         data-placeholder={placeholder}
-        className={cn(
-          "rich-content min-h-[120px] px-3 py-2 text-sm text-dash-text focus:outline-none",
-          "[&[data-placeholder]]:empty:before:content-[attr(data-placeholder)] [&[data-placeholder]]:empty:before:text-dash-muted/60"
-        )}
+        className="rich-content min-h-[150px] p-3 outline-none text-sm text-dash-text focus:outline-none [&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-dash-muted"
+        suppressContentEditableWarning
       />
     </div>
   );

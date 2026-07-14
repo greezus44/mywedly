@@ -1,93 +1,104 @@
 import React, { forwardRef } from "react";
 import { cn } from "../../lib/utils";
 
-interface BaseFieldProps {
+interface BaseProps {
   label?: string;
   error?: string;
 }
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement>, BaseFieldProps {}
+interface InputProps
+  extends BaseProps,
+    Omit<React.InputHTMLAttributes<HTMLInputElement>, "size"> {}
 
-interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement>, BaseFieldProps {}
+interface TextareaProps
+  extends BaseProps,
+    React.TextareaHTMLAttributes<HTMLTextAreaElement> {}
 
-interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement>, BaseFieldProps {}
+interface SelectProps
+  extends BaseProps,
+    React.SelectHTMLAttributes<HTMLSelectElement> {}
 
-const fieldBaseClasses =
-  "w-full rounded-lg border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted/60 focus:outline-none focus:ring-2 focus:ring-dash-primary/30 transition-colors";
+const baseInputClasses =
+  "w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted focus:outline-none focus:ring-2 focus:ring-dash-primary focus:border-transparent transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
 
-const errorBorderClass = (error?: string) =>
-  error ? "border-dash-danger" : "border-dash-border";
-
-const labelClass = "block text-sm font-medium text-dash-text mb-1.5";
-const errorClass = "mt-1 text-xs text-dash-danger";
+const errorClasses = "border-dash-danger focus:ring-dash-danger";
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, className, id, ...props }, ref) => {
-    const inputId = id || props.name;
+    const inputId = id || props.name || label;
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className={labelClass}>
+          <label
+            htmlFor={inputId}
+            className="block text-sm font-medium text-dash-text mb-1.5"
+          >
             {label}
           </label>
         )}
         <input
           ref={ref}
           id={inputId}
-          className={cn(fieldBaseClasses, errorBorderClass(error), className)}
+          className={cn(baseInputClasses, error && errorClasses, className)}
           {...props}
         />
-        {error && <p className={errorClass}>{error}</p>}
+        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
       </div>
     );
-  }
+  },
 );
 Input.displayName = "Input";
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, error, className, id, ...props }, ref) => {
-    const inputId = id || props.name;
+    const inputId = id || props.name || label;
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className={labelClass}>
+          <label
+            htmlFor={inputId}
+            className="block text-sm font-medium text-dash-text mb-1.5"
+          >
             {label}
           </label>
         )}
         <textarea
           ref={ref}
           id={inputId}
-          className={cn(fieldBaseClasses, "resize-y min-h-[80px]", errorBorderClass(error), className)}
+          className={cn(baseInputClasses, "resize-y min-h-[80px]", error && errorClasses, className)}
           {...props}
         />
-        {error && <p className={errorClass}>{error}</p>}
+        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
       </div>
     );
-  }
+  },
 );
 Textarea.displayName = "Textarea";
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, error, className, id, children, ...props }, ref) => {
-    const inputId = id || props.name;
+    const inputId = id || props.name || label;
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className={labelClass}>
+          <label
+            htmlFor={inputId}
+            className="block text-sm font-medium text-dash-text mb-1.5"
+          >
             {label}
           </label>
         )}
         <select
           ref={ref}
           id={inputId}
-          className={cn(fieldBaseClasses, "cursor-pointer", errorBorderClass(error), className)}
+          className={cn(baseInputClasses, "appearance-none cursor-pointer", error && errorClasses, className)}
           {...props}
         >
           {children}
         </select>
-        {error && <p className={errorClass}>{error}</p>}
+        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
       </div>
     );
-  }
+  },
 );
 Select.displayName = "Select";

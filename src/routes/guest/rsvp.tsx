@@ -14,11 +14,10 @@ interface RsvpState {
 }
 
 export default function GuestRsvp() {
-  const { event, slug, invitedSubEventIds } = useGuestOutletContext();
+  const { event, invitedSubEventIds } = useGuestOutletContext();
   const { guest } = useGuestAuth();
   const queryClient = useQueryClient();
 
-  // Fetch only the sub-events the guest is invited to
   const { data: subEvents, isLoading, error } = useQuery({
     queryKey: ["guest-rsvp-sub-events", event.id, invitedSubEventIds],
     queryFn: async () => {
@@ -34,7 +33,6 @@ export default function GuestRsvp() {
     enabled: invitedSubEventIds.length > 0,
   });
 
-  // Fetch existing RSVPs for this guest
   const { data: existingRsvps } = useQuery({
     queryKey: ["guest-rsvps", event.id, guest?.id],
     queryFn: async () => {
@@ -50,7 +48,6 @@ export default function GuestRsvp() {
     enabled: !!guest?.id,
   });
 
-  // Build local RSVP state from existing data
   const [rsvpStates, setRsvpStates] = useState<Record<string, RsvpState>>({});
 
   useEffect(() => {
@@ -68,13 +65,10 @@ export default function GuestRsvp() {
     setRsvpStates(states);
   }, [subEvents, existingRsvps]);
 
-  // RSVP submission mutation
   const rsvpMutation = useMutation({
     mutationFn: async ({ subEventId, state }: { subEventId: string; state: RsvpState }) => {
       if (!guest) throw new Error("Not signed in");
-
       const existing = existingRsvps?.find((r) => r.sub_event_id === subEventId);
-
       const payload = {
         event_id: event.id,
         guest_id: guest.id,
@@ -87,17 +81,11 @@ export default function GuestRsvp() {
         submitted_at: new Date().toISOString(),
         responded_at: new Date().toISOString(),
       };
-
       if (existing) {
-        const { error } = await supabase
-          .from("event_rsvps")
-          .update(payload)
-          .eq("id", existing.id);
+        const { error } = await supabase.from("event_rsvps").update(payload).eq("id", existing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from("event_rsvps")
-          .insert(payload);
+        const { error } = await supabase.from("event_rsvps").insert(payload);
         if (error) throw error;
       }
     },
@@ -107,10 +95,7 @@ export default function GuestRsvp() {
   });
 
   const updateState = (subEventId: string, patch: Partial<RsvpState>) => {
-    setRsvpStates((prev) => ({
-      ...prev,
-      [subEventId]: { ...prev[subEventId], ...patch },
-    }));
+    setRsvpStates((prev) => ({ ...prev, [subEventId]: { ...prev[subEventId], ...patch } }));
   };
 
   if (isLoading) {
@@ -126,7 +111,7 @@ export default function GuestRsvp() {
       <div className="guest-section text-center">
         <div className="event-card mx-auto max-w-md">
           <h2 className="guest-title mb-2">Something went wrong</h2>
-          <p className="guest-subtitle mb-4">We couldn't load your RSVP page. Please try again later.</p>
+          <p className="guest-subtitle">We couldn't load your RSVP page. Please try again later.</p>
         </div>
       </div>
     );
@@ -139,10 +124,7 @@ export default function GuestRsvp() {
       <div className="guest-section text-center">
         <div className="event-card mx-auto max-w-md">
           <h2 className="guest-title mb-2">No Events to RSVP</h2>
-          <p className="guest-subtitle">
-            You haven't been invited to any events yet, or the host hasn't configured any events.
-            Please check back later or contact the host.
-          </p>
+          <p className="guest-subtitle">You haven't been invited to any events yet, or the host hasn't configured any events.</p>
         </div>
       </div>
     );
@@ -151,16 +133,12 @@ export default function GuestRsvp() {
   return (
     <div className="guest-section">
       <div className="mx-auto max-w-2xl">
-        {/* Header */}
         <div className="mb-8 text-center">
           <p className="guest-eyebrow">RSVP</p>
           <h1 className="guest-title">Let us know if you can make it</h1>
-          <p className="guest-subtitle mx-auto">
-            Please respond to each event you've been invited to.
-          </p>
+          <p className="guest-subtitle mx-auto">Please respond to each event you've been invited to.</p>
         </div>
 
-        {/* Event Cards */}
         <div className="space-y-6">
           {events.map((subEvent, index) => {
             const state = rsvpStates[subEvent.id] || { status: "pending" as const, plus_ones: 0, dietary: "", message: "" };
@@ -168,49 +146,25 @@ export default function GuestRsvp() {
             const mutationError = rsvpMutation.isError && rsvpMutation.variables?.subEventId === subEvent.id;
 
             return (
-              <div
-                key={subEvent.id}
-                className="event-card animate-slideUpStagger"
-                style={{ animationDelay: `${index * 80}ms` }}
-              >
-                {/* Event Info */}
+              <div key={subEvent.id} className="event-card animate-slideUpStagger" style={{ animationDelay: `${index * 80}ms` }}>
                 <div className="mb-5">
-                  <h2 className="mb-2 text-xl font-semibold" style={{ color: "var(--event-heading)" }}>
-                    {subEvent.name}
-                  </h2>
+                  <h2 className="mb-2 text-xl font-semibold" style={{ color: "var(--event-heading)" }}>{subEvent.name}</h2>
                   {subEvent.date && (
                     <p className="text-sm" style={{ color: "var(--event-muted)" }}>
-                      {formatDate(subEvent.date)}
-                      {subEvent.start_time ? ` at ${formatTime12(subEvent.start_time)}` : ""}
+                      {formatDate(subEvent.date)}{subEvent.start_time ? ` at ${formatTime12(subEvent.start_time)}` : ""}
                     </p>
                   )}
-                  {subEvent.venue && (
-                    <p className="text-sm" style={{ color: "var(--event-muted)" }}>
-                      {subEvent.venue}
-                    </p>
-                  )}
-                  {subEvent.description && (
-                    <p className="mt-2 text-sm" style={{ color: "var(--event-text)" }}>
-                      {subEvent.description}
-                    </p>
-                  )}
-                  {rsvpDeadlinePassed && (
-                    <p className="mt-2 text-xs font-medium" style={{ color: "var(--event-primary)" }}>
-                      RSVP deadline has passed
-                    </p>
-                  )}
+                  {subEvent.venue && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{subEvent.venue}</p>}
+                  {subEvent.description && <p className="mt-2 text-sm" style={{ color: "var(--event-text)" }}>{subEvent.description}</p>}
+                  {rsvpDeadlinePassed && <p className="mt-2 text-xs font-medium" style={{ color: "var(--event-primary)" }}>RSVP deadline has passed</p>}
                 </div>
 
-                {/* RSVP Controls */}
                 <div className="space-y-4">
                   <div className="flex gap-3">
                     <button
                       onClick={() => updateState(subEvent.id, { status: "attending" })}
                       disabled={rsvpDeadlinePassed}
-                      className={cn(
-                        "flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-semibold transition-all",
-                        state.status === "attending" ? "scale-105" : "hover:scale-105"
-                      )}
+                      className={cn("flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-semibold transition-all", state.status === "attending" ? "scale-105" : "hover:scale-105")}
                       style={{
                         borderColor: state.status === "attending" ? "var(--event-primary)" : "var(--event-border)",
                         backgroundColor: state.status === "attending" ? "var(--event-primary)" : "transparent",
@@ -218,16 +172,11 @@ export default function GuestRsvp() {
                         opacity: rsvpDeadlinePassed ? 0.5 : 1,
                         cursor: rsvpDeadlinePassed ? "not-allowed" : "pointer",
                       }}
-                    >
-                      Will Attend
-                    </button>
+                    >Will Attend</button>
                     <button
                       onClick={() => updateState(subEvent.id, { status: "declined" })}
                       disabled={rsvpDeadlinePassed}
-                      className={cn(
-                        "flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-semibold transition-all",
-                        state.status === "declined" ? "scale-105" : "hover:scale-105"
-                      )}
+                      className={cn("flex-1 rounded-lg border-2 px-4 py-2.5 text-sm font-semibold transition-all", state.status === "declined" ? "scale-105" : "hover:scale-105")}
                       style={{
                         borderColor: state.status === "declined" ? "var(--event-primary)" : "var(--event-border)",
                         backgroundColor: state.status === "declined" ? "var(--event-surface-alt)" : "transparent",
@@ -235,79 +184,39 @@ export default function GuestRsvp() {
                         opacity: rsvpDeadlinePassed ? 0.5 : 1,
                         cursor: rsvpDeadlinePassed ? "not-allowed" : "pointer",
                       }}
-                    >
-                      Cannot Attend
-                    </button>
+                    >Cannot Attend</button>
                   </div>
 
-                  {/* Additional fields when attending */}
                   {state.status === "attending" && (
                     <div className="space-y-3 animate-fadeIn">
                       <div>
-                        <label className="mb-1 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                          Number of Plus Ones
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          max={10}
-                          value={state.plus_ones}
-                          onChange={(e) => updateState(subEvent.id, { plus_ones: parseInt(e.target.value) || 0 })}
-                          className="event-input"
-                        />
+                        <label className="mb-1 block text-sm font-medium" style={{ color: "var(--event-text)" }}>Number of Plus Ones</label>
+                        <input type="number" min={0} max={10} value={state.plus_ones} onChange={(e) => updateState(subEvent.id, { plus_ones: parseInt(e.target.value) || 0 })} className="event-input" />
                       </div>
                       <div>
-                        <label className="mb-1 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                          Dietary Requirements
-                        </label>
-                        <input
-                          type="text"
-                          value={state.dietary}
-                          onChange={(e) => updateState(subEvent.id, { dietary: e.target.value })}
-                          className="event-input"
-                          placeholder="Any dietary restrictions?"
-                        />
+                        <label className="mb-1 block text-sm font-medium" style={{ color: "var(--event-text)" }}>Dietary Requirements</label>
+                        <input type="text" value={state.dietary} onChange={(e) => updateState(subEvent.id, { dietary: e.target.value })} className="event-input" placeholder="Any dietary restrictions?" />
                       </div>
                       <div>
-                        <label className="mb-1 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                          Message to Host
-                        </label>
-                        <textarea
-                          value={state.message}
-                          onChange={(e) => updateState(subEvent.id, { message: e.target.value })}
-                          className="event-input"
-                          rows={2}
-                          placeholder="Leave a message..."
-                        />
+                        <label className="mb-1 block text-sm font-medium" style={{ color: "var(--event-text)" }}>Message to Host</label>
+                        <textarea value={state.message} onChange={(e) => updateState(subEvent.id, { message: e.target.value })} className="event-input" rows={2} placeholder="Leave a message..." />
                       </div>
                     </div>
                   )}
 
-                  {/* Submit */}
                   {state.status !== "pending" && !rsvpDeadlinePassed && (
                     <button
                       onClick={() => rsvpMutation.mutate({ subEventId: subEvent.id, state })}
                       disabled={rsvpMutation.isPending}
                       className="event-btn-primary w-full"
                       style={{ opacity: rsvpMutation.isPending ? 0.6 : 1 }}
-                    >
-                      {rsvpMutation.isPending ? "Saving..." : "Submit RSVP"}
-                    </button>
+                    >{rsvpMutation.isPending ? "Saving..." : "Submit RSVP"}</button>
                   )}
 
-                  {/* Success feedback */}
                   {rsvpMutation.isSuccess && rsvpMutation.variables?.subEventId === subEvent.id && (
-                    <p className="text-sm font-medium animate-fadeIn" style={{ color: "var(--event-primary)" }}>
-                      Your RSVP has been saved.
-                    </p>
+                    <p className="text-sm font-medium animate-fadeIn" style={{ color: "var(--event-primary)" }}>Your RSVP has been saved.</p>
                   )}
-
-                  {/* Error feedback */}
-                  {mutationError && (
-                    <p className="text-sm font-medium" style={{ color: "var(--event-primary)" }}>
-                      Failed to save RSVP. Please try again.
-                    </p>
-                  )}
+                  {mutationError && <p className="text-sm font-medium" style={{ color: "var(--event-primary)" }}>Failed to save RSVP. Please try again.</p>}
                 </div>
               </div>
             );

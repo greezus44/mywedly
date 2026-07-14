@@ -26,9 +26,9 @@ export interface UserEvent {
   id: string;
   creator_id: string;
   name: string;
-  draft_name: string | null;
-  event_type: string | null;
-  draft_event_type: string | null;
+  draft_name: string;
+  event_type: string;
+  draft_event_type: string;
   event_date: string | null;
   draft_event_date: string | null;
   event_time: string | null;
@@ -92,14 +92,14 @@ export interface EventGuest {
   group_name: string | null;
   side: string | null;
   group_id: string | null;
-  token: string | null;
-  rsvp_status: string | null;
+  token: string;
+  rsvp_status: string;
   rsvp_submitted_at: string | null;
-  plus_ones: number | null;
+  plus_ones: number;
   dietary: string | null;
   message: string | null;
   created_at: string;
-  table_number: string | null;
+  table_number: number | null;
 }
 
 export interface GuestGroup {
@@ -121,15 +121,15 @@ export interface EventRsvp {
   id: string;
   event_id: string;
   guest_id: string;
-  guest_name: string | null;
+  guest_name: string;
   status: string;
-  plus_ones: number | null;
-  guest_count: number | null;
+  plus_ones: number;
+  guest_count: number;
   dietary: string | null;
   dietary_notes: string | null;
   message: string | null;
   answers: Json;
-  submitted_at: string | null;
+  submitted_at: string;
   responded_at: string | null;
   sub_event_id: string | null;
 }
@@ -165,7 +165,7 @@ export interface CustomPage {
   event_id: string;
   slug: string;
   title: string;
-  body: string | null;
+  body: string;
   cover_image_url: string | null;
   inline_image_url: string | null;
   sort_order: number;
@@ -197,9 +197,9 @@ export interface GuestInvitationOverride {
 export interface SharingEvent {
   id: string;
   event_id: string;
-  event_type: string | null;
+  event_type: string;
   guest_id: string | null;
-  source: string | null;
+  source: string;
   device_type: string | null;
   metadata: Json;
   created_at: string;

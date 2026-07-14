@@ -1,222 +1,272 @@
 import React from "react";
 import { resolveTypography } from "../../lib/typography";
-import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
+import { formatDate, formatTime12, getCountdown, cn } from "../../lib/utils";
 import type { Json } from "../../lib/supabase";
 
-// ---- CoverPreview ----
-interface CoverPreviewProps {
-  eventName: unknown;
-  eventDate: string | null;
-  eventTime: string | null;
-  venue: unknown;
-  coverImage: string | null;
-  coverConfig?: Json | null;
+interface EventData {
+  name?: string;
+  event_type?: string;
+  event_date?: string | null;
+  event_time?: string | null;
+  venue?: string | null;
+  address?: string | null;
+  cover_image?: string | null;
+  cover_config?: Json | null;
+  content?: Json | null;
 }
 
-export function CoverPreview({
-  eventName,
-  eventDate,
-  eventTime,
-  venue,
-  coverImage,
-}: CoverPreviewProps) {
-  const nameResolved = resolveTypography(eventName, "Our Wedding");
-  const venueResolved = resolveTypography(venue, "Venue to be announced");
+function getStr(value: unknown, fallback = ""): string {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object" && "text" in value) {
+    const v = (value as { text?: unknown }).text;
+    if (typeof v === "string") return v;
+  }
+  return fallback;
+}
+
+function getCoverStyle(config: Json | null | undefined): React.CSSProperties {
+  if (!config || typeof config !== "object" || Array.isArray(config)) return {};
+  const c = config as Record<string, unknown>;
+  const style: React.CSSProperties = {};
+  if (typeof c.overlayColor === "string") {
+    style.backgroundImage = `linear-gradient(${c.overlayColor}, ${c.overlayColor})`;
+  }
+  if (typeof c.overlayOpacity === "number") {
+    style.opacity = c.overlayOpacity;
+  }
+  return style;
+}
+
+export function CoverPreview({ event }: { event: EventData }) {
+  const { text: name, style: nameStyle } = resolveTypography(
+    (event.content as Record<string, unknown> | undefined)?.["coverName"],
+    event.name || "Our Wedding",
+  );
+  const { text: dateText, style: dateStyle } = resolveTypography(
+    (event.content as Record<string, unknown> | undefined)?.["coverDate"],
+    formatDate(event.event_date),
+  );
+  const { text: venueText, style: venueStyle } = resolveTypography(
+    (event.content as Record<string, unknown> | undefined)?.["coverVenue"],
+    event.venue || "",
+  );
+
+  const countdown = getCountdown(event.event_date ? `${event.event_date}T${event.event_time || "00:00:00"}` : null);
 
   return (
-    <div className="event-themed min-h-[400px] flex flex-col items-center justify-center text-center relative overflow-hidden">
-      {coverImage && (
-        <div className="absolute inset-0">
-          <img src={coverImage} alt="" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-black/30" />
-        </div>
+    <div className="relative w-full min-h-[500px] rounded-lg overflow-hidden bg-dash-bg">
+      {event.cover_image && (
+        <img
+          src={event.cover_image}
+          alt="Cover"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
       )}
-      <div className="relative z-10 px-6 py-12 max-w-2xl">
-        <div className="guest-eyebrow text-white/80">We're getting married</div>
-        <h1 className="guest-title text-white" style={nameResolved.style}>
-          {nameResolved.text}
+      <div
+        className="absolute inset-0"
+        style={getCoverStyle(event.cover_config)}
+      />
+      <div className="relative flex flex-col items-center justify-center min-h-[500px] px-6 text-center py-12">
+        <p className="guest-eyebrow">{event.event_type || "We're getting married"}</p>
+        <h1 className="guest-title" style={nameStyle}>
+          {name}
         </h1>
-        <p className="guest-subtitle text-white/90" style={venueResolved.style}>
-          {venueResolved.text}
-        </p>
-        {eventDate && (
-          <p className="mt-4 text-white/80 text-sm">
-            {formatDate(eventDate)}
-            {eventTime && ` · ${formatTime12(eventTime)}`}
+        {dateText && (
+          <p className="guest-subtitle" style={dateStyle}>
+            {dateText}
           </p>
         )}
-      </div>
-    </div>
-  );
-}
-
-// ---- LoginPreview ----
-interface LoginPreviewProps {
-  eventName: unknown;
-  loginMessage?: unknown;
-}
-
-export function LoginPreview({ eventName, loginMessage }: LoginPreviewProps) {
-  const nameResolved = resolveTypography(eventName, "Our Wedding");
-  const messageResolved = resolveTypography(loginMessage, "Please enter your email to view your invitation");
-
-  return (
-    <div className="event-themed min-h-[300px] flex items-center justify-center p-6">
-      <div className="event-card max-w-md w-full text-center">
-        <h2 className="guest-title mb-2" style={nameResolved.style}>
-          {nameResolved.text}
-        </h2>
-        <p className="guest-subtitle mb-6" style={messageResolved.style}>
-          {messageResolved.text}
-        </p>
-        <div className="space-y-3">
-          <input
-            type="email"
-            placeholder="your@email.com"
-            className="event-input"
-            readOnly
-          />
-          <button className="event-btn-primary w-full">View Invitation</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---- HomePreview ----
-interface HomePreviewProps {
-  eventName: unknown;
-  eventDate: string | null;
-  eventTime: string | null;
-  venue: unknown;
-  address: unknown;
-  welcomeMessage?: unknown;
-  coverImage?: string | null;
-}
-
-export function HomePreview({
-  eventName,
-  eventDate,
-  eventTime,
-  venue,
-  address,
-  welcomeMessage,
-  coverImage,
-}: HomePreviewProps) {
-  const nameResolved = resolveTypography(eventName, "Our Wedding");
-  const venueResolved = resolveTypography(venue, "Venue to be announced");
-  const addressResolved = resolveTypography(address, "");
-  const welcomeResolved = resolveTypography(welcomeMessage, "Welcome to our wedding website. We're so excited to celebrate with you!");
-  const countdown = getCountdown(eventDate);
-
-  return (
-    <div className="event-themed">
-      {coverImage && (
-        <div className="h-48 overflow-hidden">
-          <img src={coverImage} alt="" className="w-full h-full object-cover" />
-        </div>
-      )}
-      <section className="guest-section text-center">
-        <div className="guest-eyebrow">Save the date</div>
-        <h1 className="guest-title mb-2" style={nameResolved.style}>
-          {nameResolved.text}
-        </h1>
-        {eventDate && (
-          <p className="text-lg mb-4" style={{ color: "var(--event-muted)" }}>
-            {formatDate(eventDate)}
-            {eventTime && ` · ${formatTime12(eventTime)}`}
+        {venueText && (
+          <p className="guest-subtitle mt-1" style={venueStyle}>
+            {venueText}
           </p>
         )}
-        {!countdown.expired && eventDate && (
-          <div className="flex justify-center gap-4 mb-6">
-            {[
-              { label: "Days", value: countdown.days },
-              { label: "Hours", value: countdown.hours },
-              { label: "Mins", value: countdown.minutes },
-              { label: "Secs", value: countdown.seconds },
-            ].map((item) => (
-              <div key={item.label} className="event-info-card text-center px-3 py-2 min-w-[60px]">
-                <div className="text-2xl font-bold" style={{ color: "var(--event-primary)" }}>
-                  {item.value}
+        {!countdown.isPast && (
+          <div className="flex gap-6 mt-8">
+            {(["days", "hours", "minutes", "seconds"] as const).map((unit) => (
+              <div key={unit} className="text-center">
+                <div className="text-3xl font-bold" style={{ color: "var(--event-primary)" }}>
+                  {countdown[unit]}
                 </div>
-                <div className="text-xs" style={{ color: "var(--event-muted)" }}>
-                  {item.label}
+                <div className="text-xs uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>
+                  {unit}
                 </div>
               </div>
             ))}
           </div>
         )}
-      </section>
-      <section className="guest-section-tight text-center">
-        <p className="guest-subtitle mx-auto" style={welcomeResolved.style}>
-          {welcomeResolved.text}
-        </p>
-      </section>
-      <section className="guest-section-tight">
-        <div className="event-info-card max-w-md mx-auto text-center">
-          <h3 className="text-lg font-semibold mb-2" style={{ color: "var(--event-heading)" }}>
-            {venueResolved.text}
-          </h3>
-          {addressResolved.text && (
-            <p className="text-sm" style={{ color: "var(--event-muted)" }}>
-              {addressResolved.text}
-            </p>
-          )}
-        </div>
-      </section>
+      </div>
     </div>
   );
 }
 
-// ---- RsvpPreview ----
-interface RsvpPreviewProps {
-  eventName: unknown;
-  rsvpDeadline?: string | null;
-}
-
-export function RsvpPreview({ eventName, rsvpDeadline }: RsvpPreviewProps) {
-  const nameResolved = resolveTypography(eventName, "Our Wedding");
+export function LoginPreview({ event }: { event: EventData }) {
+  const { text: title, style: titleStyle } = resolveTypography(
+    (event.content as Record<string, unknown> | undefined)?.["loginTitle"],
+    "Welcome",
+  );
+  const { text: subtitle, style: subtitleStyle } = resolveTypography(
+    (event.content as Record<string, unknown> | undefined)?.["loginSubtitle"],
+    "Please sign in with your email to view the invitation",
+  );
 
   return (
-    <div className="event-themed min-h-[300px] p-6">
-      <section className="guest-section-tight text-center">
-        <div className="guest-eyebrow">Kindly respond</div>
-        <h2 className="guest-title mb-4" style={nameResolved.style}>
-          {nameResolved.text}
-        </h2>
-        {rsvpDeadline && (
-          <p className="guest-subtitle mx-auto mb-6">
-            Please RSVP by {formatDate(rsvpDeadline)}
-          </p>
-        )}
-        <div className="event-card max-w-md mx-auto text-left space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--event-heading)" }}>
-              Will you attend?
-            </label>
-            <div className="flex gap-2">
-              <button className="event-btn-primary flex-1">Joyfully Accept</button>
-              <button className="event-btn-secondary flex-1">Regretfully Decline</button>
+    <div className="flex flex-col items-center justify-center min-h-[500px] px-6 py-12 text-center">
+      <h1 className="guest-title" style={titleStyle}>
+        {title}
+      </h1>
+      <p className="guest-subtitle mb-8" style={subtitleStyle}>
+        {subtitle}
+      </p>
+      <div className="w-full max-w-sm space-y-3">
+        <input
+          type="email"
+          placeholder="Enter your email"
+          className="event-input"
+          readOnly
+        />
+        <button type="button" className="event-btn-primary w-full">
+          View Invitation
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function HomePreview({ event }: { event: EventData }) {
+  const { text: welcomeTitle, style: welcomeStyle } = resolveTypography(
+    (event.content as Record<string, unknown> | undefined)?.["homeTitle"],
+    event.name || "Our Wedding",
+  );
+  const { text: welcomeBody, style: welcomeBodyStyle } = resolveTypography(
+    (event.content as Record<string, unknown> | undefined)?.["homeBody"],
+    "We invite you to celebrate our special day with us. Join us as we begin our journey together.",
+  );
+
+  return (
+    <div className="guest-section">
+      <div className="max-w-3xl mx-auto text-center">
+        <p className="guest-eyebrow">{event.event_type || "We're getting married"}</p>
+        <h1 className="guest-title" style={welcomeStyle}>
+          {welcomeTitle}
+        </h1>
+        <p className="guest-subtitle mt-4" style={welcomeBodyStyle}>
+          {welcomeBody}
+        </p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-12 max-w-4xl mx-auto">
+        <div className="event-info-card text-center">
+          <div className="text-xs uppercase tracking-wider mb-2" style={{ color: "var(--event-muted)" }}>
+            When
+          </div>
+          <div className="font-semibold" style={{ color: "var(--event-heading)" }}>
+            {formatDate(event.event_date)}
+          </div>
+          {event.event_time && (
+            <div className="text-sm mt-1" style={{ color: "var(--event-muted)" }}>
+              {formatTime12(event.event_time)}
             </div>
+          )}
+        </div>
+        <div className="event-info-card text-center">
+          <div className="text-xs uppercase tracking-wider mb-2" style={{ color: "var(--event-muted)" }}>
+            Where
+          </div>
+          <div className="font-semibold" style={{ color: "var(--event-heading)" }}>
+            {event.venue || "Venue TBA"}
+          </div>
+          {event.address && (
+            <div className="text-sm mt-1" style={{ color: "var(--event-muted)" }}>
+              {event.address}
+            </div>
+          )}
+        </div>
+        <div className="event-info-card text-center">
+          <div className="text-xs uppercase tracking-wider mb-2" style={{ color: "var(--event-muted)" }}>
+            RSVP
+          </div>
+          <div className="font-semibold" style={{ color: "var(--event-heading)" }}>
+            Respond Soon
+          </div>
+          <div className="text-sm mt-1" style={{ color: "var(--event-muted)" }}>
+            Kindly reply before the deadline
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function RsvpPreview({ event }: { event: EventData }) {
+  const { text: title, style: titleStyle } = resolveTypography(
+    (event.content as Record<string, unknown> | undefined)?.["rsvpTitle"],
+    "RSVP",
+  );
+  const { text: subtitle, style: subtitleStyle } = resolveTypography(
+    (event.content as Record<string, unknown> | undefined)?.["rsvpSubtitle"],
+    "Will you be joining us?",
+  );
+
+  return (
+    <div className="guest-section">
+      <div className="max-w-xl mx-auto text-center">
+        <p className="guest-eyebrow">Kindly Reply</p>
+        <h1 className="guest-title" style={titleStyle}>
+          {title}
+        </h1>
+        <p className="guest-subtitle mt-2" style={subtitleStyle}>
+          {subtitle}
+        </p>
+      </div>
+      <div className="max-w-xl mx-auto mt-8">
+        <div className="event-card space-y-4">
+          <div className="flex gap-3">
+            <button
+              type="button"
+              className="event-btn-primary flex-1"
+            >
+              Joyfully Accepts
+            </button>
+            <button
+              type="button"
+              className="event-btn-secondary flex-1"
+            >
+              Regretfully Declines
+            </button>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--event-heading)" }}>
-              Number of guests
+            <label className="block text-sm mb-1" style={{ color: "var(--event-muted)" }}>
+              Number of Guests
             </label>
-            <select className="event-input" defaultValue="1">
-              <option>1</option>
-              <option>2</option>
+            <select className="event-input" disabled>
+              <option>1 Guest</option>
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1" style={{ color: "var(--event-heading)" }}>
-              Dietary requirements
+            <label className="block text-sm mb-1" style={{ color: "var(--event-muted)" }}>
+              Dietary Requirements
             </label>
-            <textarea className="event-input" rows={2} placeholder="Any allergies or dietary needs?" readOnly />
+            <textarea
+              className="event-input"
+              placeholder="Any dietary needs?"
+              readOnly
+            />
           </div>
-          <button className="event-btn-primary w-full">Submit RSVP</button>
+          <div>
+            <label className="block text-sm mb-1" style={{ color: "var(--event-muted)" }}>
+              Message
+            </label>
+            <textarea
+              className="event-input"
+              placeholder="Leave a message for the couple"
+              readOnly
+            />
+          </div>
+          <button type="button" className="event-btn-primary w-full">
+            Submit RSVP
+          </button>
         </div>
-      </section>
+      </div>
     </div>
   );
 }

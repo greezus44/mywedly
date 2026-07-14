@@ -1,156 +1,186 @@
 import React, { useCallback, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
+import { uploadImage, removeImage, extractPathFromUrl } from "../../lib/upload";
 import { Button } from "./Button";
-import { LoadingSpinner } from "./index";
 
 interface ImageUploadProps {
   value?: string | null;
-  onUpload: (file: File) => Promise<string>;
-  onRemove?: () => void;
-  label?: string;
+  onChange?: (url: string | null, path: string | null) => void;
+  bucket?: string;
+  path?: string;
   className?: string;
-  accept?: string;
-  maxSizeMb?: number;
-  aspectRatio?: string;
+  label?: string;
+  maxSizeMB?: number;
+  disabled?: boolean;
 }
 
 export function ImageUpload({
   value,
-  onUpload,
-  onRemove,
-  label,
+  onChange,
+  bucket = "event-assets",
+  path = "uploads",
   className,
-  accept = "image/*",
-  maxSizeMb = 10,
-  aspectRatio,
+  label = "Upload Image",
+  maxSizeMB = 10,
+  disabled = false,
 }: ImageUploadProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [dragging, setDragging] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback(
     async (file: File) => {
       setError(null);
-      if (file.size > maxSizeMb * 1024 * 1024) {
-        setError(`File too large. Max ${maxSizeMb}MB.`);
+      if (file.size > maxSizeMB * 1024 * 1024) {
+        setError(`File too large. Max ${maxSizeMB}MB.`);
         return;
       }
-      setLoading(true);
-      try {
-        await onUpload(file);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Upload failed");
-      } finally {
-        setLoading(false);
+      if (!file.type.startsWith("image/")) {
+        setError("Please select an image file.");
+        return;
+      }
+      setUploading(true);
+      const result = await uploadImage(file, bucket, path);
+      setUploading(false);
+      if ("error" in result) {
+        setError(result.error);
+      } else {
+        onChange?.(result.url, result.path);
       }
     },
-    [onUpload, maxSizeMb]
+    [bucket, path, maxSizeMB, onChange],
   );
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    if (disabled || uploading) return;
+    const file = e.dataTransfer.files[0];
     if (file) handleFile(file);
-    e.target.value = "";
-  };
+  }
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleFile(file);
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragging(false);
-  };
+  function handleRemove() {
+    if (!value) return;
+    const storedPath = extractPathFromUrl(value, bucket);
+    if (storedPath) {
+      removeImage(bucket, storedPath);
+    }
+    onChange?.(null, null);
+  }
 
   return (
     <div className={cn("w-full", className)}>
-      {label && <label className="block text-sm font-medium text-dash-text mb-1.5">{label}</label>}
+      {label && (
+        <label className="block text-sm font-medium text-dash-text mb-1.5">
+          {label}
+        </label>
+      )}
       {value ? (
-        <div className="relative group rounded-lg border border-dash-border overflow-hidden bg-dash-surface">
+        <div className="relative group rounded-lg border border-dash-border overflow-hidden">
           <img
             src={value}
-            alt="Uploaded preview"
-            className="w-full object-cover"
-            style={aspectRatio ? { aspectRatio } : { maxHeight: "300px" }}
+            alt="Preview"
+            className="w-full h-48 object-cover"
           />
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
             <Button
               variant="secondary"
               size="sm"
               onClick={() => inputRef.current?.click()}
+              disabled={disabled || uploading}
             >
               Replace
             </Button>
-            {onRemove && (
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={onRemove}
-              >
-                Remove
-              </Button>
-            )}
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleRemove}
+              disabled={disabled || uploading}
+            >
+              Remove
+            </Button>
           </div>
         </div>
       ) : (
         <div
+          onClick={() => !disabled && !uploading && inputRef.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={() => inputRef.current?.click()}
           className={cn(
-            "flex flex-col items-center justify-center rounded-lg border-2 border-dashed cursor-pointer transition-colors p-6 text-center",
-            dragging
-              ? "border-dash-primary bg-dash-primary/5"
-              : "border-dash-border bg-dash-surface hover:border-dash-primary/50",
-            aspectRatio ? "" : "min-h-[160px]"
+            "flex flex-col items-center justify-center cursor-pointer rounded-lg border-2 border-dashed p-6 transition-colors",
+            dragOver
+              ? "border-dash-primary bg-sky-50"
+              : "border-dash-border hover:border-dash-primary hover:bg-dash-bg",
+            (disabled || uploading) && "opacity-50 cursor-not-allowed",
           )}
-          style={aspectRatio ? { aspectRatio } : undefined}
         >
-          {loading ? (
-            <LoadingSpinner />
+          {uploading ? (
+            <div className="flex items-center gap-2 text-sm text-dash-muted">
+              <svg
+                className="animate-spin h-5 w-5"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+              Uploading...
+            </div>
           ) : (
             <>
               <svg
-                className="h-8 w-8 text-dash-muted mb-2"
+                className="w-8 h-8 text-dash-muted mb-2"
                 fill="none"
-                viewBox="0 0 24 24"
                 stroke="currentColor"
-                strokeWidth={1.5}
+                viewBox="0 0 24 24"
               >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+                  strokeWidth={1.5}
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
                 />
               </svg>
-              <p className="text-sm text-dash-text font-medium">
+              <p className="text-sm text-dash-text">
                 Drag & drop or click to upload
               </p>
               <p className="text-xs text-dash-muted mt-1">
-                PNG, JPG, SVG up to {maxSizeMb}MB
+                PNG, JPG, SVG up to {maxSizeMB}MB
               </p>
             </>
           )}
         </div>
       )}
-      {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
       <input
         ref={inputRef}
         type="file"
-        accept={accept}
-        onChange={handleInputChange}
+        accept="image/*"
         className="hidden"
+        disabled={disabled || uploading}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+          e.target.value = "";
+        }}
       />
+      {error && <p className="mt-1.5 text-xs text-dash-danger">{error}</p>}
     </div>
   );
 }

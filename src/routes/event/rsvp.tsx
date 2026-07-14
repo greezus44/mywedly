@@ -1,20 +1,21 @@
-import React from "react";
+import React, { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "../../lib/supabase";
-import type { UserEvent, EventRsvp } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventRsvp } from "../../lib/supabase";
 import { Card, Badge, LoadingSpinner, ErrorState, EmptyState } from "../../components/ui";
-import { formatDateTime, cn } from "../../lib/utils";
+import { formatDate, cn } from "../../lib/utils";
+
+const STATUS_VARIANTS: Record<string, "success" | "danger" | "warning" | "default"> = {
+  attending: "success",
+  declined: "danger",
+  pending: "warning",
+};
 
 export function RsvpPage() {
   const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
+  const [filter, setFilter] = useState<string>("all");
 
-  const {
-    data: rsvps,
-    isLoading,
-    isError,
-    refetch,
-  } = useQuery({
+  const { data: rsvps, isLoading, isError } = useQuery({
     queryKey: ["event-rsvps", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -30,112 +31,133 @@ export function RsvpPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <LoadingSpinner size="lg" />
+        <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
 
   if (isError) {
-    return <ErrorState message="Failed to load RSVPs" onRetry={() => refetch()} />;
+    return (
+      <div className="py-20">
+        <ErrorState message="Failed to load RSVP responses" />
+      </div>
+    );
   }
 
-  const total = rsvps?.length ?? 0;
-  const attending = (rsvps ?? []).filter((r) => r.status === "attending").length;
-  const declined = (rsvps ?? []).filter((r) => r.status === "declined").length;
-  const pending = (rsvps ?? []).filter((r) => !r.status || r.status === "pending").length;
-  const totalGuests = (rsvps ?? [])
-    .filter((r) => r.status === "attending")
-    .reduce((sum, r) => sum + (r.guest_count ?? 1), 0);
+  const allRsvps = rsvps ?? [];
+  const filtered =
+    filter === "all"
+      ? allRsvps
+      : allRsvps.filter((r) => (r.status || "pending") === filter);
+
+  const attending = allRsvps.filter((r) => r.status === "attending").length;
+  const declined = allRsvps.filter((r) => r.status === "declined").length;
+  const pending = allRsvps.filter(
+    (r) => !r.status || r.status === "pending",
+  ).length;
+  const totalPlusOnes = allRsvps.reduce((sum, r) => sum + (r.plus_ones ?? 0), 0);
+  const totalGuests = attending + totalPlusOnes;
 
   return (
-    <div className="max-w-5xl mx-auto">
-      <div className="mb-6">
+    <div className="mx-auto max-w-4xl px-4 sm:px-6 py-6 space-y-6">
+      <div>
         <h2 className="text-lg font-semibold text-dash-text">RSVP Responses</h2>
-        <p className="mt-1 text-sm text-dash-muted">
-          View and track RSVP submissions from your guests.
+        <p className="text-sm text-dash-muted mt-1">
+          View and manage guest RSVP responses.
         </p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Total RSVPs" value={total} color="text-dash-text" />
-        <StatCard label="Attending" value={attending} color="text-green-600" />
-        <StatCard label="Declined" value={declined} color="text-red-600" />
-        <StatCard label="Total Guests" value={totalGuests} color="text-dash-primary" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card className="text-center">
+          <div className="text-3xl font-bold text-green-600">{attending}</div>
+          <div className="text-sm text-dash-muted mt-1">Attending</div>
+        </Card>
+        <Card className="text-center">
+          <div className="text-3xl font-bold text-red-600">{declined}</div>
+          <div className="text-sm text-dash-muted mt-1">Declined</div>
+        </Card>
+        <Card className="text-center">
+          <div className="text-3xl font-bold text-amber-600">{pending}</div>
+          <div className="text-sm text-dash-muted mt-1">Pending</div>
+        </Card>
+        <Card className="text-center">
+          <div className="text-3xl font-bold text-dash-primary">{totalGuests}</div>
+          <div className="text-sm text-dash-muted mt-1">Total Guests</div>
+        </Card>
+      </div>
+
+      {/* Filter */}
+      <div className="flex gap-2">
+        {[
+          { key: "all", label: "All", count: allRsvps.length },
+          { key: "attending", label: "Attending", count: attending },
+          { key: "declined", label: "Declined", count: declined },
+          { key: "pending", label: "Pending", count: pending },
+        ].map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setFilter(f.key)}
+            className={cn(
+              "px-3 py-1.5 text-sm rounded-md border transition-colors",
+              filter === f.key
+                ? "bg-dash-primary text-dash-primary-fg border-transparent"
+                : "bg-dash-surface text-dash-text border-dash-border hover:bg-dash-bg",
+            )}
+          >
+            {f.label} ({f.count})
+          </button>
+        ))}
       </div>
 
       {/* RSVP List */}
-      {rsvps && rsvps.length > 0 ? (
+      {filtered.length > 0 ? (
         <div className="space-y-3">
-          {rsvps.map((rsvp) => (
-            <Card key={rsvp.id} className="p-5">
-              <div className="flex items-start justify-between">
+          {filtered.map((rsvp) => (
+            <Card key={rsvp.id}>
+              <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
-                    <h3 className="text-base font-semibold text-dash-text">
-                      {rsvp.guest_name || "Anonymous Guest"}
+                    <h3 className="font-semibold text-dash-text">
+                      {rsvp.guest_name}
                     </h3>
-                    <StatusBadge status={rsvp.status} />
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-dash-muted">
-                    {rsvp.guest_count !== null && rsvp.guest_count !== undefined && (
-                      <span>👥 {rsvp.guest_count} guest(s)</span>
-                    )}
-                    {rsvp.plus_ones !== null && rsvp.plus_ones !== undefined && (
-                      <span>+{rsvp.plus_ones} plus one(s)</span>
-                    )}
-                    {rsvp.submitted_at && (
-                      <span>📅 {formatDateTime(rsvp.submitted_at)}</span>
+                    <Badge variant={STATUS_VARIANTS[rsvp.status || "pending"] ?? "default"}>
+                      {rsvp.status || "pending"}
+                    </Badge>
+                    {rsvp.plus_ones > 0 && (
+                      <Badge>+{rsvp.plus_ones} guest{rsvp.plus_ones > 1 ? "s" : ""}</Badge>
                     )}
                   </div>
                   {rsvp.dietary && (
-                    <p className="text-sm text-dash-muted mt-2">
-                      <span className="font-medium">Dietary:</span> {rsvp.dietary}
-                    </p>
-                  )}
-                  {rsvp.dietary_notes && (
-                    <p className="text-sm text-dash-muted mt-1">
-                      <span className="font-medium">Dietary Notes:</span> {rsvp.dietary_notes}
+                    <p className="text-sm text-dash-muted mb-1">
+                      <strong>Dietary:</strong> {rsvp.dietary}
                     </p>
                   )}
                   {rsvp.message && (
-                    <div className="mt-3 rounded-lg border border-dash-border bg-dash-bg p-3">
-                      <p className="text-sm text-dash-text italic">"{rsvp.message}"</p>
-                    </div>
+                    <p className="text-sm text-dash-muted mb-1">
+                      <strong>Message:</strong> {rsvp.message}
+                    </p>
                   )}
+                  <p className="text-xs text-dash-muted mt-2">
+                    {rsvp.submitted_at
+                      ? `Responded on ${formatDate(rsvp.submitted_at.slice(0, 10))}`
+                      : "No response date"}
+                  </p>
                 </div>
               </div>
             </Card>
           ))}
         </div>
       ) : (
-        <EmptyState
-          title="No RSVP responses yet"
-          description="RSVP submissions from your guests will appear here."
-        />
+        <Card>
+          <EmptyState
+            title="No RSVP responses"
+            description="RSVP responses from your guests will appear here."
+            icon={<span className="text-4xl">📝</span>}
+          />
+        </Card>
       )}
     </div>
   );
-}
-
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <Card className="p-5">
-      <div className={cn("text-2xl font-bold", color)}>{value}</div>
-      <div className="text-sm text-dash-muted">{label}</div>
-    </Card>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  switch (status) {
-    case "attending":
-      return <Badge variant="success">Attending</Badge>;
-    case "declined":
-      return <Badge variant="danger">Declined</Badge>;
-    case "pending":
-      return <Badge variant="warning">Pending</Badge>;
-    default:
-      return <Badge variant="default">{status || "Unknown"}</Badge>;
-  }
 }

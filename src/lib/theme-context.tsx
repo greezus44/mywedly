@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useMemo } from "react";
 import type { Json } from "./supabase";
 import { jsonToTheme, themeToEventCssVars, type ThemeConfig } from "./theme";
 
@@ -14,12 +14,14 @@ interface EventThemeProviderProps {
 }
 
 export function EventThemeProvider({ theme, children }: EventThemeProviderProps) {
-  const resolvedTheme = jsonToTheme(theme);
-  const cssVars = themeToEventCssVars(resolvedTheme);
+  const resolvedTheme = useMemo(() => jsonToTheme(theme), [theme]);
+  const cssVars = useMemo(() => themeToEventCssVars(resolvedTheme), [resolvedTheme]);
+
+  const value = useMemo(() => ({ theme: resolvedTheme }), [resolvedTheme]);
 
   return (
-    <EventThemeContext.Provider value={{ theme: resolvedTheme }}>
-      <div className="event-themed" style={cssVars}>
+    <EventThemeContext.Provider value={value}>
+      <div className="event-themed" style={cssVars as React.CSSProperties}>
         {children}
       </div>
     </EventThemeContext.Provider>
@@ -29,7 +31,7 @@ export function EventThemeProvider({ theme, children }: EventThemeProviderProps)
 export function useEventTheme(): ThemeConfig {
   const ctx = useContext(EventThemeContext);
   if (!ctx) {
-    throw new Error("useEventTheme must be used within an EventThemeProvider");
+    return jsonToTheme(null);
   }
   return ctx.theme;
 }
