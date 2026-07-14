@@ -1,18 +1,19 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type EventMessage } from "../../lib/supabase";
-import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { useGuestOutletContext } from "./guest-layout";
 
 export default function GuestWishes() {
-  const { event, theme } = useGuestOutletContext();
-  const { name } = useGuestAuth();
+  const { event } = useGuestOutletContext();
+  const { guest } = useGuestAuth();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
+  const [authorName, setAuthorName] = useState(guest?.name ?? "");
   const [error, setError] = useState<string | null>(null);
 
-  const { data: messages = [], isLoading } = useQuery({
-    queryKey: ["guest-messages", event.id],
+  const { data: messages, isLoading } = useQuery({
+    queryKey: ["guest-wishes", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_messages")
@@ -24,92 +25,142 @@ export default function GuestWishes() {
     },
   });
 
-  const postMutation = useMutation({
+  const submitMutation = useMutation({
     mutationFn: async () => {
-      if (!message.trim()) throw new Error("Please write a message");
       const { error } = await supabase.from("event_messages").insert({
         event_id: event.id,
-        guest_name: name ?? "Guest",
+        guest_name: authorName.trim() || "Anonymous",
         message: message.trim(),
       });
       if (error) throw error;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guest-wishes", event.id] });
       setMessage("");
       setError(null);
-      queryClient.invalidateQueries({ queryKey: ["guest-messages", event.id] });
     },
-    onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to post message");
+    onError: () => {
+      setError("Failed to post your wish. Please try again.");
     },
   });
 
-  function handleSubmit(e: FormEvent) {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    postMutation.mutate();
-  }
+    if (!message.trim()) return;
+    submitMutation.mutate();
+  };
+
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
+
+  const allMessages = messages ?? [];
 
   return (
     <div className="guest-section">
       <div className="mx-auto max-w-3xl">
-        {/* Centered header */}
-        <div className="mb-10 text-center">
-          <p className="guest-eyebrow">Wishes</p>
+        {/* Header */}
+        <div className="mb-10 text-center animate-fadeIn">
+          <p className="guest-eyebrow">Wishes Wall</p>
           <h1 className="guest-title">Send Your Wishes</h1>
-          <p className="guest-subtitle mx-auto">Share a kind word, a memory, or a blessing.</p>
+          <p className="guest-subtitle mx-auto">
+            Share a message of love, advice, or congratulations with the happy couple.
+          </p>
         </div>
 
-        {/* Form in max-width card */}
-        <form onSubmit={handleSubmit} className="event-card mb-10">
-          <label className="mb-2 block text-sm font-medium" style={{ color: theme.heading }}>
-            Your message
-          </label>
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            rows={4}
-            placeholder="Write your wish…"
-            className="event-input"
-            maxLength={500}
-          />
-          <div className="mt-3 flex items-center justify-between">
-            <span className="text-xs" style={{ color: theme.muted }}>{message.length}/500</span>
-            <button
-              type="submit"
-              disabled={postMutation.isPending || !message.trim()}
-              className="event-btn-primary"
-              style={{ opacity: postMutation.isPending || !message.trim() ? 0.5 : 1 }}
-            >
-              {postMutation.isPending ? "Posting…" : "Post Wish"}
-            </button>
-          </div>
-          {error && <p className="mt-2 text-sm" style={{ color: "#dc2626" }}>{error}</p>}
-        </form>
+        {/* Form */}
+        <div className="event-card mb-10 animate-slideUp">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
+                Your Name
+              </label>
+              <input
+                type="text"
+                value={authorName}
+                onChange={(e) => setAuthorName(e.target.value)}
+                className="event-input"
+                placeholder="Your name"
+                required
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
+                Your Message
+              </label>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                className="event-input"
+                rows={4}
+                placeholder="Write your wish here..."
+                required
+              />
+            </div>
+            {error && (
+              <p className="text-sm font-medium" style={{ color: "var(--event-primary)" }}>{error}</p>
+            )}
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={submitMutation.isPending || !message.trim()}
+                className="event-btn-primary"
+                style={{ opacity: submitMutation.isPending || !message.trim() ? 0.6 : 1 }}
+              >
+                {submitMutation.isPending ? "Posting..." : "Post Wish"}
+              </button>
+            </div>
+            {submitMutation.isSuccess && (
+              <p className="text-sm font-medium animate-fadeIn" style={{ color: "var(--event-primary)" }}>
+                Your wish has been posted. Thank you!
+              </p>
+            )}
+          </form>
+        </div>
 
-        {/* Staggered message cards */}
+        {/* Messages */}
         {isLoading ? (
-          <div className="text-center" style={{ color: theme.muted }}>Loading wishes…</div>
-        ) : messages.length === 0 ? (
-          <div className="event-card text-center">
-            <p style={{ color: theme.muted }}>No wishes yet. Be the first to leave one!</p>
+          <div className="flex justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
+          </div>
+        ) : allMessages.length === 0 ? (
+          <div className="text-center animate-fadeIn">
+            <p className="guest-subtitle mx-auto">
+              No wishes yet. Be the first to leave a message!
+            </p>
           </div>
         ) : (
           <div className="grid gap-5 sm:grid-cols-2">
-            {messages.map((m, i) => (
+            {allMessages.map((msg, index) => (
               <div
-                key={m.id}
+                key={msg.id}
                 className="event-card animate-slideUpStagger"
-                style={{ animationDelay: `${i * 60}ms` }}
+                style={{ animationDelay: `${index * 60}ms` }}
               >
-                <p style={{ color: theme.text, whiteSpace: "pre-wrap", lineHeight: 1.7 }}>{m.message}</p>
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="font-semibold" style={{ color: theme.heading, fontFamily: theme.fontHeading }}>
-                    {m.guest_name}
-                  </span>
-                  <span className="text-xs" style={{ color: theme.muted }}>
-                    {new Date(m.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </span>
+                <div className="mb-3 flex items-center gap-3">
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold"
+                    style={{
+                      backgroundColor: "var(--event-primary)",
+                      color: "var(--event-primary-fg)",
+                    }}
+                  >
+                    {msg.guest_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-semibold" style={{ color: "var(--event-heading)" }}>
+                      {msg.guest_name}
+                    </p>
+                    <p className="text-xs" style={{ color: "var(--event-muted)" }}>
+                      {formatTime(msg.created_at)}
+                    </p>
+                  </div>
                 </div>
+                <p className="text-sm leading-relaxed" style={{ color: "var(--event-text)" }}>
+                  {msg.message}
+                </p>
               </div>
             ))}
           </div>

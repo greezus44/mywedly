@@ -1,22 +1,27 @@
-import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { useOutletContext, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../lib/supabase";
-import { useEventContext } from "./event-layout";
+import type { UserEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Modal, DatePicker } from "../../components/ui";
+import { Input, Textarea, Select } from "../../components/ui/Input";
+import { Card, Modal, FormField, Badge } from "../../components/ui";
+import { DateTimePicker } from "../../components/ui/DateTimePicker";
+import { slugify } from "../../lib/theme";
+import { formatDate } from "../../lib/utils";
 
-export default function SettingsPage() {
-  const { event, eventId } = useEventContext();
+export function SettingsPage() {
+  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [title, setTitle] = useState(event.draft_title ?? event.title ?? "");
-  const [description, setDescription] = useState(event.draft_description ?? event.description ?? "");
-  const [eventDate, setEventDate] = useState(event.draft_event_date ?? event.event_date ?? "");
-  const [eventEndDate, setEventEndDate] = useState(event.draft_event_end_date ?? event.event_end_date ?? "");
-  const [venueName, setVenueName] = useState(event.draft_venue_name ?? event.venue_name ?? "");
-  const [venueAddress, setVenueAddress] = useState(event.draft_venue_address ?? event.venue_address ?? "");
+  const [name, setName] = useState(event.draft_name || event.name);
+  const [eventType, setEventType] = useState(event.draft_event_type || event.event_type || "wedding");
+  const [eventDate, setEventDate] = useState(event.draft_event_date || event.event_date || "");
+  const [eventTime, setEventTime] = useState(event.draft_event_time || event.event_time || "");
+  const [venue, setVenue] = useState(event.draft_venue || event.venue || "");
+  const [address, setAddress] = useState(event.draft_address || event.address || "");
+  const [rsvpDeadline, setRsvpDeadline] = useState(event.draft_rsvp_deadline || event.rsvp_deadline || "");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState("");
 
@@ -25,24 +30,29 @@ export default function SettingsPage() {
       const { error } = await supabase
         .from("user_events")
         .update({
-          draft_title: title,
-          draft_description: description,
+          draft_name: name,
+          draft_event_type: eventType,
           draft_event_date: eventDate || null,
-          draft_event_end_date: eventEndDate || null,
-          draft_venue_name: venueName,
-          draft_venue_address: venueAddress,
+          draft_event_time: eventTime || null,
+          draft_venue: venue,
+          draft_address: address,
+          draft_rsvp_deadline: rsvpDeadline || null,
         })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["user-event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["user-events"] });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("user_events").delete().eq("id", eventId);
+      const { error } = await supabase
+        .from("user_events")
+        .delete()
+        .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -51,122 +61,155 @@ export default function SettingsPage() {
     },
   });
 
-  function handleSave(e: FormEvent) {
-    e.preventDefault();
-    saveMutation.mutate();
-  }
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-dash-text">Website Settings</h2>
-        <p className="text-sm text-dash-muted">Manage your event details and configuration.</p>
+    <div className="max-w-3xl mx-auto">
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold text-dash-text">Website Settings</h2>
+        <p className="mt-1 text-sm text-dash-muted">
+          Manage your website details and configuration.
+        </p>
       </div>
 
-      {saveMutation.isError && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-          Error saving: {saveMutation.error?.message}
-        </div>
-      )}
-      {saveMutation.isSuccess && (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700">
-          Settings saved successfully!
-        </div>
-      )}
+      {/* General Settings */}
+      <Card className="p-6 mb-6">
+        <h3 className="text-sm font-semibold text-dash-text mb-4">General</h3>
+        <div className="space-y-4">
+          <FormField label="Website Name">
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </FormField>
 
-      <form onSubmit={handleSave} className="space-y-4">
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-6 space-y-4">
-          <h3 className="text-sm font-semibold text-dash-text">Event Details</h3>
-          <Input
-            label="Event Name"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="My Event"
-          />
-          <Textarea
-            label="Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="A brief description of your event"
-            rows={3}
-          />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-sm font-medium text-dash-text mb-1">Event Date</label>
-              <DatePicker value={eventDate} onChange={setEventDate} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-dash-text mb-1">End Date</label>
-              <DatePicker value={eventEndDate} onChange={setEventEndDate} />
-            </div>
+          <FormField label="Event Type">
+            <Select value={eventType} onChange={(e) => setEventType(e.target.value)}>
+              <option value="wedding">Wedding</option>
+              <option value="birthday">Birthday</option>
+              <option value="engagement">Engagement</option>
+              <option value="anniversary">Anniversary</option>
+              <option value="corporate">Corporate</option>
+              <option value="other">Other</option>
+            </Select>
+          </FormField>
+
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Event Date">
+              <Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
+            </FormField>
+            <FormField label="Event Time">
+              <Input type="time" value={eventTime} onChange={(e) => setEventTime(e.target.value)} />
+            </FormField>
           </div>
-          <Input
-            label="Venue Name"
-            value={venueName}
-            onChange={(e) => setVenueName(e.target.value)}
-            placeholder="Grand Hall"
-          />
-          <Input
-            label="Venue Address"
-            value={venueAddress}
-            onChange={(e) => setVenueAddress(e.target.value)}
-            placeholder="123 Main St, City, State"
-          />
+
+          <FormField label="Venue">
+            <Input value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue name" />
+          </FormField>
+
+          <FormField label="Address">
+            <Textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Full address" rows={2} />
+          </FormField>
+
+          <FormField label="RSVP Deadline">
+            <DateTimePicker value={rsvpDeadline} onChange={(v) => setRsvpDeadline(v ?? "")} />
+          </FormField>
         </div>
 
-        <div className="flex justify-end">
-          <Button type="submit" loading={saveMutation.isPending}>
-            Save Changes
+        <div className="mt-5 flex items-center gap-3">
+          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+            Save Settings
           </Button>
+          {saveMutation.isError && (
+            <span className="text-sm text-dash-danger">
+              {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+            </span>
+          )}
+          {saveMutation.isSuccess && (
+            <span className="text-sm text-green-600">Saved!</span>
+          )}
         </div>
-      </form>
+      </Card>
 
-      {/* Danger zone */}
-      <div className="rounded-lg border border-red-200 bg-red-50/50 p-6">
-        <h3 className="text-sm font-semibold text-red-700">Danger Zone</h3>
-        <p className="mt-1 text-sm text-dash-muted">
-          Deleting this website will permanently remove all data, including guests, RSVPs, and pages.
+      {/* Status */}
+      <Card className="p-6 mb-6">
+        <h3 className="text-sm font-semibold text-dash-text mb-4">Status</h3>
+        <div className="flex items-center gap-3 mb-2">
+          <span className="text-sm text-dash-muted">Published:</span>
+          {event.is_published ? (
+            <Badge variant="success">Yes</Badge>
+          ) : (
+            <Badge variant="warning">No (Draft)</Badge>
+          )}
+        </div>
+        {event.published_at && (
+          <p className="text-sm text-dash-muted">
+            Last published: {formatDate(event.published_at)}
+          </p>
+        )}
+        {event.slug && (
+          <p className="text-sm text-dash-muted mt-2">
+            Published URL: <span className="font-mono">/{event.slug}</span>
+          </p>
+        )}
+      </Card>
+
+      {/* Danger Zone */}
+      <Card className="p-6 border-red-200">
+        <h3 className="text-sm font-semibold text-red-700 mb-2">Danger Zone</h3>
+        <p className="text-sm text-dash-muted mb-4">
+          Deleting your website will permanently remove all data, including guests, RSVPs, and pages.
+          This cannot be undone.
         </p>
-        <Button
-          variant="danger"
-          size="sm"
-          className="mt-4"
-          onClick={() => setDeleteOpen(true)}
-        >
+        <Button variant="danger" onClick={() => setDeleteOpen(true)}>
           Delete Website
         </Button>
-      </div>
+      </Card>
 
       {/* Delete confirmation modal */}
-      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Website">
-        <div className="space-y-4">
-          <p className="text-sm text-dash-text">
-            Are you sure you want to delete this website? This action cannot be undone.
-          </p>
-          <p className="text-sm text-dash-muted">
-            Type <code className="rounded bg-dash-bg px-1.5 py-0.5">DELETE</code> to confirm:
-          </p>
-          <Input
-            value={deleteConfirm}
-            onChange={(e) => setDeleteConfirm(e.target.value)}
-            placeholder="DELETE"
-          />
-          {deleteMutation.isError && (
-            <p className="text-sm text-red-600">Error: {deleteMutation.error?.message}</p>
-          )}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={() => setDeleteOpen(false)}>
+      <Modal
+        open={deleteOpen}
+        onClose={() => {
+          setDeleteOpen(false);
+          setDeleteConfirm("");
+        }}
+        title="Delete Website"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDeleteOpen(false);
+                setDeleteConfirm("");
+              }}
+            >
               Cancel
             </Button>
             <Button
               variant="danger"
-              disabled={deleteConfirm !== "DELETE"}
               loading={deleteMutation.isPending}
+              disabled={deleteConfirm !== event.name}
               onClick={() => deleteMutation.mutate()}
             >
-              Delete Forever
+              Delete Permanently
             </Button>
-          </div>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-dash-text">
+            Are you sure you want to delete{" "}
+            <span className="font-semibold">{event.name}</span>? This action cannot be undone.
+          </p>
+          <p className="text-sm text-dash-muted">
+            Type <span className="font-mono font-semibold text-dash-text">{event.name}</span> to confirm:
+          </p>
+          <Input
+            value={deleteConfirm}
+            onChange={(e) => setDeleteConfirm(e.target.value)}
+            placeholder={event.name}
+            autoFocus
+          />
+          {deleteMutation.isError && (
+            <p className="text-sm text-dash-danger">
+              {deleteMutation.error instanceof Error ? deleteMutation.error.message : "Delete failed"}
+            </p>
+          )}
         </div>
       </Modal>
     </div>

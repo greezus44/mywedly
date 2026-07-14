@@ -1,69 +1,83 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate, useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Json } from "../../lib/supabase";
-import { useEventContext } from "./event-layout";
+import { supabase } from "../../lib/supabase";
+import type { UserEvent, CustomPage, Json } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { LoadingSpinner, ErrorState, EmptyState } from "../../components/ui";
-import { cn } from "../../lib/utils";
+import { Input } from "../../components/ui/Input";
+import {
+  Card,
+  LoadingSpinner,
+  ErrorState,
+  Modal,
+} from "../../components/ui";
+import { RichTextContent } from "../../lib/sanitize";
 import {
   type Block,
   type BlockType,
   BLOCK_TYPES,
   createBlock,
-  BlockContent,
-  BlockEditor,
-  normalizeBlocks,
+  blocksToJson,
+  jsonToBlocks,
 } from "./block-types";
+import { cn } from "../../lib/utils";
 
-export default function PageBuilder() {
-  const { eventId, event } = useEventContext();
+export function PageBuilder() {
+  const { eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
   const { pageId } = useParams<{ pageId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [blocks, setBlocks] = useState<Block[]>([]);
-  const [showBlockPicker, setShowBlockPicker] = useState(false);
+  const [title, setTitle] = useState("");
+  const [slug, setSlug] = useState("");
+  const [navLabel, setNavLabel] = useState("");
+  const [showInNav, setShowInNav] = useState(true);
+  const [blockPickerOpen, setBlockPickerOpen] = useState(false);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
 
-  // Fetch the custom page
-  const { data: page, isLoading, isError, refetch } = useQuery({
+  const {
+    data: page,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["custom-page", pageId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
         .select("*")
         .eq("id", pageId!)
-        .single();
+        .maybeSingle();
       if (error) throw error;
-      return data as {
-        id: string;
-        event_id: string;
-        title: string;
-        slug: string;
-        blocks: Json;
-        is_published: boolean;
-        sort_order: number;
-      };
+      if (!data) throw new Error("Page not found");
+      return data as CustomPage;
     },
     enabled: !!pageId,
   });
 
-  // Initialize blocks from page data
   useEffect(() => {
-    if (page && !loaded) {
-      setBlocks(normalizeBlocks(page.blocks));
-      setLoaded(true);
+    if (page) {
+      setTitle(page.title);
+      setSlug(page.slug);
+      setNavLabel(page.nav_label || page.title);
+      setShowInNav(page.show_in_nav);
+      setBlocks(jsonToBlocks(page.blocks));
     }
-  }, [page, loaded]);
+  }, [page]);
 
-  // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("custom_pages")
-        .update({ blocks: blocks as unknown as Json })
+        .update({
+          title,
+          slug,
+          nav_label: navLabel,
+          show_in_nav: showInNav,
+          blocks: blocksToJson(blocks),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", pageId!);
       if (error) throw error;
     },
@@ -73,252 +87,358 @@ export default function PageBuilder() {
     },
   });
 
-  // Block operations
-  function addBlock(type: BlockType) {
-    const block = createBlock(type);
-    setBlocks((prev) => [...prev, block]);
-    setSelectedBlockId(block.id);
-    setShowBlockPicker(false);
-  }
+  const addBlock = (type: BlockType) => {
+    const newBlock = createBlock(type);
+    setBlocks((prev) => [...prev, newBlock]);
+    setSelectedBlockId(newBlock.id);
+    setBlockPickerOpen(false);
+  };
 
-  function updateBlock(updated: Block) {
-    setBlocks((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
-  }
+  const updateBlock = (id: string, content: Partial<Block["content"]>) => {
+    setBlocks((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, content: { ...b.content, ...content } } : b))
+    );
+  };
 
-  function removeBlock(id: string) {
+  const deleteBlock = (id: string) => {
     setBlocks((prev) => prev.filter((b) => b.id !== id));
     if (selectedBlockId === id) setSelectedBlockId(null);
-  }
+  };
 
-  function moveBlock(id: string, direction: "up" | "down") {
+  const moveBlock = (id: string, direction: "up" | "down") => {
     setBlocks((prev) => {
       const idx = prev.findIndex((b) => b.id === id);
       if (idx === -1) return prev;
       const newIdx = direction === "up" ? idx - 1 : idx + 1;
       if (newIdx < 0 || newIdx >= prev.length) return prev;
-      const copy = [...prev];
-      [copy[idx], copy[newIdx]] = [copy[newIdx], copy[idx]];
-      return copy;
-    });
-  }
-
-  function duplicateBlock(id: string) {
-    setBlocks((prev) => {
-      const idx = prev.findIndex((b) => b.id === id);
-      if (idx === -1) return prev;
-      const original = prev[idx];
-      const copy = { ...original, id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` } as Block;
       const newBlocks = [...prev];
-      newBlocks.splice(idx + 1, 0, copy);
+      [newBlocks[idx], newBlocks[newIdx]] = [newBlocks[newIdx], newBlocks[idx]];
       return newBlocks;
     });
-  }
+  };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex items-center justify-center py-20">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
-  if (isError || !page) {
-    return (
-      <ErrorState
-        title="Page not found"
-        description="This page may have been deleted."
-        onRetry={() => navigate(`/event/${eventId}/pages`)}
-      />
-    );
+  if (isError) {
+    return <ErrorState message="Failed to load page" onRetry={() => refetch()} />;
   }
 
-  const selectedBlock = blocks.find((b) => b.id === selectedBlockId) ?? null;
-
   return (
-    <div className="space-y-4">
+    <div className="max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="min-w-0">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(`/event/${eventId}/pages`)}
-            className="text-sm text-dash-muted hover:text-dash-text"
+            className="text-sm text-dash-muted hover:text-dash-text transition-colors"
           >
-            ← Back to Pages
+            ← Pages
           </button>
-          <h2 className="mt-1 text-xl font-semibold text-dash-text truncate">
-            {page.title}
-          </h2>
-          <p className="text-sm text-dash-muted">/{page.slug}</p>
+          <h2 className="text-lg font-semibold text-dash-text">Page Builder</h2>
         </div>
-        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-          Save Changes
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setBlockPickerOpen(true)}
+          >
+            + Add Block
+          </Button>
+          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+            Save Page
+          </Button>
+        </div>
       </div>
 
-      {/* Status messages */}
       {saveMutation.isError && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-          Error saving: {saveMutation.error?.message}
-        </div>
+        <p className="text-sm text-dash-danger mb-4">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+        </p>
       )}
       {saveMutation.isSuccess && (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700">
-          Page saved successfully!
-        </div>
+        <p className="text-sm text-green-600 mb-4">Page saved!</p>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_350px]">
-        {/* Preview area */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-dash-text">Page Content</h3>
-            <Button variant="secondary" size="sm" onClick={() => setShowBlockPicker(true)}>
-              + Add Block
-            </Button>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Page settings */}
+        <Card className="p-5 lg:col-span-1 h-fit">
+          <h3 className="text-sm font-semibold text-dash-text mb-4">Page Settings</h3>
+          <div className="space-y-3">
+            <Input
+              label="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+            <Input
+              label="URL Slug"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+            />
+            <Input
+              label="Nav Label"
+              value={navLabel}
+              onChange={(e) => setNavLabel(e.target.value)}
+            />
+            <label className="flex items-center gap-2 text-sm text-dash-text">
+              <input
+                type="checkbox"
+                checked={showInNav}
+                onChange={(e) => setShowInNav(e.target.checked)}
+                className="rounded"
+              />
+              Show in navigation
+            </label>
           </div>
+        </Card>
 
-          {blocks.length === 0 ? (
-            <EmptyState
-              title="No blocks yet"
-              description="Add blocks to build your page content."
-              icon={<span className="text-4xl">🧱</span>}
-              action={
-                <Button variant="secondary" size="sm" onClick={() => setShowBlockPicker(true)}>
-                  + Add Block
-                </Button>
-              }
-            />
+        {/* Blocks */}
+        <div className="lg:col-span-2 space-y-3">
+          {blocks.length > 0 ? (
+            blocks.map((block, idx) => (
+              <BlockEditor
+                key={block.id}
+                block={block}
+                index={idx}
+                total={blocks.length}
+                isSelected={selectedBlockId === block.id}
+                onSelect={() => setSelectedBlockId(block.id)}
+                onUpdate={(content) => updateBlock(block.id, content)}
+                onDelete={() => deleteBlock(block.id)}
+                onMove={(dir) => moveBlock(block.id, dir)}
+              />
+            ))
           ) : (
-            <div className="space-y-2">
-              {blocks.map((block, idx) => {
-                const typeDef = BLOCK_TYPES.find((t) => t.type === block.type);
-                const isSelected = selectedBlockId === block.id;
-                return (
-                  <div
-                    key={block.id}
-                    className={cn(
-                      "rounded-lg border bg-dash-surface transition-all",
-                      isSelected ? "border-dash-primary ring-2 ring-dash-primary/20" : "border-dash-border"
-                    )}
-                  >
-                    {/* Block header bar */}
-                    <div className="flex items-center justify-between border-b border-dash-border px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedBlockId(isSelected ? null : block.id)}
-                        className="flex items-center gap-2 text-sm font-medium text-dash-text"
-                      >
-                        <span className="flex h-6 w-6 items-center justify-center rounded bg-dash-primary/10 text-xs text-dash-primary">
-                          {typeDef?.icon ?? "?"}
-                        </span>
-                        {typeDef?.label ?? block.type}
-                      </button>
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          disabled={idx === 0}
-                          onClick={() => moveBlock(block.id, "up")}
-                          className="rounded p-1 text-dash-muted hover:bg-dash-bg hover:text-dash-text disabled:opacity-30"
-                          title="Move up"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          disabled={idx === blocks.length - 1}
-                          onClick={() => moveBlock(block.id, "down")}
-                          className="rounded p-1 text-dash-muted hover:bg-dash-bg hover:text-dash-text disabled:opacity-30"
-                          title="Move down"
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => duplicateBlock(block.id)}
-                          className="rounded p-1 text-dash-muted hover:bg-dash-bg hover:text-dash-text"
-                          title="Duplicate"
-                        >
-                          ⧉
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeBlock(block.id)}
-                          className="rounded p-1 text-dash-danger hover:bg-dash-bg"
-                          title="Remove"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                    {/* Block preview */}
-                    <div
-                      className="cursor-pointer p-4"
-                      onClick={() => setSelectedBlockId(isSelected ? null : block.id)}
-                    >
-                      <BlockContent block={block} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Editor sidebar */}
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-dash-text">Block Editor</h3>
-          {selectedBlock ? (
-            <BlockEditor
-              block={selectedBlock}
-              onChange={updateBlock}
-              onRemove={() => removeBlock(selectedBlock.id)}
-            />
-          ) : (
-            <div className="rounded-lg border border-dash-border border-dashed bg-dash-bg/50 p-6 text-center">
-              <p className="text-sm text-dash-muted">
-                Select a block to edit its content, or add a new block.
+            <Card className="p-10 text-center">
+              <p className="text-sm text-dash-muted mb-4">
+                No blocks yet. Add your first block to start building this page.
               </p>
-            </div>
+              <Button onClick={() => setBlockPickerOpen(true)}>+ Add Block</Button>
+            </Card>
           )}
         </div>
       </div>
 
       {/* Block picker modal */}
-      {showBlockPicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setShowBlockPicker(false)} />
-          <div className="relative z-10 w-full max-w-2xl rounded-lg border border-dash-border bg-dash-surface p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-dash-text">Add a Block</h2>
-              <button
-                onClick={() => setShowBlockPicker(false)}
-                className="rounded-md p-1 text-dash-muted hover:bg-dash-bg hover:text-dash-text"
-              >
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 max-h-[60vh] overflow-y-auto">
-              {BLOCK_TYPES.map((bt) => (
-                <button
-                  key={bt.type}
-                  onClick={() => addBlock(bt.type)}
-                  className="flex flex-col items-start gap-1 rounded-lg border border-dash-border bg-dash-bg p-3 text-left transition-colors hover:border-dash-primary hover:bg-dash-primary/5"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-md bg-dash-primary/10 text-base text-dash-primary">
-                      {bt.icon}
-                    </span>
-                    <span className="text-sm font-medium text-dash-text">{bt.label}</span>
-                  </div>
-                  <p className="text-xs text-dash-muted">{bt.description}</p>
-                </button>
-              ))}
-            </div>
-          </div>
+      <Modal
+        open={blockPickerOpen}
+        onClose={() => setBlockPickerOpen(false)}
+        title="Add a Block"
+        size="lg"
+      >
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {BLOCK_TYPES.map((meta) => (
+            <button
+              key={meta.type}
+              type="button"
+              onClick={() => addBlock(meta.type)}
+              className="rounded-lg border border-dash-border bg-dash-surface p-4 text-left hover:border-dash-primary hover:shadow-sm transition-all"
+            >
+              <div className="text-2xl mb-2">{meta.icon}</div>
+              <div className="text-sm font-semibold text-dash-text">{meta.label}</div>
+              <div className="text-xs text-dash-muted mt-1">{meta.description}</div>
+            </button>
+          ))}
         </div>
-      )}
+      </Modal>
     </div>
   );
+}
+
+// ---- Block Editor ----
+interface BlockEditorProps {
+  block: Block;
+  index: number;
+  total: number;
+  isSelected: boolean;
+  onSelect: () => void;
+  onUpdate: (content: Partial<Block["content"]>) => void;
+  onDelete: () => void;
+  onMove: (dir: "up" | "down") => void;
+}
+
+function BlockEditor({
+  block,
+  index,
+  total,
+  isSelected,
+  onSelect,
+  onUpdate,
+  onDelete,
+  onMove,
+}: BlockEditorProps) {
+  return (
+    <Card
+      className={cn(
+        "p-4 cursor-pointer transition-all",
+        isSelected ? "border-dash-primary ring-2 ring-dash-primary/20" : ""
+      )}
+    >
+      <div onClick={onSelect}>
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-medium text-dash-muted uppercase tracking-wide">
+            {block.type}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onMove("up"); }}
+              disabled={index === 0}
+              className="rounded p-1 text-dash-muted hover:bg-dash-bg disabled:opacity-30"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onMove("down"); }}
+              disabled={index === total - 1}
+              className="rounded p-1 text-dash-muted hover:bg-dash-bg disabled:opacity-30"
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              className="rounded p-1 text-dash-danger hover:bg-red-50"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {/* Block-specific editing */}
+        <BlockContentEditor block={block} onUpdate={onUpdate} />
+      </div>
+    </Card>
+  );
+}
+
+function BlockContentEditor({
+  block,
+  onUpdate,
+}: {
+  block: Block;
+  onUpdate: (content: Partial<Block["content"]>) => void;
+}) {
+  const c = block.content;
+
+  switch (block.type) {
+    case "heading":
+      return (
+        <div className="space-y-2">
+          <input
+            type="text"
+            value={c.text ?? ""}
+            onChange={(e) => onUpdate({ text: e.target.value })}
+            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-lg font-semibold text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+            placeholder="Heading text..."
+          />
+          <div className="flex gap-2">
+            {([1, 2, 3] as const).map((lvl) => (
+              <button
+                key={lvl}
+                type="button"
+                onClick={() => onUpdate({ level: lvl })}
+                className={cn(
+                  "rounded border px-2 py-1 text-xs font-medium",
+                  c.level === lvl
+                    ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
+                    : "border-dash-border text-dash-muted"
+                )}
+              >
+                H{lvl}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+
+    case "paragraph":
+      return (
+        <textarea
+          value={c.text ?? ""}
+          onChange={(e) => onUpdate({ text: e.target.value })}
+          className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+          placeholder="Paragraph text..."
+          rows={3}
+        />
+      );
+
+    case "image":
+      return (
+        <div className="space-y-2">
+          <input
+            type="text"
+            value={c.src ?? ""}
+            onChange={(e) => onUpdate({ src: e.target.value })}
+            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+            placeholder="Image URL..."
+          />
+          <input
+            type="text"
+            value={c.alt ?? ""}
+            onChange={(e) => onUpdate({ alt: e.target.value })}
+            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+            placeholder="Alt text..."
+          />
+        </div>
+      );
+
+    case "divider":
+      return <hr className="border-dash-border" />;
+
+    case "spacer":
+      return (
+        <div>
+          <label className="block text-xs text-dash-muted mb-1">Height: {c.height ?? 32}px</label>
+          <input
+            type="range"
+            min={8}
+            max={128}
+            step={8}
+            value={c.height ?? 32}
+            onChange={(e) => onUpdate({ height: parseInt(e.target.value) })}
+            className="w-full accent-dash-primary"
+          />
+        </div>
+      );
+
+    case "button":
+      return (
+        <div className="space-y-2">
+          <input
+            type="text"
+            value={c.label ?? ""}
+            onChange={(e) => onUpdate({ label: e.target.value })}
+            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+            placeholder="Button label..."
+          />
+          <input
+            type="text"
+            value={c.href ?? ""}
+            onChange={(e) => onUpdate({ href: e.target.value })}
+            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+            placeholder="Link URL..."
+          />
+        </div>
+      );
+
+    case "quote":
+      return (
+        <textarea
+          value={c.text ?? ""}
+          onChange={(e) => onUpdate({ text: e.target.value })}
+          className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm italic text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+          placeholder="Quote text..."
+          rows={2}
+        />
+      );
+
+    default:
+      return null;
+  }
 }

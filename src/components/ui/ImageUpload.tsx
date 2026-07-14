@@ -1,131 +1,144 @@
-import { useCallback, useRef, useState, type DragEvent } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
-import { uploadImage, removeImage, extractPathFromUrl } from "../../lib/upload";
+import { Button } from "./Button";
 import { LoadingSpinner } from "./index";
 
 interface ImageUploadProps {
-  value?: string;
-  onChange: (url: string) => void;
-  path?: string;
+  value?: string | null;
+  onUpload: (file: File) => Promise<string>;
+  onRemove?: () => void;
   label?: string;
   className?: string;
   accept?: string;
-  maxSizeMB?: number;
+  maxSizeMb?: number;
+  aspectRatio?: string;
 }
 
 export function ImageUpload({
   value,
-  onChange,
-  path = "uploads",
-  label = "Upload Image",
+  onUpload,
+  onRemove,
+  label,
   className,
   accept = "image/*",
-  maxSizeMB = 10,
+  maxSizeMb = 10,
+  aspectRatio,
 }: ImageUploadProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback(
     async (file: File) => {
-      if (file.size > maxSizeMB * 1024 * 1024) {
-        setError(`File too large (max ${maxSizeMB}MB)`);
-        return;
-      }
-      if (!file.type.startsWith("image/")) {
-        setError("Please select an image file");
-        return;
-      }
       setError(null);
+      if (file.size > maxSizeMb * 1024 * 1024) {
+        setError(`File too large. Max ${maxSizeMb}MB.`);
+        return;
+      }
       setLoading(true);
       try {
-        if (value) {
-          const oldPath = extractPathFromUrl(value);
-          if (oldPath) {
-            await removeImage(oldPath).catch(() => {});
-          }
-        }
-        const result = await uploadImage(file, path);
-        onChange(result.url);
+        await onUpload(file);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Upload failed");
       } finally {
         setLoading(false);
       }
     },
-    [value, path, onChange, maxSizeMB]
+    [onUpload, maxSizeMb]
   );
 
-  const handleDrop = useCallback(
-    (e: DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      setDragging(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
-    },
-    [handleFile]
-  );
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    e.target.value = "";
+  };
 
-  const handleRemove = useCallback(async () => {
-    if (value) {
-      const oldPath = extractPathFromUrl(value);
-      if (oldPath) {
-        await removeImage(oldPath).catch(() => {});
-      }
-    }
-    onChange("");
-  }, [value, onChange]);
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(false);
+  };
 
   return (
     <div className={cn("w-full", className)}>
-      {label && <label className="block text-sm font-medium text-dash-text mb-1">{label}</label>}
+      {label && <label className="block text-sm font-medium text-dash-text mb-1.5">{label}</label>}
       {value ? (
-        <div className="relative group rounded-lg border border-dash-border overflow-hidden">
-          <img src={value} alt="Preview" className="w-full h-48 object-cover" />
-          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-            <button
-              type="button"
+        <div className="relative group rounded-lg border border-dash-border overflow-hidden bg-dash-surface">
+          <img
+            src={value}
+            alt="Uploaded preview"
+            className="w-full object-cover"
+            style={aspectRatio ? { aspectRatio } : { maxHeight: "300px" }}
+          />
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => inputRef.current?.click()}
-              className="rounded-md bg-white/90 px-3 py-1.5 text-sm font-medium text-dash-text hover:bg-white"
             >
               Replace
-            </button>
-            <button
-              type="button"
-              onClick={handleRemove}
-              className="rounded-md bg-red-500/90 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500"
-            >
-              Remove
-            </button>
+            </Button>
+            {onRemove && (
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={onRemove}
+              >
+                Remove
+              </Button>
+            )}
           </div>
         </div>
       ) : (
         <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
           onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
           onClick={() => inputRef.current?.click()}
           className={cn(
-            "flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 cursor-pointer transition-colors",
-            dragging ? "border-dash-primary bg-dash-primary/5" : "border-dash-border hover:border-dash-primary/50",
-            loading && "pointer-events-none"
+            "flex flex-col items-center justify-center rounded-lg border-2 border-dashed cursor-pointer transition-colors p-6 text-center",
+            dragging
+              ? "border-dash-primary bg-dash-primary/5"
+              : "border-dash-border bg-dash-surface hover:border-dash-primary/50",
+            aspectRatio ? "" : "min-h-[160px]"
           )}
+          style={aspectRatio ? { aspectRatio } : undefined}
         >
           {loading ? (
             <LoadingSpinner />
           ) : (
             <>
-              <svg className="h-10 w-10 text-dash-muted mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M3 16.5V18a2 2 0 002 2h14a2 2 0 002-2v-1.5M12 3v13M7 8l5-5 5 5" strokeLinecap="round" strokeLinejoin="round" />
+              <svg
+                className="h-8 w-8 text-dash-muted mb-2"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+                />
               </svg>
-              <p className="text-sm text-dash-muted">
-                <span className="text-dash-primary font-medium">Click to upload</span> or drag and drop
+              <p className="text-sm text-dash-text font-medium">
+                Drag & drop or click to upload
               </p>
-              <p className="text-xs text-dash-muted mt-1">PNG, JPG, GIF up to {maxSizeMB}MB</p>
+              <p className="text-xs text-dash-muted mt-1">
+                PNG, JPG, SVG up to {maxSizeMb}MB
+              </p>
             </>
           )}
         </div>
@@ -135,12 +148,8 @@ export function ImageUpload({
         ref={inputRef}
         type="file"
         accept={accept}
+        onChange={handleInputChange}
         className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
-          e.target.value = "";
-        }}
       />
     </div>
   );

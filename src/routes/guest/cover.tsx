@@ -1,26 +1,31 @@
 import { useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { jsonToTheme, type ThemeConfig } from "../../lib/theme";
-import { resolveTypography } from "../../lib/typography";
+import { jsonToTheme } from "../../lib/theme";
+
+interface LogoConfig {
+  url?: string | null;
+  size?: number;
+  align?: string;
+}
 
 interface CoverConfig {
-  title?: string | { text?: string; align?: string; color?: string; fontSize?: number; fontFamily?: string; fontWeight?: number; lineHeight?: number; letterSpacing?: number };
-  subtitle?: string | { text?: string; align?: string; color?: string; fontSize?: number; fontFamily?: string; fontWeight?: number; lineHeight?: number; letterSpacing?: number };
-  body?: string | { text?: string; align?: string; color?: string; fontSize?: number; fontFamily?: string; fontWeight?: number; lineHeight?: number; letterSpacing?: number };
-  dateLocation?: string | { text?: string; align?: string; color?: string; fontSize?: number; fontFamily?: string; fontWeight?: number; lineHeight?: number; letterSpacing?: number };
-  button?: string | { text?: string; fontSize?: number; color?: string };
-  logo?: { url?: string | null; size?: string; align?: string };
-  background?: { image?: string | null; color?: string; overlayOpacity?: number; position?: string; fit?: string };
+  eyebrow?: string;
+  heading?: string;
+  subheading?: string;
+  bodyHtml?: string;
+  ctaText?: string;
+  overlayOpacity?: number;
+  background?: { image?: string | null; color?: string; position?: string; fit?: string };
 }
 
 export default function GuestCover() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { guestId, eventId } = useGuestAuth();
+  const { guest, eventId } = useGuestAuth();
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["published-event", slug],
@@ -38,10 +43,10 @@ export default function GuestCover() {
   });
 
   useEffect(() => {
-    if (event && guestId && eventId === event.id) {
+    if (event && guest && eventId === event.id) {
       navigate(`/e/${slug}/home`, { replace: true });
     }
-  }, [event, guestId, eventId, slug, navigate]);
+  }, [event, guest, eventId, slug, navigate]);
 
   if (isLoading) {
     return (
@@ -63,9 +68,9 @@ export default function GuestCover() {
 
   const theme = jsonToTheme(event.theme);
   const coverConfig = (event.cover_config ?? {}) as CoverConfig;
-  const logoConfig = (event.logo_config ?? {}) as { url?: string };
+  const logoConfig = (event.logo_config ?? {}) as LogoConfig;
   const bgConfig = coverConfig.background ?? {};
-  const overlay = bgConfig.overlayOpacity ?? 0.3;
+  const overlay = (coverConfig.overlayOpacity ?? 30) / 100;
 
   const bgStyle: React.CSSProperties = {};
   if (bgConfig.image) {
@@ -73,30 +78,16 @@ export default function GuestCover() {
     bgStyle.backgroundSize = bgConfig.fit === "fill" ? "100% 100%" : (bgConfig.fit as "cover" | "contain") || "cover";
     bgStyle.backgroundPosition = bgConfig.position || "center";
     bgStyle.backgroundRepeat = "no-repeat";
+  } else if (bgConfig.color) {
+    bgStyle.backgroundColor = bgConfig.color;
   } else {
-    bgStyle.backgroundColor = bgConfig.color || theme.bg;
+    bgStyle.backgroundColor = theme.colors.bg;
   }
 
-  // FIX: Increased logo sizes — sm=80px, md=140px, lg=200px
-  const logoHeight = coverConfig.logo?.size === "sm" ? 80 : coverConfig.logo?.size === "lg" ? 200 : 140;
-  const logoAlign = coverConfig.logo?.align || "center";
-
-  // FIX: Use resolveTypography to handle both string and object formats
-  // This prevents React error #31 (rendering an object as a React node)
-  const titleResolved = resolveTypography(coverConfig.title, event.title);
-  const subtitleResolved = resolveTypography(coverConfig.subtitle);
-  const bodyResolved = resolveTypography(coverConfig.body);
-
-  // Button text: handle both string and object
-  const buttonText = typeof coverConfig.button === "string"
-    ? coverConfig.button
-    : (coverConfig.button as { text?: string } | undefined)?.text || "Open Invitation";
-  const buttonColor = typeof coverConfig.button === "object" && coverConfig.button !== null
-    ? (coverConfig.button as { color?: string }).color
-    : undefined;
-  const buttonFontSize = typeof coverConfig.button === "object" && coverConfig.button !== null
-    ? (coverConfig.button as { fontSize?: number }).fontSize
-    : undefined;
+  const logoSize = typeof logoConfig.size === "number" ? logoConfig.size : 120;
+  const logoAlign = logoConfig.align || "center";
+  const titleText = coverConfig.heading || event.name;
+  const buttonText = coverConfig.ctaText || "Open Invitation";
 
   return (
     <EventThemeProvider theme={event.theme}>
@@ -111,34 +102,20 @@ export default function GuestCover() {
               <img
                 src={logoConfig.url}
                 alt="Logo"
-                style={{ height: logoHeight, width: "auto", maxHeight: "30vh" }}
+                style={{ height: `${logoSize}px`, width: "auto", maxHeight: "40vh" }}
                 className="object-contain"
               />
             </div>
           )}
 
-          {titleResolved.text && (
-            <h1 className="mb-3" style={titleResolved.style}>{titleResolved.text}</h1>
-          )}
-          {subtitleResolved.text && (
-            <p className="mb-3" style={subtitleResolved.style}>{subtitleResolved.text}</p>
-          )}
-          {bodyResolved.text && (
-            <p className="mb-8 max-w-md" style={bodyResolved.style}>{bodyResolved.text}</p>
+          {coverConfig.eyebrow && <p className="guest-eyebrow mb-2">{coverConfig.eyebrow}</p>}
+          {titleText && <h1 className="guest-title mb-3">{titleText}</h1>}
+          {coverConfig.subheading && <p className="guest-subtitle mb-3">{coverConfig.subheading}</p>}
+          {coverConfig.bodyHtml && (
+            <div className="rich-content mb-8 max-w-md" dangerouslySetInnerHTML={{ __html: coverConfig.bodyHtml }} />
           )}
 
-          {/* Date and Location removed from Cover Page */}
-
-          <button
-            onClick={() => navigate(`/e/${slug}/signin`)}
-            className="rounded-lg px-6 py-3 font-semibold uppercase tracking-wide transition-all hover:opacity-90 hover:scale-105"
-            style={{
-              backgroundColor: theme.primary,
-              color: buttonColor || theme.primaryFg,
-              fontSize: `${buttonFontSize || 14}px`,
-              borderRadius: theme.radius,
-            }}
-          >
+          <button onClick={() => navigate(`/e/${slug}/signin`)} className="event-btn-primary">
             {buttonText}
           </button>
         </div>

@@ -1,83 +1,54 @@
-import { useState, useMemo, type FormEvent } from "react";
+import React, { useState, useMemo } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type EventGuest } from "../../lib/supabase";
-import { useEventContext } from "./event-layout";
+import { supabase } from "../../lib/supabase";
+import type { UserEvent, EventGuest, GuestGroup, SubEvent, GuestInvitationOverride } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input, Select, Modal, Card, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
-import { cn, generateUsername } from "../../lib/utils";
+import { Input } from "../../components/ui/Input";
 import {
-  GuestFormFieldsComponent,
-  RsvpBadge,
+  Card,
+  Modal,
+  LoadingSpinner,
+  ErrorState,
+  EmptyState,
+  Badge,
+} from "../../components/ui";
+import {
+  GuestForm,
   guestToForm,
-  EMPTY_GUEST_FORM,
-  type GuestFormFields,
+  emptyGuestForm,
+  RsvpBadge,
+  type GuestFormData,
 } from "./guest-form";
+import { cn } from "../../lib/utils";
 
-interface GuestDB {
-  id: string;
-  event_id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  username: string | null;
-  side: string | null;
-  group_id: string | null;
-  group_name: string | null;
-  guest_count: number | null;
-  plus_one_allowed: boolean | null;
-  dietary_notes: string | null;
-  table_number: string | null;
-  rsvp_status: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface GroupDB {
-  id: string;
-  event_id: string;
-  name: string;
-}
-
-interface SubEventDB {
-  id: string;
-  parent_event_id: string;
-  name: string;
-}
-
-interface OverrideDB {
-  id: string;
-  guest_id: string;
-  sub_event_id: string;
-  is_invited: boolean;
-}
-
-export default function GuestsPage() {
-  const { eventId } = useEventContext();
+export function GuestsPage() {
+  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<GuestFormFields>(EMPTY_GUEST_FORM);
-  const [usernameError, setUsernameError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [filterSide, setFilterSide] = useState("");
-  const [filterGroup, setFilterGroup] = useState("");
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [filterGroup, setFilterGroup] = useState<string>("");
+  const [formData, setFormData] = useState<GuestFormData>(emptyGuestForm());
 
-  // Fetch guests
-  const { data: guests, isLoading, isError, refetch } = useQuery({
+  const {
+    data: guests,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["event-guests", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_guests")
         .select("*")
         .eq("event_id", eventId)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as GuestDB[];
+      return data as EventGuest[];
     },
   });
 
-  // Fetch groups
   const { data: groups } = useQuery({
     queryKey: ["guest-groups", eventId],
     queryFn: async () => {
@@ -85,13 +56,12 @@ export default function GuestsPage() {
         .from("guest_groups")
         .select("*")
         .eq("event_id", eventId)
-        .order("name", { ascending: true });
+        .order("sort_order", { ascending: true });
       if (error) throw error;
-      return data as GroupDB[];
+      return data as GuestGroup[];
     },
   });
 
-  // Fetch sub-events
   const { data: subEvents } = useQuery({
     queryKey: ["sub-events", eventId],
     queryFn: async () => {
@@ -101,59 +71,71 @@ export default function GuestsPage() {
         .eq("parent_event_id", eventId)
         .order("display_order", { ascending: true });
       if (error) throw error;
-      return data as SubEventDB[];
+      return data as SubEvent[];
     },
   });
 
-  // Fetch all overrides for this event's guests
   const { data: overrides } = useQuery({
-    queryKey: ["guest-invitation-overrides-event", eventId],
+    queryKey: ["guest-invitation-overrides-all", eventId],
     queryFn: async () => {
-      if (!guests || guests.length === 0) return [];
-      const guestIds = guests.map((g) => g.id);
       const { data, error } = await supabase
         .from("guest_invitation_overrides")
         .select("*")
-        .in("guest_id", guestIds);
+        .in("sub_event_id", (subEvents ?? []).map((se) => se.id));
       if (error) throw error;
-      return data as OverrideDB[];
+      return data as GuestInvitationOverride[];
     },
-    enabled: !!guests && guests.length > 0,
+    enabled: !!subEvents && subEvents.length > 0,
   });
 
-  // ─── Mutations ──────────────────────────────────────────────────────────
-
-  const saveMutation = useMutation({
+  const createMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
+      const { error } = await supabase.from("event_guests").insert({
         event_id: eventId,
-        name: form.name,
-        email: form.email || "",
-        phone: form.phone || "",
-        username: form.username || null,
-        side: form.side || "",
-        group_id: form.group_id || null,
-        group_name: form.group_name || "",
-        guest_count: parseInt(form.guest_count, 10) || 1,
-        plus_one_allowed: form.plus_one_allowed,
-        dietary_notes: form.dietary_notes || "",
-        table_number: form.table_number || null,
-      };
-      if (editingId) {
-        const { error } = await supabase.from("event_guests").update(payload).eq("id", editingId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("event_guests").insert(payload);
-        if (error) throw error;
-      }
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone || null,
+        group_id: formData.group_id,
+        group_name: formData.group_name || null,
+        side: formData.side || null,
+        rsvp_status: formData.rsvp_status,
+        plus_ones: formData.plus_ones,
+        dietary: formData.dietary || null,
+        message: formData.message || null,
+        table_number: formData.table_number || null,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["guest-invitation-overrides-event", eventId] });
-      setModalOpen(false);
-      setForm(EMPTY_GUEST_FORM);
-      setEditingId(null);
-      setUsernameError(null);
+      closeModal();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingId) throw new Error("No guest selected");
+      const { error } = await supabase
+        .from("event_guests")
+        .update({
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone || null,
+          group_id: formData.group_id,
+          group_name: formData.group_name || null,
+          side: formData.side || null,
+          rsvp_status: formData.rsvp_status,
+          plus_ones: formData.plus_ones,
+          dietary: formData.dietary || null,
+          message: formData.message || null,
+          table_number: formData.table_number || null,
+        })
+        .eq("id", editingId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
+      closeModal();
     },
   });
 
@@ -164,13 +146,11 @@ export default function GuestsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["guest-invitation-overrides-event", eventId] });
     },
   });
 
-  const toggleOverride = useMutation({
+  const toggleOverrideMutation = useMutation({
     mutationFn: async ({ guestId, subEventId, isInvited }: { guestId: string; subEventId: string; isInvited: boolean }) => {
-      // Check if override exists
       const existing = (overrides ?? []).find(
         (o) => o.guest_id === guestId && o.sub_event_id === subEventId
       );
@@ -190,344 +170,212 @@ export default function GuestsPage() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guest-invitation-overrides-event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["guest-invitation-overrides-all", eventId] });
     },
   });
 
-  // ─── Derived data ───────────────────────────────────────────────────────
+  const openCreate = () => {
+    setEditingId(null);
+    setFormData(emptyGuestForm());
+    setModalOpen(true);
+  };
+
+  const openEdit = (guest: EventGuest) => {
+    setEditingId(guest.id);
+    setFormData(guestToForm(guest));
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingId(null);
+  };
+
+  const handleSave = () => {
+    if (editingId) {
+      updateMutation.mutate();
+    } else {
+      createMutation.mutate();
+    }
+  };
 
   const filteredGuests = useMemo(() => {
     if (!guests) return [];
     return guests.filter((g) => {
-      if (search) {
-        const q = search.toLowerCase();
-        const matches =
-          g.name.toLowerCase().includes(q) ||
-          (g.email ?? "").toLowerCase().includes(q) ||
-          (g.username ?? "").toLowerCase().includes(q);
-        if (!matches) return false;
-      }
-      if (filterSide && g.side !== filterSide) return false;
-      if (filterGroup && g.group_id !== filterGroup) return false;
-      return true;
+      const matchSearch =
+        !search ||
+        g.name.toLowerCase().includes(search.toLowerCase()) ||
+        g.email.toLowerCase().includes(search.toLowerCase());
+      const matchGroup = !filterGroup || g.group_id === filterGroup;
+      return matchSearch && matchGroup;
     });
-  }, [guests, search, filterSide, filterGroup]);
+  }, [guests, search, filterGroup]);
 
-  // Group guests by group_id (ungrouped go to "__none__")
-  const groupedGuests = useMemo(() => {
-    const map = new Map<string, GuestDB[]>();
-    for (const g of filteredGuests) {
-      const key = g.group_id || "__none__";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(g);
-    }
-    return map;
-  }, [filteredGuests]);
-
-  const groupNames = useMemo(() => {
-    const map = new Map<string, string>();
-    map.set("__none__", "Ungrouped");
-    for (const g of groups ?? []) map.set(g.id, g.name);
-    return map;
-  }, [groups]);
-
-  // Determine if a guest is invited to a sub-event
-  function isInvitedTo(guestId: string, subEventId: string): boolean {
+  const isGuestInvitedToSubEvent = (guestId: string, subEventId: string): boolean => {
     const override = (overrides ?? []).find(
       (o) => o.guest_id === guestId && o.sub_event_id === subEventId
     );
-    return override ? override.is_invited : false;
-  }
-
-  // ─── Handlers ───────────────────────────────────────────────────────────
-
-  function openCreate() {
-    setForm(EMPTY_GUEST_FORM);
-    setEditingId(null);
-    setUsernameError(null);
-    setModalOpen(true);
-  }
-
-  function openEdit(guest: GuestDB) {
-    setForm(guestToForm(guest as unknown as EventGuest));
-    setEditingId(guest.id);
-    setUsernameError(null);
-    setModalOpen(true);
-  }
-
-  async function checkUsernameUnique(username: string, excludeId?: string): Promise<boolean> {
-    if (!username) return true;
-    const { data, error } = await supabase
-      .from("event_guests")
-      .select("id")
-      .eq("event_id", eventId)
-      .eq("username", username);
-    if (error) return true;
-    if (!data || data.length === 0) return true;
-    if (excludeId && data.length === 1 && data[0].id === excludeId) return true;
-    return false;
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    // Auto-generate username if blank
-    let finalForm = { ...form };
-    if (!finalForm.username && finalForm.name) {
-      finalForm.username = generateUsername(finalForm.name);
-      setForm(finalForm);
-    }
-    // Validate username uniqueness
-    if (finalForm.username) {
-      const unique = await checkUsernameUnique(finalForm.username, editingId ?? undefined);
-      if (!unique) {
-        setUsernameError("Username already taken. Please choose another.");
-        return;
-      }
-    }
-    setUsernameError(null);
-    saveMutation.mutate();
-  }
-
-  function toggleGroupCollapse(key: string) {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }
-
-  // ─── Render ──────────────────────────────────────────────────────────────
+    return override?.is_invited ?? false;
+  };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex items-center justify-center py-20">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   if (isError) {
-    return <ErrorState onRetry={() => refetch()} />;
+    return <ErrorState message="Failed to load guests" onRetry={() => refetch()} />;
   }
 
-  const totalGuests = guests?.length ?? 0;
-  const totalFiltered = filteredGuests.length;
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="max-w-5xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-dash-text">Guests</h2>
-          <p className="text-sm text-dash-muted">
-            {totalGuests} {totalGuests === 1 ? "guest" : "guests"} total
-            {totalFiltered !== totalGuests && ` (${totalFiltered} shown)`}
+          <h2 className="text-lg font-semibold text-dash-text">Guests</h2>
+          <p className="mt-1 text-sm text-dash-muted">
+            Manage your guest list, track RSVPs, and assign event invitations.
           </p>
         </div>
         <Button onClick={openCreate}>Add Guest</Button>
       </div>
 
-      {saveMutation.isError && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-          Error: {saveMutation.error?.message}
-        </div>
-      )}
-
-      {/* Search & Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, email, or username..."
+          placeholder="Search by name or email..."
           className="flex-1"
         />
-        <Select
-          value={filterSide}
-          onChange={(e) => setFilterSide(e.target.value)}
-          className="sm:w-40"
-        >
-          <option value="">All sides</option>
-          <option value="Bride">Bride</option>
-          <option value="Groom">Groom</option>
-          <option value="Family">Family</option>
-          <option value="Friend">Friend</option>
-          <option value="Other">Other</option>
-        </Select>
-        <Select
-          value={filterGroup}
-          onChange={(e) => setFilterGroup(e.target.value)}
-          className="sm:w-40"
-        >
-          <option value="">All groups</option>
-          {groups?.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </Select>
+        <div className="sm:w-48">
+          <select
+            value={filterGroup}
+            onChange={(e) => setFilterGroup(e.target.value)}
+            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+          >
+            <option value="">All Groups</option>
+            {(groups ?? []).map((g) => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {/* Guest list grouped */}
-      {totalFiltered === 0 ? (
-        <EmptyState
-          title={totalGuests === 0 ? "No guests yet" : "No guests match your filters"}
-          description={
-            totalGuests === 0
-              ? "Add guests to your event to manage invitations and RSVPs."
-              : "Try adjusting your search or filters."
-          }
-          icon={<span className="text-5xl">👥</span>}
-          action={totalGuests === 0 ? <Button onClick={openCreate}>Add Guest</Button> : undefined}
-        />
-      ) : (
-        <div className="space-y-4">
-          {Array.from(groupedGuests.entries()).map(([groupKey, groupGuests]) => {
-            const isCollapsed = collapsedGroups.has(groupKey);
-            return (
-              <div key={groupKey} className="rounded-lg border border-dash-border overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => toggleGroupCollapse(groupKey)}
-                  className="flex w-full items-center justify-between bg-dash-surface px-4 py-3 hover:bg-dash-bg transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-dash-text">
-                      {groupNames.get(groupKey) ?? "Unknown Group"}
-                    </span>
-                    <Badge variant="default">{groupGuests.length}</Badge>
+      {/* Guest list */}
+      {filteredGuests.length > 0 ? (
+        <div className="space-y-3">
+          {filteredGuests.map((guest) => (
+            <Card key={guest.id} className="p-5">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-base font-semibold text-dash-text">{guest.name}</h3>
+                    <RsvpBadge status={guest.rsvp_status} />
+                    {guest.group_name && (
+                      <Badge variant="default">{guest.group_name}</Badge>
+                    )}
+                    {guest.side && (
+                      <Badge variant="default" className="capitalize">{guest.side}</Badge>
+                    )}
                   </div>
-                  <span className="text-xs text-dash-muted">{isCollapsed ? "▼" : "▲"}</span>
-                </button>
-                {!isCollapsed && (
-                  <div className="divide-y divide-dash-border">
-                    {groupGuests.map((guest) => (
-                      <GuestRow
-                        key={guest.id}
-                        guest={guest}
-                        subEvents={subEvents ?? []}
-                        isInvitedTo={isInvitedTo}
-                        onToggleOverride={(subEventId, isInvited) =>
-                          toggleOverride.mutate({ guestId: guest.id, subEventId, isInvited })
-                        }
-                        onEdit={() => openEdit(guest)}
-                        onDelete={() => deleteMutation.mutate(guest.id)}
-                        toggling={toggleOverride.isPending}
-                      />
-                    ))}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-dash-muted">
+                    <span>✉️ {guest.email}</span>
+                    {guest.phone && <span>📞 {guest.phone}</span>}
+                    {guest.plus_ones !== null && guest.plus_ones > 0 && (
+                      <span>👥 +{guest.plus_ones}</span>
+                    )}
+                    {guest.table_number && <span>🪑 Table {guest.table_number}</span>}
                   </div>
-                )}
+
+                  {/* Invited events as clickable chips */}
+                  {subEvents && subEvents.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {subEvents.map((se) => {
+                        const invited = isGuestInvitedToSubEvent(guest.id, se.id);
+                        return (
+                          <button
+                            key={se.id}
+                            type="button"
+                            onClick={() =>
+                              toggleOverrideMutation.mutate({
+                                guestId: guest.id,
+                                subEventId: se.id,
+                                isInvited: !invited,
+                              })
+                            }
+                            className={cn(
+                              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                              invited
+                                ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
+                                : "border-dash-border bg-dash-surface text-dash-muted hover:bg-dash-bg"
+                            )}
+                          >
+                            {invited ? "✓" : "+"} {se.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0 ml-4">
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(guest)}>
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => deleteMutation.mutate(guest.id)}
+                    loading={deleteMutation.isPending}
+                  >
+                    Delete
+                  </Button>
+                </div>
               </div>
-            );
-          })}
+            </Card>
+          ))}
         </div>
+      ) : (
+        <EmptyState
+          title={search || filterGroup ? "No guests found" : "No guests yet"}
+          description={search || filterGroup ? "Try adjusting your filters." : "Add guests to start building your guest list."}
+          action={!search && !filterGroup ? <Button onClick={openCreate}>Add Guest</Button> : undefined}
+        />
       )}
 
       {/* Modal */}
       <Modal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={closeModal}
         title={editingId ? "Edit Guest" : "Add Guest"}
-        className="max-w-xl"
-      >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <GuestFormFieldsComponent
-            form={form}
-            setForm={setForm}
-            groups={groups ?? []}
-            usernameError={usernameError}
-          />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeModal}>
               Cancel
             </Button>
-            <Button type="submit" loading={saveMutation.isPending}>
-              {editingId ? "Update" : "Add"}
+            <Button
+              onClick={handleSave}
+              loading={createMutation.isPending || updateMutation.isPending}
+            >
+              {editingId ? "Save" : "Add"}
             </Button>
-          </div>
-        </form>
+          </>
+        }
+      >
+        <GuestForm
+          initial={formData}
+          groups={groups ?? []}
+          onChange={setFormData}
+        />
+        {(createMutation.isError || updateMutation.isError) && (
+          <p className="text-sm text-dash-danger mt-3">
+            {createMutation.error?.message || updateMutation.error?.message || "Save failed"}
+          </p>
+        )}
       </Modal>
-    </div>
-  );
-}
-
-// ─── Guest row component ──────────────────────────────────────────────────
-
-interface GuestRowProps {
-  guest: GuestDB;
-  subEvents: SubEventDB[];
-  isInvitedTo: (guestId: string, subEventId: string) => boolean;
-  onToggleOverride: (subEventId: string, isInvited: boolean) => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  toggling: boolean;
-}
-
-function GuestRow({
-  guest,
-  subEvents,
-  isInvitedTo,
-  onToggleOverride,
-  onEdit,
-  onDelete,
-  toggling,
-}: GuestRowProps) {
-  return (
-    <div className="bg-dash-bg px-4 py-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="text-sm font-medium text-dash-text">{guest.name}</h4>
-            <RsvpBadge status={guest.rsvp_status} />
-            {guest.side && <Badge variant="default">{guest.side}</Badge>}
-            {guest.guest_count && guest.guest_count > 1 && (
-              <Badge variant="default">{guest.guest_count} guests</Badge>
-            )}
-          </div>
-          <div className="mt-1 flex flex-wrap gap-3 text-xs text-dash-muted">
-            {guest.email && <span>✉ {guest.email}</span>}
-            {guest.phone && <span>☎ {guest.phone}</span>}
-            {guest.username && <span>@{guest.username}</span>}
-            {guest.table_number && <span>🪑 {guest.table_number}</span>}
-          </div>
-        </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <Button variant="ghost" size="sm" onClick={onEdit}>
-            Edit
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onDelete}>
-            Delete
-          </Button>
-        </div>
-      </div>
-
-      {/* Invited events chips */}
-      {subEvents.length > 0 && (
-        <div className="mt-3">
-          <p className="mb-1.5 text-xs font-medium text-dash-muted">Invited to:</p>
-          <div className="flex flex-wrap gap-2">
-            {subEvents.map((se) => {
-              const invited = isInvitedTo(guest.id, se.id);
-              return (
-                <button
-                  key={se.id}
-                  type="button"
-                  disabled={toggling}
-                  onClick={() => onToggleOverride(se.id, !invited)}
-                  className={cn(
-                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50",
-                    invited
-                      ? "border-dash-primary/30 bg-dash-primary/10 text-dash-primary"
-                      : "border-dash-border bg-dash-surface text-dash-muted hover:bg-dash-bg"
-                  )}
-                >
-                  {invited ? "✓ " : ""}
-                  {se.name}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

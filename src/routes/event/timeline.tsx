@@ -1,82 +1,105 @@
-import { useState, type FormEvent } from "react";
+import React, { useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type EventSchedule } from "../../lib/supabase";
-import { useEventContext } from "./event-layout";
+import { supabase } from "../../lib/supabase";
+import type { UserEvent, EventSchedule } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Modal, Card, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
-import { DatePicker, TimePicker } from "../../components/ui";
-import { formatDateTime, to12Hour, cn } from "../../lib/utils";
+import { Input, Textarea } from "../../components/ui/Input";
+import {
+  Card,
+  Modal,
+  LoadingSpinner,
+  ErrorState,
+  EmptyState,
+  Badge,
+} from "../../components/ui";
+import { DatePicker } from "../../components/ui/DatePicker";
+import { TimePicker } from "../../components/ui/TimePicker";
+import { formatDate, formatTime12, cn } from "../../lib/utils";
 
-interface ScheduleFormData {
-  title: string;
-  description: string;
-  date: string;
-  start_time: string;
-  end_time: string;
-  location: string;
-}
+const CATEGORIES = ["Ceremony", "Reception", "Dinner", "Party", "Other"];
 
-const emptyForm: ScheduleFormData = {
-  title: "",
-  description: "",
-  date: "",
-  start_time: "",
-  end_time: "",
-  location: "",
-};
-
-export default function TimelinePage() {
-  const { eventId } = useEventContext();
+export function TimelinePage() {
+  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<ScheduleFormData>(emptyForm);
 
-  const { data: schedule, isLoading, isError, refetch } = useQuery({
+  // Form state
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [date, setDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [venue, setVenue] = useState("");
+  const [address, setAddress] = useState("");
+  const [dressCode, setDressCode] = useState("");
+  const [category, setCategory] = useState("Ceremony");
+
+  const {
+    data: schedule,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["event-schedule", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_schedule")
         .select("*")
         .eq("event_id", eventId)
-        .order("sort_order", { ascending: true });
+        .order("order_index", { ascending: true });
       if (error) throw error;
       return data as EventSchedule[];
     },
   });
 
-  const saveMutation = useMutation({
+  const createMutation = useMutation({
     mutationFn: async () => {
-      const sortOrder = editingId
-        ? (schedule?.find((s) => s.id === editingId)?.sort_order ?? 0)
-        : (schedule?.length ?? 0);
-
-      const payload = {
+      const maxOrder = schedule ? Math.max(...schedule.map((s) => s.order_index), -1) : -1;
+      const { error } = await supabase.from("event_schedule").insert({
         event_id: eventId,
-        title: form.title,
-        description: form.description || null,
-        start_time: form.date && form.start_time ? `${form.date}T${form.start_time}` : new Date().toISOString(),
-        end_time: form.date && form.end_time ? `${form.date}T${form.end_time}` : null,
-        location: form.location || null,
-        sort_order: sortOrder,
-      };
-
-      if (editingId) {
-        const { error } = await supabase
-          .from("event_schedule")
-          .update(payload)
-          .eq("id", editingId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("event_schedule").insert(payload);
-        if (error) throw error;
-      }
+        title,
+        description: description || null,
+        schedule_date: date || null,
+        start_time: startTime || null,
+        end_time: endTime || null,
+        venue: venue || null,
+        address: address || null,
+        dress_code: dressCode || null,
+        category: category || null,
+        order_index: maxOrder + 1,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event-schedule", eventId] });
-      setModalOpen(false);
-      setForm(emptyForm);
-      setEditingId(null);
+      closeModal();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingId) throw new Error("No item selected");
+      const { error } = await supabase
+        .from("event_schedule")
+        .update({
+          title,
+          description: description || null,
+          schedule_date: date || null,
+          start_time: startTime || null,
+          end_time: endTime || null,
+          venue: venue || null,
+          address: address || null,
+          dress_code: dressCode || null,
+          category: category || null,
+        })
+        .eq("id", editingId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event-schedule", eventId] });
+      closeModal();
     },
   });
 
@@ -90,164 +113,203 @@ export default function TimelinePage() {
     },
   });
 
-  function openCreate() {
-    setForm(emptyForm);
+  const openCreate = () => {
     setEditingId(null);
+    setTitle("");
+    setDescription("");
+    setDate(event.draft_event_date || event.event_date || "");
+    setStartTime("");
+    setEndTime("");
+    setVenue("");
+    setAddress("");
+    setDressCode("");
+    setCategory("Ceremony");
     setModalOpen(true);
-  }
+  };
 
-  function openEdit(item: EventSchedule) {
-    const datePart = item.start_time?.split("T")[0] ?? "";
-    const startTimePart = item.start_time?.split("T")[1]?.slice(0, 5) ?? "";
-    const endTimePart = item.end_time?.split("T")[1]?.slice(0, 5) ?? "";
-    setForm({
-      title: item.title,
-      description: item.description ?? "",
-      date: datePart,
-      start_time: startTimePart,
-      end_time: endTimePart,
-      location: item.location ?? "",
-    });
+  const openEdit = (item: EventSchedule) => {
     setEditingId(item.id);
+    setTitle(item.title);
+    setDescription(item.description || "");
+    setDate(item.schedule_date || "");
+    setStartTime(item.start_time || "");
+    setEndTime(item.end_time || "");
+    setVenue(item.venue || "");
+    setAddress(item.address || "");
+    setDressCode(item.dress_code || "");
+    setCategory(item.category || "Ceremony");
     setModalOpen(true);
-  }
+  };
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    saveMutation.mutate();
-  }
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingId(null);
+  };
+
+  const handleSave = () => {
+    if (editingId) {
+      updateMutation.mutate();
+    } else {
+      createMutation.mutate();
+    }
+  };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex items-center justify-center py-20">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   if (isError) {
-    return <ErrorState onRetry={() => refetch()} />;
+    return <ErrorState message="Failed to load schedule" onRetry={() => refetch()} />;
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="max-w-4xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-semibold text-dash-text">Schedule</h2>
-          <p className="text-sm text-dash-muted">Create a timeline for your event day.</p>
+          <h2 className="text-lg font-semibold text-dash-text">Schedule</h2>
+          <p className="mt-1 text-sm text-dash-muted">
+            Build a timeline of all the events for your special day.
+          </p>
         </div>
-        <Button onClick={openCreate}>Add Item</Button>
+        <Button onClick={openCreate}>Add Event</Button>
       </div>
 
-      {saveMutation.isError && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-          Error: {saveMutation.error?.message}
-        </div>
-      )}
-
-      {schedule && schedule.length === 0 ? (
-        <EmptyState
-          title="No schedule items"
-          description="Add items to create a timeline for your event."
-          icon={<span className="text-5xl">📅</span>}
-          action={<Button onClick={openCreate}>Add Item</Button>}
-        />
-      ) : (
-        <div className="space-y-3">
-          {schedule?.map((item, idx) => {
-            const datePart = item.start_time?.split("T")[0] ?? "";
-            const startTimePart = item.start_time?.split("T")[1]?.slice(0, 5) ?? "";
-            const endTimePart = item.end_time?.split("T")[1]?.slice(0, 5) ?? "";
-            return (
-              <Card key={item.id} className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="flex-shrink-0 flex h-8 w-8 items-center justify-center rounded-full bg-dash-primary/10 text-dash-primary text-sm font-semibold">
-                      {idx + 1}
-                    </div>
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-semibold text-dash-text">{item.title}</h3>
-                      {item.description && (
-                        <p className="mt-1 text-sm text-dash-muted">{item.description}</p>
-                      )}
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <Badge variant="default">
-                          📅 {formatDateTime(datePart, startTimePart)}
-                        </Badge>
-                        {endTimePart && (
-                          <Badge variant="default">→ {to12Hour(endTimePart)}</Badge>
-                        )}
-                        {item.location && (
-                          <Badge variant="default">📍 {item.location}</Badge>
-                        )}
-                      </div>
-                    </div>
+      {schedule && schedule.length > 0 ? (
+        <div className="space-y-4">
+          {schedule.map((item) => (
+            <Card key={item.id} className="p-5">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-base font-semibold text-dash-text">{item.title}</h3>
+                    {item.category && (
+                      <Badge variant="primary">{item.category}</Badge>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <Button variant="ghost" size="sm" onClick={() => openEdit(item)}>
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deleteMutation.mutate(item.id)}
-                    >
-                      Delete
-                    </Button>
+                  {item.description && (
+                    <p className="text-sm text-dash-muted mb-2">{item.description}</p>
+                  )}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-dash-muted">
+                    {item.schedule_date && (
+                      <span>📅 {formatDate(item.schedule_date)}</span>
+                    )}
+                    {item.start_time && (
+                      <span>⏰ {formatTime12(item.start_time)}</span>
+                    )}
+                    {item.end_time && (
+                      <span>– {formatTime12(item.end_time)}</span>
+                    )}
+                    {item.venue && <span>📍 {item.venue}</span>}
+                    {item.dress_code && <span>👔 {item.dress_code}</span>}
                   </div>
                 </div>
-              </Card>
-            );
-          })}
+                <div className="flex items-center gap-2 shrink-0 ml-4">
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(item)}>
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => deleteMutation.mutate(item.id)}
+                    loading={deleteMutation.isPending}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ))}
         </div>
+      ) : (
+        <EmptyState
+          title="No schedule items yet"
+          description="Add events to build a timeline for your special day."
+          action={<Button onClick={openCreate}>Add Event</Button>}
+        />
       )}
 
       {/* Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingId ? "Edit Schedule Item" : "Add Schedule Item"}>
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <Modal
+        open={modalOpen}
+        onClose={closeModal}
+        title={editingId ? "Edit Event" : "Add Event"}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeModal}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              loading={createMutation.isPending || updateMutation.isPending}
+            >
+              {editingId ? "Save" : "Add"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
           <Input
             label="Title"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            placeholder="Ceremony"
-            required
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g., Ceremony"
           />
           <Textarea
             label="Description"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
             placeholder="Optional description"
             rows={2}
           />
-          <div>
-            <label className="block text-sm font-medium text-dash-text mb-1">Date</label>
-            <DatePicker value={form.date} onChange={(v) => setForm({ ...form, date: v })} />
+          <div className="grid grid-cols-2 gap-3">
+            <DatePicker label="Date" value={date} onChange={(v) => setDate(v ?? "")} />
+            <div>
+              <label className="block text-sm font-medium text-dash-text mb-1.5">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-dash-text mb-1">Start Time</label>
-              <TimePicker value={form.start_time} onChange={(v) => setForm({ ...form, start_time: v })} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-dash-text mb-1">End Time</label>
-              <TimePicker value={form.end_time} onChange={(v) => setForm({ ...form, end_time: v })} />
-            </div>
+            <TimePicker label="Start Time" value={startTime} onChange={(v) => setStartTime(v ?? "")} />
+            <TimePicker label="End Time" value={endTime} onChange={(v) => setEndTime(v ?? "")} />
           </div>
           <Input
-            label="Location"
-            value={form.location}
-            onChange={(e) => setForm({ ...form, location: e.target.value })}
-            placeholder="Main Hall"
+            label="Venue"
+            value={venue}
+            onChange={(e) => setVenue(e.target.value)}
+            placeholder="Venue name"
           />
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={saveMutation.isPending}>
-              {editingId ? "Update" : "Add"}
-            </Button>
-          </div>
-        </form>
+          <Textarea
+            label="Address"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="Full address"
+            rows={2}
+          />
+          <Input
+            label="Dress Code"
+            value={dressCode}
+            onChange={(e) => setDressCode(e.target.value)}
+            placeholder="e.g., Black tie, Cocktail"
+          />
+          {(createMutation.isError || updateMutation.isError) && (
+            <p className="text-sm text-dash-danger">
+              {createMutation.error?.message || updateMutation.error?.message || "Save failed"}
+            </p>
+          )}
+        </div>
       </Modal>
     </div>
   );

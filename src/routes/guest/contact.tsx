@@ -1,83 +1,96 @@
 import { useGuestOutletContext } from "./guest-layout";
 
 export default function GuestContact() {
-  const { event, theme } = useGuestOutletContext();
+  const { event } = useGuestOutletContext();
 
-  const mapUrl =
-    event.venue_map_url ||
-    (event.venue_address
-      ? `https://www.google.com/maps?q=${encodeURIComponent(event.venue_address)}&output=embed`
-      : null);
+  const content = (event.content ?? {}) as {
+    contactPhone?: string;
+    contactEmail?: string;
+    contactAddress?: string;
+    contactNote?: string;
+    mapEmbedUrl?: string;
+    mapQuery?: string;
+  };
+
+  const phone = content.contactPhone;
+  const email = content.contactEmail;
+  const address = content.contactAddress || event.address;
+  const note = content.contactNote;
+  const mapUrl = content.mapEmbedUrl;
+  const mapQuery = content.mapQuery || event.venue || event.address;
+  const googleMapsEmbed = mapUrl || (mapQuery ? `https://maps.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed` : null);
 
   return (
     <div className="guest-section">
-      <div className="mx-auto max-w-4xl">
-        {/* Centered header */}
-        <div className="mb-12 text-center">
-          <p className="guest-eyebrow">Contact</p>
-          <h1 className="guest-title">Get in Touch</h1>
-          <p className="guest-subtitle mx-auto">Details and directions for the big day.</p>
+      <div className="mx-auto max-w-3xl">
+        {/* Header */}
+        <div className="mb-10 text-center animate-fadeIn">
+          <p className="guest-eyebrow">Get In Touch</p>
+          <h1 className="guest-title">Contact</h1>
+          <p className="guest-subtitle mx-auto">
+            Have a question? Here's how to reach us.
+          </p>
         </div>
 
-        <div className="grid gap-10 md:grid-cols-2">
-          {/* Venue section */}
-          <section>
-            <p className="guest-eyebrow">Venue</p>
-            <h2 className="mb-2" style={{ color: theme.heading, fontFamily: theme.fontHeading, fontSize: "1.5rem" }}>
-              {event.venue_name || "Venue to be announced"}
-            </h2>
-            {event.venue_address && (
-              <p style={{ color: theme.text, lineHeight: 1.7 }}>{event.venue_address}</p>
-            )}
-            {event.venue_map_url && (
-              <a
-                href={event.venue_map_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-block text-sm font-medium hover:underline"
-                style={{ color: theme.primary }}
-              >
-                Open in Maps →
-              </a>
-            )}
-          </section>
-
-          {/* When section */}
-          <section>
-            <p className="guest-eyebrow">When</p>
-            <h2 className="mb-2" style={{ color: theme.heading, fontFamily: theme.fontHeading, fontSize: "1.5rem" }}>
-              {event.event_date
-                ? new Date(event.event_date).toLocaleDateString("en-US", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })
-                : "Date to be announced"}
-            </h2>
-            {event.event_end_date && (
-              <p style={{ color: theme.muted }}>
-                through{" "}
-                {new Date(event.event_end_date).toLocaleDateString("en-US", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
+        {/* Contact Cards */}
+        <div className="mb-10 grid gap-6 sm:grid-cols-2">
+          {phone && (
+            <div className="event-card animate-slideUpStagger">
+              <p className="guest-eyebrow">Phone</p>
+              <p className="text-lg font-semibold" style={{ color: "var(--event-heading)" }}>
+                <a href={`tel:${phone}`} className="hover:underline">{phone}</a>
               </p>
-            )}
-          </section>
+            </div>
+          )}
+          {email && (
+            <div className="event-card animate-slideUpStagger" style={{ animationDelay: "60ms" }}>
+              <p className="guest-eyebrow">Email</p>
+              <p className="text-lg font-semibold" style={{ color: "var(--event-heading)" }}>
+                <a href={`mailto:${email}`} className="hover:underline">{email}</a>
+              </p>
+            </div>
+          )}
+          {address && (
+            <div className="event-card animate-slideUpStagger" style={{ animationDelay: "120ms" }}>
+              <p className="guest-eyebrow">Address</p>
+              <p className="text-sm leading-relaxed" style={{ color: "var(--event-text)" }}>
+                {address}
+              </p>
+            </div>
+          )}
+          {note && (
+            <div className="event-card animate-slideUpStagger" style={{ animationDelay: "180ms" }}>
+              <p className="guest-eyebrow">Note</p>
+              <p className="text-sm leading-relaxed" style={{ color: "var(--event-text)" }}>
+                {note}
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* Embedded map with rounded corners */}
-        {mapUrl && (
-          <div className="mt-10 overflow-hidden" style={{ borderRadius: "calc(var(--event-radius) * 2)", border: `1px solid ${theme.border}` }}>
-            <iframe
-              src={mapUrl}
-              className="w-full"
-              style={{ height: 360, border: "none" }}
-              loading="lazy"
-              title="Venue map"
-            />
+        {/* Map */}
+        {googleMapsEmbed && (
+          <div className="animate-slideUp">
+            <p className="guest-eyebrow mb-3">Location</p>
+            <div className="overflow-hidden" style={{ borderRadius: "var(--event-radius)" }}>
+              <iframe
+                src={googleMapsEmbed}
+                title="Event location map"
+                className="h-80 w-full border-0"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                style={{ borderRadius: "var(--event-radius)" }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Fallback if no contact info */}
+        {!phone && !email && !address && !note && !googleMapsEmbed && (
+          <div className="text-center animate-fadeIn">
+            <p className="guest-subtitle mx-auto">
+              Contact information has not been provided yet. Please check back later.
+            </p>
           </div>
         )}
       </div>

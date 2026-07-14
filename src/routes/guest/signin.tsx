@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
@@ -9,8 +9,8 @@ import { jsonToTheme } from "../../lib/theme";
 export default function GuestSignIn() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { guestId, eventId, signIn } = useGuestAuth();
-  const [username, setUsername] = useState("");
+  const { guest, eventId, signIn } = useGuestAuth();
+  const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,37 +29,25 @@ export default function GuestSignIn() {
     enabled: !!slug,
   });
 
-  // Already signed in for this event → go to home
-  if (event && guestId && eventId === event.id) {
-    navigate(`/e/${slug}/home`, { replace: true });
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    const trimmed = username.trim();
-    if (!trimmed || !event) return;
-    setSubmitting(true);
-    try {
-      const { data, error } = await supabase
-        .from("event_guests")
-        .select("*")
-        .eq("event_id", event.id)
-        .ilike("username", trimmed)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) {
-        setError("We couldn't find that username. Please check your invitation and try again.");
-        return;
-      }
-      signIn(event.id, data.id, data.name, data.email ?? undefined);
+  useEffect(() => {
+    if (event && guest && eventId === event.id) {
       navigate(`/e/${slug}/home`, { replace: true });
-    } catch {
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setSubmitting(false);
     }
-  }
+  }, [event, guest, eventId, slug, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!event) return;
+    setError(null);
+    setSubmitting(true);
+    const result = await signIn(event.id, email.trim());
+    setSubmitting(false);
+    if (result.error) {
+      setError(result.error);
+    } else {
+      navigate(`/e/${slug}/home`, { replace: true });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -73,40 +61,40 @@ export default function GuestSignIn() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
         <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
-        <p className="text-dash-muted">This invitation website could not be found or is no longer available.</p>
         <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
 
   const theme = jsonToTheme(event.theme);
-  const eventTitle = event.title || "Our Wedding";
 
   return (
     <EventThemeProvider theme={event.theme}>
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16 animate-fadeIn">
-        <div className="w-full max-w-sm">
-          <p className="guest-eyebrow text-center">{eventTitle}</p>
-          <h1 className="guest-title text-center" style={{ marginBottom: "0.5rem" }}>Welcome</h1>
-          <p className="guest-subtitle text-center" style={{ marginBottom: "2rem" }}>
-            Enter the username from your invitation to continue.
-          </p>
+      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
+        <div className="w-full max-w-md">
+          <div className="mb-8 text-center">
+            <h1 className="guest-title mb-2">{event.name}</h1>
+            <p className="guest-subtitle">Sign in to view your invitation</p>
+          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Your username"
-              required
-              autoFocus
-              autoComplete="username"
-              className="event-input"
-              disabled={submitting}
-            />
+          <form onSubmit={handleSubmit} className="event-card space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="event-input"
+                placeholder="your@email.com"
+                required
+                autoFocus
+              />
+            </div>
 
             {error && (
-              <p className="text-sm" style={{ color: "#dc2626" }}>{error}</p>
+              <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>
             )}
 
             <button
@@ -115,17 +103,13 @@ export default function GuestSignIn() {
               className="event-btn-primary w-full"
               style={{ opacity: submitting ? 0.6 : 1 }}
             >
-              {submitting ? "Signing in…" : "Sign In"}
+              {submitting ? "Signing in..." : "Sign In"}
             </button>
           </form>
 
           <div className="mt-6 text-center">
-            <Link
-              to={`/e/${slug}`}
-              className="text-sm hover:underline"
-              style={{ color: "var(--event-muted)" }}
-            >
-              ← Back to cover
+            <Link to={`/e/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>
+              Back to cover
             </Link>
           </div>
         </div>

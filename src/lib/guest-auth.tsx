@@ -1,103 +1,126 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { supabase } from "./supabase";
-
-interface GuestAuthState {
-  guestId: string | null;
-  eventId: string | null;
-  name: string | null;
-  email: string | null;
-  isAuthenticated: boolean;
-}
-
-interface GuestAuthContextValue extends GuestAuthState {
-  signIn: (eventId: string, guestId: string, name?: string, email?: string) => void;
-  signOut: () => void;
-}
+import type { EventGuest } from "./supabase";
 
 const STORAGE_KEY = "mywedly-guest-auth";
 
-const GuestAuthContext = createContext<GuestAuthContextValue>({
-  guestId: null,
-  eventId: null,
-  name: null,
-  email: null,
-  isAuthenticated: false,
-  signIn: () => {},
-  signOut: () => {},
-});
+interface StoredAuth {
+  guestId: string;
+  eventId: string;
+}
 
-function loadState(): GuestAuthState {
-  if (typeof window === "undefined") return { guestId: null, eventId: null, name: null, email: null, isAuthenticated: false };
+interface GuestAuthContextValue {
+  guest: EventGuest | null;
+  eventId: string | null;
+  loading: boolean;
+  signIn: (eventId: string, email: string) => Promise<{ error: string | null }>;
+  signOut: () => void;
+}
+
+const GuestAuthContext = createContext<GuestAuthContextValue | null>(null);
+
+function readStoredAuth(): StoredAuth | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { guestId: null, eventId: null, name: null, email: null, isAuthenticated: false };
-    const parsed = JSON.parse(raw) as GuestAuthState;
-    return {
-      guestId: parsed.guestId ?? null,
-      eventId: parsed.eventId ?? null,
-      name: parsed.name ?? null,
-      email: parsed.email ?? null,
-      isAuthenticated: Boolean(parsed.guestId && parsed.eventId),
-    };
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredAuth;
+    if (!parsed.guestId || !parsed.eventId) return null;
+    return parsed;
   } catch {
-    return { guestId: null, eventId: null, name: null, email: null, isAuthenticated: false };
+    return null;
   }
 }
 
-function saveState(state: GuestAuthState): void {
+function writeStoredAuth(auth: StoredAuth | null): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (auth) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
   } catch {
     // ignore
   }
 }
 
-interface GuestAuthProviderProps {
-  children: ReactNode;
-}
-
-export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
-  const [state, setState] = useState<GuestAuthState>(loadState);
+export function GuestAuthProvider({ children }: { children: React.ReactNode }) {
+  const [guest, setGuest] = useState<EventGuest | null>(null);
+  const [eventId, setEventId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    saveState(state);
-  }, [state]);
+    let cancelled = false;
+    (async () => {
+      const stored = readStoredAuth();
+      if (!stored) {
+        setLoading(false);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("event_guests")
+        .select("*")
+        .eq("id", stored.guestId)
+        .eq("event_id", stored.eventId)
+        .maybeSingle();
 
-  const signIn = useCallback(
-    (eventId: string, guestId: string, name?: string, email?: string) => {
-      setState({
-        guestId,
-        eventId,
-        name: name ?? null,
-        email: email ?? null,
-        isAuthenticated: true,
-      });
-    },
-    []
-  );
-
-  const signOut = useCallback(() => {
-    setState({ guestId: null, eventId: null, name: null, email: null, isAuthenticated: false });
+      if (cancelled) return;
+      if (!error && data) {
+        setGuest(data as EventGuest);
+        setEventId(stored.eventId);
+      } else {
+        writeStoredAuth(null);
+      }
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const value = useMemo<GuestAuthContextValue>(
-    () => ({ ...state, signIn, signOut }),
-    [state, signIn, signOut]
-  );
+  const signIn = useCallback(async (eventId: string, email: string): Promise<{ error: string | null }> => {
+    if (!email.trim()) {
+      return { error: "Please enter your email" };
+    }
+    const { data, error } = await supabase
+      .from("event_guests")
+      .select("*")
+      .eq("event_id", eventId)
+      .ilike("email", email.trim())
+      .maybeSingle();
 
-  return <GuestAuthContext.Provider value={value}>{children}</GuestAuthContext.Provider>;
+    if (error) {
+      return { error: "Something went wrong. Please try again." };
+    }
+    if (!data) {
+      return { error: "No invitation found for this email. Please check and try again." };
+    }
+
+    const guestData = data as EventGuest;
+    writeStoredAuth({ guestId: guestData.id, eventId });
+    setGuest(guestData);
+    setEventId(eventId);
+    return { error: null };
+  }, []);
+
+  const signOut = useCallback(() => {
+    writeStoredAuth(null);
+    setGuest(null);
+    setEventId(null);
+  }, []);
+
+  return (
+    <GuestAuthContext.Provider value={{ guest, eventId, loading, signIn, signOut }}>
+      {children}
+    </GuestAuthContext.Provider>
+  );
 }
 
 export function useGuestAuth(): GuestAuthContextValue {
-  return useContext(GuestAuthContext);
+  const ctx = useContext(GuestAuthContext);
+  if (!ctx) {
+    throw new Error("useGuestAuth must be used within a GuestAuthProvider");
+  }
+  return ctx;
 }
 
 export function useSignIn() {
@@ -105,17 +128,7 @@ export function useSignIn() {
   return signIn;
 }
 
-export async function useGuestSignIn(eventId: string, identifier: string): Promise<boolean> {
+export function useGuestSignIn() {
   const { signIn } = useGuestAuth();
-  const { data, error } = await supabase
-    .from("event_guests")
-    .select("*")
-    .eq("event_id", eventId)
-    .or(`email.eq.${identifier},phone.eq.${identifier},name.eq.${identifier}`)
-    .single();
-
-  if (error || !data) return false;
-
-  signIn(eventId, data.id, data.name, data.email);
-  return true;
+  return signIn;
 }

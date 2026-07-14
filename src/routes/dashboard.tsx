@@ -1,97 +1,87 @@
-import { useState, type FormEvent } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../lib/supabase";
-import { slugify, isValidSlug } from "../lib/theme";
+import { supabase } from "../lib/supabase";
+import type { UserEvent } from "../lib/supabase";
+import { slugify } from "../lib/theme";
+import { formatDate } from "../lib/utils";
 import { Button } from "../components/ui/Button";
-import { Input, Textarea } from "../components/ui";
+import { Input } from "../components/ui/Input";
 import {
   Card,
   Badge,
   Modal,
   LoadingSpinner,
-  ErrorState,
   EmptyState,
+  ErrorState,
 } from "../components/ui";
-import { formatDateShort } from "../lib/utils";
 
-export default function DashboardPage() {
+export function DashboardPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [slugError, setSlugError] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const { data: session } = useQuery({
-    queryKey: ["session"],
+    queryKey: ["auth-session"],
     queryFn: async () => {
-      const { data } = await supabase.auth.getSession();
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
       return data.session;
     },
   });
 
-  const userId = session?.user?.id;
-
-  const { data: events, isLoading, isError, refetch } = useQuery({
-    queryKey: ["user-events", userId],
+  const { data: events, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ["user-events", session?.user?.id],
     queryFn: async () => {
-      if (!userId) return [];
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("owner_id", userId)
+        .eq("creator_id", session!.user.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as UserEvent[];
     },
-    enabled: !!userId,
+    enabled: !!session?.user?.id,
   });
 
   const createMutation = useMutation({
-    mutationFn: async () => {
-      if (!userId) throw new Error("Not authenticated");
-      const slug = slugify(newTitle);
+    mutationFn: async (name: string) => {
+      const slug = slugify(name) || `event-${Date.now()}`;
       const { data, error } = await supabase
         .from("user_events")
         .insert({
-          owner_id: userId,
-          title: newTitle,
-          slug,
-          draft_title: newTitle,
-          description: newDescription,
-          draft_description: newDescription,
-          status: "draft",
-          cover_config: {},
-          theme: {},
-          content: {},
-          login_config: {},
-          sharing_config: {},
+          name,
+          draft_name: name,
+          creator_id: session!.user.id,
+          draft_slug: slug,
         })
         .select()
         .single();
       if (error) throw error;
-      return data;
+      return data as UserEvent;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user-events", userId] });
+    onSuccess: (newEvent) => {
+      queryClient.invalidateQueries({ queryKey: ["user-events", session?.user?.id] });
       setCreateOpen(false);
-      setNewTitle("");
-      setNewDescription("");
-      setSlugError(null);
+      setNewName("");
+      setCreateError(null);
+      navigate(`/event/${newEvent.id}`);
+    },
+    onError: (err: Error) => {
+      setCreateError(err.message);
     },
   });
 
-  function handleCreate(e: FormEvent) {
-    e.preventDefault();
-    const slug = slugify(newTitle);
-    if (!isValidSlug(slug)) {
-      setSlugError("Please enter a valid title (at least 2 characters)");
+  const handleCreate = () => {
+    if (!newName.trim()) {
+      setCreateError("Please enter a name for your website");
       return;
     }
-    setSlugError(null);
-    createMutation.mutate();
-  }
+    setCreateError(null);
+    createMutation.mutate(newName.trim());
+  };
 
   if (isLoading) {
     return (
@@ -103,8 +93,11 @@ export default function DashboardPage() {
 
   if (isError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-dash-bg">
-        <ErrorState onRetry={() => refetch()} />
+      <div className="min-h-screen flex items-center justify-center bg-dash-bg px-4">
+        <ErrorState
+          message={error instanceof Error ? error.message : "Failed to load websites"}
+          onRetry={() => refetch()}
+        />
       </div>
     );
   }
@@ -114,21 +107,18 @@ export default function DashboardPage() {
       {/* Header */}
       <header className="border-b border-dash-border bg-dash-surface">
         <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="text-xl font-bold text-dash-primary">
-            MyWedly
+          <Link to="/" className="flex items-center gap-2">
+            <span className="text-xl font-bold text-dash-primary">MyWedly</span>
           </Link>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                await supabase.auth.signOut();
-                navigate("/");
-              }}
-            >
-              Sign Out
-            </Button>
-          </div>
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              await supabase.auth.signOut();
+              navigate("/");
+            }}
+          >
+            Sign Out
+          </Button>
         </div>
       </header>
 
@@ -137,83 +127,104 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl font-bold text-dash-text">Your Websites</h1>
             <p className="mt-1 text-sm text-dash-muted">
-              Manage your invitation websites and create new ones.
+              Manage and edit your invitation websites.
             </p>
           </div>
           <Button onClick={() => setCreateOpen(true)}>Create Website</Button>
         </div>
 
-        {createMutation.isError && (
-          <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            Error creating website: {createMutation.error?.message}
+        {events && events.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {events.map((event) => (
+              <Link key={event.id} to={`/event/${event.id}`}>
+                <Card className="p-5 hover:shadow-md transition-shadow cursor-pointer h-full">
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-dash-text">
+                      {event.draft_name || event.name}
+                    </h3>
+                    {event.is_published ? (
+                      <Badge variant="success">Published</Badge>
+                    ) : (
+                      <Badge variant="warning">Draft</Badge>
+                    )}
+                  </div>
+                  {event.draft_event_date && (
+                    <p className="text-sm text-dash-muted mb-2">
+                      📅 {formatDate(event.draft_event_date)}
+                    </p>
+                  )}
+                  {event.draft_venue && (
+                    <p className="text-sm text-dash-muted mb-2">
+                      📍 {event.draft_venue}
+                    </p>
+                  )}
+                  {event.draft_slug && (
+                    <p className="text-xs text-dash-muted mt-3 font-mono">
+                      /{event.draft_slug}
+                    </p>
+                  )}
+                </Card>
+              </Link>
+            ))}
           </div>
-        )}
-        {createMutation.isSuccess && (
-          <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-            Website created successfully!
-          </div>
-        )}
-
-        {events && events.length === 0 ? (
+        ) : (
           <EmptyState
             title="No websites yet"
             description="Create your first invitation website to get started."
-            icon={<span className="text-5xl">💌</span>}
+            icon={
+              <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+            }
             action={<Button onClick={() => setCreateOpen(true)}>Create Website</Button>}
           />
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {events?.map((event) => (
-              <Card key={event.id} hover className="cursor-pointer" onClick={() => navigate(`/event/${event.id}`)}>
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="text-lg font-semibold text-dash-text">
-                    {event.draft_title || event.title || "Untitled"}
-                  </h3>
-                  <Badge variant={event.status === "published" ? "success" : "default"}>
-                    {event.status}
-                  </Badge>
-                </div>
-                <p className="text-sm text-dash-muted line-clamp-2">
-                  {event.draft_description || event.description || "No description"}
-                </p>
-                <div className="mt-4 flex items-center gap-3 text-xs text-dash-muted">
-                  <span>📅 {formatDateShort(event.draft_event_date || event.event_date)}</span>
-                  <span>🔗 /e/{event.slug}</span>
-                </div>
-              </Card>
-            ))}
-          </div>
         )}
       </main>
 
       {/* Create Modal */}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create Website">
-        <form onSubmit={handleCreate} className="space-y-4">
-          <Input
-            label="Title"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            placeholder="My Wedding Day"
-            required
-            autoFocus
-          />
-          <Textarea
-            label="Description"
-            value={newDescription}
-            onChange={(e) => setNewDescription(e.target.value)}
-            placeholder="A brief description of your event..."
-            rows={3}
-          />
-          {slugError && <p className="text-xs text-dash-danger">{slugError}</p>}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setCreateOpen(false)}>
+      <Modal
+        open={createOpen}
+        onClose={() => {
+          setCreateOpen(false);
+          setNewName("");
+          setCreateError(null);
+        }}
+        title="Create New Website"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setCreateOpen(false);
+                setNewName("");
+                setCreateError(null);
+              }}
+            >
               Cancel
             </Button>
-            <Button type="submit" loading={createMutation.isPending}>
+            <Button onClick={handleCreate} loading={createMutation.isPending}>
               Create
             </Button>
-          </div>
-        </form>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            label="Website Name"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="e.g., Sarah & John's Wedding"
+            autoFocus
+          />
+          {newName.trim() && (
+            <p className="text-sm text-dash-muted">
+              URL: /{slugify(newName) || "event"}
+            </p>
+          )}
+          {createError && (
+            <p className="text-sm text-dash-danger">{createError}</p>
+          )}
+        </div>
       </Modal>
     </div>
   );
