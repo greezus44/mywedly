@@ -1,10 +1,25 @@
 import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes } from "react";
 import { cn } from "../../lib/utils";
 
-const labelClass = "block text-sm font-medium text-dash-text mb-1";
-const errorClass = "mt-1 text-xs text-red-500";
-const baseInput =
-  "w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted focus:outline-none focus:ring-2 focus:ring-dash-primary/50 focus:border-dash-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
+const baseField =
+  "w-full rounded-lg border bg-dash-surface px-3 py-2 text-dash-text placeholder:text-dash-muted/60 focus:outline-none focus:ring-2 focus:ring-dash-primary/30 disabled:opacity-50";
+
+interface FieldWrapperProps {
+  label?: string;
+  error?: string;
+  children: React.ReactNode;
+  className?: string;
+}
+
+function FieldWrapper({ label, error, children, className }: FieldWrapperProps) {
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      {label && <label className="block text-sm font-medium text-dash-text">{label}</label>}
+      {children}
+      {error && <p className="text-sm text-dash-danger">{error}</p>}
+    </div>
+  );
+}
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -12,19 +27,15 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, className, id, ...props }, ref) => {
-    const inputId = id ?? label?.toLowerCase().replace(/\s+/g, "-");
+  ({ label, error, className, ...props }, ref) => {
     return (
-      <div className="w-full">
-        {label && <label htmlFor={inputId} className={labelClass}>{label}</label>}
+      <FieldWrapper label={label} error={error}>
         <input
           ref={ref}
-          id={inputId}
-          className={cn(baseInput, error && "border-red-400 focus:ring-red-400/50", className)}
+          className={cn(baseField, error ? "border-dash-danger" : "border-dash-border", className)}
           {...props}
         />
-        {error && <p className={errorClass}>{error}</p>}
-      </div>
+      </FieldWrapper>
     );
   },
 );
@@ -36,19 +47,15 @@ interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ label, error, className, id, ...props }, ref) => {
-    const inputId = id ?? label?.toLowerCase().replace(/\s+/g, "-");
+  ({ label, error, className, ...props }, ref) => {
     return (
-      <div className="w-full">
-        {label && <label htmlFor={inputId} className={labelClass}>{label}</label>}
+      <FieldWrapper label={label} error={error}>
         <textarea
           ref={ref}
-          id={inputId}
-          className={cn(baseInput, "resize-y min-h-[80px]", error && "border-red-400 focus:ring-red-400/50", className)}
+          className={cn(baseField, "resize-y min-h-[80px]", error ? "border-dash-danger" : "border-dash-border", className)}
           {...props}
         />
-        {error && <p className={errorClass}>{error}</p>}
-      </div>
+      </FieldWrapper>
     );
   },
 );
@@ -60,21 +67,17 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, className, id, children, ...props }, ref) => {
-    const inputId = id ?? label?.toLowerCase().replace(/\s+/g, "-");
+  ({ label, error, className, children, ...props }, ref) => {
     return (
-      <div className="w-full">
-        {label && <label htmlFor={inputId} className={labelClass}>{label}</label>}
+      <FieldWrapper label={label} error={error}>
         <select
           ref={ref}
-          id={inputId}
-          className={cn(baseInput, "appearance-none cursor-pointer", error && "border-red-400 focus:ring-red-400/50", className)}
+          className={cn(baseField, "cursor-pointer", error ? "border-dash-danger" : "border-dash-border", className)}
           {...props}
         >
           {children}
         </select>
-        {error && <p className={errorClass}>{error}</p>}
-      </div>
+      </FieldWrapper>
     );
   },
 );

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate, NavLink, Outlet, Link } from "react-router-dom";
-import { useOutletContext } from "react-router-dom";
+import { useParams, useNavigate, NavLink, Outlet, Link, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
@@ -68,11 +67,13 @@ export default function GuestLayout() {
 
   const invitedSubEventIds = invitations ? getInvitedSubEventIds(invitations) : [];
 
+  // FIX #4: Strict auth enforcement — if no guest session, redirect to sign-in.
+  // This catches direct navigation to any protected page.
   useEffect(() => {
-    if (!authLoading && !guest && event) {
+    if (!authLoading && event && (!guest || eventId !== event.id)) {
       navigate(`/e/${slug}/signin`, { replace: true });
     }
-  }, [authLoading, guest, event, slug, navigate]);
+  }, [authLoading, guest, eventId, event, slug, navigate]);
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
@@ -109,9 +110,10 @@ export default function GuestLayout() {
     );
   }
 
+  // FIX #4: If no valid guest session, render nothing (redirect is in-flight)
   if (!guest || eventId !== event.id) return null;
 
-  // FIX #5: Contact page removed from navigation
+  // No Contact page in navigation
   const navLinks = [
     { label: "Home", to: `/e/${slug}/home` },
     ...(invitedSubEventIds.length > 0 ? [{ label: "RSVP", to: `/e/${slug}/rsvp` }] : []),
@@ -121,7 +123,7 @@ export default function GuestLayout() {
 
   return (
     <EventThemeProvider theme={event.theme}>
-      {/* FIX #4: Hamburger icon — no circular background/container, uses accent colour */}
+      {/* Hamburger icon — no circular background, uses accent colour */}
       <button
         onClick={() => setMenuOpen(true)}
         aria-label="Open navigation menu"
@@ -142,10 +144,7 @@ export default function GuestLayout() {
             style={{ backgroundColor: "var(--event-bg)", borderRight: "1px solid var(--event-border)" }}
           >
             <div className="flex items-center justify-between p-5">
-              <h2
-                className="text-lg font-semibold"
-                style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}
-              >
+              <h2 className="text-lg font-semibold" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>
                 {event.name || "Menu"}
               </h2>
               <button
@@ -166,9 +165,7 @@ export default function GuestLayout() {
                   to={link.to}
                   onClick={closeMenu}
                   className={({ isActive }) =>
-                    `rounded-lg px-4 py-3 text-base font-medium transition-colors ${
-                      isActive ? "opacity-100" : "opacity-70 hover:opacity-100"
-                    }`
+                    `rounded-lg px-4 py-3 text-base font-medium transition-colors ${isActive ? "opacity-100" : "opacity-70 hover:opacity-100"}`
                   }
                   style={({ isActive }) => ({
                     color: isActive ? "var(--event-primary)" : "var(--event-text)",

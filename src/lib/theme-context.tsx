@@ -1,13 +1,11 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, type CSSProperties, type ReactNode } from "react";
 import { jsonToTheme, themeToEventCssVars, type ThemeConfig } from "./theme";
 
 interface EventThemeContextValue {
   theme: ThemeConfig;
 }
 
-const EventThemeContext = createContext<EventThemeContextValue>({
-  theme: jsonToTheme({}),
-});
+const EventThemeContext = createContext<EventThemeContextValue | null>(null);
 
 interface EventThemeProviderProps {
   theme: unknown;
@@ -15,21 +13,21 @@ interface EventThemeProviderProps {
 }
 
 export function EventThemeProvider({ theme, children }: EventThemeProviderProps) {
-  const resolved = jsonToTheme(theme);
-  const cssVars = themeToEventCssVars(resolved);
-
+  const resolvedTheme = jsonToTheme(theme);
+  const cssVars = themeToEventCssVars(resolvedTheme) as CSSProperties;
   return (
-    <EventThemeContext.Provider value={{ theme: resolved }}>
-      <div
-        className="event-themed"
-        style={cssVars as React.CSSProperties}
-      >
+    <EventThemeContext.Provider value={{ theme: resolvedTheme }}>
+      <div className="event-themed" style={cssVars}>
         {children}
       </div>
     </EventThemeContext.Provider>
   );
 }
 
-export function useEventTheme(): EventThemeContextValue {
-  return useContext(EventThemeContext);
+export function useEventTheme(): ThemeConfig {
+  const ctx = useContext(EventThemeContext);
+  if (!ctx) {
+    return jsonToTheme(null);
+  }
+  return ctx.theme;
 }

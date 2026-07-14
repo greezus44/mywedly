@@ -1,17 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[];
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: { persistSession: true, autoRefreshToken: true },
+});
 
 export interface Profile {
   id: string;
@@ -24,7 +20,7 @@ export interface Profile {
 export interface UserEvent {
   id: string;
   creator_id: string;
-  name: string;
+  name: string | null;
   draft_name: string | null;
   event_type: string | null;
   draft_event_type: string | null;
@@ -62,39 +58,56 @@ export interface UserEvent {
   template_id: string | null;
 }
 
+// FIX #1: event_guests uses `name` column, NOT `full_name`
+export interface EventGuest {
+  id: string;
+  event_id: string;
+  name: string;  // ← column is `name`, not `full_name`
+  email: string | null;
+  phone: string | null;
+  group_name: string | null;
+  side: string | null;
+  token: string;
+  rsvp_status: string;
+  rsvp_submitted_at: string | null;
+  plus_ones: number;
+  dietary: string | null;
+  message: string | null;
+  created_at: string;
+  table_number: string | null;
+  username: string | null;
+  group_id: string | null;
+}
+
 export interface SubEvent {
   id: string;
   parent_event_id: string;
   name: string;
-  event_date: string | null;
-  event_time: string | null;
+  date: string | null;
+  time: string | null;
   venue: string | null;
   address: string | null;
   description: string | null;
-  created_at: string;
-}
-
-export interface EventGuest {
-  id: string;
-  event_id: string;
-  full_name: string;
-  username: string;
-  email: string | null;
-  phone: string | null;
-  table_number: string | null;
-  group_id: string | null;
-  is_attending: boolean | null;
-  rsvp_status: string | null;
+  dress_code: string | null;
+  rsvp_deadline: string | null;
+  rsvp_enabled: boolean;
+  order_index: number;
   created_at: string;
   updated_at: string;
+  start_time: string | null;
+  end_time: string | null;
+  display_order: number;
+  wedding_id: string | null;
 }
 
 export interface GuestGroup {
   id: string;
-  event_id: string;
+  wedding_id: string | null;
+  event_id: string | null;
   name: string;
-  description: string | null;
+  sort_order: number;
   created_at: string;
+  updated_at: string;
 }
 
 export interface GuestGroupMember {
@@ -108,13 +121,16 @@ export interface EventRsvp {
   id: string;
   event_id: string;
   guest_id: string;
-  sub_event_id: string | null;
+  guest_name: string | null;
   status: string;
-  plus_one_count: number;
-  plus_one_names: string[];
+  plus_ones: number;
+  dietary: string | null;
   message: string | null;
-  created_at: string;
-  updated_at: string;
+  answers: Json;
+  submitted_at: string | null;
+  sub_event_id: string | null;
+  plus_one_names: string[];
+  responded_at: string | null;
 }
 
 export interface EventSchedule {
@@ -122,7 +138,7 @@ export interface EventSchedule {
   event_id: string;
   title: string;
   description: string | null;
-  start_time: string | null;
+  start_time: string;
   end_time: string | null;
   location: string | null;
   created_at: string;
@@ -131,7 +147,7 @@ export interface EventSchedule {
 export interface EventMessage {
   id: string;
   event_id: string;
-  guest_id: string | null;
+  guest_id: string;
   message: string;
   created_at: string;
 }
@@ -159,8 +175,8 @@ export interface SubEventGroupAssignment {
 
 export interface GuestInvitationOverride {
   id: string;
-  guest_id: string;
   sub_event_id: string;
+  guest_id: string;
   is_invited: boolean;
   created_at: string;
 }

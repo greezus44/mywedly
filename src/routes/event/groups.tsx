@@ -1,19 +1,23 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type GuestGroup } from "../../lib/supabase";
-import { Button, Card, Modal, Input, Textarea, EmptyState, LoadingSpinner, Badge } from "../../components/ui";
+import { supabase, type UserEvent, type GuestGroup, type SubEvent } from "../../lib/supabase";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui";
+import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
+
+interface EventContextValue { event: UserEvent; eventId: string; }
 
 export function GroupsPage() {
-  const { eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
+  const { eventId } = useOutletContext<EventContextValue>();
   const queryClient = useQueryClient();
+  const [showForm, setShowForm] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState<GuestGroup | null>(null);
-  const [form, setForm] = useState({ name: "", description: "" });
-
-  const { data: groups, isLoading } = useQuery({
-    queryKey: ["groups", eventId],
+  const { data: groups, isLoading, isError, error } = useQuery({
+    queryKey: ["guest-groups", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("guest_groups")
@@ -21,141 +25,204 @@ export function GroupsPage() {
         .eq("event_id", eventId)
         .order("name", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as GuestGroup[];
+      return data as GuestGroup[];
     },
   });
 
-  const { data: memberCounts } = useQuery({
-    queryKey: ["group-member-counts", eventId],
+  const { data: subEvents } = useQuery({
+    queryKey: ["sub-events", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sub_events")
+        .select("id, name")
+        .eq("parent_event_id", eventId)
+        .order("display_order", { ascending: true });
+      if (error) throw error;
+      return data as SubEvent[];
+    },
+  });
+
+  // Get group assignments (which groups are assigned to which sub-events)
+  const { data: assignments } = useQuery({
+    queryKey: ["group-assignments", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sub_event_group_assignments")
+        .select("id, sub_event_id, group_id")
+        .in("group_id", (groups ?? []).map((g) => g.id));
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!(groups && groups.length > 0),
+  });
+
+  // Get guest counts per group
+  const { data: groupMembers } = useQuery({
+    queryKey: ["group-members", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("guest_group_members")
-        .select("group_id")
-        .in("group_id", (groups ?? []).map((g) => g.id));
+        .select("group_id, guest_id");
       if (error) throw error;
-      const counts: Record<string, number> = {};
-      (data ?? []).forEach((m: { group_id: string }) => {
-        counts[m.group_id] = (counts[m.group_id] ?? 0) + 1;
-      });
-      return counts;
-    },
-    enabled: (groups ?? []).length > 0,
-  });
-
-  function openCreate() {
-    setEditing(null);
-    setForm({ name: "", description: "" });
-    setShowModal(true);
-  }
-
-  function openEdit(group: GuestGroup) {
-    setEditing(group);
-    setForm({ name: group.name, description: group.description ?? "" });
-    setShowModal(true);
-  }
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (editing) {
-        const { error } = await supabase
-          .from("guest_groups")
-          .update({ name: form.name.trim(), description: form.description || null })
-          .eq("id", editing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("guest_groups")
-          .insert({ event_id: eventId, name: form.name.trim(), description: form.description || null });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["groups", eventId] });
-      setShowModal(false);
+      return data ?? [];
     },
   });
 
-  const deleteMutation = useMutation({
+  const guestCountByGroup = new Map<string, number>();
+  (groupMembers ?? []).forEach((m) => {
+    const gid = m.group_id as string;
+    guestCountByGroup.set(gid, (guestCountByGroup.get(gid) ?? 0) + 1);
+  });
+
+  const createGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      const { error } = await supabase
+        .from("guest_groups")
+        .insert({ event_id: eventId, name: groupName.trim(), sort_order: 0 });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
+      setShowForm(false);
+      setGroupName("");
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Failed to create group");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const deleteGroup = useMutation({
     mutationFn: async (id: string) => {
+      // Delete assignments for this group
+      await supabase.from("sub_event_group_assignments").delete().eq("group_id", id);
+      // Delete group member associations
+      await supabase.from("guest_group_members").delete().eq("group_id", id);
+      // Clear group_id on guests
+      await supabase.from("event_guests").update({ group_id: null }).eq("group_id", id);
+      // Delete the group
       const { error } = await supabase.from("guest_groups").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["groups", eventId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["group-assignments", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["group-members", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
+    },
+  });
+
+  // FIX #3: Assign a group to a sub-event — bulk invite all guests in the group
+  const assignGroupToEvent = useMutation({
+    mutationFn: async ({ groupId, subEventId }: { groupId: string; subEventId: string }) => {
+      // Check if assignment already exists
+      const { data: existing } = await supabase
+        .from("sub_event_group_assignments")
+        .select("id")
+        .eq("group_id", groupId)
+        .eq("sub_event_id", subEventId)
+        .maybeSingle();
+      if (existing) return; // Already assigned — no duplicates
+
+      const { error } = await supabase
+        .from("sub_event_group_assignments")
+        .insert({ group_id: groupId, sub_event_id: subEventId });
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["group-assignments", eventId] }),
+  });
+
+  const unassignGroupFromEvent = useMutation({
+    mutationFn: async ({ assignmentId }: { assignmentId: string }) => {
+      const { error } = await supabase
+        .from("sub_event_group_assignments")
+        .delete()
+        .eq("id", assignmentId);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["group-assignments", eventId] }),
+  });
+
+  if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
+  if (isError) return <ErrorState title="Failed to load groups" message={error instanceof Error ? error.message : "Unknown error"} />;
+
+  const assignmentMap = new Map<string, string>(); // `${groupId}:${subEventId}` → assignmentId
+  (assignments ?? []).forEach((a) => {
+    assignmentMap.set(`${a.group_id}:${a.sub_event_id}`, a.id as string);
   });
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-dash-text">Groups</h2>
-        <Button size="sm" onClick={openCreate}>New group</Button>
+        <h2 className="text-lg font-semibold text-dash-text">Guest Groups</h2>
+        <Button size="sm" onClick={() => setShowForm(true)}>Add Group</Button>
       </div>
 
       <p className="text-sm text-dash-muted">
-        Groups let you control which guests are invited to specific events in your wedding schedule.
+        Assign a group to an event to invite all guests in that group at once. You can still add or remove individual guests from each event.
       </p>
 
-      {isLoading ? (
-        <div className="flex justify-center py-12"><LoadingSpinner /></div>
-      ) : !groups || groups.length === 0 ? (
-        <EmptyState
-          title="No groups yet"
-          description="Create groups to organise your guest list."
-          action={<Button size="sm" onClick={openCreate}>Create first group</Button>}
-        />
+      {!groups || groups.length === 0 ? (
+        <EmptyState title="No groups yet" description="Create groups to organise guests and invite them in bulk." action={<Button size="sm" onClick={() => setShowForm(true)}>Add Group</Button>} />
       ) : (
-        <div className="space-y-3">
-          {groups.map((group) => (
-            <Card key={group.id}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-dash-text">{group.name}</h3>
-                    <Badge variant="default">{memberCounts?.[group.id] ?? 0} members</Badge>
-                  </div>
-                  {group.description && (
-                    <p className="text-sm text-dash-muted mt-0.5">{group.description}</p>
-                  )}
+        <div className="space-y-4">
+          {groups.map((g) => (
+            <div key={g.id} className="rounded-lg border border-dash-border bg-dash-surface p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-semibold text-dash-text">{g.name}</h3>
+                  <p className="text-sm text-dash-muted">{guestCountByGroup.get(g.id) ?? 0} guest(s)</p>
                 </div>
-                <div className="flex gap-1 shrink-0">
-                  <Button variant="ghost" size="sm" onClick={() => openEdit(group)}>Edit</Button>
-                  <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(group.id)}>Delete</Button>
-                </div>
+                <button onClick={() => deleteGroup.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button>
               </div>
-            </Card>
+
+              {/* Event assignments */}
+              {(subEvents ?? []).length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-medium text-dash-muted">Invited to Events:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {(subEvents ?? []).map((se) => {
+                      const key = `${g.id}:${se.id}`;
+                      const isAssigned = assignmentMap.has(key);
+                      return (
+                        <button
+                          key={se.id}
+                          onClick={() => {
+                            if (isAssigned) {
+                              unassignGroupFromEvent.mutate({ assignmentId: assignmentMap.get(key)! });
+                            } else {
+                              assignGroupToEvent.mutate({ groupId: g.id, subEventId: se.id });
+                            }
+                          }}
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            isAssigned
+                              ? "bg-dash-primary text-dash-primary-fg"
+                              : "bg-dash-bg text-dash-muted hover:text-dash-text"
+                          }`}
+                        >
+                          {se.name}
+                          {isAssigned ? " ✓" : " +"}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}
 
-      <Modal
-        open={showModal}
-        onClose={() => setShowModal(false)}
-        title={editing ? "Edit Group" : "Create Group"}
-      >
-        <div className="space-y-4">
-          <Input
-            label="Group Name"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            placeholder="e.g. Bride's Family"
-            autoFocus
-          />
-          <Textarea
-            label="Description (optional)"
-            value={form.description}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            placeholder="Optional description"
-            rows={2}
-          />
-          {saveMutation.isError && (
-            <p className="text-sm text-red-500">{(saveMutation.error as Error)?.message}</p>
-          )}
-          <div className="flex gap-3 justify-end">
-            <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
-            <Button loading={saveMutation.isPending} disabled={!form.name.trim()} onClick={() => saveMutation.mutate()}>
-              {editing ? "Save" : "Create"}
-            </Button>
+      <Modal open={showForm} onClose={() => { setShowForm(false); setGroupName(""); setFormError(null); }} title="Add Group">
+        <form onSubmit={createGroup} className="space-y-4">
+          <Input label="Group Name" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="e.g. Groom's Family" required autoFocus />
+          {formError && <p className="text-sm text-dash-danger">{formError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => { setShowForm(false); setGroupName(""); setFormError(null); }}>Cancel</Button>
+            <Button type="submit" loading={submitting}>Create</Button>
           </div>
-        </div>
+        </form>
       </Modal>
     </div>
   );

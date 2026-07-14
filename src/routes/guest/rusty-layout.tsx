@@ -1,16 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate, NavLink, Outlet, Link } from "react-router-dom";
-import { useOutletContext } from "react-router-dom";
+import { useParams, useNavigate, NavLink, Outlet, Link, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME } from "../../lib/theme";
+import { jsonToTheme, RUSTY_THEME } from "../../lib/theme";
 import { resolveGuestInvitations, getInvitedSubEventIds, type ResolveResult } from "../../lib/invitations";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { LoadingSpinner } from "../../components/ui";
 
-export type { GuestOutletContext } from "./guest-layout";
 export { useGuestOutletContext } from "./guest-layout";
+export type { GuestOutletContext } from "./guest-layout";
 
 export default function RustyLayout() {
   const { slug } = useParams<{ slug: string }>();
@@ -62,10 +61,10 @@ export default function RustyLayout() {
   const invitedSubEventIds = invitations ? getInvitedSubEventIds(invitations) : [];
 
   useEffect(() => {
-    if (!authLoading && !guest && event) {
+    if (!authLoading && event && (!guest || eventId !== event.id)) {
       navigate(`/r/${slug}/signin`, { replace: true });
     }
-  }, [authLoading, guest, event, slug, navigate]);
+  }, [authLoading, guest, eventId, event, slug, navigate]);
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
@@ -76,7 +75,7 @@ export default function RustyLayout() {
 
   if (isLoading || authLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: RUSTY_THEME.colors.bg }}>
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
         <LoadingSpinner />
       </div>
     );
@@ -84,25 +83,28 @@ export default function RustyLayout() {
 
   if (isError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center" style={{ backgroundColor: RUSTY_THEME.colors.bg }}>
-        <h1 className="text-2xl font-bold" style={{ color: RUSTY_THEME.colors.heading }}>Something went wrong</h1>
-        <p style={{ color: RUSTY_THEME.colors.muted }}>{error instanceof Error ? error.message : "Please try again later."}</p>
-        <Link to="/" style={{ color: RUSTY_THEME.colors.primary }}>Return home</Link>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Something went wrong</h1>
+        <p className="text-dash-muted">{error instanceof Error ? error.message : "Please try again later."}</p>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
 
   if (!event) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center" style={{ backgroundColor: RUSTY_THEME.colors.bg }}>
-        <h1 className="text-2xl font-bold" style={{ color: RUSTY_THEME.colors.heading }}>Invitation Not Found</h1>
-        <p style={{ color: RUSTY_THEME.colors.muted }}>This invitation could not be found.</p>
-        <Link to="/" style={{ color: RUSTY_THEME.colors.primary }}>Return home</Link>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
+        <p className="text-dash-muted">This invitation website could not be found or is no longer available.</p>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
 
   if (!guest || eventId !== event.id) return null;
+
+  const theme = jsonToTheme(event.theme);
+  const rustyTheme = { ...RUSTY_THEME, colors: theme.colors, fonts: theme.fonts };
 
   const navLinks = [
     { label: "Home", to: `/r/${slug}/home` },
@@ -112,7 +114,7 @@ export default function RustyLayout() {
   ];
 
   return (
-    <EventThemeProvider theme={RUSTY_THEME}>
+    <EventThemeProvider theme={rustyTheme}>
       <button
         onClick={() => setMenuOpen(true)}
         aria-label="Open navigation menu"
@@ -168,7 +170,7 @@ export default function RustyLayout() {
         </div>
       )}
 
-      <Outlet context={{ event, slug: slug!, theme: RUSTY_THEME, invitedSubEventIds }} />
+      <Outlet context={{ event, slug: slug!, theme: rustyTheme, invitedSubEventIds }} />
     </EventThemeProvider>
   );
 }

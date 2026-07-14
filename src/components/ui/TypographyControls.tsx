@@ -1,7 +1,10 @@
 import type { TypographyStyle } from "../../lib/typography";
-import { HEADING_FONT_OPTIONS } from "../../lib/theme";
 import { Input } from "./Input";
 import { FontSelect } from "./FontSelect";
+import { ColorInput } from "./index";
+import { RangeInput } from "./index";
+import { Toggle } from "./index";
+import { HEADING_FONT_OPTIONS } from "../../lib/theme";
 import { cn } from "../../lib/utils";
 
 interface TypographyControlsProps {
@@ -11,71 +14,64 @@ interface TypographyControlsProps {
   showText?: boolean;
 }
 
-function set<K extends keyof TypographyStyle>(
-  current: TypographyStyle,
-  key: K,
-  val: TypographyStyle[K],
-  onChange: (v: TypographyStyle) => void,
-) {
-  onChange({ ...current, [key]: val });
-}
-
-const alignOptions = ["left", "center", "right"] as const;
-const weightOptions = [
+const WEIGHTS = [
   { label: "Regular", value: 400 },
   { label: "Medium", value: 500 },
   { label: "Bold", value: 700 },
 ];
 
+const ALIGNS = [
+  { label: "Left", value: "left", icon: "M4 6h16M4 12h10M4 18h16" },
+  { label: "Center", value: "center", icon: "M4 6h16M7 12h10M4 18h16" },
+  { label: "Right", value: "right", icon: "M4 6h16M10 12h10M4 18h16" },
+];
+
 export function TypographyControls({ label, value, onChange, showText }: TypographyControlsProps) {
+  const update = (patch: Partial<TypographyStyle>) => onChange({ ...value, ...patch });
+
   return (
     <div className="space-y-3">
-      {label && <p className="text-sm font-medium text-dash-text">{label}</p>}
+      {label && <label className="block text-sm font-medium text-dash-text">{label}</label>}
 
       {showText && (
         <Input
           label="Text"
           value={value.text ?? ""}
-          onChange={(e) => set(value, "text", e.target.value, onChange)}
+          onChange={(e) => update({ text: e.target.value })}
+          placeholder="Enter text"
         />
       )}
 
       <FontSelect
         label="Font Family"
         value={value.fontFamily ?? ""}
-        onChange={(v) => set(value, "fontFamily", v, onChange)}
+        onChange={(v) => update({ fontFamily: v })}
         options={HEADING_FONT_OPTIONS}
-        placeholder="Inherit"
+        placeholder="Select font"
       />
 
-      <div>
-        <label className="block text-sm font-medium text-dash-text mb-1">
-          Font Size: {value.fontSize ?? 16}px
-        </label>
-        <input
-          type="range"
-          min={8}
-          max={72}
-          step={1}
-          value={value.fontSize ?? 16}
-          onChange={(e) => set(value, "fontSize", Number(e.target.value), onChange)}
-          className="w-full accent-dash-primary"
-        />
-      </div>
+      <RangeInput
+        label="Font Size"
+        value={value.fontSize ?? 16}
+        min={8}
+        max={72}
+        onChange={(v) => update({ fontSize: v })}
+      />
 
-      <div>
-        <label className="block text-sm font-medium text-dash-text mb-1">Weight</label>
-        <div className="flex gap-1">
-          {weightOptions.map((w) => (
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-dash-text">Weight</label>
+        <div className="flex gap-2">
+          {WEIGHTS.map((w) => (
             <button
               key={w.value}
               type="button"
-              onClick={() => set(value, "fontWeight", w.value, onChange)}
+              onClick={() => update({ fontWeight: w.value })}
+              style={{ fontWeight: w.value }}
               className={cn(
-                "flex-1 rounded border px-2 py-1 text-xs transition-colors",
+                "flex-1 rounded-lg border px-3 py-1.5 text-sm transition-colors",
                 value.fontWeight === w.value
-                  ? "border-dash-primary bg-dash-primary text-white"
-                  : "border-dash-border bg-dash-surface text-dash-text hover:border-dash-primary/50",
+                  ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
+                  : "border-dash-border bg-dash-surface text-dash-text hover:bg-dash-bg",
               )}
             >
               {w.label}
@@ -84,69 +80,45 @@ export function TypographyControls({ label, value, onChange, showText }: Typogra
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-dash-text mb-1">Color</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="color"
-            value={value.color ?? "#000000"}
-            onChange={(e) => set(value, "color", e.target.value, onChange)}
-            className="h-8 w-10 rounded border border-dash-border cursor-pointer"
-          />
-          <input
-            type="text"
-            value={value.color ?? ""}
-            onChange={(e) => set(value, "color", e.target.value, onChange)}
-            placeholder="#000000"
-            className="flex-1 rounded-md border border-dash-border bg-dash-surface px-2 py-1 text-xs text-dash-text focus:outline-none focus:ring-1 focus:ring-dash-primary/50"
-          />
-        </div>
-      </div>
+      <ColorInput
+        label="Color"
+        value={value.color ?? "#000000"}
+        onChange={(v) => update({ color: v })}
+      />
 
-      <div>
-        <label className="block text-sm font-medium text-dash-text mb-1">Alignment</label>
-        <div className="flex gap-1">
-          {alignOptions.map((a) => (
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium text-dash-text">Alignment</label>
+        <div className="flex gap-2">
+          {ALIGNS.map((a) => (
             <button
-              key={a}
+              key={a.value}
               type="button"
-              onClick={() => set(value, "align", a, onChange)}
+              onClick={() => update({ align: a.value })}
               className={cn(
-                "flex flex-1 items-center justify-center rounded border py-1.5 transition-colors",
-                value.align === a
-                  ? "border-dash-primary bg-dash-primary text-white"
-                  : "border-dash-border bg-dash-surface text-dash-text hover:border-dash-primary/50",
+                "flex h-9 flex-1 items-center justify-center rounded-lg border transition-colors",
+                value.align === a.value
+                  ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
+                  : "border-dash-border bg-dash-surface text-dash-text hover:bg-dash-bg",
               )}
+              title={a.label}
             >
-              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                {a === "left" && <path strokeLinecap="round" d="M3 6h18M3 12h12M3 18h15" />}
-                {a === "center" && <path strokeLinecap="round" d="M3 6h18M6 12h12M4 18h16" />}
-                {a === "right" && <path strokeLinecap="round" d="M3 6h18M9 12h12M6 18h15" />}
-              </svg>
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={a.icon} /></svg>
             </button>
           ))}
         </div>
       </div>
 
       <div className="flex gap-4">
-        <label className="flex items-center gap-2 text-sm text-dash-text cursor-pointer">
-          <input
-            type="checkbox"
-            checked={value.italic ?? false}
-            onChange={(e) => set(value, "italic", e.target.checked, onChange)}
-            className="accent-dash-primary"
-          />
-          Italic
-        </label>
-        <label className="flex items-center gap-2 text-sm text-dash-text cursor-pointer">
-          <input
-            type="checkbox"
-            checked={value.underline ?? false}
-            onChange={(e) => set(value, "underline", e.target.checked, onChange)}
-            className="accent-dash-primary"
-          />
-          Underline
-        </label>
+        <Toggle
+          label="Italic"
+          checked={value.italic ?? false}
+          onChange={(v) => update({ italic: v })}
+        />
+        <Toggle
+          label="Underline"
+          checked={value.underline ?? false}
+          onChange={(v) => update({ underline: v })}
+        />
       </div>
     </div>
   );

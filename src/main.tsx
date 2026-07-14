@@ -42,9 +42,7 @@ import RustyHome from "./routes/guest/rusty-home";
 import RustyRsvp from "./routes/guest/rusty-rsvp";
 import RustyWishes from "./routes/guest/rusty-wishes";
 
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
-});
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -75,7 +73,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 <Route path="wishes" element={<WishesPage />} />
               </Route>
 
-              {/* Guest site — no Contact page */}
               <Route path="/e/:slug" element={<GuestCover />} />
               <Route path="/e/:slug/signin" element={<GuestSignIn />} />
               <Route path="/e/:slug/home" element={<GuestLayout />}><Route index element={<GuestHome />} /></Route>
@@ -83,7 +80,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/e/:slug/wishes" element={<GuestLayout />}><Route index element={<GuestWishes />} /></Route>
               <Route path="/e/:slug/p/:pageSlug" element={<GuestLayout />}><Route index element={<GuestCustomPage />} /></Route>
 
-              {/* Rusty theme routes — no Contact page */}
               <Route path="/r/:slug" element={<RustyCover />} />
               <Route path="/r/:slug/signin" element={<RustySignIn />} />
               <Route path="/r/:slug/home" element={<RustyLayout />}><Route index element={<RustyHome />} /></Route>

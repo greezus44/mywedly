@@ -1,20 +1,5 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  type ReactNode,
-} from "react";
-import { useMutation } from "@tanstack/react-query";
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import { supabase, type EventGuest } from "./supabase";
-
-const STORAGE_KEY = "guest_session";
-
-interface GuestSession {
-  guest: EventGuest;
-  eventId: string;
-}
 
 interface GuestAuthContextValue {
   guest: EventGuest | null;
@@ -28,60 +13,76 @@ const GuestAuthContext = createContext<GuestAuthContextValue>({
   guest: null,
   eventId: null,
   loading: true,
-  signIn: async () => ({ error: "Not initialised" }),
+  signIn: async () => ({ error: "Not implemented" }),
   signOut: () => {},
 });
+
+const STORAGE_KEY = "guest_session";
+
+interface StoredSession {
+  guestId: string;
+  eventId: string;
+}
 
 export function GuestAuthProvider({ children }: { children: ReactNode }) {
   const [guest, setGuest] = useState<EventGuest | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Restore session from localStorage on mount
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const session: GuestSession = JSON.parse(raw);
-        setGuest(session.guest);
-        setEventId(session.eventId);
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const session = JSON.parse(stored) as StoredSession;
+          const { data, error } = await supabase
+            .from("event_guests")
+            .select("*")
+            .eq("id", session.guestId)
+            .eq("event_id", session.eventId)
+            .maybeSingle();
+          if (!cancelled && !error && data) {
+            setGuest(data as EventGuest);
+            setEventId(session.eventId);
+          } else if (!cancelled) {
+            localStorage.removeItem(STORAGE_KEY);
+          }
+        }
+      } catch {
+        // ignore parse errors
       }
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, []);
 
-  const signIn = useCallback(
-    async (evtId: string, username: string): Promise<{ error: string | null }> => {
-      try {
-        const { data, error } = await supabase
-          .from("event_guests")
-          .select("*")
-          .eq("event_id", evtId)
-          .ilike("username", username)
-          .maybeSingle();
+  const signIn = useCallback(async (targetEventId: string, username: string): Promise<{ error: string | null }> => {
+    if (!username.trim()) return { error: "Please enter your username" };
 
-        if (error) return { error: error.message };
-        if (!data) return { error: "Guest not found. Please check your username." };
+    // FIX #1: use `name` column (not `full_name`) + `.ilike` for case-insensitive username
+    const { data, error } = await supabase
+      .from("event_guests")
+      .select("*")
+      .eq("event_id", targetEventId)
+      .ilike("username", username.trim())
+      .maybeSingle();
 
-        const g = data as EventGuest;
-        const session: GuestSession = { guest: g, eventId: evtId };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-        setGuest(g);
-        setEventId(evtId);
-        return { error: null };
-      } catch (err) {
-        return { error: err instanceof Error ? err.message : "An error occurred" };
-      }
-    },
-    [],
-  );
+    if (error) return { error: "Unable to sign in. Please try again." };
+    if (!data) return { error: "Username not found. Please check and try again." };
+
+    const guestData = data as EventGuest;
+    setGuest(guestData);
+    setEventId(targetEventId);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ guestId: guestData.id, eventId: targetEventId }));
+    return { error: null };
+  }, []);
 
   const signOut = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
     setGuest(null);
     setEventId(null);
+    localStorage.removeItem(STORAGE_KEY);
   }, []);
 
   return (
@@ -91,7 +92,7 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useGuestAuth(): GuestAuthContextValue {
+export function useGuestAuth() {
   return useContext(GuestAuthContext);
 }
 
@@ -101,12 +102,5 @@ export function useSignIn() {
 }
 
 export function useGuestSignIn() {
-  const { signIn } = useGuestAuth();
-  return useMutation({
-    mutationFn: async ({ eventId, username }: { eventId: string; username: string }) => {
-      const result = await signIn(eventId, username);
-      if (result.error) throw new Error(result.error);
-      return result;
-    },
-  });
+  return useSignIn();
 }

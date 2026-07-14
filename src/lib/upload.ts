@@ -2,62 +2,73 @@ import { supabase } from "./supabase";
 
 const BUCKET = "event-images";
 
-export async function compressImage(file: File): Promise<File> {
-  // Bypass SVG — no compression needed
-  if (file.type === "image/svg+xml") return file;
-
-  const isPng = file.type === "image/png";
-
-  return new Promise((resolve) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const MAX = 1600;
-      let { width, height } = img;
-      if (width > MAX || height > MAX) {
-        if (width >= height) {
-          height = Math.round((height * MAX) / width);
-          width = MAX;
-        } else {
-          width = Math.round((width * MAX) / height);
-          height = MAX;
+export async function compressImage(
+  file: File,
+  maxWidth = 1920,
+  quality = 0.82,
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
         }
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) { resolve(file); return; }
-      ctx.drawImage(img, 0, 0, width, height);
-      const mimeType = isPng ? "image/png" : "image/jpeg";
-      const quality = isPng ? 1 : 0.85;
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) { resolve(file); return; }
-          resolve(new File([blob], file.name, { type: mimeType }));
-        },
-        mimeType,
-        quality,
-      );
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Canvas context unavailable"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Failed to compress image"));
+          },
+          "image/jpeg",
+          quality,
+        );
+      };
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = reader.result as string;
     };
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
-    img.src = url;
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
   });
 }
 
 export async function uploadImage(file: File, userId: string): Promise<string> {
   const compressed = await compressImage(file);
-  const path = `${userId}/${Date.now()}-${file.name}`;
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const fileName = `${userId}/${crypto.randomUUID()}.${ext}`;
+  const blob = new File([compressed], fileName, { type: "image/jpeg" });
 
-  const { error } = await supabase.storage
-    .from(BUCKET)
-    .upload(path, compressed, { upsert: false });
-
+  const { error } = await supabase.storage.from(BUCKET).upload(fileName, blob, {
+    cacheControl: "3600",
+    upsert: false,
+  });
   if (error) throw error;
 
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
   return data.publicUrl;
+}
+
+export function extractPathFromUrl(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const segments = u.pathname.split("/");
+    const bucketIdx = segments.indexOf(BUCKET);
+    if (bucketIdx === -1 || bucketIdx === segments.length - 1) return null;
+    return segments.slice(bucketIdx + 1).join("/");
+  } catch {
+    return null;
+  }
 }
 
 export async function removeImage(url: string): Promise<void> {
@@ -65,17 +76,4 @@ export async function removeImage(url: string): Promise<void> {
   if (!path) return;
   const { error } = await supabase.storage.from(BUCKET).remove([path]);
   if (error) throw error;
-}
-
-export function extractPathFromUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    // Public URL format: /storage/v1/object/public/<bucket>/<path>
-    const marker = `/object/public/${BUCKET}/`;
-    const idx = u.pathname.indexOf(marker);
-    if (idx === -1) return "";
-    return decodeURIComponent(u.pathname.slice(idx + marker.length));
-  } catch {
-    return "";
-  }
 }
