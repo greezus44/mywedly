@@ -1,169 +1,157 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import React, { useRef, useEffect, useCallback } from "react";
 import { cn } from "../../lib/utils";
 
-interface RichTextEditorProps {
+export interface RichTextEditorProps {
   value: string;
   onChange: (html: string) => void;
   className?: string;
   placeholder?: string;
 }
 
-type Command =
-  | "bold"
-  | "italic"
-  | "underline"
-  | "strikeThrough"
-  | "insertUnorderedList"
-  | "insertOrderedList"
-  | "formatBlock-h1"
-  | "formatBlock-h2"
-  | "formatBlock-h3"
-  | "formatBlock-p"
-  | "formatBlock-blockquote"
-  | "createLink"
-  | "insertImage";
-
-const ToolbarButton = ({
-  onClick,
-  active,
-  children,
-  title,
-}: {
-  onClick: () => void;
-  active?: boolean;
-  children: React.ReactNode;
-  title: string;
-}) => (
-  <button
-    type="button"
-    title={title}
-    onMouseDown={(e) => e.preventDefault()}
-    onClick={onClick}
-    className={cn(
-      "flex h-8 w-8 items-center justify-center rounded text-sm hover:bg-muted/20",
-      active && "bg-primary/15 text-primary"
-    )}
-  >
-    {children}
-  </button>
-);
+function execCommand(command: string, value?: string) {
+  document.execCommand(command, false, value);
+}
 
 export function RichTextEditor({
   value,
   onChange,
   className,
-  placeholder,
+  placeholder = "Write something...",
 }: RichTextEditorProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [focused, setFocused] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (ref.current && !focused && ref.current.innerHTML !== value) {
-      ref.current.innerHTML = value || "";
+    if (editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value || "";
     }
-  }, [value, focused]);
-
-  const exec = useCallback((command: Command, arg?: string) => {
-    if (command.startsWith("formatBlock-")) {
-      const block = command.split("-")[1];
-      document.execCommand("formatBlock", false, block);
-    } else if (command === "createLink") {
-      const url = window.prompt("Enter URL");
-      if (url) document.execCommand("createLink", false, url);
-    } else if (command === "insertImage") {
-      const url = window.prompt("Enter image URL");
-      if (url) document.execCommand("insertImage", false, url);
-    } else {
-      document.execCommand(command, false, arg);
-    }
-    if (ref.current) onChange(ref.current.innerHTML);
-  }, [onChange]);
+  }, [value]);
 
   const handleInput = useCallback(() => {
-    if (ref.current) onChange(ref.current.innerHTML);
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
   }, [onChange]);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "b") {
-      e.preventDefault();
-      exec("bold");
-    }
-    if ((e.metaKey || e.ctrlKey) && e.key === "i") {
-      e.preventDefault();
-      exec("italic");
-    }
-  }, [exec]);
+  const toolbarButtons = [
+    { label: "B", command: "bold", title: "Bold" },
+    { label: "I", command: "italic", title: "Italic" },
+    { label: "U", command: "underline", title: "Underline" },
+    { label: "S", command: "strikeThrough", title: "Strikethrough" },
+  ];
 
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-md border border-border bg-surface",
+        "rounded-lg border border-dash-border bg-dash-surface overflow-hidden",
         className
       )}
     >
-      <div className="flex flex-wrap items-center gap-0.5 border-b border-border bg-surface-alt px-2 py-1">
-        <ToolbarButton title="Bold" onClick={() => exec("bold")}>
-          <strong>B</strong>
-        </ToolbarButton>
-        <ToolbarButton title="Italic" onClick={() => exec("italic")}>
-          <em>I</em>
-        </ToolbarButton>
-        <ToolbarButton title="Underline" onClick={() => exec("underline")}>
-          <u>U</u>
-        </ToolbarButton>
-        <ToolbarButton title="Strikethrough" onClick={() => exec("strikeThrough")}>
-          <s>S</s>
-        </ToolbarButton>
-        <div className="mx-1 h-5 w-px bg-border" />
-        <ToolbarButton title="Heading 1" onClick={() => exec("formatBlock-h1")}>
+      <div className="flex flex-wrap items-center gap-1 border-b border-dash-border bg-dash-bg px-2 py-1.5">
+        {toolbarButtons.map((btn) => (
+          <button
+            key={btn.command}
+            type="button"
+            title={btn.title}
+            onClick={() => execCommand(btn.command)}
+            className="flex h-7 min-w-7 items-center justify-center rounded px-1.5 text-sm font-medium text-dash-text hover:bg-dash-border"
+          >
+            {btn.label === "B" ? (
+              <span className="font-bold">{btn.label}</span>
+            ) : btn.label === "I" ? (
+              <span className="italic">{btn.label}</span>
+            ) : btn.label === "U" ? (
+              <span className="underline">{btn.label}</span>
+            ) : (
+              <span className="line-through">{btn.label}</span>
+            )}
+          </button>
+        ))}
+        <div className="mx-1 h-5 w-px bg-dash-border" />
+        <button
+          type="button"
+          title="Heading 1"
+          onClick={() => execCommand("formatBlock", "<h1>")}
+          className="rounded px-2 py-0.5 text-sm font-medium text-dash-text hover:bg-dash-border"
+        >
           H1
-        </ToolbarButton>
-        <ToolbarButton title="Heading 2" onClick={() => exec("formatBlock-h2")}>
+        </button>
+        <button
+          type="button"
+          title="Heading 2"
+          onClick={() => execCommand("formatBlock", "<h2>")}
+          className="rounded px-2 py-0.5 text-sm font-medium text-dash-text hover:bg-dash-border"
+        >
           H2
-        </ToolbarButton>
-        <ToolbarButton title="Heading 3" onClick={() => exec("formatBlock-h3")}>
+        </button>
+        <button
+          type="button"
+          title="Heading 3"
+          onClick={() => execCommand("formatBlock", "<h3>")}
+          className="rounded px-2 py-0.5 text-sm font-medium text-dash-text hover:bg-dash-border"
+        >
           H3
-        </ToolbarButton>
-        <ToolbarButton title="Paragraph" onClick={() => exec("formatBlock-p")}>
-          P
-        </ToolbarButton>
-        <ToolbarButton title="Quote" onClick={() => exec("formatBlock-blockquote")}>
-          “
-        </ToolbarButton>
-        <div className="mx-1 h-5 w-px bg-border" />
-        <ToolbarButton title="Bullet list" onClick={() => exec("insertUnorderedList")}>
-          •
-        </ToolbarButton>
-        <ToolbarButton title="Numbered list" onClick={() => exec("insertOrderedList")}>
-          1.
-        </ToolbarButton>
-        <div className="mx-1 h-5 w-px bg-border" />
-        <ToolbarButton title="Link" onClick={() => exec("createLink")}>
-          🔗
-        </ToolbarButton>
-        <ToolbarButton title="Image" onClick={() => exec("insertImage")}>
-          🖼
-        </ToolbarButton>
+        </button>
+        <div className="mx-1 h-5 w-px bg-dash-border" />
+        <button
+          type="button"
+          title="Bullet list"
+          onClick={() => execCommand("insertUnorderedList")}
+          className="rounded px-2 py-0.5 text-sm text-dash-text hover:bg-dash-border"
+        >
+          • List
+        </button>
+        <button
+          type="button"
+          title="Numbered list"
+          onClick={() => execCommand("insertOrderedList")}
+          className="rounded px-2 py-0.5 text-sm text-dash-text hover:bg-dash-border"
+        >
+          1. List
+        </button>
+        <div className="mx-1 h-5 w-px bg-dash-border" />
+        <button
+          type="button"
+          title="Link"
+          onClick={() => {
+            const url = window.prompt("Enter URL:");
+            if (url) execCommand("createLink", url);
+          }}
+          className="rounded px-2 py-0.5 text-sm text-dash-text hover:bg-dash-border"
+        >
+          Link
+        </button>
+        <button
+          type="button"
+          title="Align left"
+          onClick={() => execCommand("justifyLeft")}
+          className="rounded px-2 py-0.5 text-sm text-dash-text hover:bg-dash-border"
+        >
+          ⬅
+        </button>
+        <button
+          type="button"
+          title="Align center"
+          onClick={() => execCommand("justifyCenter")}
+          className="rounded px-2 py-0.5 text-sm text-dash-text hover:bg-dash-border"
+        >
+          ⬌
+        </button>
+        <button
+          type="button"
+          title="Align right"
+          onClick={() => execCommand("justifyRight")}
+          className="rounded px-2 py-0.5 text-sm text-dash-text hover:bg-dash-border"
+        >
+          ➡
+        </button>
       </div>
       <div
-        ref={ref}
+        ref={editorRef}
         contentEditable
-        suppressContentEditableWarning
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
         onInput={handleInput}
-        onKeyDown={handleKeyDown}
         data-placeholder={placeholder}
-        className={cn(
-          "rich-text-editor min-h-[120px] px-3 py-2 text-sm text-foreground focus:outline-none",
-          "[&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-muted"
-        )}
+        className="rich-content min-h-[120px] resize-y p-3 outline-none empty:before:text-dash-muted empty:before:content-[attr(data-placeholder)]"
+        style={{ fontFamily: "inherit" }}
       />
     </div>
   );

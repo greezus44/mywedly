@@ -1,50 +1,45 @@
-import { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
+import React, { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
+import { supabase } from "../../lib/supabase";
+import { useOutletContext } from "./event-layout";
 import { slugify, isValidSlug } from "../../lib/theme";
-import { cn } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { Card, Badge } from "../../components/ui";
+import { Input } from "../../components/ui";
 import { generateQrDataUrl, downloadQrCode } from "../../lib/qr";
 
 export default function Sharing() {
-  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
+  const { event, eventId } = useOutletContext();
   const queryClient = useQueryClient();
 
-  const [slug, setSlug] = useState<string>(event.draft_slug ?? event.slug ?? "");
+  const [slug, setSlug] = useState(event.draft_slug ?? event.slug ?? "");
   const [slugError, setSlugError] = useState<string | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [qrUrl, setQrUrl] = useState<string>("");
-
-  useEffect(() => {
-    setSlug(event.draft_slug ?? event.slug ?? "");
-  }, [event]);
 
   const guestUrl = `${window.location.origin}/e/${slug}`;
 
   useEffect(() => {
-    if (!slug) {
-      setQrUrl("");
-      return;
+    if (slug) {
+      generateQrDataUrl(guestUrl).then(setQrDataUrl).catch(() => {});
     }
-    generateQrDataUrl(guestUrl, { width: 256 }).then(setQrUrl).catch(() => {});
-  }, [guestUrl, slug]);
+  }, [guestUrl]);
 
   const saveSlugMutation = useMutation({
     mutationFn: async () => {
       if (!isValidSlug(slug)) {
-        throw new Error("Invalid slug. Use only lowercase letters, numbers, and hyphens.");
+        throw new Error("Invalid slug. Use only lowercase letters, numbers, and hyphens (2-80 chars).");
       }
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("user_events")
         .update({ draft_slug: slug })
-        .eq("id", eventId);
+        .eq("id", eventId)
+        .select()
+        .maybeSingle();
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["user_event", eventId] });
       setSlugError(null);
     },
     onError: (err) => {
@@ -53,7 +48,8 @@ export default function Sharing() {
   });
 
   const handleSlugChange = (value: string) => {
-    setSlug(value);
+    const slugified = slugify(value);
+    setSlug(slugified);
     setSlugError(null);
   };
 
@@ -63,106 +59,102 @@ export default function Sharing() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // ignore
+      /* ignore */
     }
   };
 
+  const handleOpenGuestPage = () => {
+    window.open(guestUrl, "_blank");
+  };
+
   const handleDownloadQr = () => {
-    downloadQrCode(guestUrl, `${slug || "event"}-qr.png`, { width: 512 });
+    downloadQrCode(guestUrl, `${slug}-qr.png`);
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Sharing</h2>
-        <p className="text-sm text-muted">
-          Share your website with guests via URL or QR code.
-        </p>
-      </div>
+    <div className="mx-auto max-w-2xl">
+      <h2 className="mb-6 text-lg font-semibold text-dash-text">Sharing</h2>
 
       {/* Slug editor */}
-      <Card>
-        <h3 className="mb-4 text-sm font-semibold text-foreground">
+      <div className="mb-6 rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h3 className="mb-1 text-sm font-semibold text-dash-text">
           Website URL
         </h3>
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted">{window.location.origin}/e/</span>
-            <div className="flex-1">
-              <Input
-                value={slug}
-                onChange={(e) => handleSlugChange(e.target.value)}
-                placeholder="my-event"
-                error={slugError ?? undefined}
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={() => saveSlugMutation.mutate()}
-              loading={saveSlugMutation.isPending}
-              disabled={slug === (event.draft_slug ?? event.slug)}
-            >
-              Save URL
-            </Button>
-            {saveSlugMutation.isSuccess && (
-              <Badge variant="success">Saved!</Badge>
-            )}
-          </div>
-          <p className="text-xs text-muted">
-            Auto-suggest: {slugify(event.draft_name ?? event.name) || "my-event"}
-          </p>
+        <p className="mb-3 text-sm text-dash-muted">
+          Customize the URL for your invitation website.
+        </p>
+        <div className="flex items-center gap-2">
+          <span className="whitespace-nowrap text-sm text-dash-muted">
+            {window.location.origin}/e/
+          </span>
+          <Input
+            value={slug}
+            onChange={(e) => handleSlugChange(e.target.value)}
+            placeholder="my-event"
+            error={slugError ?? undefined}
+            className="flex-1"
+          />
         </div>
-      </Card>
+        <div className="mt-3 flex items-center gap-2">
+          <Button
+            onClick={() => saveSlugMutation.mutate()}
+            loading={saveSlugMutation.isPending}
+            size="sm"
+          >
+            Save URL
+          </Button>
+          {saveSlugMutation.isSuccess && !slugError && (
+            <span className="text-sm text-green-600">URL saved!</span>
+          )}
+        </div>
+      </div>
 
-      {/* Guest URL */}
-      <Card>
-        <h3 className="mb-4 text-sm font-semibold text-foreground">
+      {/* Guest link */}
+      <div className="mb-6 rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h3 className="mb-1 text-sm font-semibold text-dash-text">
           Guest Link
         </h3>
-        <div className="flex flex-col gap-3">
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-md border border-border bg-surface-alt px-3 py-2"
-            )}
-          >
-            <span className="flex-1 truncate text-sm text-foreground">
-              {guestUrl}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={handleCopy}>
-              {copied ? "Copied!" : "Copy Link"}
-            </Button>
-            <a href={guestUrl} target="_blank" rel="noopener noreferrer">
-              <Button variant="ghost">Open Guest Page</Button>
-            </a>
-          </div>
+        <p className="mb-3 text-sm text-dash-muted">
+          Share this link with your guests so they can access your invitation website.
+        </p>
+        <div className="flex items-center gap-2 rounded-md border border-dash-border bg-dash-bg px-3 py-2">
+          <span className="flex-1 truncate text-sm text-dash-text">{guestUrl}</span>
+          <Button variant="secondary" size="sm" onClick={handleCopy}>
+            {copied ? "Copied!" : "Copy"}
+          </Button>
         </div>
-      </Card>
+        <div className="mt-3">
+          <Button variant="secondary" size="sm" onClick={handleOpenGuestPage}>
+            Open Guest Page
+          </Button>
+        </div>
+      </div>
 
       {/* QR Code */}
-      <Card>
-        <h3 className="mb-4 text-sm font-semibold text-foreground">QR Code</h3>
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h3 className="mb-1 text-sm font-semibold text-dash-text">
+          QR Code
+        </h3>
+        <p className="mb-3 text-sm text-dash-muted">
+          Guests can scan this QR code to open your invitation website.
+        </p>
         <div className="flex flex-col items-center gap-4">
-          {qrUrl ? (
+          {qrDataUrl ? (
             <img
-              src={qrUrl}
-              alt="QR code"
-              className="h-48 w-48 rounded-lg border border-border bg-white p-2"
+              src={qrDataUrl}
+              alt="QR Code"
+              className="h-48 w-48 rounded-md border border-dash-border"
             />
           ) : (
-            <div className="flex h-48 w-48 items-center justify-center rounded-lg border border-dashed border-border bg-surface-alt text-muted">
-              Enter a URL to generate QR code
+            <div className="flex h-48 w-48 items-center justify-center rounded-md border border-dash-border bg-dash-bg">
+              <span className="text-sm text-dash-muted">Generating...</span>
             </div>
           )}
-          {qrUrl && (
-            <Button variant="secondary" onClick={handleDownloadQr}>
-              Download QR Code
-            </Button>
-          )}
+          <Button variant="secondary" size="sm" onClick={handleDownloadQr}>
+            Download QR Code
+          </Button>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

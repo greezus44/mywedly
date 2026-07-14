@@ -1,35 +1,66 @@
-import { useEffect } from "react";
-import { NavLink, Outlet, useParams, useNavigate } from "react-router-dom";
+import React, { useEffect } from "react";
+import {
+  useParams,
+  useNavigate,
+  Outlet,
+  NavLink,
+  useOutletContext as useRRDOutletContext,
+} from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
+import {
+  supabase,
+  type UserEvent,
+  type CustomPage,
+  type Json,
+} from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { jsonToTheme, DEFAULT_THEME } from "../../lib/theme";
-import { LoadingSpinner } from "../../components/ui";
+import { jsonToTheme } from "../../lib/theme";
 import { cn } from "../../lib/utils";
+
+export interface GuestOutletContext {
+  event: UserEvent;
+  slug: string;
+}
+
+export function useGuestOutletContext(): GuestOutletContext {
+  return useRRDOutletContext<GuestOutletContext>();
+}
 
 export default function GuestLayout() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { eventId, guestId } = useGuestAuth();
+  const { isAuthenticated, eventId, guestName, signOut } = useGuestAuth();
 
-  const { data: event, isLoading, isError } = useQuery({
-    queryKey: ["public-event", slug],
+  // Redirect to cover if not signed in for this event
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate(`/e/${slug}`, { replace: true });
+    }
+  }, [isAuthenticated, eventId, slug, navigate]);
+
+  const {
+    data: event,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ["guest_event", slug],
+    enabled: !!slug,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("slug", slug)
+        .eq("slug", slug!)
         .eq("is_published", true)
         .maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
-    enabled: !!slug,
   });
 
   const { data: navPages } = useQuery({
-    queryKey: ["guest-nav-pages", event?.id],
+    queryKey: ["guest_nav_pages", slug],
+    enabled: !!event,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
@@ -41,11 +72,11 @@ export default function GuestLayout() {
       if (error) throw error;
       return data as CustomPage[];
     },
-    enabled: !!event?.id,
   });
 
   const { data: footerPages } = useQuery({
-    queryKey: ["guest-footer-pages", event?.id],
+    queryKey: ["guest_footer_pages", slug],
+    enabled: !!event,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
@@ -57,107 +88,115 @@ export default function GuestLayout() {
       if (error) throw error;
       return data as CustomPage[];
     },
-    enabled: !!event?.id,
   });
 
-  // Redirect to cover if not signed in for this event
-  useEffect(() => {
-    if (!isLoading && !isError && event && eventId !== event.id) {
-      navigate(`/e/${slug}`, { replace: true });
-    }
-    if (!isLoading && !isError && event && eventId === event.id && !guestId) {
-      navigate(`/e/${slug}`, { replace: true });
-    }
-  }, [isLoading, isError, event, eventId, guestId, slug, navigate]);
+  if (!isAuthenticated || (event && eventId !== event.id)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <div className="animate-pulse text-dash-muted">Redirecting…</div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <LoadingSpinner />
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <div className="animate-pulse text-dash-muted">Loading…</div>
       </div>
     );
   }
 
   if (isError || !event) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
-        <h1 className="text-2xl font-semibold text-dash-text">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <p className="max-w-md text-lg text-dash-text">
           This invitation website could not be found or is no longer available.
-        </h1>
+        </p>
       </div>
     );
   }
 
-  // Guard: if not authenticated for this event, don't render content
-  if (eventId !== event.id || !guestId) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <LoadingSpinner />
-      </div>
-    );
-  }
-
-  const theme = jsonToTheme(event.theme) ?? DEFAULT_THEME;
+  const theme = jsonToTheme(event.theme as Json | null);
 
   const navItems = [
-    { label: "Home", to: `/e/${slug}/home`, end: false },
-    { label: "Events", to: `/e/${slug}/events`, end: false },
-    { label: "RSVP", to: `/e/${slug}/rsvp`, end: false },
-    { label: "Wishes", to: `/e/${slug}/wishes`, end: false },
-    { label: "Contact", to: `/e/${slug}/contact`, end: false },
-    ...((navPages ?? []).map((p) => ({
+    { label: "Home", to: `/e/${slug}/home` },
+    { label: "Events", to: `/e/${slug}/events` },
+    { label: "RSVP", to: `/e/${slug}/rsvp` },
+    { label: "Wishes", to: `/e/${slug}/wishes` },
+    { label: "Contact", to: `/e/${slug}/contact` },
+    ...(navPages ?? []).map((p) => ({
       label: p.nav_label ?? p.title,
       to: `/e/${slug}/p/${p.slug}`,
-      end: false,
-    }))),
+    })),
   ];
 
   return (
     <EventThemeProvider initialTheme={theme}>
       <div className="flex min-h-screen flex-col">
-        {/* Navigation */}
-        <header className="sticky top-0 z-30 border-b border-event-border bg-event-surface/95 backdrop-blur">
-          <nav className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-1 px-4 py-3">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                className={({ isActive }) =>
-                  cn(
-                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-event-primary text-event-primary-fg"
-                      : "text-event-muted hover:bg-event-surface-alt hover:text-event-text"
-                  )
-                }
+        {/* Header */}
+        <header className="sticky top-0 z-40 border-b border-event-border bg-event-surface/80 backdrop-blur">
+          <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
+            <h1 className="text-lg font-semibold text-event-heading">
+              {event.name}
+            </h1>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-event-muted">Hi, {guestName}</span>
+              <button
+                onClick={() => {
+                  signOut();
+                  navigate(`/e/${slug}`, { replace: true });
+                }}
+                className="text-sm text-event-muted hover:text-event-text"
               >
-                {item.label}
-              </NavLink>
-            ))}
+                Sign out
+              </button>
+            </div>
+          </div>
+          <nav className="border-t border-event-border">
+            <div className="mx-auto max-w-5xl px-4">
+              <div className="flex gap-1 overflow-x-auto scrollbar-thin py-1">
+                {navItems.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end
+                    className={({ isActive }) =>
+                      cn(
+                        "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                        isActive
+                          ? "bg-event-primary text-event-primary-fg"
+                          : "text-event-muted hover:bg-event-surface-alt hover:text-event-text"
+                      )
+                    }
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
           </nav>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1">
-          <div className="mx-auto max-w-3xl px-4 py-8">
-            <Outlet />
-          </div>
+        {/* Main content */}
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
+          <Outlet context={{ event, slug: slug! }} />
         </main>
 
         {/* Footer */}
-        {footerPages && footerPages.length > 0 && (
-          <footer className="border-t border-event-border bg-event-surface-alt">
-            <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-4 px-4 py-4">
-              {footerPages.map((page) => (
-                <NavLink
-                  key={page.id}
-                  to={`/e/${slug}/p/${page.slug}`}
-                  className="text-sm text-event-muted hover:text-event-text"
-                >
-                  {page.nav_label ?? page.title}
-                </NavLink>
-              ))}
+        {(footerPages?.length ?? 0) > 0 && (
+          <footer className="border-t border-event-border bg-event-surface">
+            <div className="mx-auto max-w-5xl px-4 py-6">
+              <div className="flex flex-wrap gap-4">
+                {footerPages!.map((p) => (
+                  <NavLink
+                    key={p.id}
+                    to={`/e/${slug}/p/${p.slug}`}
+                    className="text-sm text-event-muted hover:text-event-text"
+                  >
+                    {p.nav_label ?? p.title}
+                  </NavLink>
+                ))}
+              </div>
             </div>
           </footer>
         )}

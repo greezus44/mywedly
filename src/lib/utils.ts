@@ -5,9 +5,9 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatDate(date: string | Date | null | undefined): string {
-  if (!date) return "";
-  const d = typeof date === "string" ? new Date(date) : date;
+export function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
   if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-US", {
     weekday: "long",
@@ -17,9 +17,9 @@ export function formatDate(date: string | Date | null | undefined): string {
   });
 }
 
-export function formatDateShort(date: string | Date | null | undefined): string {
-  if (!date) return "";
-  const d = typeof date === "string" ? new Date(date) : date;
+export function formatDateShort(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
   if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-US", {
     year: "numeric",
@@ -30,97 +30,97 @@ export function formatDateShort(date: string | Date | null | undefined): string 
 
 export function formatTime12(time: string | null | undefined): string {
   if (!time) return "";
-  const [hStr, mStr] = time.split(":");
-  const h = parseInt(hStr, 10);
-  const m = parseInt(mStr, 10);
-  if (isNaN(h)) return "";
-  const period = h >= 12 ? "PM" : "AM";
-  const hour12 = h % 12 === 0 ? 12 : h % 12;
-  const minutes = m && !isNaN(m) ? `:${String(m).padStart(2, "0")}` : "";
-  return `${hour12}${minutes} ${period}`;
+  const t = to12Hour(time);
+  return t;
 }
 
-export function formatDateTime(date: string | Date | null | undefined): string {
-  if (!date) return "";
-  const d = typeof date === "string" ? new Date(date) : date;
+export function formatDateTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
   if (isNaN(d.getTime())) return "";
-  return `${formatDateShort(d)} at ${formatTime12(
-    `${d.getHours()}:${d.getMinutes()}`
-  )}`;
+  return d.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
-export function getCountdown(target: string | Date | null | undefined): {
+export function getCountdown(targetDate: string | null | undefined): {
   days: number;
   hours: number;
   minutes: number;
   seconds: number;
-  done: boolean;
+  isPast: boolean;
 } {
-  const fallback = { days: 0, hours: 0, minutes: 0, seconds: 0, done: true };
-  if (!target) return fallback;
-  const d = typeof target === "string" ? new Date(target) : target;
-  if (isNaN(d.getTime())) return fallback;
-  const diff = d.getTime() - Date.now();
-  if (diff <= 0) return { ...fallback, done: true };
+  if (!targetDate) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false };
+  const target = new Date(targetDate).getTime();
+  const now = Date.now();
+  const diff = target - now;
+  if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-  const minutes = Math.floor((diff / (1000 * 60)) % 60);
-  const seconds = Math.floor((diff / 1000) % 60);
-  return { days, hours, minutes, seconds, done: false };
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+  return { days, hours, minutes, seconds, isPast: false };
 }
 
-export function to12Hour(time24: string): string {
-  if (!time24) return "";
-  const [hStr, mStr] = time24.split(":");
-  const h = parseInt(hStr, 10);
+export function to12Hour(time: string): string {
+  if (!time) return "";
+  const [hStr, m] = time.split(":");
+  let h = parseInt(hStr, 10);
   if (isNaN(h)) return "";
   const period = h >= 12 ? "PM" : "AM";
-  const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return `${hour12}:${mStr ?? "00"} ${period}`;
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${m} ${period}`;
 }
 
-export function to24Hour(time12: string): string {
-  if (!time12) return "";
-  const match = time12.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-  if (!match) return time12;
+export function to24Hour(time: string): string {
+  if (!time) return "";
+  const match = time.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return time;
   let h = parseInt(match[1], 10);
   const m = match[2];
   const period = match[3].toUpperCase();
-  if (period === "PM" && h !== 12) h += 12;
   if (period === "AM" && h === 12) h = 0;
+  if (period === "PM" && h !== 12) h += 12;
   return `${String(h).padStart(2, "0")}:${m}`;
 }
 
 export function roundTo5Min(time: string): string {
   if (!time) return "";
-  const [hStr, mStr] = time.split(":");
-  const h = parseInt(hStr, 10);
-  const m = parseInt(mStr, 10);
+  const [h, m] = time.split(":").map(Number);
   if (isNaN(h) || isNaN(m)) return time;
   const rounded = Math.round(m / 5) * 5;
-  if (rounded === 60) {
-    return `${String((h + 1) % 24).padStart(2, "0")}:00`;
+  let newH = h;
+  let newM = rounded;
+  if (newM === 60) {
+    newM = 0;
+    newH = (h + 1) % 24;
   }
-  return `${String(h).padStart(2, "0")}:${String(rounded).padStart(2, "0")}`;
+  return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
 }
 
-export function isRsvpClosed(deadline: string | Date | null | undefined): boolean {
+export function isRsvpClosed(deadline: string | null | undefined): boolean {
   if (!deadline) return false;
-  const d = typeof deadline === "string" ? new Date(deadline) : deadline;
-  if (isNaN(d.getTime())) return false;
-  return d.getTime() < Date.now();
+  return new Date(deadline).getTime() < Date.now();
 }
 
 export function generateUsername(name: string): string {
+  if (!name) return "";
   const base = name
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, ".");
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, "_");
   const suffix = Math.random().toString(36).slice(2, 6);
-  return `${base}.${suffix}`.replace(/\.+/g, ".").replace(/^\.|\.$/g, "");
+  return `${base}_${suffix}`;
 }
 
-export function truncate(text: string, max: number): string {
-  if (!text) return "";
-  return text.length > max ? text.slice(0, max - 1) + "…" : text;
+export function truncate(str: string, maxLen: number): string {
+  if (!str) return "";
+  if (str.length <= maxLen) return str;
+  return str.slice(0, maxLen - 1) + "…";
 }

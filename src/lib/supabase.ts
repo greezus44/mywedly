@@ -138,7 +138,7 @@ export interface EventSchedule {
   event_id: string;
   title: string;
   description: string | null;
-  schedule_date: string;
+  schedule_date: string | null;
   start_time: string | null;
   end_time: string | null;
   venue: string | null;
@@ -165,7 +165,7 @@ export interface CustomPage {
   event_id: string | null;
   slug: string;
   title: string;
-  body: string | null;
+  body: string;
   cover_image_url: string | null;
   inline_image_url: string | null;
   sort_order: number;

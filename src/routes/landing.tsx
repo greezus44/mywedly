@@ -1,3 +1,4 @@
+import React from "react";
 import { Link } from "react-router-dom";
 import { SiteHeader } from "../components/site/SiteHeader";
 import { SiteFooter } from "../components/site/SiteFooter";
@@ -5,121 +6,123 @@ import { Button } from "../components/ui/Button";
 
 const FEATURES = [
   {
-    title: "Beautiful Templates",
+    icon: "💌",
+    title: "Beautiful Invitation Websites",
     description:
-      "Choose from dozens of professionally designed templates tailored to your style.",
+      "Create stunning, personalized invitation websites for weddings, birthdays, baby showers, and any special occasion.",
+  },
+  {
+    icon: "✅",
+    title: "Smart RSVP Management",
+    description:
+      "Collect and track RSVPs effortlessly. Manage guest lists, dietary requirements, and plus ones all in one place.",
+  },
+  {
     icon: "🎨",
-  },
-  {
-    title: "Guest Management",
+    title: "Customizable Themes",
     description:
-      "Track RSVPs, manage guest lists, and organize groups — all in one place.",
-    icon: "👥",
+      "Choose from 10 elegant presets or customize colors, fonts, and layouts to match your event's unique style.",
   },
   {
-    title: "Custom Pages",
-    description:
-      "Build unlimited custom pages with our drag-and-drop block editor.",
-    icon: "📄",
-  },
-  {
-    title: "Smart Sharing",
-    description:
-      "Share your website with a custom URL and QR codes for every guest.",
-    icon: "🔗",
-  },
-  {
-    title: "Analytics",
-    description:
-      "See who visited your site, track RSVPs, and monitor engagement in real time.",
-    icon: "📊",
-  },
-  {
+    icon: "📅",
     title: "Event Schedule",
     description:
-      "Create a detailed timeline so your guests always know what's happening.",
-    icon: "📅",
+      "Share your full event timeline so guests know exactly when and where each part of your celebration takes place.",
+  },
+  {
+    icon: "👥",
+    title: "Guest Groups",
+    description:
+      "Organize guests into groups and assign them to specific events. Send targeted invitations with a few clicks.",
+  },
+  {
+    icon: "📊",
+    title: "Analytics & Insights",
+    description:
+      "Track page views, RSVP responses, and guest engagement with built-in analytics dashboards.",
   },
 ];
 
 export default function Landing() {
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="min-h-screen bg-dash-bg">
       <SiteHeader />
 
-      <main className="flex-1">
-        {/* Hero */}
-        <section className="relative overflow-hidden">
-          <div className="mx-auto max-w-6xl px-4 py-20 text-center sm:py-28">
-            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-6xl">
-              Your perfect event
-              <br />
-              <span className="text-primary">starts here</span>
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-dash-primary/10 via-dash-bg to-dash-accent/10" />
+        <div className="relative mx-auto max-w-6xl px-4 py-20 md:py-28">
+          <div className="mx-auto max-w-3xl text-center">
+            <h1 className="text-4xl font-bold tracking-tight text-dash-text md:text-6xl">
+              Beautiful invitation websites
+              <span className="block text-dash-primary">for every occasion</span>
             </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-lg text-muted">
-              MyWedly helps you create a stunning invitation website in minutes.
-              Manage guests, track RSVPs, and share your special day with ease.
+            <p className="mt-6 text-lg text-dash-muted md:text-xl">
+              MyWedly helps you create stunning invitation websites, manage RSVPs,
+              and coordinate guests — all in one elegant platform.
             </p>
-            <div className="mt-8 flex items-center justify-center gap-4">
+            <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <Link to="/auth">
-                <Button size="lg">Get started — it's free</Button>
+                <Button size="lg">Get started free</Button>
               </Link>
-              <Link to="/features">
+              <Link to="/auth">
                 <Button variant="secondary" size="lg">
-                  Learn more
+                  Sign in
                 </Button>
               </Link>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Features */}
-        <section className="border-t border-border bg-surface-alt py-20">
-          <div className="mx-auto max-w-6xl px-4">
-            <h2 className="text-center text-3xl font-bold text-foreground">
-              Everything you need
-            </h2>
-            <p className="mx-auto mt-3 max-w-xl text-center text-muted">
-              Powerful features to make your event planning effortless.
-            </p>
-            <div className="mt-12 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-              {FEATURES.map((feature) => (
-                <div
-                  key={feature.title}
-                  className="rounded-lg border border-border bg-surface p-6 shadow-sm transition-shadow hover:shadow-md"
-                >
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10 text-2xl">
-                    {feature.icon}
-                  </div>
-                  <h3 className="text-lg font-semibold text-foreground">
-                    {feature.title}
-                  </h3>
-                  <p className="mt-2 text-sm text-muted">
-                    {feature.description}
-                  </p>
-                </div>
-              ))}
+      {/* Features */}
+      <section className="mx-auto max-w-6xl px-4 py-16 md:py-24">
+        <div className="mx-auto max-w-2xl text-center">
+          <h2 className="text-3xl font-bold text-dash-text md:text-4xl">
+            Everything you need to plan your event
+          </h2>
+          <p className="mt-4 text-lg text-dash-muted">
+            From invitations to RSVPs to day-of coordination, MyWedly has you covered.
+          </p>
+        </div>
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((feature) => (
+            <div
+              key={feature.title}
+              className="rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm transition-shadow hover:shadow-md"
+            >
+              <div className="mb-4 text-3xl">{feature.icon}</div>
+              <h3 className="mb-2 text-lg font-semibold text-dash-text">
+                {feature.title}
+              </h3>
+              <p className="text-sm text-dash-muted">{feature.description}</p>
             </div>
-          </div>
-        </section>
+          ))}
+        </div>
+      </section>
 
-        {/* CTA */}
-        <section className="py-20">
-          <div className="mx-auto max-w-3xl px-4 text-center">
-            <h2 className="text-3xl font-bold text-foreground">
-              Ready to create your website?
-            </h2>
-            <p className="mt-3 text-muted">
-              Join thousands of couples who chose MyWedly for their special day.
-            </p>
-            <div className="mt-8">
-              <Link to="/auth">
-                <Button size="lg">Create your website</Button>
-              </Link>
-            </div>
+      {/* CTA */}
+      <section className="mx-auto max-w-6xl px-4 py-16 md:py-24">
+        <div className="rounded-2xl bg-gradient-to-br from-dash-primary to-dash-primary-hover px-6 py-12 text-center md:px-12 md:py-16">
+          <h2 className="text-3xl font-bold text-white md:text-4xl">
+            Ready to create your invitation website?
+          </h2>
+          <p className="mt-4 text-lg text-white/90">
+            Join MyWedly today and start planning your perfect event.
+          </p>
+          <div className="mt-8">
+            <Link to="/auth">
+              <Button
+                variant="secondary"
+                size="lg"
+                className="bg-white text-dash-primary hover:bg-white/90"
+              >
+                Create your website
+              </Button>
+            </Link>
           </div>
-        </section>
-      </main>
+        </div>
+      </section>
 
       <SiteFooter />
     </div>

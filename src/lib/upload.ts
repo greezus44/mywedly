@@ -1,66 +1,74 @@
 import { supabase } from "./supabase";
 
 const BUCKET = "event-images";
-const MAX_WIDTH = 1600;
-const MAX_HEIGHT = 1600;
+const MAX_WIDTH = 1920;
+const MAX_HEIGHT = 1080;
 const QUALITY = 0.82;
 
 export async function compressImage(
   file: File,
-  options: { maxWidth?: number; maxHeight?: number; quality?: number } = {}
+  maxWidth = MAX_WIDTH,
+  maxHeight = MAX_HEIGHT,
+  quality = QUALITY
 ): Promise<Blob> {
-  const { maxWidth = MAX_WIDTH, maxHeight = MAX_HEIGHT, quality = QUALITY } =
-    options;
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(
-    1,
-    maxWidth / bitmap.width,
-    maxHeight / bitmap.height
-  );
-  const width = Math.round(bitmap.width * scale);
-  const height = Math.round(bitmap.height * scale);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas context unavailable");
-  ctx.drawImage(bitmap, 0, 0, width, height);
-
-  const isPng = file.type === "image/png";
-  const blob: Blob = await new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error("Compression failed"))),
-      isPng ? "image/png" : "image/jpeg",
-      quality
-    );
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Could not get canvas context"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error("Compression failed"));
+          },
+          file.type === "image/png" ? "image/png" : "image/jpeg",
+          quality
+        );
+      };
+      img.onerror = () => reject(new Error("Image load failed"));
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => reject(new Error("File read failed"));
+    reader.readAsDataURL(file);
   });
-
-  return blob;
 }
 
 export async function uploadImage(
   file: File,
   eventId: string,
-  options: { maxWidth?: number; maxHeight?: number; quality?: number } = {}
+  folder?: string
 ): Promise<string> {
-  const compressed = await compressImage(file, options);
-  const ext = file.type === "image/png" ? "png" : "jpg";
-  const fileName = `${Date.now()}-${Math.random()
+  const compressed = await compressImage(file);
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const fileName = `${folder ? folder + "/" : ""}${eventId}/${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 8)}.${ext}`;
-  const path = `${eventId}/${fileName}`;
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(path, compressed, {
-      contentType: compressed.type,
+    .upload(fileName, compressed, {
+      contentType: compressed.type || "image/jpeg",
       upsert: false,
     });
 
   if (error) throw error;
 
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
   return data.publicUrl;
 }
 
@@ -74,10 +82,9 @@ export async function removeImage(url: string): Promise<void> {
 export function extractPathFromUrl(url: string): string | null {
   try {
     const u = new URL(url);
-    const parts = u.pathname.split("/");
-    const bucketIndex = parts.indexOf(BUCKET);
-    if (bucketIndex === -1) return null;
-    return parts.slice(bucketIndex + 1).join("/");
+    const parts = u.pathname.split(`/${BUCKET}/`);
+    if (parts.length < 2) return null;
+    return decodeURIComponent(parts[1]);
   } catch {
     return null;
   }

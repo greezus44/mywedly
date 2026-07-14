@@ -1,54 +1,56 @@
-import {
-  createContext,
-  useContext,
-  useMemo,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
-import {
-  DEFAULT_THEME,
-  themeToEventCssVars,
-  type ThemeConfig,
-} from "./theme";
+import React, { createContext, useContext, useMemo, useState, useEffect } from "react";
+import { DEFAULT_THEME, themeToEventCssVars, type ThemeConfig } from "./theme";
 
 interface EventThemeContextValue {
   theme: ThemeConfig;
+  setTheme: (t: ThemeConfig) => void;
 }
 
-const EventThemeContext = createContext<EventThemeContextValue>({
-  theme: DEFAULT_THEME,
-});
-
-export function useEventTheme(): EventThemeContextValue {
-  return useContext(EventThemeContext);
-}
-
-interface EventThemeProviderProps {
-  children: ReactNode;
-  initialTheme?: ThemeConfig;
-}
+const EventThemeContext = createContext<EventThemeContextValue | undefined>(undefined);
 
 export function EventThemeProvider({
   children,
   initialTheme,
-}: EventThemeProviderProps) {
-  const theme = useMemo(() => initialTheme ?? DEFAULT_THEME, [initialTheme]);
+}: {
+  children: React.ReactNode;
+  initialTheme?: ThemeConfig;
+}) {
+  const [theme, setTheme] = useState<ThemeConfig>(initialTheme ?? DEFAULT_THEME);
+
+  useEffect(() => {
+    if (initialTheme) setTheme(initialTheme);
+  }, [initialTheme]);
+
+  const cssVars = useMemo(() => themeToEventCssVars(theme), [theme]);
 
   const style = useMemo(() => {
-    const vars = themeToEventCssVars(theme);
-    const cssVars = vars as CSSProperties as Record<string, string>;
-    const result: CSSProperties = {};
-    for (const [key, value] of Object.entries(cssVars)) {
-      (result as Record<string, string>)[key] = value;
+    const style: Record<string, string> = { ...cssVars };
+    if (theme.bgType === "gradient" && theme.bgGradient) {
+      style.backgroundImage = theme.bgGradient;
+    } else if (theme.bgType === "image" && theme.bgImage) {
+      style.backgroundImage = `url(${theme.bgImage})`;
+      style.backgroundSize = "cover";
+      style.backgroundPosition = theme.bgImagePosition ?? "center";
+      if (theme.bgOverlayOpacity !== undefined) {
+        style.backgroundImage = `linear-gradient(rgba(0,0,0,${theme.bgOverlayOpacity}), rgba(0,0,0,${theme.bgOverlayOpacity})), url(${theme.bgImage})`;
+      }
     }
-    return result;
-  }, [theme]);
+    return style;
+  }, [cssVars, theme]);
 
   return (
-    <EventThemeContext.Provider value={{ theme }}>
+    <EventThemeContext.Provider value={{ theme, setTheme }}>
       <div className="event-themed" style={style}>
         {children}
       </div>
     </EventThemeContext.Provider>
   );
+}
+
+export function useEventTheme(): EventThemeContextValue {
+  const ctx = useContext(EventThemeContext);
+  if (!ctx) {
+    throw new Error("useEventTheme must be used within an EventThemeProvider");
+  }
+  return ctx;
 }

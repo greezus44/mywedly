@@ -1,9 +1,25 @@
-import { NavLink, Outlet, useParams, useNavigate } from "react-router-dom";
+import React from "react";
+import {
+  useParams,
+  useNavigate,
+  Outlet,
+  NavLink,
+  useOutletContext as useRRDOutletContext,
+} from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { cn } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { LoadingSpinner, ErrorState, Badge } from "../../components/ui";
+import { LoadingSpinner, ErrorState } from "../../components/ui";
+
+export interface EventOutletContext {
+  event: UserEvent;
+  eventId: string;
+}
+
+export function useOutletContext(): EventOutletContext {
+  return useRRDOutletContext<EventOutletContext>();
+}
 
 const NAV_TABS = [
   { label: "Cover", to: "", end: true },
@@ -22,27 +38,33 @@ const NAV_TABS = [
 ];
 
 export default function EventLayout() {
-  const { eventId } = useParams();
+  const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: event, isLoading, isError } = useQuery({
-    queryKey: ["event", eventId],
+  const {
+    data: event,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["user_event", eventId],
+    enabled: !!eventId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("id", eventId)
+        .eq("id", eventId!)
         .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("Event not found");
       return data as UserEvent;
     },
-    enabled: !!eventId,
   });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      if (!event) throw new Error("Event not loaded");
+      if (!event) throw new Error("No event");
       const { data, error } = await supabase
         .from("user_events")
         .update({
@@ -64,78 +86,91 @@ export default function EventLayout() {
           is_published: true,
           published_at: new Date().toISOString(),
         })
-        .eq("id", eventId)
+        .eq("id", event.id)
         .select()
         .maybeSingle();
       if (error) throw error;
-      return data;
+      return data as UserEvent;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["user-events"] });
+      queryClient.invalidateQueries({ queryKey: ["user_event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["user_events"] });
     },
   });
 
-  // CRITICAL: Do NOT render Outlet while loading or on error.
-  // This prevents child routes from receiving a null outlet context.
+  // CRITICAL: While loading, render spinner and DO NOT render Outlet
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <LoadingSpinner />
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
 
+  // CRITICAL: On error, render error state and DO NOT render Outlet
   if (isError || !event) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg p-4">
         <ErrorState
           title="Event not found"
-          description="This website may have been deleted or you don't have access."
+          description={
+            error instanceof Error ? error.message : "Failed to load event"
+          }
           onRetry={() => navigate("/dashboard")}
         />
       </div>
     );
   }
 
+  // CRITICAL: Only on success, render Outlet with non-null context
   return (
     <div className="min-h-screen bg-dash-bg">
       {/* Header */}
-      <div className="border-b border-border bg-surface">
-        <div className="mx-auto max-w-6xl px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => navigate("/dashboard")}
-                  className="text-muted hover:text-foreground"
-                >
-                  ← Dashboard
-                </button>
-                <span className="text-muted">/</span>
-                <h1 className="text-lg font-semibold text-foreground">
-                  {event.draft_name ?? event.name}
-                </h1>
-              </div>
-              <div className="mt-1 flex items-center gap-2">
-                <Badge variant={event.is_published ? "success" : "warning"}>
-                  {event.is_published ? "Published" : "Draft"}
-                </Badge>
-                {event.slug && (
-                  <span className="text-xs text-muted">/{event.slug}</span>
-                )}
-              </div>
-            </div>
-            <Button
-              onClick={() => publishMutation.mutate()}
-              loading={publishMutation.isPending}
+      <header className="sticky top-0 z-40 border-b border-dash-border bg-dash-surface/80 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate("/dashboard")}
+              className="text-dash-muted hover:text-dash-text"
+              aria-label="Back to dashboard"
             >
-              Publish
-            </Button>
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15 19l-7-7 7-7"
+                />
+              </svg>
+            </button>
+            <div>
+              <h1 className="text-base font-semibold text-dash-text">
+                {event.draft_name ?? event.name}
+              </h1>
+              <p className="text-xs text-dash-muted">
+                {event.is_published ? "Published" : "Draft"}
+              </p>
+            </div>
           </div>
+          <Button
+            onClick={() => publishMutation.mutate()}
+            loading={publishMutation.isPending}
+            size="sm"
+          >
+            {event.is_published ? "Update Published" : "Publish"}
+          </Button>
+        </div>
+      </header>
 
-          {/* Nav tabs */}
-          <nav className="mt-4 flex flex-wrap gap-1">
+      {/* Nav tabs */}
+      <nav className="sticky top-16 z-30 border-b border-dash-border bg-dash-surface">
+        <div className="mx-auto max-w-7xl px-4">
+          <div className="flex gap-1 overflow-x-auto scrollbar-thin py-1">
             {NAV_TABS.map((tab) => (
               <NavLink
                 key={tab.label}
@@ -143,24 +178,24 @@ export default function EventLayout() {
                 end={tab.end}
                 className={({ isActive }) =>
                   cn(
-                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                     isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted hover:bg-muted/20 hover:text-foreground"
+                      ? "bg-dash-primary text-dash-primary-fg"
+                      : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"
                   )
                 }
               >
                 {tab.label}
               </NavLink>
             ))}
-          </nav>
+          </div>
         </div>
-      </div>
+      </nav>
 
-      {/* Outlet — context is always valid here */}
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      {/* Outlet with non-null context */}
+      <main className="mx-auto max-w-7xl px-4 py-6">
         <Outlet context={{ event, eventId: eventId! }} />
-      </div>
+      </main>
     </div>
   );
 }

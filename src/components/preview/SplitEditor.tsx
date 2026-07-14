@@ -1,9 +1,9 @@
-import type { ReactNode } from "react";
+import React from "react";
 import { cn } from "../../lib/utils";
 
-interface SplitEditorProps {
-  editor: ReactNode;
-  preview: ReactNode;
+export interface SplitEditorProps {
+  editor: React.ReactNode;
+  preview: React.ReactNode;
   previewClassName?: string;
   editorRatio?: number;
 }
@@ -18,19 +18,19 @@ export function SplitEditor({
   const previewWidth = `${(1 - editorRatio) * 100}%`;
 
   return (
-    <div className="flex h-full w-full overflow-hidden rounded-lg border border-border">
+    <div className="flex h-full w-full overflow-hidden">
       <div
-        className="flex flex-col overflow-y-auto border-r border-border bg-surface-alt"
-        style={{ width: editorWidth }}
+        className="h-full overflow-y-auto scrollbar-thin border-r border-dash-border bg-dash-bg p-4"
+        style={{ width: editorWidth, flexShrink: 0 }}
       >
         {editor}
       </div>
       <div
         className={cn(
-          "flex flex-col overflow-y-auto bg-surface",
+          "h-full overflow-y-auto scrollbar-thin bg-dash-surface",
           previewClassName
         )}
-        style={{ width: previewWidth }}
+        style={{ width: previewWidth, flexGrow: 1 }}
       >
         {preview}
       </div>

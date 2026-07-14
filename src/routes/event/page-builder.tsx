@@ -1,105 +1,110 @@
-import { useState, useEffect } from "react";
-import { useOutletContext, useParams, useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/supabase";
-import { cn } from "../../lib/utils";
-import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
-import {
-  LoadingSpinner,
-  ErrorState,
-  EmptyState,
-  IconButton,
-  Card,
-} from "../../components/ui";
+import { supabase, type Json } from "../../lib/supabase";
+import { useOutletContext } from "./event-layout";
 import {
   BLOCK_TYPES,
-  BlockContent,
   createBlock,
-  blocksToJson,
-  jsonToBlocks,
+  BlockContent,
   type Block,
-  type BlockType,
 } from "./block-types";
+import { Button } from "../../components/ui/Button";
+import {
+  Modal,
+  Input,
+  Textarea,
+  LoadingSpinner,
+  ErrorState,
+} from "../../components/ui";
+import { RichTextEditor } from "../../components/ui/RichTextEditor";
+import { EventThemeProvider } from "../../lib/theme-context";
+import { jsonToTheme } from "../../lib/theme";
+import { cn } from "../../lib/utils";
 
 export default function PageBuilder() {
-  const { eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
+  const { eventId, event } = useOutletContext();
   const { pageId } = useParams<{ pageId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [blocks, setBlocks] = useState<Block[]>([]);
+  const [showAddBlock, setShowAddBlock] = useState(false);
+  const [editingBlock, setEditingBlock] = useState<Block | null>(null);
   const [title, setTitle] = useState("");
-  const [navLabel, setNavLabel] = useState("");
-  const [showInNav, setShowInNav] = useState(true);
-  const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
 
   const { data: page, isLoading, isError } = useQuery({
-    queryKey: ["custom-page", pageId],
+    queryKey: ["custom_page", pageId],
+    enabled: !!pageId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
         .select("*")
-        .eq("id", pageId)
+        .eq("id", pageId!)
         .maybeSingle();
       if (error) throw error;
-      return data as CustomPage;
+      if (!data) throw new Error("Page not found");
+      return data;
     },
-    enabled: !!pageId,
   });
 
   useEffect(() => {
     if (page) {
       setTitle(page.title);
-      setNavLabel(page.nav_label ?? "");
-      setShowInNav(page.show_in_nav);
-      setBlocks(jsonToBlocks(page.blocks));
+      const pageBlocks = Array.isArray(page.blocks)
+        ? (page.blocks as Block[])
+        : [];
+      setBlocks(pageBlocks);
     }
   }, [page]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("custom_pages")
         .update({
-          title,
-          nav_label: navLabel || null,
-          show_in_nav: showInNav,
-          blocks: blocksToJson(blocks),
+          title: title,
+          nav_label: title,
+          blocks: blocks as unknown as Json,
         })
-        .eq("id", pageId);
+        .eq("id", pageId!)
+        .select()
+        .maybeSingle();
       if (error) throw error;
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["custom-page", pageId] });
-      queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["custom_page", pageId] });
+      queryClient.invalidateQueries({ queryKey: ["custom_pages", eventId] });
     },
   });
 
-  const addBlock = (type: BlockType) => {
-    const block = createBlock(type);
-    setBlocks((prev) => [...prev, block]);
-    setSelectedBlock(block.id);
+  const handleAddBlock = (type: Block["type"]) => {
+    const newBlock = createBlock(type);
+    setBlocks((b) => [...b, newBlock]);
+    setShowAddBlock(false);
+    setEditingBlock(newBlock);
   };
 
-  const updateBlock = (id: string, data: Record<string, unknown>) => {
-    setBlocks((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...data } } : b))
+  const handleUpdateBlock = (id: string, data: Record<string, unknown>) => {
+    setBlocks((b) =>
+      b.map((block) =>
+        block.id === id ? { ...block, data: { ...block.data, ...data } } : block
+      )
     );
   };
 
-  const deleteBlock = (id: string) => {
-    setBlocks((prev) => prev.filter((b) => b.id !== id));
-    if (selectedBlock === id) setSelectedBlock(null);
+  const handleDeleteBlock = (id: string) => {
+    setBlocks((b) => b.filter((block) => block.id !== id));
   };
 
-  const moveBlock = (id: string, direction: "up" | "down") => {
-    setBlocks((prev) => {
-      const index = prev.findIndex((b) => b.id === id);
-      if (index === -1) return prev;
+  const handleMoveBlock = (id: string, direction: "up" | "down") => {
+    setBlocks((b) => {
+      const index = b.findIndex((block) => block.id === id);
+      if (index === -1) return b;
       const newIndex = direction === "up" ? index - 1 : index + 1;
-      if (newIndex < 0 || newIndex >= prev.length) return prev;
-      const newBlocks = [...prev];
+      if (newIndex < 0 || newIndex >= b.length) return b;
+      const newBlocks = [...b];
       [newBlocks[index], newBlocks[newIndex]] = [
         newBlocks[newIndex],
         newBlocks[index],
@@ -111,443 +116,281 @@ export default function PageBuilder() {
   if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <LoadingSpinner />
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
 
-  if (isError || !page) {
-    return (
-      <ErrorState
-        title="Page not found"
-        onRetry={() => navigate(`/event/${eventId}/pages`)}
-      />
-    );
+  if (isError) {
+    return <ErrorState description="Failed to load page" />;
   }
 
-  const editingBlock = blocks.find((b) => b.id === selectedBlock);
+  const previewTheme = jsonToTheme(event.draft_theme ?? event.theme);
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate(`/event/${eventId}/pages`)}
-            className="text-muted hover:text-foreground"
-          >
-            ← Pages
-          </button>
-          <span className="text-muted">/</span>
-          <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-        </div>
-        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-          Save Changes
-        </Button>
-      </div>
-
-      {saveMutation.isError && (
-        <p className="text-sm text-danger">
-          {saveMutation.error instanceof Error
-            ? saveMutation.error.message
-            : "Failed to save"}
-        </p>
-      )}
-      {saveMutation.isSuccess && (
-        <p className="text-sm text-success">Saved successfully!</p>
-      )}
-
-      {/* Page settings */}
-      <Card>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div className="flex h-[calc(100vh-8rem)] flex-col">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => navigate(`/event/${eventId}/pages`)}>
+            ← Back
+          </Button>
           <Input
-            label="Page Title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            className="w-64"
+            placeholder="Page title"
           />
-          <Input
-            label="Nav Label"
-            value={navLabel}
-            onChange={(e) => setNavLabel(e.target.value)}
-            placeholder="Label in navigation"
-          />
-          <label className="flex items-end gap-2 pb-2">
-            <input
-              type="checkbox"
-              checked={showInNav}
-              onChange={(e) => setShowInNav(e.target.checked)}
-              className="h-4 w-4 rounded border-border"
-            />
-            <span className="text-sm text-foreground">Show in navigation</span>
-          </label>
         </div>
-      </Card>
-
-      {/* Block types palette */}
-      <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-surface-alt p-3">
-        <span className="self-center text-xs font-medium text-muted">
-          Add block:
-        </span>
-        {BLOCK_TYPES.map((bt) => (
-          <button
-            key={bt.type}
-            onClick={() => addBlock(bt.type)}
-            className="flex items-center gap-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs font-medium text-foreground hover:border-primary hover:bg-primary/5"
+        <div className="flex items-center gap-2">
+          {saveMutation.isError && (
+            <span className="text-sm text-dash-danger">
+              {saveMutation.error instanceof Error
+                ? saveMutation.error.message
+                : "Failed to save"}
+            </span>
+          )}
+          {saveMutation.isSuccess && (
+            <span className="text-sm text-green-600">Saved!</span>
+          )}
+          <Button
+            onClick={() => saveMutation.mutate()}
+            loading={saveMutation.isPending}
           >
-            <span>{bt.icon}</span>
-            {bt.label}
-          </button>
-        ))}
+            Save Changes
+          </Button>
+        </div>
       </div>
 
-      {/* Blocks list */}
-      {blocks.length > 0 ? (
-        <div className="flex flex-col gap-3">
-          {blocks.map((block, index) => {
-            const isSelected = selectedBlock === block.id;
-            return (
-              <div
-                key={block.id}
-                className={cn(
-                  "rounded-lg border bg-surface p-4 transition-colors",
-                  isSelected
-                    ? "border-primary ring-2 ring-primary/20"
-                    : "border-border"
-                )}
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="text-xs font-medium uppercase text-muted">
-                    {block.type}
-                  </span>
-                  <div className="flex gap-1">
-                    <IconButton
-                      onClick={() => moveBlock(block.id, "up")}
-                      title="Move up"
-                      disabled={index === 0}
-                    >
-                      ↑
-                    </IconButton>
-                    <IconButton
-                      onClick={() => moveBlock(block.id, "down")}
-                      title="Move down"
-                      disabled={index === blocks.length - 1}
-                    >
-                      ↓
-                    </IconButton>
-                    <IconButton
-                      onClick={() => deleteBlock(block.id)}
-                      title="Delete"
-                      className="hover:text-danger"
-                    >
-                      🗑
-                    </IconButton>
-                  </div>
-                </div>
-
-                {/* Block content preview */}
+      <div className="flex flex-1 gap-4 overflow-hidden">
+        {/* Block list / editor */}
+        <div className="w-1/2 overflow-y-auto scrollbar-thin rounded-lg border border-dash-border bg-dash-bg p-4">
+          {blocks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <p className="mb-4 text-sm text-dash-muted">
+                No blocks yet. Add your first block to get started.
+              </p>
+              <Button onClick={() => setShowAddBlock(true)}>Add Block</Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {blocks.map((block, index) => (
                 <div
-                  onClick={() => setSelectedBlock(block.id)}
-                  className="cursor-pointer"
+                  key={block.id}
+                  className="rounded-md border border-dash-border bg-dash-surface p-3"
                 >
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-xs font-medium text-dash-muted">
+                      {BLOCK_TYPES.find((b) => b.type === block.type)?.label ?? block.type}
+                    </span>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handleMoveBlock(block.id, "up")}
+                        disabled={index === 0}
+                        className="rounded p-1 text-dash-muted hover:bg-dash-bg disabled:opacity-30"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        onClick={() => handleMoveBlock(block.id, "down")}
+                        disabled={index === blocks.length - 1}
+                        className="rounded p-1 text-dash-muted hover:bg-dash-bg disabled:opacity-30"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        onClick={() => setEditingBlock(block)}
+                        className="rounded p-1 text-dash-muted hover:bg-dash-bg"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBlock(block.id)}
+                        className="rounded p-1 text-dash-danger hover:bg-dash-bg"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
                   <BlockContent block={block} />
                 </div>
-
-                {/* Inline editor for selected block */}
-                {isSelected && (
-                  <div className="mt-4 border-t border-border pt-4">
-                    <BlockEditor block={block} updateBlock={updateBlock} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
+              ))}
+              <Button
+                variant="secondary"
+                onClick={() => setShowAddBlock(true)}
+              >
+                + Add Block
+              </Button>
+            </div>
+          )}
         </div>
-      ) : (
-        <EmptyState
-          title="No blocks yet"
-          description="Add blocks from the palette above to build your page."
+
+        {/* Preview */}
+        <div className="flex-1 overflow-y-auto scrollbar-thin rounded-lg border border-dash-border">
+          <EventThemeProvider initialTheme={previewTheme}>
+            <div className="p-6">
+              <h1 className="mb-6 text-3xl font-bold text-event-heading">
+                {title}
+              </h1>
+              {blocks.map((block) => (
+                <div key={block.id} className="mb-4">
+                  <BlockContent block={block} />
+                </div>
+              ))}
+            </div>
+          </EventThemeProvider>
+        </div>
+      </div>
+
+      {/* Add block modal */}
+      <Modal
+        open={showAddBlock}
+        onClose={() => setShowAddBlock(false)}
+        title="Add Block"
+        size="lg"
+      >
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {BLOCK_TYPES.map((bt) => (
+            <button
+              key={bt.type}
+              onClick={() => handleAddBlock(bt.type)}
+              className="flex flex-col items-center gap-1 rounded-md border border-dash-border p-3 text-center hover:bg-dash-bg"
+            >
+              <span className="text-2xl">{bt.icon}</span>
+              <span className="text-xs font-medium text-dash-text">
+                {bt.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </Modal>
+
+      {/* Block editor modal */}
+      {editingBlock && (
+        <BlockEditorModal
+          block={editingBlock}
+          onChange={(data) =>
+            handleUpdateBlock(editingBlock.id, data)
+          }
+          onClose={() => setEditingBlock(null)}
         />
       )}
     </div>
   );
 }
 
-function BlockEditor({
+const selectCls = "w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text";
+
+function BlockEditorModal({
   block,
-  updateBlock,
+  onChange,
+  onClose,
 }: {
   block: Block;
-  updateBlock: (id: string, data: Record<string, unknown>) => void;
+  onChange: (data: Record<string, unknown>) => void;
+  onClose: () => void;
 }) {
-  const { id, data } = block;
+  const d = block.data;
+  const s = (key: string) => (d[key] as string) || "";
 
-  switch (block.type) {
-    case "heading":
-      return (
-        <div className="flex flex-col gap-3">
-          <Input
-            label="Text"
-            value={(data.text as string) ?? ""}
-            onChange={(e) => updateBlock(id, { text: e.target.value })}
-          />
-          <div className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-foreground">Level</span>
-            <select
-              value={(data.level as string) ?? "h2"}
-              onChange={(e) => updateBlock(id, { level: e.target.value })}
-              className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="h1">Heading 1</option>
-              <option value="h2">Heading 2</option>
-              <option value="h3">Heading 3</option>
-            </select>
+  const renderField = () => {
+    switch (block.type) {
+      case "heading":
+        return (
+          <>
+            <Input label="Text" value={s("text")} onChange={(e) => onChange({ text: e.target.value })} placeholder="Heading text" autoFocus />
+            <div>
+              <label className="mb-1 block text-sm font-medium text-dash-text">Level</label>
+              <select value={String(d.level ?? 2)} onChange={(e) => onChange({ level: Number(e.target.value) })} className={selectCls}>
+                <option value="1">H1</option><option value="2">H2</option><option value="3">H3</option>
+              </select>
+            </div>
+          </>
+        );
+      case "paragraph":
+        return (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-dash-text">Content</label>
+            <RichTextEditor value={s("text")} onChange={(html) => onChange({ text: html })} placeholder="Write your paragraph..." />
           </div>
-        </div>
-      );
-
-    case "paragraph":
-      return (
-        <Textarea
-          label="Text"
-          value={(data.text as string) ?? ""}
-          onChange={(e) => updateBlock(id, { text: e.target.value })}
-          rows={4}
-        />
-      );
-
-    case "image":
-      return (
-        <div className="flex flex-col gap-3">
-          <Input
-            label="Image URL"
-            value={(data.url as string) ?? ""}
-            onChange={(e) => updateBlock(id, { url: e.target.value })}
-            placeholder="https://..."
-          />
-          <Input
-            label="Alt Text"
-            value={(data.alt as string) ?? ""}
-            onChange={(e) => updateBlock(id, { alt: e.target.value })}
-          />
-        </div>
-      );
-
-    case "spacer":
-      return (
-        <Input
-          label="Height (px)"
-          type="number"
-          value={(data.height as number) ?? 40}
-          onChange={(e) => updateBlock(id, { height: Number(e.target.value) })}
-        />
-      );
-
-    case "video":
-      return (
-        <Input
-          label="Video URL (embed link)"
-          value={(data.url as string) ?? ""}
-          onChange={(e) => updateBlock(id, { url: e.target.value })}
-          placeholder="https://www.youtube.com/embed/..."
-        />
-      );
-
-    case "button":
-      return (
-        <div className="flex flex-col gap-3">
-          <Input
-            label="Button Text"
-            value={(data.text as string) ?? ""}
-            onChange={(e) => updateBlock(id, { text: e.target.value })}
-          />
-          <Input
-            label="URL"
-            value={(data.url as string) ?? ""}
-            onChange={(e) => updateBlock(id, { url: e.target.value })}
-          />
-        </div>
-      );
-
-    case "quote":
-      return (
-        <div className="flex flex-col gap-3">
-          <Textarea
-            label="Quote"
-            value={(data.text as string) ?? ""}
-            onChange={(e) => updateBlock(id, { text: e.target.value })}
-            rows={2}
-          />
-          <Input
-            label="Author"
-            value={(data.author as string) ?? ""}
-            onChange={(e) => updateBlock(id, { author: e.target.value })}
-          />
-        </div>
-      );
-
-    case "countdown":
-      return (
-        <Input
-          label="Target Date"
-          type="date"
-          value={(data.target as string) ?? ""}
-          onChange={(e) => updateBlock(id, { target: e.target.value })}
-        />
-      );
-
-    case "map":
-      return (
-        <div className="flex flex-col gap-3">
-          <Input
-            label="Address"
-            value={(data.address as string) ?? ""}
-            onChange={(e) => updateBlock(id, { address: e.target.value })}
-          />
-          <Input
-            label="Zoom"
-            type="number"
-            value={(data.zoom as number) ?? 14}
-            onChange={(e) => updateBlock(id, { zoom: Number(e.target.value) })}
-            min={1}
-            max={20}
-          />
-        </div>
-      );
-
-    case "venue":
-      return (
-        <div className="flex flex-col gap-3">
-          <Input
-            label="Venue Name"
-            value={(data.name as string) ?? ""}
-            onChange={(e) => updateBlock(id, { name: e.target.value })}
-          />
-          <Input
-            label="Address"
-            value={(data.address as string) ?? ""}
-            onChange={(e) => updateBlock(id, { address: e.target.value })}
-          />
-        </div>
-      );
-
-    case "gallery":
-      return (
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-foreground">
-            Image URLs (one per line)
-          </span>
-          <textarea
-            value={((data.images as string[]) ?? []).join("\n")}
-            onChange={(e) =>
-              updateBlock(id, {
-                images: e.target.value.split("\n").filter(Boolean),
-              })
-            }
-            rows={4}
-            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
-          />
-        </div>
-      );
-
-    case "list":
-      return (
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-foreground">
-            Items (one per line)
-          </span>
-          <textarea
-            value={((data.items as string[]) ?? []).join("\n")}
-            onChange={(e) =>
-              updateBlock(id, {
-                items: e.target.value.split("\n").filter(Boolean),
-              })
-            }
-            rows={4}
-            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
-          />
-        </div>
-      );
-
-    case "faq":
-      return (
-        <div className="flex flex-col gap-3">
-          {((data.items as { question: string; answer: string }[]) ?? []).map(
-            (item, i) => (
-              <div key={i} className="flex flex-col gap-2 rounded-md border border-border p-3">
-                <Input
-                  label={`Question ${i + 1}`}
-                  value={item.question}
-                  onChange={(e) => {
-                    const items = [...((data.items as { question: string; answer: string }[]) ?? [])];
-                    items[i] = { ...items[i], question: e.target.value };
-                    updateBlock(id, { items });
-                  }}
-                />
-                <Textarea
-                  label="Answer"
-                  value={item.answer}
-                  onChange={(e) => {
-                    const items = [...((data.items as { question: string; answer: string }[]) ?? [])];
-                    items[i] = { ...items[i], answer: e.target.value };
-                    updateBlock(id, { items });
-                  }}
-                  rows={2}
-                />
-                <button
-                  onClick={() => {
-                    const items = ((data.items as { question: string; answer: string }[]) ?? []).filter(
-                      (_, idx) => idx !== i
-                    );
-                    updateBlock(id, { items });
-                  }}
-                  className="self-start text-xs text-danger hover:underline"
-                >
-                  Remove
-                </button>
-              </div>
-            )
-          )}
-          <button
-            onClick={() => {
-              const items = [
-                ...((data.items as { question: string; answer: string }[]) ?? []),
-                { question: "New question?", answer: "" },
-              ];
-              updateBlock(id, { items });
-            }}
-            className="self-start rounded-md border border-border bg-surface-alt px-3 py-1.5 text-xs text-foreground hover:bg-muted/20"
-          >
-            + Add FAQ Item
-          </button>
-        </div>
-      );
-
-    case "columns":
-      return (
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-foreground">
-            Column contents (one per line)
-          </span>
-          <textarea
-            value={((data.columns as { text: string }[]) ?? []).map((c) => c.text).join("\n")}
-            onChange={(e) => {
-              const texts = e.target.value.split("\n");
-              updateBlock(id, {
-                columns: texts.map((t) => ({ text: t })),
-              });
-            }}
-            rows={4}
-            className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
-          />
-        </div>
-      );
-
-    default:
-      return (
-        <p className="text-sm text-muted">
-          This block type is rendered on the guest page and has no editable
-          properties here.
-        </p>
-      );
+        );
+      case "image":
+        return (
+          <>
+            <Input label="Image URL" value={s("url")} onChange={(e) => onChange({ url: e.target.value })} placeholder="https://..." autoFocus />
+            <Input label="Alt Text" value={s("alt")} onChange={(e) => onChange({ alt: e.target.value })} placeholder="Image description" />
+          </>
+        );
+      case "spacer":
+        return <Input label="Height (px)" type="number" value={String(d.height ?? 32)} onChange={(e) => onChange({ height: Number(e.target.value) })} autoFocus />;
+      case "video":
+        return (
+          <>
+            <Input label="Video URL" value={s("url")} onChange={(e) => onChange({ url: e.target.value })} placeholder="https://..." autoFocus />
+            <Input label="Caption" value={s("caption")} onChange={(e) => onChange({ caption: e.target.value })} />
+          </>
+        );
+      case "button":
+        return (
+          <>
+            <Input label="Button Text" value={s("text")} onChange={(e) => onChange({ text: e.target.value })} autoFocus />
+            <Input label="URL" value={s("url")} onChange={(e) => onChange({ url: e.target.value })} placeholder="https://..." />
+            <div>
+              <label className="mb-1 block text-sm font-medium text-dash-text">Style</label>
+              <select value={s("style") || "primary"} onChange={(e) => onChange({ style: e.target.value })} className={selectCls}>
+                <option value="primary">Primary</option><option value="outline">Outline</option>
+              </select>
+            </div>
+          </>
+        );
+      case "columns":
+        return (
+          <>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-dash-text">Left Column</label>
+              <RichTextEditor value={s("left")} onChange={(html) => onChange({ left: html })} placeholder="Left content..." />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-dash-text">Right Column</label>
+              <RichTextEditor value={s("right")} onChange={(html) => onChange({ right: html })} placeholder="Right content..." />
+            </div>
+          </>
+        );
+      case "quote":
+        return (
+          <>
+            <Textarea label="Quote" value={s("text")} onChange={(e) => onChange({ text: e.target.value })} placeholder="Quote text" />
+            <Input label="Author" value={s("author")} onChange={(e) => onChange({ author: e.target.value })} placeholder="Author name" />
+          </>
+        );
+      case "countdown":
+        return <Input label="Target Date" type="datetime-local" value={s("targetDate")} onChange={(e) => onChange({ targetDate: e.target.value })} autoFocus />;
+      case "map":
+        return (
+          <>
+            <Input label="Address" value={s("address")} onChange={(e) => onChange({ address: e.target.value })} placeholder="123 Main St, City" autoFocus />
+            <Input label="Zoom Level" type="number" value={String(d.zoom ?? 15)} onChange={(e) => onChange({ zoom: Number(e.target.value) })} />
+          </>
+        );
+      case "venue":
+        return (
+          <>
+            <Input label="Venue Name" value={s("name")} onChange={(e) => onChange({ name: e.target.value })} autoFocus />
+            <Input label="Address" value={s("address")} onChange={(e) => onChange({ address: e.target.value })} />
+          </>
+        );
+      default:
+        return <p className="text-sm text-dash-muted">This block type has no editable fields. It will be rendered automatically on the guest page.</p>;
     }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Edit Block" size="lg">
+      <div className="flex flex-col gap-4">
+        {renderField()}
+        <div className="flex justify-end">
+          <Button onClick={onClose}>Done</Button>
+        </div>
+      </div>
+    </Modal>
+  );
 }
