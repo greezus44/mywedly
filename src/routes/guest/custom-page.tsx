@@ -2,7 +2,7 @@ import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type CustomPage, type UserEvent, type SubEvent } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { jsonToTheme, type ThemeConfig } from "../../lib/theme";
+import { jsonToTheme } from "../../lib/theme";
 import { RichTextContent } from "../../lib/sanitize";
 import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
 import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
@@ -49,7 +49,6 @@ export default function GuestCustomPage() {
     enabled: !!event?.id && !!pageSlug,
   });
 
-  // Resolve invited sub-events for blocks that need them (schedule, guest-list, etc.)
   const { data: invitedSubEventIds } = useQuery({
     queryKey: ["guest-invited-sub-events", event?.id, guestId],
     queryFn: async () => {
@@ -75,13 +74,17 @@ export default function GuestCustomPage() {
   });
 
   if (eventLoading || pageLoading) {
-    return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
+      </div>
+    );
   }
 
   if (!event) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 text-center">
-        <h1 className="text-2xl font-bold">Invitation Not Found</h1>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
         <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
@@ -92,7 +95,7 @@ export default function GuestCustomPage() {
       <EventThemeProvider initialTheme={jsonToTheme(event.theme)}>
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 text-center">
           <h1 className="text-2xl font-bold">Page Not Found</h1>
-          <Link to={`/e/${slug}/home`} className="text-event-primary hover:underline">Return to home</Link>
+          <Link to={`/e/${slug}/home`} className="hover:underline" style={{ color: "var(--event-primary)" }}>Return to home</Link>
         </div>
       </EventThemeProvider>
     );
@@ -103,19 +106,35 @@ export default function GuestCustomPage() {
 
   return (
     <EventThemeProvider initialTheme={theme}>
-      <div className="mx-auto max-w-4xl px-4 py-8">
-        <h1 className="mb-6 text-3xl font-bold">{page.title}</h1>
+      <div>
         {page.cover_image_url && (
-          <img src={page.cover_image_url} alt={page.title} className="mb-6 w-full rounded-lg" />
-        )}
-        {page.body && <RichTextContent html={page.body} />}
-        {blocks.length > 0 && (
-          <div className="mt-6 space-y-6">
-            {blocks.map((block) => (
-              <BlockRenderer key={block.id} block={block} event={event} subEvents={subEvents ?? []} />
-            ))}
+          <div className="h-64 w-full overflow-hidden md:h-80">
+            <img src={page.cover_image_url} alt={page.title} className="h-full w-full object-cover" />
           </div>
         )}
+
+        <section className="guest-section">
+          <div className="mx-auto max-w-2xl">
+            <p className="guest-eyebrow text-center">{page.nav_label || "Page"}</p>
+            <h1 className="guest-title text-center">{page.title}</h1>
+
+            {page.body && (
+              <div className="mt-6 animate-slideUp">
+                <RichTextContent html={page.body} />
+              </div>
+            )}
+
+            {blocks.length > 0 && (
+              <div className="mt-8 space-y-8">
+                {blocks.map((block, i) => (
+                  <div key={block.id} className="animate-slideUpStagger" style={{ animationDelay: `${i * 0.08}s` }}>
+                    <BlockRenderer block={block} event={event} subEvents={subEvents ?? []} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
     </EventThemeProvider>
   );
@@ -142,7 +161,7 @@ function BlockRenderer({ block, event, subEvents }: { block: Block; event: UserE
     case "spacer":
       return <div style={{ height: (data.height as number) || 40 }} />;
     case "divider":
-      return <hr className="border-event-border" />;
+      return <hr style={{ borderColor: "var(--event-border)" }} />;
     case "video":
       return (
         <div>
@@ -171,7 +190,7 @@ function BlockRenderer({ block, event, subEvents }: { block: Block; event: UserE
       );
     case "quote":
       return (
-        <blockquote className="border-l-4 border-event-border pl-4 italic opacity-80">
+        <blockquote className="border-l-4 pl-4 italic opacity-80" style={{ borderColor: "var(--event-border)" }}>
           <p>{String(data.text)}</p>
           {(data.author as string) && <footer className="mt-2 text-sm">— {String(data.author)}</footer>}
         </blockquote>
@@ -198,7 +217,7 @@ function BlockRenderer({ block, event, subEvents }: { block: Block; event: UserE
     }
     case "map":
       return (
-        <div className="overflow-hidden rounded-lg border border-event-border">
+        <div className="overflow-hidden rounded-lg border" style={{ borderColor: "var(--event-border)" }}>
           <iframe
             title="Map"
             src={`https://maps.google.com/maps?q=${encodeURIComponent((data.address as string) || event.address || "")}&output=embed`}
@@ -211,7 +230,7 @@ function BlockRenderer({ block, event, subEvents }: { block: Block; event: UserE
       return (
         <div className="space-y-3">
           {subEvents.map((sub) => (
-            <div key={sub.id} className="rounded-lg border border-event-border p-4">
+            <div key={sub.id} className="event-info-card">
               <h3 className="font-semibold">{sub.name}</h3>
               {sub.date && <p className="text-sm opacity-70">{formatDate(sub.date)}</p>}
               {sub.time && <p className="text-sm opacity-70">{formatTime12(sub.time)}</p>}
@@ -231,7 +250,7 @@ function BlockRenderer({ block, event, subEvents }: { block: Block; event: UserE
       return (
         <div className="space-y-2">
           {(data.items as string[] | undefined)?.map((item, i) => (
-            <div key={i} className="rounded-lg border border-event-border p-3 text-sm">{item}</div>
+            <div key={i} className="rounded-lg border p-3 text-sm" style={{ borderColor: "var(--event-border)" }}>{item}</div>
           ))}
         </div>
       );

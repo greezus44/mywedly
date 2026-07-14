@@ -1,121 +1,172 @@
-import React, { useRef, useEffect, useCallback } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 import { cn } from "../../lib/utils";
 
-export interface RichTextEditorProps {
+interface RichTextEditorProps {
   value: string;
   onChange: (html: string) => void;
   className?: string;
   placeholder?: string;
 }
 
-interface ToolBarAction {
-  cmd?: string;
-  arg?: string;
-  label?: string;
-  title?: string;
-  sep?: boolean;
+function execCommand(command: string, value?: string) {
+  document.execCommand(command, false, value);
 }
 
-const TOOLBAR_ACTIONS: ToolBarAction[] = [
-  { cmd: "bold", label: "B", title: "Bold" },
-  { cmd: "italic", label: "I", title: "Italic" },
-  { cmd: "underline", label: "U", title: "Underline" },
-  { cmd: "strikeThrough", label: "S", title: "Strikethrough" },
-  { sep: true },
-  { cmd: "formatBlock", arg: "H1", label: "H1", title: "Heading 1" },
-  { cmd: "formatBlock", arg: "H2", label: "H2", title: "Heading 2" },
-  { cmd: "formatBlock", arg: "H3", label: "H3", title: "Heading 3" },
-  { cmd: "formatBlock", arg: "P", label: "P", title: "Paragraph" },
-  { sep: true },
-  { cmd: "insertUnorderedList", label: "• List", title: "Bullet list" },
-  { cmd: "insertOrderedList", label: "1. List", title: "Numbered list" },
-  { cmd: "formatBlock", arg: "BLOCKQUOTE", label: "❝", title: "Quote" },
-  { sep: true },
-  { cmd: "createLink", label: "🔗", title: "Insert link", arg: "prompt" },
-  { cmd: "insertImage", label: "🖼", title: "Insert image", arg: "prompt" },
-];
-
-export function RichTextEditor({ value, onChange, className, placeholder }: RichTextEditorProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const lastValue = useRef<string>(value);
+export function RichTextEditor({
+  value,
+  onChange,
+  className,
+  placeholder = "Start typing...",
+}: RichTextEditorProps) {
+  const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (ref.current && lastValue.current !== value && document.activeElement !== ref.current) {
-      ref.current.innerHTML = value || "";
-      lastValue.current = value;
+    if (editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value;
     }
   }, [value]);
 
-  useEffect(() => {
-    if (ref.current && !ref.current.innerHTML && value) {
-      ref.current.innerHTML = value;
-      lastValue.current = value;
+  const handleInput = () => {
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  };
 
-  const exec = useCallback((cmd: string, arg?: string) => {
-    let finalArg: string | undefined = arg;
-    if (arg === "prompt") {
-      if (cmd === "createLink") {
-        const url = window.prompt("Enter URL:");
-        if (!url) return;
-        finalArg = url;
-      } else if (cmd === "insertImage") {
-        const url = window.prompt("Enter image URL:");
-        if (!url) return;
-        finalArg = url;
-      }
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+      e.preventDefault();
+      execCommand("bold");
     }
-    document.execCommand(cmd, false, finalArg);
-    if (ref.current) {
-      lastValue.current = ref.current.innerHTML;
-      onChange(ref.current.innerHTML);
+    if ((e.metaKey || e.ctrlKey) && e.key === "i") {
+      e.preventDefault();
+      execCommand("italic");
     }
-  }, [onChange]);
+    if ((e.metaKey || e.ctrlKey) && e.key === "u") {
+      e.preventDefault();
+      execCommand("underline");
+    }
+  };
 
-  const handleInput = useCallback(() => {
-    if (ref.current) {
-      lastValue.current = ref.current.innerHTML;
-      onChange(ref.current.innerHTML);
-    }
-  }, [onChange]);
+  const toolbarButtons = [
+    { label: "B", command: "bold", className: "font-bold" },
+    { label: "I", command: "italic", className: "italic" },
+    { label: "U", command: "underline", className: "underline" },
+    { label: "S", command: "strikeThrough", className: "line-through" },
+  ];
+
+  const blockButtons = [
+    { label: "H1", command: "formatBlock", value: "H1" },
+    { label: "H2", command: "formatBlock", value: "H2" },
+    { label: "H3", command: "formatBlock", value: "H3" },
+    { label: "P", command: "formatBlock", value: "P" },
+  ];
+
+  const listButtons = [
+    { label: "• List", command: "insertUnorderedList" },
+    { label: "1. List", command: "insertOrderedList" },
+  ];
+
+  const handleLink = () => {
+    const url = window.prompt("Enter URL:");
+    if (url) execCommand("createLink", url);
+  };
+
+  const handleImage = () => {
+    const url = window.prompt("Enter image URL:");
+    if (url) execCommand("insertImage", url);
+  };
 
   return (
-    <div className={cn("flex flex-col rounded-md border border-dash-border bg-dash-surface", className)}>
+    <div className={cn("w-full overflow-hidden rounded-lg border border-dash-border bg-dash-surface", className)}>
       <div className="flex flex-wrap items-center gap-1 border-b border-dash-border bg-dash-bg px-2 py-1.5">
-        {TOOLBAR_ACTIONS.map((action, i) =>
-          action.sep ? (
-            <span key={i} className="mx-1 h-5 w-px bg-dash-border" />
-          ) : (
-            <button
-              key={i}
-              type="button"
-              title={action.title}
-              onClick={() => action.cmd && exec(action.cmd, action.arg)}
-              className="min-w-[28px] rounded px-1.5 py-1 text-sm font-medium text-dash-text hover:bg-dash-surface"
-            >
-              {action.label}
-            </button>
-          )
-        )}
+        {toolbarButtons.map((btn) => (
+          <button
+            key={btn.command}
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              execCommand(btn.command);
+            }}
+            className={cn(
+              "rounded px-2 py-1 text-sm hover:bg-dash-surface",
+              btn.className
+            )}
+          >
+            {btn.label}
+          </button>
+        ))}
+        <div className="mx-1 h-5 w-px bg-dash-border" />
+        {blockButtons.map((btn) => (
+          <button
+            key={btn.label}
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              execCommand(btn.command, btn.value);
+            }}
+            className="rounded px-2 py-1 text-xs font-medium hover:bg-dash-surface"
+          >
+            {btn.label}
+          </button>
+        ))}
+        <div className="mx-1 h-5 w-px bg-dash-border" />
+        {listButtons.map((btn) => (
+          <button
+            key={btn.command}
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              execCommand(btn.command);
+            }}
+            className="rounded px-2 py-1 text-xs hover:bg-dash-surface"
+          >
+            {btn.label}
+          </button>
+        ))}
+        <div className="mx-1 h-5 w-px bg-dash-border" />
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            handleLink();
+          }}
+          className="rounded px-2 py-1 text-xs hover:bg-dash-surface"
+        >
+          Link
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            handleImage();
+          }}
+          className="rounded px-2 py-1 text-xs hover:bg-dash-surface"
+        >
+          Image
+        </button>
+        <button
+          type="button"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            execCommand("formatBlock", "BLOCKQUOTE");
+          }}
+          className="rounded px-2 py-1 text-xs hover:bg-dash-surface"
+        >
+          Quote
+        </button>
       </div>
       <div
-        ref={ref}
+        ref={editorRef}
         contentEditable
-        suppressContentEditableWarning
         onInput={handleInput}
-        onBlur={handleInput}
+        onKeyDown={handleKeyDown}
         data-placeholder={placeholder}
-        className="rich-content min-h-[160px] flex-1 overflow-y-auto scrollbar-thin px-3 py-2 text-sm text-dash-text focus:outline-none"
+        className={cn(
+          "rich-content min-h-[120px] px-4 py-3 outline-none",
+          "empty:before:content-[attr(data-placeholder)] empty:before:text-dash-muted"
+        )}
+        suppressContentEditableWarning
       />
-      <style>{`
-        [contenteditable][data-placeholder]:empty::before {
-          content: attr(data-placeholder);
-          color: var(--dash-muted, #64748b);
-          pointer-events: none;
-        }
-      `}</style>
     </div>
   );
 }

@@ -1,10 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { SubEvent, EventGuest, SubEventGroupAssignment, GuestInvitationOverride } from "./supabase";
+import type {
+  GuestInvitationOverride,
+  SubEventGroupAssignment,
+} from "./supabase";
 
 export interface ResolvedInvitation {
   subEventId: string;
   invited: boolean;
-  source: "group" | "manual" | "none";
+  source: "override" | "group" | "default";
 }
 
 export async function resolveGuestInvitations(
@@ -12,67 +15,72 @@ export async function resolveGuestInvitations(
   guestId: string,
   parentEventId: string
 ): Promise<ResolvedInvitation[]> {
-  // 1. Query all sub-events for this parent event
-  const { data: subEvents, error: subErr } = await supabase
+  // Fetch all sub-events for the parent event
+  const { data: subEvents, error: subEventsError } = await supabase
     .from("sub_events")
     .select("id")
-    .eq("parent_event_id", parentEventId);
+    .eq("parent_event_id", parentEventId)
+    .order("display_order", { ascending: true });
 
-  if (subErr) throw subErr;
-  const subEventIds: string[] = (subEvents ?? []).map((s: { id: string }) => s.id);
+  if (subEventsError) throw subEventsError;
+  if (!subEvents || subEvents.length === 0) return [];
 
-  if (subEventIds.length === 0) return [];
+  const subEventIds = subEvents.map((s) => s.id);
 
-  // 2. Query the guest to get their group_id
-  const { data: guest, error: guestErr } = await supabase
-    .from("event_guests")
-    .select("id, group_id")
-    .eq("id", guestId)
-    .maybeSingle();
-
-  if (guestErr) throw guestErr;
-  const guestGroupId: string | null = (guest as Pick<EventGuest, "id" | "group_id"> | null)?.group_id ?? null;
-
-  // 3. Query all group→sub-event assignments for these sub-events
-  const { data: assignments, error: assignErr } = await supabase
-    .from("sub_event_group_assignments")
-    .select("sub_event_id, group_id")
-    .in("sub_event_id", subEventIds);
-
-  if (assignErr) throw assignErr;
-  const assignmentList = (assignments ?? []) as Pick<SubEventGroupAssignment, "sub_event_id" | "group_id">[];
-  const assignedGroupIdsBySubEvent = new Map<string, Set<string>>();
-  for (const a of assignmentList) {
-    if (!assignedGroupIdsBySubEvent.has(a.sub_event_id)) {
-      assignedGroupIdsBySubEvent.set(a.sub_event_id, new Set());
-    }
-    assignedGroupIdsBySubEvent.get(a.sub_event_id)!.add(a.group_id);
-  }
-
-  // 4. Query manual overrides for this guest + sub-events
-  const { data: overrides, error: overrideErr } = await supabase
+  // Fetch manual overrides for this guest
+  const { data: overrides, error: overrideError } = await supabase
     .from("guest_invitation_overrides")
-    .select("sub_event_id, is_invited")
+    .select("*")
     .eq("guest_id", guestId)
     .in("sub_event_id", subEventIds);
 
-  if (overrideErr) throw overrideErr;
-  const overrideList = (overrides ?? []) as Pick<GuestInvitationOverride, "sub_event_id" | "is_invited">[];
-  const overrideBySubEvent = new Map<string, boolean>();
-  for (const o of overrideList) {
-    overrideBySubEvent.set(o.sub_event_id, o.is_invited);
+  if (overrideError) throw overrideError;
+
+  const overrideMap = new Map<string, GuestInvitationOverride>();
+  for (const o of overrides ?? []) {
+    overrideMap.set((o as GuestInvitationOverride).sub_event_id, o as GuestInvitationOverride);
   }
 
-  // 5. Resolve each sub-event
+  // Fetch group assignments for sub-events that don't have overrides
+  const needsGroupLookup = subEventIds.filter((id) => !overrideMap.has(id));
+
+  // Fetch guest's groups
+  const { data: groupMembers, error: groupMemberError } = await supabase
+    .from("guest_group_members")
+    .select("group_id")
+    .eq("guest_id", guestId);
+
+  if (groupMemberError) throw groupMemberError;
+
+  const guestGroupIds = (groupMembers ?? []).map((g) => (g as { group_id: string }).group_id);
+
+  let groupAssignmentMap = new Map<string, boolean>();
+
+  if (needsGroupLookup.length > 0 && guestGroupIds.length > 0) {
+    const { data: groupAssignments, error: groupAssignError } = await supabase
+      .from("sub_event_group_assignments")
+      .select("*")
+      .in("sub_event_id", needsGroupLookup)
+      .in("group_id", guestGroupIds);
+
+    if (groupAssignError) throw groupAssignError;
+
+    for (const ga of groupAssignments ?? []) {
+      const g = ga as SubEventGroupAssignment;
+      groupAssignmentMap.set(g.sub_event_id, true);
+    }
+  }
+
   const result: ResolvedInvitation[] = subEventIds.map((subEventId) => {
-    if (overrideBySubEvent.has(subEventId)) {
+    const override = overrideMap.get(subEventId);
+    if (override) {
       return {
         subEventId,
-        invited: overrideBySubEvent.get(subEventId)!,
-        source: "manual",
+        invited: override.is_invited,
+        source: "override",
       };
     }
-    if (guestGroupId && assignedGroupIdsBySubEvent.get(subEventId)?.has(guestGroupId)) {
+    if (groupAssignmentMap.has(subEventId)) {
       return {
         subEventId,
         invited: true,
@@ -82,11 +90,10 @@ export async function resolveGuestInvitations(
     return {
       subEventId,
       invited: false,
-      source: "none",
+      source: "default",
     };
   });
 
-  // 6. Return resolved invitations
   return result;
 }
 

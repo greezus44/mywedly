@@ -1,23 +1,56 @@
-import React from "react";
+import { Link } from "react-router-dom";
 import { cn } from "../../lib/utils";
 
-export function SiteHeader({ className }: { className?: string }) {
+interface SiteHeaderProps {
+  className?: string;
+}
+
+export function SiteHeader({ className }: SiteHeaderProps) {
   return (
-    <header className={cn("border-b border-dash-border bg-dash-surface", className)}>
+    <header
+      className={cn(
+        "sticky top-0 z-40 w-full border-b border-dash-border bg-dash-surface/80 backdrop-blur",
+        className
+      )}
+    >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-        <a href="/" className="flex items-center gap-2">
-          <span className="text-xl font-bold text-dash-primary">MyWedly</span>
-        </a>
-        <nav className="flex items-center gap-6 text-sm">
-          <a href="/#features" className="text-dash-muted hover:text-dash-text">Features</a>
-          <a href="/#templates" className="text-dash-muted hover:text-dash-text">Templates</a>
-          <a href="/#pricing" className="text-dash-muted hover:text-dash-text">Pricing</a>
-          <a
-            href="/login"
-            className="rounded-md bg-dash-primary px-4 py-2 font-medium text-dash-primary-fg hover:bg-dash-primary-hover"
+        <Link to="/" className="flex items-center gap-2">
+          <span className="text-xl font-bold tracking-tight text-dash-text">
+            My<span className="text-dash-primary">Wedly</span>
+          </span>
+        </Link>
+
+        <nav className="flex items-center gap-1">
+          <Link
+            to="/features"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text"
+          >
+            Features
+          </Link>
+          <Link
+            to="/templates"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text"
+          >
+            Templates
+          </Link>
+          <Link
+            to="/pricing"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text"
+          >
+            Pricing
+          </Link>
+          <Link
+            to="/login"
+            className="rounded-lg px-3 py-2 text-sm font-medium text-dash-text transition-colors hover:bg-dash-bg"
           >
             Sign in
-          </a>
+          </Link>
+          <Link
+            to="/signup"
+            className="rounded-lg bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg transition-colors hover:bg-dash-primary-hover"
+          >
+            Get started
+          </Link>
         </nav>
       </div>
     </header>

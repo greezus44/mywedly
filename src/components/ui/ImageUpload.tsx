@@ -1,21 +1,21 @@
-import React, { useCallback, useRef, useState } from "react";
+import { useRef, useState, type DragEvent, type ChangeEvent } from "react";
 import { cn } from "../../lib/utils";
-import { uploadImage, removeImage, extractPathFromUrl } from "../../lib/upload";
+import { uploadImage, removeImage } from "../../lib/upload";
 
-export interface ImageUploadProps {
+interface ImageUploadProps {
   value: string | null;
   onChange: (url: string | null) => void;
   eventId: string;
   className?: string;
   label?: string;
-  aspect?: "square" | "wide" | "tall" | "auto";
+  aspect?: "square" | "16/9" | "4/3" | "3/2";
 }
 
-const ASPECT_CLASS: Record<NonNullable<ImageUploadProps["aspect"]>, string> = {
+const aspectClasses: Record<NonNullable<ImageUploadProps["aspect"]>, string> = {
   square: "aspect-square",
-  wide: "aspect-video",
-  tall: "aspect-[3/4]",
-  auto: "aspect-auto min-h-[120px]",
+  "16/9": "aspect-video",
+  "4/3": "aspect-[4/3]",
+  "3/2": "aspect-[3/2]",
 };
 
 export function ImageUpload({
@@ -24,137 +24,169 @@ export function ImageUpload({
   eventId,
   className,
   label,
-  aspect = "wide",
+  aspect = "16/9",
 }: ImageUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFile = useCallback(
-    async (file: File) => {
-      if (!file.type.startsWith("image/")) {
-        setError("Please select an image file.");
-        return;
-      }
-      setError(null);
-      setUploading(true);
-      try {
-        const url = await uploadImage(file, eventId);
-        if (value) {
-          const oldPath = extractPathFromUrl(value);
-          if (oldPath) {
-            try {
-              await removeImage(value);
-            } catch {
-              /* ignore */
-            }
-          }
-        }
-        onChange(url);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Upload failed");
-      } finally {
-        setUploading(false);
-      }
-    },
-    [eventId, onChange, value]
-  );
+  const handleFile = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setError("Please select an image file");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const url = await uploadImage(file, eventId);
+      onChange(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const onDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      setDragging(false);
-      const file = e.dataTransfer.files?.[0];
-      if (file) handleFile(file);
-    },
-    [handleFile]
-  );
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  };
 
-  const onRemove = useCallback(async () => {
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragging(false);
+  };
+
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+  };
+
+  const handleRemove = async () => {
     if (value) {
-      const path = extractPathFromUrl(value);
-      if (path) {
-        try {
-          await removeImage(value);
-        } catch {
-          /* ignore */
-        }
+      try {
+        await removeImage(value);
+      } catch {
+        // ignore removal errors
       }
     }
     onChange(null);
-  }, [onChange, value]);
+    if (inputRef.current) inputRef.current.value = "";
+  };
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
-      {label && <span className="text-sm font-medium text-dash-text">{label}</span>}
+    <div className={cn("w-full", className)}>
+      {label && (
+        <label className="mb-1.5 block text-sm font-medium text-dash-text">
+          {label}
+        </label>
+      )}
       <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
         onClick={() => inputRef.current?.click()}
         className={cn(
-          "relative flex cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 border-dashed bg-dash-bg transition-colors",
-          dragging ? "border-dash-primary bg-dash-primary/5" : "border-dash-border hover:border-dash-primary/50",
-          ASPECT_CLASS[aspect]
+          "relative cursor-pointer overflow-hidden rounded-xl border-2 border-dashed transition-colors",
+          dragging
+            ? "border-dash-primary bg-dash-bg"
+            : "border-dash-border hover:border-dash-primary",
+          aspectClasses[aspect]
         )}
       >
         {value ? (
           <>
-            <img src={value} alt="Upload preview" className="h-full w-full object-cover" />
-            {uploading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                <svg className="animate-spin h-6 w-6 text-white" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                </svg>
-              </div>
-            )}
+            <img
+              src={value}
+              alt="Uploaded"
+              className="h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity hover:opacity-100">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  inputRef.current?.click();
+                }}
+                className="rounded-lg bg-white/90 px-3 py-1.5 text-xs font-medium text-dash-text hover:bg-white"
+              >
+                Replace
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemove();
+                }}
+                className="rounded-lg bg-red-500/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
+              >
+                Remove
+              </button>
+            </div>
           </>
         ) : (
-          <div className="flex flex-col items-center gap-2 p-6 text-center">
-            {uploading ? (
-              <svg className="animate-spin h-6 w-6 text-dash-primary" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-              </svg>
+          <div className="flex h-full w-full flex-col items-center justify-center text-dash-muted">
+            {loading ? (
+              <div className="flex flex-col items-center gap-2">
+                <svg
+                  className="h-8 w-8 animate-spin text-dash-primary"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+                <span className="text-xs">Uploading...</span>
+              </div>
             ) : (
-              <svg className="h-8 w-8 text-dash-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-              </svg>
+              <>
+                <svg
+                  className="mb-2 h-8 w-8"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+                <span className="text-xs font-medium">
+                  Click or drag to upload
+                </span>
+              </>
             )}
-            <p className="text-sm text-dash-muted">
-              {uploading ? "Uploading…" : "Drag & drop or click to upload"}
-            </p>
           </div>
         )}
       </div>
-      {error && <p className="text-xs text-dash-danger">{error}</p>}
-      {value && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          className="self-start text-xs text-dash-danger hover:underline"
-        >
-          Remove image
-        </button>
-      )}
+      {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
       <input
         ref={inputRef}
         type="file"
         accept="image/*"
+        onChange={handleChange}
         className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
-          e.target.value = "";
-        }}
       />
     </div>
   );

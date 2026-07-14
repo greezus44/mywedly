@@ -1,47 +1,44 @@
-import React, { useState, useRef, useEffect } from "react";
-import { cn, to12Hour, to24Hour, roundTo5Min } from "../../lib/utils";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { cn, to12Hour, to24Hour } from "../../lib/utils";
 
-export interface TimePickerProps {
+interface TimePickerProps {
   value: string | null;
-  onChange: (time: string | null) => void;
+  onChange: (time24: string | null) => void;
   label?: string;
   className?: string;
 }
 
-const HOURS_12 = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
-
-function parseTime(time: string | null): { hour: number; minute: number; period: "AM" | "PM" } | null {
-  if (!time) return null;
-  const [hStr, mStr] = time.split(":");
-  const h = parseInt(hStr, 10);
-  const m = parseInt(mStr, 10);
-  if (isNaN(h) || isNaN(m)) return null;
-  const period = h >= 12 ? "PM" : "AM";
-  const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return { hour: hour12, minute: m, period };
-}
+const HOURS = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
 
 export function TimePicker({ value, onChange, label, className }: TimePickerProps) {
-  const initial = parseTime(value);
   const [open, setOpen] = useState(false);
-  const [hour, setHour] = useState<number>(initial?.hour ?? 12);
-  const [minute, setMinute] = useState<number>(initial?.minute ?? 0);
-  const [period, setPeriod] = useState<"AM" | "PM">(initial?.period ?? "AM");
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const p = parseTime(value);
-    if (p) {
-      setHour(p.hour);
-      setMinute(p.minute);
-      setPeriod(p.period);
-    }
+  const parsed = useMemo(() => {
+    if (!value) return null;
+    const [h, m] = value.split(":").map((n) => parseInt(n, 10));
+    if (isNaN(h) || isNaN(m)) return null;
+    const period: "AM" | "PM" = h >= 12 ? "PM" : "AM";
+    const displayHour = h % 12 === 0 ? 12 : h % 12;
+    return { hour: displayHour, minute: Math.round(m / 5) * 5 % 60, period };
   }, [value]);
+
+  const [selHour, setSelHour] = useState<number>(parsed?.hour ?? 12);
+  const [selMinute, setSelMinute] = useState<number>(parsed?.minute ?? 0);
+  const [selPeriod, setSelPeriod] = useState<"AM" | "PM">(parsed?.period ?? "AM");
+
+  useEffect(() => {
+    if (parsed) {
+      setSelHour(parsed.hour);
+      setSelMinute(parsed.minute);
+      setSelPeriod(parsed.period);
+    }
+  }, [parsed]);
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
+    const handler = (e: globalThis.MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
@@ -50,93 +47,121 @@ export function TimePicker({ value, onChange, label, className }: TimePickerProp
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const commit = (h: number, m: number, p: "AM" | "PM") => {
-    let hour24 = h;
-    if (p === "AM" && h === 12) hour24 = 0;
-    if (p === "PM" && h !== 12) hour24 = h + 12;
-    const rounded = roundTo5Min(`${hour24.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`);
-    onChange(rounded);
+  const handleConfirm = () => {
+    const h12 = selHour === 12 ? 0 : selHour;
+    const h24 = selPeriod === "PM" ? h12 + 12 : h12;
+    const time24 = `${String(h24).padStart(2, "0")}:${String(selMinute).padStart(2, "0")}`;
+    onChange(time24);
+    setOpen(false);
   };
 
-  const display = value ? to12Hour(value) : "Select time";
+  const handleClear = () => {
+    onChange(null);
+    setOpen(false);
+  };
 
   return (
-    <div ref={containerRef} className={cn("relative flex flex-col gap-1", className)}>
-      {label && <span className="text-sm font-medium text-dash-text">{label}</span>}
+    <div ref={containerRef} className={cn("relative w-full", className)}>
+      {label && (
+        <label className="mb-1.5 block text-sm font-medium text-dash-text">
+          {label}
+        </label>
+      )}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-left text-sm text-dash-text hover:border-dash-primary/50"
+        className="flex w-full items-center justify-between rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text hover:border-dash-primary"
       >
-        {display}
+        <span className={cn(!value && "text-dash-muted")}>
+          {value ? to12Hour(value) : "Select a time"}
+        </span>
+        <svg className="h-4 w-4 text-dash-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
       </button>
       {open && (
-        <div className="absolute z-30 mt-1 flex gap-3 rounded-lg border border-dash-border bg-dash-surface p-3 shadow-lg">
-          <div className="flex max-h-48 flex-col gap-0.5 overflow-y-auto scrollbar-thin">
-            {HOURS_12.map((h) => (
-              <button
-                key={h}
-                type="button"
-                onClick={() => {
-                  setHour(h);
-                  commit(h, minute, period);
-                }}
-                className={cn(
-                  "rounded px-3 py-1 text-sm hover:bg-dash-primary/10",
-                  hour === h && "bg-dash-primary text-dash-primary-fg hover:bg-dash-primary"
-                )}
-              >
-                {h}
-              </button>
-            ))}
+        <div className="absolute z-50 mt-1 w-64 rounded-lg border border-dash-border bg-dash-surface p-3 shadow-lg">
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <p className="mb-1 text-xs font-medium text-dash-muted">Hour</p>
+              <div className="max-h-32 overflow-y-auto rounded-lg border border-dash-border scrollbar-thin">
+                {HOURS.map((h) => (
+                  <button
+                    key={h}
+                    type="button"
+                    onClick={() => setSelHour(h)}
+                    className={cn(
+                      "block w-full px-2 py-1 text-sm transition-colors",
+                      selHour === h
+                        ? "bg-dash-primary text-dash-primary-fg"
+                        : "text-dash-text hover:bg-dash-bg"
+                    )}
+                  >
+                    {h}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="mb-1 text-xs font-medium text-dash-muted">Min</p>
+              <div className="max-h-32 overflow-y-auto rounded-lg border border-dash-border scrollbar-thin">
+                {MINUTES.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setSelMinute(m)}
+                    className={cn(
+                      "block w-full px-2 py-1 text-sm transition-colors",
+                      selMinute === m
+                        ? "bg-dash-primary text-dash-primary-fg"
+                        : "text-dash-text hover:bg-dash-bg"
+                    )}
+                  >
+                    {String(m).padStart(2, "0")}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="w-14">
+              <p className="mb-1 text-xs font-medium text-dash-muted">AM/PM</p>
+              <div className="rounded-lg border border-dash-border">
+                {(["AM", "PM"] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setSelPeriod(p)}
+                    className={cn(
+                      "block w-full px-2 py-1 text-sm transition-colors",
+                      selPeriod === p
+                        ? "bg-dash-primary text-dash-primary-fg"
+                        : "text-dash-text hover:bg-dash-bg"
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-          <div className="flex max-h-48 flex-col gap-0.5 overflow-y-auto scrollbar-thin">
-            {MINUTES.map((m) => (
+          <div className="mt-3 flex items-center justify-between gap-2">
+            {value && (
               <button
-                key={m}
                 type="button"
-                onClick={() => {
-                  setMinute(m);
-                  commit(hour, m, period);
-                }}
-                className={cn(
-                  "rounded px-3 py-1 text-sm hover:bg-dash-primary/10",
-                  minute === m && "bg-dash-primary text-dash-primary-fg hover:bg-dash-primary"
-                )}
+                onClick={handleClear}
+                className="rounded-lg px-2 py-1.5 text-xs text-dash-muted hover:bg-dash-bg"
               >
-                {m.toString().padStart(2, "0")}
+                Clear
               </button>
-            ))}
-          </div>
-          <div className="flex flex-col gap-1">
-            {(["AM", "PM"] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => {
-                  setPeriod(p);
-                  commit(hour, minute, p);
-                }}
-                className={cn(
-                  "rounded px-3 py-1 text-sm hover:bg-dash-primary/10",
-                  period === p && "bg-dash-primary text-dash-primary-fg hover:bg-dash-primary"
-                )}
-              >
-                {p}
-              </button>
-            ))}
+            )}
+            <button
+              type="button"
+              onClick={handleConfirm}
+              className="ml-auto rounded-lg bg-dash-primary px-3 py-1.5 text-xs font-medium text-dash-primary-fg hover:bg-dash-primary-hover"
+            >
+              Confirm
+            </button>
           </div>
         </div>
-      )}
-      {value && (
-        <button
-          type="button"
-          onClick={() => onChange(null)}
-          className="absolute right-8 top-8 text-xs text-dash-muted hover:text-dash-text"
-          aria-label="Clear time"
-        >
-          ✕
-        </button>
       )}
     </div>
   );

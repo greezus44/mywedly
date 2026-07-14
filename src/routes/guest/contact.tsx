@@ -5,56 +5,62 @@ export default function GuestContact() {
   const { event } = useGuestOutletContext();
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Contact</h1>
+    <div>
+      <section className="guest-section-tight text-center">
+        <p className="guest-eyebrow">Contact</p>
+        <h1 className="guest-title">Find Your Way</h1>
+        <p className="guest-subtitle mx-auto">Venue details and directions for the celebration.</p>
+      </section>
 
-      <div className="event-card space-y-3">
-        {event.venue && (
-          <div>
-            <p className="text-sm font-medium opacity-70">Venue</p>
-            <p className="text-lg">{event.venue}</p>
-          </div>
-        )}
-        {event.address && (
-          <div>
-            <p className="text-sm font-medium opacity-70">Address</p>
-            <p className="text-lg">{event.address}</p>
-          </div>
-        )}
-        {event.event_date && (
-          <div>
-            <p className="text-sm font-medium opacity-70">Date</p>
-            <p className="text-lg">{formatDate(event.event_date)}</p>
-          </div>
-        )}
-        {event.event_time && (
-          <div>
-            <p className="text-sm font-medium opacity-70">Time</p>
-            <p className="text-lg">{formatTime12(event.event_time)}</p>
-          </div>
-        )}
-        {event.address && (
-          <a
-            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="event-btn-secondary inline-block"
-          >
-            Open in Google Maps
-          </a>
-        )}
-      </div>
-
-      {event.address && (
-        <div className="overflow-hidden rounded-lg border border-event-border">
-          <iframe
-            title="Map"
-            src={`https://maps.google.com/maps?q=${encodeURIComponent(event.address)}&output=embed`}
-            className="h-64 w-full"
-            loading="lazy"
-          />
+      <section className="guest-section-tight">
+        <div className="event-card mx-auto max-w-lg space-y-5">
+          {event.venue && (
+            <div>
+              <p className="guest-eyebrow">Venue</p>
+              <p className="text-lg font-medium">{event.venue}</p>
+            </div>
+          )}
+          {event.address && (
+            <div>
+              <p className="guest-eyebrow">Address</p>
+              <p className="text-base leading-relaxed">{event.address}</p>
+            </div>
+          )}
+          {event.event_date && (
+            <div>
+              <p className="guest-eyebrow">Date</p>
+              <p className="text-base">{formatDate(event.event_date)}</p>
+            </div>
+          )}
+          {event.event_time && (
+            <div>
+              <p className="guest-eyebrow">Time</p>
+              <p className="text-base">{formatTime12(event.event_time)}</p>
+            </div>
+          )}
+          {event.address && (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.address)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="event-btn-secondary inline-block"
+            >
+              Open in Google Maps
+            </a>
+          )}
         </div>
-      )}
+
+        {event.address && (
+          <div className="mx-auto mt-6 max-w-lg overflow-hidden rounded-2xl border" style={{ borderColor: "var(--event-border)" }}>
+            <iframe
+              title="Map"
+              src={`https://maps.google.com/maps?q=${encodeURIComponent(event.address)}&output=embed`}
+              className="h-72 w-full"
+              loading="lazy"
+            />
+          </div>
+        )}
+      </section>
     </div>
   );
 }

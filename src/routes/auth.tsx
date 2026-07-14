@@ -1,12 +1,11 @@
-import React, { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui";
+import { Input } from "../components/ui/Input";
 import { LoadingSpinner } from "../components/ui";
-import { cn } from "../lib/utils";
 
-export default function AuthPage() {
+export default function Auth() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -14,28 +13,25 @@ export default function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
     try {
       if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({ email, password });
+        const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        if (data.user && data.session) {
-          navigate("/dashboard");
-        } else {
-          setError("Check your email to confirm your account.");
-        }
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
         if (error) throw error;
-        if (data.session) {
-          navigate("/dashboard");
-        }
       }
+      navigate("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed.");
+      setError(err instanceof Error ? err.message : "Authentication failed");
     } finally {
       setLoading(false);
     }
@@ -44,50 +40,50 @@ export default function AuthPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
       <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <Link to="/" className="text-2xl font-bold text-dash-primary">
-            MyWedly
+        <div className="mb-8 text-center">
+          <Link to="/" className="inline-block">
+            <span className="text-2xl font-bold tracking-tight text-dash-text">
+              My<span className="text-dash-primary">Wedly</span>
+            </span>
           </Link>
         </div>
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-8 shadow-sm">
-          <h1 className="text-2xl font-bold text-dash-text">
-            {mode === "signin" ? "Welcome back" : "Create your account"}
-          </h1>
-          <p className="mt-1 text-sm text-dash-muted">
-            {mode === "signin"
-              ? "Sign in to manage your invitation websites."
-              : "Sign up to start building your event website."}
-          </p>
 
-          {/* Toggle */}
-          <div className="mt-6 inline-flex w-full rounded-md border border-dash-border bg-dash-bg p-0.5 text-sm">
+        <div className="rounded-xl border border-dash-border bg-dash-surface p-8 shadow-sm">
+          <div className="mb-6 flex rounded-lg border border-dash-border bg-dash-bg p-1">
             <button
               type="button"
               onClick={() => setMode("signin")}
-              className={cn(
-                "flex-1 rounded px-3 py-1.5 font-medium transition-colors",
+              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
                 mode === "signin"
-                  ? "bg-dash-primary text-dash-primary-fg"
+                  ? "bg-dash-surface text-dash-text shadow-sm"
                   : "text-dash-muted hover:text-dash-text"
-              )}
+              }`}
             >
-              Sign In
+              Sign in
             </button>
             <button
               type="button"
               onClick={() => setMode("signup")}
-              className={cn(
-                "flex-1 rounded px-3 py-1.5 font-medium transition-colors",
+              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
                 mode === "signup"
-                  ? "bg-dash-primary text-dash-primary-fg"
+                  ? "bg-dash-surface text-dash-text shadow-sm"
                   : "text-dash-muted hover:text-dash-text"
-              )}
+              }`}
             >
-              Sign Up
+              Sign up
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
+          <h1 className="mb-2 text-xl font-semibold text-dash-text">
+            {mode === "signin" ? "Welcome back" : "Create your account"}
+          </h1>
+          <p className="mb-6 text-sm text-dash-muted">
+            {mode === "signin"
+              ? "Sign in to manage your invitation websites."
+              : "Sign up to create your first invitation website."}
+          </p>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
             <Input
               label="Email"
               type="email"
@@ -104,23 +100,49 @@ export default function AuthPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              autoComplete={
+                mode === "signin" ? "current-password" : "new-password"
+              }
               minLength={6}
             />
+
             {error && (
-              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-dash-danger">{error}</p>
+              <div className="rounded-lg border border-dash-danger/30 bg-red-50 px-4 py-3 text-sm text-dash-danger">
+                {error}
+              </div>
             )}
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? <LoadingSpinner /> : mode === "signin" ? "Sign In" : "Sign Up"}
+
+            <Button type="submit" className="w-full" loading={loading}>
+              {loading ? (
+                <LoadingSpinner size="sm" />
+              ) : mode === "signin" ? (
+                "Sign in"
+              ) : (
+                "Sign up"
+              )}
             </Button>
           </form>
 
-          <p className="mt-4 text-center text-xs text-dash-muted">
-            <Link to="/" className="hover:text-dash-text">
-              ← Back to home
-            </Link>
+          <p className="mt-6 text-center text-sm text-dash-muted">
+            {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === "signin" ? "signup" : "signin");
+                setError(null);
+              }}
+              className="font-medium text-dash-primary hover:underline"
+            >
+              {mode === "signin" ? "Sign up" : "Sign in"}
+            </button>
           </p>
         </div>
+
+        <p className="mt-6 text-center text-xs text-dash-muted">
+          <Link to="/" className="hover:text-dash-text">
+            ← Back to home
+          </Link>
+        </p>
       </div>
     </div>
   );

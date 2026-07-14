@@ -1,139 +1,187 @@
-import React, { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "../../lib/supabase";
+import { useState, useEffect } from "react";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { supabase, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { LoginPreview } from "../../components/preview/PreviewRenderers";
-import { Input, Textarea, Toggle } from "../../components/ui";
+import { Input } from "../../components/ui/Input";
 import { Button } from "../../components/ui/Button";
+import { Toggle, LoadingSpinner } from "../../components/ui";
 
-type LoginConfig = {
+interface LoginConfig {
+  mode?: "open" | "password";
+  password?: string;
   heading?: string;
-  body?: string;
-  buttonLabel?: string;
-  fields?: ("name" | "code")[];
-  requirePassword?: boolean;
-};
-
-function parseConfig(json: unknown): LoginConfig {
-  if (!json || typeof json !== "object") return {};
-  return (json as Record<string, unknown>) as LoginConfig;
+  subheading?: string;
+  placeholder?: string;
+  buttonText?: string;
 }
 
 export default function LoginEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const existing = parseConfig(event.draft_login_config ?? event.login_config);
-  const [heading, setHeading] = useState(existing.heading ?? "Welcome");
-  const [body, setBody] = useState(existing.body ?? "Please enter your name to continue.");
-  const [buttonLabel, setButtonLabel] = useState(existing.buttonLabel ?? "Enter");
-  const [requireName, setRequireName] = useState(
-    existing.fields?.includes("name") ?? true
-  );
-  const [requireCode, setRequireCode] = useState(
-    existing.fields?.includes("code") ?? false
-  );
-  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [config, setConfig] = useState<LoginConfig>(() => {
+    const raw = (event.draft_login_config ?? event.login_config ?? {}) as LoginConfig;
+    return {
+      mode: raw.mode ?? "open",
+      password: raw.password ?? "",
+      heading: raw.heading ?? "Welcome",
+      subheading: raw.subheading ?? "Please enter your name to continue",
+      placeholder: raw.placeholder ?? "Your full name",
+      buttonText: raw.buttonText ?? "Enter",
+    };
+  });
+
+  useEffect(() => {
+    const raw = (event.draft_login_config ?? event.login_config ?? {}) as LoginConfig;
+    setConfig({
+      mode: raw.mode ?? "open",
+      password: raw.password ?? "",
+      heading: raw.heading ?? "Welcome",
+      subheading: raw.subheading ?? "Please enter your name to continue",
+      placeholder: raw.placeholder ?? "Your full name",
+      buttonText: raw.buttonText ?? "Enter",
+    });
+  }, [event]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const fields: ("name" | "code")[] = [];
-      if (requireName) fields.push("name");
-      if (requireCode) fields.push("code");
-      const config: LoginConfig = { heading, body, buttonLabel, fields };
       const { error } = await supabase
         .from("user_events")
         .update({
-          draft_login_config: config,
-          updated_at: new Date().toISOString(),
+          draft_login_config: config as unknown as Json,
         })
         .eq("id", eventId);
+
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSavedMsg("Saved successfully!");
-      setTimeout(() => setSavedMsg(null), 3000);
+      queryClient.invalidateQueries({ queryKey: ["user_events", eventId] });
     },
   });
 
   const previewEvent = {
     ...event,
-    login_config: {
-      heading,
-      body,
-      buttonLabel,
-      fields: [
-        ...(requireName ? ["name"] : []),
-        ...(requireCode ? ["code"] : []),
-      ] as ("name" | "code")[],
-    },
+    login_config: config as unknown as Json,
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-dash-text">Login Editor</h1>
-          <p className="text-sm text-dash-muted">Customize how guests log in to your website.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          {savedMsg && <span className="text-sm text-green-600">{savedMsg}</span>}
+    <SplitEditor
+      editor={
+        <div className="space-y-6">
+          <div>
+            <h2 className="mb-1 text-lg font-semibold text-dash-text">Login Editor</h2>
+            <p className="text-sm text-dash-muted">
+              Configure how guests access your website.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-4">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="mode"
+                  value="open"
+                  checked={config.mode === "open"}
+                  onChange={() => setConfig((c) => ({ ...c, mode: "open" }))}
+                  className="accent-dash-primary"
+                />
+                <span className="text-sm font-medium text-dash-text">Open Access</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="radio"
+                  name="mode"
+                  value="password"
+                  checked={config.mode === "password"}
+                  onChange={() => setConfig((c) => ({ ...c, mode: "password" }))}
+                  className="accent-dash-primary"
+                />
+                <span className="text-sm font-medium text-dash-text">Password Protected</span>
+              </label>
+            </div>
+            <p className="text-xs text-dash-muted">
+              {config.mode === "open"
+                ? "Guests can access the website freely."
+                : "Guests must enter a password to view the website."}
+            </p>
+          </div>
+
+          {config.mode === "password" && (
+            <Input
+              label="Password"
+              type="text"
+              value={config.password ?? ""}
+              onChange={(e) =>
+                setConfig((c) => ({ ...c, password: e.target.value }))
+              }
+              placeholder="Enter a password"
+            />
+          )}
+
+          <Input
+            label="Heading"
+            value={config.heading ?? ""}
+            onChange={(e) =>
+              setConfig((c) => ({ ...c, heading: e.target.value }))
+            }
+            placeholder="Welcome"
+          />
+
+          <Input
+            label="Subheading"
+            value={config.subheading ?? ""}
+            onChange={(e) =>
+              setConfig((c) => ({ ...c, subheading: e.target.value }))
+            }
+            placeholder="Please enter your name to continue"
+          />
+
+          <Input
+            label="Input Placeholder"
+            value={config.placeholder ?? ""}
+            onChange={(e) =>
+              setConfig((c) => ({ ...c, placeholder: e.target.value }))
+            }
+            placeholder="Your full name"
+          />
+
+          <Input
+            label="Button Text"
+            value={config.buttonText ?? ""}
+            onChange={(e) =>
+              setConfig((c) => ({ ...c, buttonText: e.target.value }))
+            }
+            placeholder="Enter"
+          />
+
+          {saveMutation.isError && (
+            <p className="text-sm text-dash-danger">
+              {saveMutation.error instanceof Error
+                ? saveMutation.error.message
+                : "Failed to save"}
+            </p>
+          )}
+          {saveMutation.isSuccess && (
+            <p className="text-sm text-green-600">Changes saved successfully!</p>
+          )}
+
           <Button
-            loading={saveMutation.isPending}
             onClick={() => saveMutation.mutate()}
+            loading={saveMutation.isPending}
+            className="w-full"
           >
-            Save Changes
+            {saveMutation.isPending ? <LoadingSpinner size="sm" /> : "Save Changes"}
           </Button>
         </div>
-      </div>
-
-      {saveMutation.isError && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-dash-danger">
-          {saveMutation.error?.message}
-        </p>
-      )}
-
-      <SplitEditor
-        editor={
-          <div className="flex flex-col gap-4">
-            <Input
-              label="Heading"
-              value={heading}
-              onChange={(e) => setHeading(e.target.value)}
-              placeholder="Welcome"
-            />
-            <Textarea
-              label="Body Text"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="Please enter your name to continue."
-            />
-            <Input
-              label="Button Label"
-              value={buttonLabel}
-              onChange={(e) => setButtonLabel(e.target.value)}
-              placeholder="Enter"
-            />
-
-            <div className="flex flex-col gap-3 rounded-md border border-dash-border bg-dash-bg p-4">
-              <h3 className="text-sm font-semibold text-dash-text">Login Fields</h3>
-              <Toggle
-                checked={requireName}
-                onChange={setRequireName}
-                label="Require guest name"
-              />
-              <Toggle
-                checked={requireCode}
-                onChange={setRequireCode}
-                label="Require access code"
-              />
-            </div>
-          </div>
-        }
-        preview={<LoginPreview event={previewEvent} />}
-      />
-    </div>
+      }
+      preview={
+        <div className="p-4">
+          <LoginPreview event={previewEvent} className="rounded-lg" />
+        </div>
+      }
+    />
   );
 }

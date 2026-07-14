@@ -1,89 +1,112 @@
-import React, { forwardRef } from "react";
+import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cn } from "../../lib/utils";
 
-const baseField =
-  "w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted focus:outline-none focus:ring-2 focus:ring-dash-primary/40 focus:border-dash-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
+const baseFieldClasses =
+  "w-full rounded-lg border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted transition-colors focus:outline-none focus:ring-2 focus:ring-dash-primary focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed";
 
-export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ className, label, error, id, ...props }, ref) => {
-    const inputId = id || props.name || React.useId();
+    const inputId = id ?? props.name;
     return (
-      <div className="flex flex-col gap-1">
+      <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium text-dash-text">
+          <label
+            htmlFor={inputId}
+            className="mb-1.5 block text-sm font-medium text-dash-text"
+          >
             {label}
           </label>
         )}
         <input
           ref={ref}
           id={inputId}
-          className={cn(baseField, error && "border-dash-danger focus:ring-dash-danger/40", className)}
+          className={cn(
+            baseFieldClasses,
+            error ? "border-dash-danger" : "border-dash-border",
+            className
+          )}
           {...props}
         />
-        {error && <span className="text-xs text-dash-danger">{error}</span>}
+        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
       </div>
     );
   }
 );
 Input.displayName = "Input";
 
-export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   error?: string;
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, label, error, id, ...props }, ref) => {
-    const inputId = id || props.name || React.useId();
+    const textareaId = id ?? props.name;
     return (
-      <div className="flex flex-col gap-1">
+      <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium text-dash-text">
+          <label
+            htmlFor={textareaId}
+            className="mb-1.5 block text-sm font-medium text-dash-text"
+          >
             {label}
           </label>
         )}
         <textarea
           ref={ref}
-          id={inputId}
-          className={cn(baseField, "min-h-[80px] resize-y", error && "border-dash-danger focus:ring-dash-danger/40", className)}
+          id={textareaId}
+          className={cn(
+            baseFieldClasses,
+            "resize-y min-h-[80px]",
+            error ? "border-dash-danger" : "border-dash-border",
+            className
+          )}
           {...props}
         />
-        {error && <span className="text-xs text-dash-danger">{error}</span>}
+        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
       </div>
     );
   }
 );
 Textarea.displayName = "Textarea";
 
-export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   error?: string;
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, label, error, id, children, ...props }, ref) => {
-    const inputId = id || props.name || React.useId();
+    const selectId = id ?? props.name;
     return (
-      <div className="flex flex-col gap-1">
+      <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="text-sm font-medium text-dash-text">
+          <label
+            htmlFor={selectId}
+            className="mb-1.5 block text-sm font-medium text-dash-text"
+          >
             {label}
           </label>
         )}
         <select
           ref={ref}
-          id={inputId}
-          className={cn(baseField, "cursor-pointer", error && "border-dash-danger focus:ring-dash-danger/40", className)}
+          id={selectId}
+          className={cn(
+            baseFieldClasses,
+            "cursor-pointer",
+            error ? "border-dash-danger" : "border-dash-border",
+            className
+          )}
           {...props}
         >
           {children}
         </select>
-        {error && <span className="text-xs text-dash-danger">{error}</span>}
+        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
       </div>
     );
   }

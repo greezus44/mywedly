@@ -19,7 +19,6 @@ export default function GuestRsvp() {
   const [forms, setForms] = useState<Record<string, RsvpFormState>>({});
   const [savedEvents, setSavedEvents] = useState<Set<string>>(new Set());
 
-  // Only fetch sub-events the guest is invited to
   const { data: subEvents, isLoading } = useQuery({
     queryKey: ["guest-rsvp-sub-events", event.id, invitedSubEventIds],
     queryFn: async () => {
@@ -35,7 +34,6 @@ export default function GuestRsvp() {
     enabled: invitedSubEventIds.length > 0,
   });
 
-  // Fetch existing RSVPs for this guest
   const { data: existingRsvps } = useQuery({
     queryKey: ["guest-rsvps", event.id, guestId],
     queryFn: async () => {
@@ -94,102 +92,122 @@ export default function GuestRsvp() {
   };
 
   if (isLoading) {
-    return <div className="flex justify-center py-8"><div className="h-8 w-8 animate-spin rounded-full border-2 border-event-primary border-t-transparent" /></div>;
-  }
-
-  if (!subEvents || subEvents.length === 0) {
     return (
-      <div className="event-card text-center">
-        <h2 className="mb-2 text-2xl font-bold">RSVP</h2>
-        <p className="opacity-70">There are no events requiring your RSVP at this time.</p>
+      <div className="flex justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-event-primary border-t-transparent" />
       </div>
     );
   }
 
+  if (!subEvents || subEvents.length === 0) {
+    return (
+      <section className="guest-section text-center">
+        <p className="guest-eyebrow">RSVP</p>
+        <h1 className="guest-title">No Events to RSVP</h1>
+        <p className="guest-subtitle mx-auto">There are no events requiring your RSVP at this time.</p>
+      </section>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">RSVP</h1>
-      {subEvents.map((sub) => {
-        const closed = isRsvpClosed(sub.rsvp_deadline);
-        const form = getForm(sub.id);
-        const saved = savedEvents.has(sub.id);
-        return (
-          <div key={sub.id} className="event-card">
-            <h2 className="text-xl font-bold">{sub.name}</h2>
-            {sub.date && <p className="text-sm opacity-70">{formatDate(sub.date)}</p>}
-            {sub.time && <p className="text-sm opacity-70">{formatTime12(sub.time)}</p>}
-            {sub.venue && <p className="text-sm opacity-70">{sub.venue}</p>}
-            {closed ? (
-              <p className="mt-4 text-sm text-red-600">RSVP for this event has closed.</p>
-            ) : (
-              <div className="mt-4 space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium">Will you attend?</label>
-                  <div className="flex gap-2">
-                    {(["attending", "not_attending"] as const).map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setForm(sub.id, { status: s })}
-                        className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
-                          form.status === s
-                            ? "border-event-primary bg-event-primary text-event-primary-fg"
-                            : "border-event-border opacity-70 hover:opacity-100"
-                        }`}
-                      >
-                        {s === "attending" ? "Will Attend" : "Cannot Attend"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {form.status === "attending" && (
-                  <>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium">Plus Ones</label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={10}
-                        value={form.plus_ones}
-                        onChange={(e) => setForm(sub.id, { plus_ones: parseInt(e.target.value) || 0 })}
-                        className="event-input"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium">Dietary Requirements</label>
-                      <input
-                        type="text"
-                        value={form.dietary}
-                        onChange={(e) => setForm(sub.id, { dietary: e.target.value })}
-                        className="event-input"
-                        placeholder="Any allergies or preferences?"
-                      />
-                    </div>
-                  </>
-                )}
-                <div>
-                  <label className="mb-1 block text-sm font-medium">Message (optional)</label>
-                  <textarea
-                    value={form.message}
-                    onChange={(e) => setForm(sub.id, { message: e.target.value })}
-                    className="event-input"
-                    rows={3}
-                    placeholder="Leave a message for the host..."
-                  />
-                </div>
-                <button
-                  onClick={() => submitRsvp.mutate({ subEventId: sub.id, form })}
-                  disabled={form.status === "pending" || submitRsvp.isPending}
-                  className="event-btn-primary disabled:opacity-50"
-                >
-                  {submitRsvp.isPending ? "Saving..." : "Submit RSVP"}
-                </button>
-                {saved && <p className="text-sm text-green-600">RSVP saved successfully!</p>}
-                {submitRsvp.isError && <p className="text-sm text-red-600">Failed to save. Please try again.</p>}
+    <div>
+      <section className="guest-section-tight text-center">
+        <p className="guest-eyebrow">RSVP</p>
+        <h1 className="guest-title">Will You Join Us?</h1>
+        <p className="guest-subtitle mx-auto">Please let us know if you'll be attending each event.</p>
+      </section>
+
+      <section className="guest-section-tight space-y-6">
+        {subEvents.map((sub, i) => {
+          const closed = isRsvpClosed(sub.rsvp_deadline);
+          const form = getForm(sub.id);
+          const saved = savedEvents.has(sub.id);
+          return (
+            <div key={sub.id} className="event-card animate-slideUpStagger" style={{ animationDelay: `${i * 0.1}s` }}>
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold">{sub.name}</h2>
+                {sub.date && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{formatDate(sub.date)}</p>}
+                {sub.time && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{formatTime12(sub.time)}</p>}
+                {sub.venue && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{sub.venue}</p>}
               </div>
-            )}
-          </div>
-        );
-      })}
+
+              {closed ? (
+                <p className="text-sm text-red-600">RSVP for this event has closed.</p>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">Will you attend?</label>
+                    <div className="flex gap-3">
+                      {(["attending", "not_attending"] as const).map((s) => (
+                        <button
+                          key={s}
+                          onClick={() => setForm(sub.id, { status: s })}
+                          className={`flex-1 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
+                            form.status === s
+                              ? "border-event-primary bg-event-primary text-event-primary-fg"
+                              : "border-event-border hover:border-event-primary"
+                          }`}
+                          style={form.status === s ? {} : { color: "var(--event-text)" }}
+                        >
+                          {s === "attending" ? "Will Attend" : "Cannot Attend"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {form.status === "attending" && (
+                    <>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium">Plus Ones</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={10}
+                          value={form.plus_ones}
+                          onChange={(e) => setForm(sub.id, { plus_ones: parseInt(e.target.value) || 0 })}
+                          className="event-input"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium">Dietary Requirements</label>
+                        <input
+                          type="text"
+                          value={form.dietary}
+                          onChange={(e) => setForm(sub.id, { dietary: e.target.value })}
+                          className="event-input"
+                          placeholder="Any allergies or preferences?"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium">Message (optional)</label>
+                    <textarea
+                      value={form.message}
+                      onChange={(e) => setForm(sub.id, { message: e.target.value })}
+                      className="event-input"
+                      rows={3}
+                      placeholder="Leave a message for the host..."
+                    />
+                  </div>
+
+                  <button
+                    onClick={() => submitRsvp.mutate({ subEventId: sub.id, form })}
+                    disabled={form.status === "pending" || submitRsvp.isPending}
+                    className="event-btn-primary disabled:opacity-50"
+                  >
+                    {submitRsvp.isPending ? "Saving..." : "Submit RSVP"}
+                  </button>
+
+                  {saved && <p className="text-sm text-green-600 animate-fadeIn">RSVP saved successfully!</p>}
+                  {submitRsvp.isError && <p className="text-sm text-red-600">Failed to save. Please try again.</p>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </section>
     </div>
   );
 }

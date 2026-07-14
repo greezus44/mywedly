@@ -1,33 +1,45 @@
-import React, { createContext, useContext, useMemo, useState, useEffect } from "react";
-import { ThemeConfig, DEFAULT_THEME, themeToEventCssVars } from "./theme";
+import {
+  createContext,
+  useContext,
+  useMemo,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import {
+  DEFAULT_THEME,
+  themeToEventCssVars,
+  type ThemeConfig,
+} from "./theme";
 
 interface EventThemeContextValue {
   theme: ThemeConfig;
-  setTheme: (t: ThemeConfig) => void;
 }
 
-const EventThemeContext = createContext<EventThemeContextValue | undefined>(undefined);
+const EventThemeContext = createContext<EventThemeContextValue>({
+  theme: DEFAULT_THEME,
+});
+
+interface EventThemeProviderProps {
+  children: ReactNode;
+  initialTheme?: ThemeConfig;
+}
 
 export function EventThemeProvider({
   children,
   initialTheme,
-}: {
-  children: React.ReactNode;
-  initialTheme?: ThemeConfig;
-}) {
-  const [theme, setTheme] = useState<ThemeConfig>(initialTheme ?? DEFAULT_THEME);
+}: EventThemeProviderProps) {
+  const theme = useMemo(() => initialTheme ?? DEFAULT_THEME, [initialTheme]);
 
-  useEffect(() => {
-    if (initialTheme) setTheme(initialTheme);
-  }, [initialTheme]);
+  const cssVars = useMemo(() => {
+    const vars = themeToEventCssVars(theme);
+    return vars as CSSProperties;
+  }, [theme]);
 
-  const cssVars = useMemo(() => themeToEventCssVars(theme), [theme]);
-
-  const value = useMemo(() => ({ theme, setTheme }), [theme]);
+  const value = useMemo(() => ({ theme }), [theme]);
 
   return (
     <EventThemeContext.Provider value={value}>
-      <div className="event-themed" style={cssVars as React.CSSProperties}>
+      <div className="event-themed" style={cssVars}>
         {children}
       </div>
     </EventThemeContext.Provider>
@@ -35,9 +47,5 @@ export function EventThemeProvider({
 }
 
 export function useEventTheme(): EventThemeContextValue {
-  const ctx = useContext(EventThemeContext);
-  if (!ctx) {
-    throw new Error("useEventTheme must be used within an EventThemeProvider");
-  }
-  return ctx;
+  return useContext(EventThemeContext);
 }
