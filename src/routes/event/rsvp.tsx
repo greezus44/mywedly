@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type EventRsvp, type SubEvent } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Input, Select } from "../../components/ui/Input";
+import { Input } from "../../components/ui/Input";
+import { Select } from "../../components/ui/Input";
 import {
   Card,
   LoadingSpinner,
@@ -11,151 +12,105 @@ import {
   EmptyState,
   Badge,
 } from "../../components/ui";
-import { formatDateShort, cn } from "../../lib/utils";
-
-async function fetchRsvps(eventId: string): Promise<{ rsvps: EventRsvp[]; subEvents: SubEvent[] }> {
-  const { data: rsvps, error: rsvpError } = await supabase
-    .from("event_rsvps")
-    .select("*")
-    .eq("event_id", eventId);
-  if (rsvpError) throw rsvpError;
-
-  const { data: subEvents, error: subError } = await supabase
-    .from("sub_events")
-    .select("*")
-    .eq("parent_event_id", eventId);
-  if (subError) throw subError;
-
-  return {
-    rsvps: (rsvps ?? []) as EventRsvp[],
-    subEvents: (subEvents ?? []) as SubEvent[],
-  };
-}
-
-function statusColor(status: string): "success" | "danger" | "warning" | "default" {
-  switch (status) {
-    case "attending":
-      return "success";
-    case "not_attending":
-      return "danger";
-    case "pending":
-      return "warning";
-    default:
-      return "default";
-  }
-}
-
-function statusLabel(status: string): string {
-  switch (status) {
-    case "attending":
-      return "Attending";
-    case "not_attending":
-      return "Not Attending";
-    case "pending":
-      return "Pending";
-    default:
-      return "Pending";
-  }
-}
+import { RsvpBadge } from "./guest-form";
+import { formatDate } from "../../lib/utils";
 
 export function RsvpPage() {
   const { eventId } = useEventContext();
+  const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterSubEvent, setFilterSubEvent] = useState("");
 
-  const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["event-rsvps", eventId],
-    queryFn: () => fetchRsvps(eventId),
+  const { data: rsvps, isLoading, isError, error } = useQuery({
+    queryKey: ["rsvps", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_rsvps")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("submitted_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as EventRsvp[];
+    },
   });
 
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [search, setSearch] = useState("");
-  const [groupFilter, setGroupFilter] = useState("all");
+  const { data: subEvents } = useQuery({
+    queryKey: ["sub-events", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sub_events")
+        .select("*")
+        .eq("parent_event_id", eventId)
+        .order("display_order", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as SubEvent[];
+    },
+  });
 
-  const rsvps = data?.rsvps ?? [];
-  const subEvents = data?.subEvents ?? [];
+  const subEventMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const se of subEvents ?? []) m.set(se.id, se.name);
+    return m;
+  }, [subEvents]);
 
-  // Group RSVPs by sub-event (or "Main Event" if no sub_event_id)
-  const grouped = useMemo(() => {
-    const groups: Record<string, { subEvent: SubEvent | null; items: EventRsvp[] }> = {};
-
-    // Group with no sub-event
-    const noSub = rsvps.filter((r) => !r.sub_event_id);
-    if (noSub.length > 0) {
-      groups["__main__"] = { subEvent: null, items: noSub };
-    }
-
-    // Groups by sub-event
-    for (const sub of subEvents) {
-      const items = rsvps.filter((r) => r.sub_event_id === sub.id);
-      if (items.length > 0) {
-        groups[sub.id] = { subEvent: sub, items };
-      }
-    }
-
-    return groups;
-  }, [rsvps, subEvents]);
-
-  // Apply filters
-  const filteredGrouped = useMemo(() => {
-    const result: Record<string, { subEvent: SubEvent | null; items: EventRsvp[] }> = {};
-    for (const [key, group] of Object.entries(grouped)) {
-      let items = group.items;
-      if (statusFilter !== "all") {
-        items = items.filter((r) => (r.status ?? "pending") === statusFilter);
-      }
-      if (search.trim()) {
+  const filtered = useMemo(() => {
+    if (!rsvps) return [];
+    return rsvps.filter((r) => {
+      if (search) {
         const q = search.toLowerCase();
-        items = items.filter(
-          (r) =>
-            r.guest_name?.toLowerCase().includes(q) ||
-            r.dietary?.toLowerCase().includes(q) ||
-            r.message?.toLowerCase().includes(q),
-        );
+        if (!r.guest_name?.toLowerCase().includes(q)) return false;
       }
-      if (groupFilter !== "all") {
-        // Filter by sub-event
-        if (groupFilter === "__main__" && key !== "__main__") continue;
-        if (groupFilter !== "__main__" && key !== groupFilter) continue;
+      if (filterStatus && r.status !== filterStatus) return false;
+      if (filterSubEvent) {
+        const seId = r.sub_event_id ?? "main";
+        if (seId !== filterSubEvent) return false;
       }
-      if (items.length > 0) {
-        result[key] = { ...group, items };
-      }
+      return true;
+    });
+  }, [rsvps, search, filterStatus, filterSubEvent]);
+
+  // Group by Event
+  const groupedByEvent = useMemo(() => {
+    const groups = new Map<string, EventRsvp[]>();
+    for (const r of filtered) {
+      const key = r.sub_event_id ?? "main";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(r);
     }
-    return result;
-  }, [grouped, statusFilter, search, groupFilter]);
+    return groups;
+  }, [filtered]);
 
   // Totals
   const totals = useMemo(() => {
-    const attending = rsvps.filter((r) => r.status === "attending").length;
-    const notAttending = rsvps.filter((r) => r.status === "not_attending").length;
-    const pending = rsvps.filter((r) => !r.status || r.status === "pending").length;
-    return { attending, notAttending, pending, total: rsvps.length };
-  }, [rsvps]);
+    const total = filtered.length;
+    const confirmed = filtered.filter((r) => r.status === "confirmed" || r.status === "yes").length;
+    const declined = filtered.filter((r) => r.status === "declined" || r.status === "no").length;
+    const pending = filtered.filter((r) => r.status === "pending").length;
+    const totalPlusOnes = filtered.reduce((sum, r) => sum + (r.plus_ones ?? 0), 0);
+    return { total, confirmed, declined, pending, totalPlusOnes };
+  }, [filtered]);
 
   const handleExportCsv = () => {
-    const headers = ["Guest Name", "Status", "Plus Ones", "Plus One Names", "Dietary", "Message", "Submitted At", "Event"];
-    const rows = rsvps.map((r) => {
-      const subName = subEvents.find((s) => s.id === r.sub_event_id)?.name ?? "Main Event";
-      return [
-        r.guest_name ?? "",
-        statusLabel(r.status ?? "pending"),
-        String(r.plus_ones ?? 0),
-        (r.plus_one_names ?? []).join("; "),
-        r.dietary ?? "",
-        r.message ?? "",
-        r.submitted_at ?? "",
-        subName,
-      ];
-    });
-
+    if (!filtered.length) return;
+    const headers = ["Guest Name", "Status", "Plus Ones", "Plus One Names", "Dietary", "Message", "Event", "Submitted At"];
+    const rows = filtered.map((r) => [
+      r.guest_name ?? "",
+      r.status ?? "",
+      String(r.plus_ones ?? 0),
+      (r.plus_one_names ?? []).join("; "),
+      r.dietary ?? "",
+      r.message ?? "",
+      r.sub_event_id ? (subEventMap.get(r.sub_event_id) ?? "Unknown") : "Main Event",
+      r.submitted_at ?? "",
+    ]);
     const csv = [headers, ...rows]
       .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
       .join("\n");
-
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `rsvps-${eventId}.csv`;
+    link.download = "rsvps.csv";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -164,182 +119,121 @@ export function RsvpPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex items-center justify-center py-12">
         <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
 
   if (isError) {
-    return (
-      <ErrorState
-        message={error instanceof Error ? error.message : "Failed to load RSVPs"}
-        onRetry={() => refetch()}
-      />
-    );
+    return <ErrorState title="Failed to load RSVPs" description={error instanceof Error ? error.message : undefined} />;
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-dash-text">RSVP Management</h1>
-          <p className="mt-1 text-sm text-dash-muted">
-            Track and manage guest RSVPs
-          </p>
-        </div>
-        {rsvps.length > 0 && (
-          <Button variant="secondary" size="sm" onClick={handleExportCsv}>
-            Export CSV
-          </Button>
-        )}
+        <h2 className="text-xl font-bold text-dash-text">RSVP</h2>
+        <Button variant="secondary" onClick={handleExportCsv} disabled={!filtered.length}>
+          Export CSV
+        </Button>
       </div>
 
       {/* Totals */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Card className="text-center">
-          <div className="text-2xl font-bold text-dash-text">{totals.total}</div>
-          <div className="mt-1 text-sm text-dash-muted">Total RSVPs</div>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <Card className="p-4">
+          <p className="text-sm text-dash-muted">Total</p>
+          <p className="text-2xl font-bold text-dash-text">{totals.total}</p>
         </Card>
-        <Card className="text-center">
-          <div className="text-2xl font-bold text-green-600">{totals.attending}</div>
-          <div className="mt-1"><Badge color="success">Attending</Badge></div>
+        <Card className="p-4">
+          <p className="text-sm text-dash-muted">Confirmed</p>
+          <p className="text-2xl font-bold text-green-600">{totals.confirmed}</p>
         </Card>
-        <Card className="text-center">
-          <div className="text-2xl font-bold text-red-600">{totals.notAttending}</div>
-          <div className="mt-1"><Badge color="danger">Not Attending</Badge></div>
+        <Card className="p-4">
+          <p className="text-sm text-dash-muted">Declined</p>
+          <p className="text-2xl font-bold text-dash-danger">{totals.declined}</p>
         </Card>
-        <Card className="text-center">
-          <div className="text-2xl font-bold text-amber-600">{totals.pending}</div>
-          <div className="mt-1"><Badge color="warning">Pending</Badge></div>
+        <Card className="p-4">
+          <p className="text-sm text-dash-muted">Pending</p>
+          <p className="text-2xl font-bold text-dash-muted">{totals.pending}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-dash-muted">Plus Ones</p>
+          <p className="text-2xl font-bold text-dash-text">{totals.totalPlusOnes}</p>
         </Card>
       </div>
 
       {/* Filters */}
-      <Card>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Input
-            label="Search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, dietary, message…"
-          />
-          <Select
-            label="Status"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">All Statuses</option>
-            <option value="attending">Attending</option>
-            <option value="not_attending">Not Attending</option>
-            <option value="pending">Pending</option>
-          </Select>
-          <Select
-            label="Event"
-            value={groupFilter}
-            onChange={(e) => setGroupFilter(e.target.value)}
-          >
-            <option value="all">All Events</option>
-            <option value="__main__">Main Event</option>
-            {subEvents.map((sub) => (
-              <option key={sub.id} value={sub.id}>
-                {sub.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-      </Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Input
+          placeholder="Search by guest name..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+          <option value="">All statuses</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="declined">Declined</option>
+          <option value="pending">Pending</option>
+          <option value="maybe">Maybe</option>
+        </Select>
+        <Select value={filterSubEvent} onChange={(e) => setFilterSubEvent(e.target.value)}>
+          <option value="">All Events</option>
+          <option value="main">Main Event</option>
+          {subEvents?.map((se) => (
+            <option key={se.id} value={se.id}>{se.name}</option>
+          ))}
+        </Select>
+      </div>
 
       {/* RSVPs grouped by Event */}
-      {rsvps.length === 0 ? (
+      {rsvps && rsvps.length === 0 ? (
         <EmptyState
-          icon={<span className="text-4xl">💌</span>}
           title="No RSVPs yet"
-          description="RSVPs will appear here once guests respond to your invitation."
+          description="RSVPs will appear here once your guests respond."
         />
-      ) : Object.keys(filteredGrouped).length === 0 ? (
-        <EmptyState
-          icon={<span className="text-4xl">🔍</span>}
-          title="No matching RSVPs"
-          description="Try adjusting your filters."
-        />
+      ) : filtered.length === 0 ? (
+        <Card className="p-8 text-center">
+          <p className="text-sm text-dash-muted">No RSVPs match your filters.</p>
+        </Card>
       ) : (
         <div className="space-y-6">
-          {Object.entries(filteredGrouped).map(([key, group]) => {
-            const groupAttending = group.items.filter((r) => r.status === "attending").length;
-            const groupNotAttending = group.items.filter((r) => r.status === "not_attending").length;
-            const groupPending = group.items.filter((r) => !r.status || r.status === "pending").length;
-
-            return (
-              <Card key={key}>
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-dash-text">
-                    {group.subEvent ? group.subEvent.name : "Main Event"}
-                  </h3>
-                  <div className="flex gap-2">
-                    <Badge color="success">{groupAttending} attending</Badge>
-                    <Badge color="danger">{groupNotAttending} declined</Badge>
-                    <Badge color="warning">{groupPending} pending</Badge>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {group.items.map((rsvp) => (
-                    <div
-                      key={rsvp.id}
-                      className="rounded-lg border border-dash-border bg-dash-bg p-3"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-dash-text">
-                              {rsvp.guest_name || "Unknown Guest"}
+          {Array.from(groupedByEvent.entries()).map(([eventKey, eventRsvps]) => (
+            <div key={eventKey}>
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-sm font-semibold text-dash-text">
+                  {eventKey === "main" ? "Main Event" : subEventMap.get(eventKey) ?? "Unknown Event"}
+                </h3>
+                <Badge>{eventRsvps.length}</Badge>
+              </div>
+              <div className="space-y-2">
+                {eventRsvps.map((rsvp) => (
+                  <Card key={rsvp.id} className="p-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="text-sm font-semibold text-dash-text">{rsvp.guest_name}</h4>
+                          <RsvpBadge status={rsvp.status} />
+                        </div>
+                        <div className="flex flex-wrap gap-3 text-xs text-dash-muted">
+                          {rsvp.plus_ones > 0 && (
+                            <span>
+                              +{rsvp.plus_ones} plus ones
+                              {rsvp.plus_one_names && rsvp.plus_one_names.length > 0 && (
+                                <span> ({rsvp.plus_one_names.join(", ")})</span>
+                              )}
                             </span>
-                            <Badge color={statusColor(rsvp.status ?? "pending")}>
-                              {statusLabel(rsvp.status ?? "pending")}
-                            </Badge>
-                          </div>
-
-                          {rsvp.plus_ones !== null && rsvp.plus_ones > 0 && (
-                            <p className="mt-1 text-sm text-dash-muted">
-                              +{rsvp.plus_ones} guest{rsvp.plus_ones > 1 ? "s" : ""}
-                            </p>
                           )}
-
-                          {rsvp.plus_one_names && rsvp.plus_one_names.length > 0 && (
-                            <ul className="mt-1 list-inside list-disc text-sm text-dash-muted">
-                              {rsvp.plus_one_names.map((name, i) => (
-                                <li key={i}>{name}</li>
-                              ))}
-                            </ul>
-                          )}
-
-                          {rsvp.dietary && (
-                            <p className="mt-1 text-sm text-dash-muted">
-                              🍽 Dietary: {rsvp.dietary}
-                              {rsvp.dietary_notes ? ` (${rsvp.dietary_notes})` : ""}
-                            </p>
-                          )}
-
-                          {rsvp.message && (
-                            <p className="mt-1 text-sm text-dash-muted">
-                              💬 {rsvp.message}
-                            </p>
-                          )}
-
-                          {rsvp.submitted_at && (
-                            <p className="mt-1 text-xs text-dash-muted">
-                              Submitted: {formatDateShort(rsvp.submitted_at)}
-                            </p>
-                          )}
+                          {rsvp.dietary && <span>🍽️ {rsvp.dietary}</span>}
+                          {rsvp.message && <span>💬 {rsvp.message}</span>}
+                          <span>📅 {formatDate(rsvp.submitted_at)}</span>
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </Card>
-            );
-          })}
+                  </Card>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

@@ -1,90 +1,75 @@
 import { useGuestOutletContext } from "./guest-layout";
+import { formatDate, to12Hour } from "../../lib/utils";
 
 export default function GuestContact() {
   const { event } = useGuestOutletContext();
-  const mapQuery = [event.venue, event.address].filter(Boolean).join(", ");
-  const mapSrc = mapQuery
-    ? `https://maps.google.com/maps?q=${encodeURIComponent(mapQuery)}&output=embed`
-    : null;
+
+  const mapQuery = encodeURIComponent([event.venue, event.address].filter(Boolean).join(", "));
+  const hasMap = !!event.venue || !!event.address;
 
   return (
-    <div className="guest-section animate-fadeIn">
-      <div className="mx-auto max-w-2xl">
-        <h1 className="guest-title text-center">Contact</h1>
-        <p className="guest-subtitle text-center mb-8">Get in touch or find your way.</p>
+    <section className="guest-section">
+      <div className="mx-auto max-w-3xl">
+        <div className="mb-8 text-center">
+          <p className="guest-eyebrow">Contact</p>
+          <h1 className="guest-title">Get in Touch</h1>
+          <p className="guest-subtitle mx-auto">Find all the details you need to join us.</p>
+        </div>
 
-        <div className="space-y-6">
-          {/* Venue section */}
-          {event.venue && (
-            <section className="event-info-card">
-              <p className="guest-eyebrow mb-2">Venue</p>
-              <p className="text-lg font-semibold" style={{ color: "var(--event-heading)" }}>
-                {event.venue}
-              </p>
-              {event.address && (
-                <p style={{ color: "var(--event-muted)" }}>{event.address}</p>
-              )}
-            </section>
-          )}
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Date & Time */}
+          <div className="event-info-card">
+            <p className="guest-eyebrow mb-2">When</p>
+            {event.event_date ? (
+              <>
+                <p className="text-lg font-semibold" style={{ color: "var(--event-heading)" }}>{formatDate(event.event_date)}</p>
+                {event.event_time && (
+                  <p className="text-sm" style={{ color: "var(--event-muted)" }}>{to12Hour(event.event_time)}</p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm" style={{ color: "var(--event-muted)" }}>Date to be announced</p>
+            )}
+          </div>
 
-          {/* Date & time section */}
-          {event.event_date && (
-            <section className="event-info-card">
-              <p className="guest-eyebrow mb-2">Date &amp; Time</p>
-              <p className="font-semibold" style={{ color: "var(--event-heading)" }}>
-                {new Date(event.event_date).toLocaleDateString("en-US", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </p>
-              {event.event_time && (
-                <p style={{ color: "var(--event-muted)" }}>
-                  {(() => {
-                    const [h, m] = event.event_time.split(":");
-                    const hh = parseInt(h, 10);
-                    const period = hh >= 12 ? "PM" : "AM";
-                    const hour12 = hh % 12 === 0 ? 12 : hh % 12;
-                    return `${hour12}:${m ?? "00"} ${period}`;
-                  })()}
-                </p>
-              )}
-            </section>
-          )}
+          {/* Venue */}
+          <div className="event-info-card">
+            <p className="guest-eyebrow mb-2">Where</p>
+            {event.venue ? (
+              <p className="text-lg font-semibold" style={{ color: "var(--event-heading)" }}>{event.venue}</p>
+            ) : (
+              <p className="text-sm" style={{ color: "var(--event-muted)" }}>Venue to be announced</p>
+            )}
+            {event.address && (
+              <p className="text-sm" style={{ color: "var(--event-muted)" }}>{event.address}</p>
+            )}
+          </div>
+        </div>
 
-          {/* Map section */}
-          {mapSrc && (
-            <section>
-              <p className="guest-eyebrow mb-3">Location</p>
-              <div className="overflow-hidden rounded-xl">
-                <iframe
-                  title="Map"
-                  src={mapSrc}
-                  width="100%"
-                  height="300"
-                  style={{ border: 0 }}
-                  loading="lazy"
-                />
-              </div>
-            </section>
-          )}
+        {/* Embedded map */}
+        {hasMap && (
+          <div className="mt-6 overflow-hidden" style={{ borderRadius: "var(--event-radius)" }}>
+            <iframe
+              title="Event location map"
+              src={`https://www.google.com/maps?q=${mapQuery}&output=embed`}
+              className="w-full"
+              style={{ height: "320px", border: "none" }}
+              loading="lazy"
+            />
+          </div>
+        )}
 
-          {/* Directions link */}
-          {mapQuery && (
-            <div className="text-center">
-              <a
-                href={`https://maps.google.com/maps?q=${encodeURIComponent(mapQuery)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="event-btn-secondary"
-              >
-                Open in Google Maps
-              </a>
-            </div>
-          )}
+        {/* Contact card */}
+        <div
+          className="mt-6 rounded-lg p-6 text-center"
+          style={{ backgroundColor: "var(--event-surface)", color: "var(--event-text)", border: "1px solid var(--event-border)", borderRadius: "var(--event-radius)" }}
+        >
+          <p className="guest-eyebrow mb-2">Questions?</p>
+          <p className="text-sm">
+            If you have any questions about the event, please reach out to your host.
+          </p>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

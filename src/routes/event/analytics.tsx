@@ -1,251 +1,186 @@
-import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type SharingEvent, type EventRsvp, type SubEvent } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
-import { Card, LoadingSpinner, ErrorState, Badge } from "../../components/ui";
-import { formatDateShort } from "../../lib/utils";
-
-async function fetchAnalytics(eventId: string) {
-  // Fetch sharing events (page views, opens, etc.)
-  const { data: sharingEvents, error: sharingError } = await supabase
-    .from("sharing_events")
-    .select("*")
-    .eq("event_id", eventId);
-  if (sharingError) throw sharingError;
-
-  // Fetch RSVPs
-  const { data: rsvps, error: rsvpError } = await supabase
-    .from("event_rsvps")
-    .select("*")
-    .eq("event_id", eventId);
-  if (rsvpError) throw rsvpError;
-
-  // Fetch sub-events for grouping
-  const { data: subEvents, error: subError } = await supabase
-    .from("sub_events")
-    .select("*")
-    .eq("parent_event_id", eventId);
-  if (subError) throw subError;
-
-  return {
-    sharingEvents: (sharingEvents ?? []) as SharingEvent[],
-    rsvps: (rsvps ?? []) as EventRsvp[],
-    subEvents: (subEvents ?? []) as SubEvent[],
-  };
-}
+import { Card, LoadingSpinner, ErrorState } from "../../components/ui";
+import { formatDate, formatDateTime } from "../../lib/utils";
 
 export function AnalyticsPage() {
   const { eventId } = useEventContext();
 
-  const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["analytics", eventId],
-    queryFn: () => fetchAnalytics(eventId),
+  const { data: sharingEvents, isLoading: sLoading, isError: sError } = useQuery({
+    queryKey: ["analytics-sharing", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sharing_events")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as SharingEvent[];
+    },
   });
 
-  if (isLoading) {
+  const { data: rsvps, isLoading: rLoading, isError: rError } = useQuery({
+    queryKey: ["analytics-rsvps", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_rsvps")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("submitted_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as EventRsvp[];
+    },
+  });
+
+  const { data: subEvents } = useQuery({
+    queryKey: ["analytics-sub-events", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sub_events")
+        .select("*")
+        .eq("parent_event_id", eventId)
+        .order("display_order", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as SubEvent[];
+    },
+  });
+
+  if (sLoading || rLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex items-center justify-center py-12">
         <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
 
-  if (isError) {
-    return (
-      <ErrorState
-        message={error instanceof Error ? error.message : "Failed to load analytics"}
-        onRetry={() => refetch()}
-      />
-    );
+  if (sError || rError) {
+    return <ErrorState title="Failed to load analytics" />;
   }
 
-  const sharingEvents = data?.sharingEvents ?? [];
-  const rsvps = data?.rsvps ?? [];
-  const subEvents = data?.subEvents ?? [];
+  const totalViews = sharingEvents?.length ?? 0;
+  const uniqueGuests = new Set(sharingEvents?.map((e) => e.guest_id).filter(Boolean)).size;
+  const totalRsvps = rsvps?.length ?? 0;
+  const confirmedRsvps = rsvps?.filter((r) => r.status === "confirmed" || r.status === "yes").length ?? 0;
+  const declinedRsvps = rsvps?.filter((r) => r.status === "declined" || r.status === "no").length ?? 0;
+  const pendingRsvps = rsvps?.filter((r) => r.status === "pending").length ?? 0;
 
-  // Compute stats
-  const totalViews = sharingEvents.length;
-  const uniqueGuests = new Set(sharingEvents.filter((e) => e.guest_id).map((e) => e.guest_id!)).size;
-  const totalRsvps = rsvps.length;
-  const attending = rsvps.filter((r) => r.status === "attending").length;
-  const notAttending = rsvps.filter((r) => r.status === "not_attending").length;
-  const pending = rsvps.filter((r) => r.status === "pending" || !r.status).length;
+  // Per-Event RSVP breakdown
+  const rsvpsBySubEvent = new Map<string, EventRsvp[]>();
+  for (const rsvp of rsvps ?? []) {
+    const key = rsvp.sub_event_id ?? "main";
+    if (!rsvpsBySubEvent.has(key)) rsvpsBySubEvent.set(key, []);
+    rsvpsBySubEvent.get(key)!.push(rsvp);
+  }
 
-  // Views by source
-  const viewsBySource = sharingEvents.reduce<Record<string, number>>((acc, e) => {
-    const source = e.source ?? "direct";
-    acc[source] = (acc[source] ?? 0) + 1;
-    return acc;
-  }, {});
-
-  // Views by device
-  const viewsByDevice = sharingEvents.reduce<Record<string, number>>((acc, e) => {
-    const device = e.device_type ?? "unknown";
-    acc[device] = (acc[device] ?? 0) + 1;
-    return acc;
-  }, {});
-
-  // RSVPs by sub-event
-  const rsvpsBySubEvent = subEvents.map((sub) => {
-    const subRsvps = rsvps.filter((r) => r.sub_event_id === sub.id);
-    return {
-      name: sub.name,
-      total: subRsvps.length,
-      attending: subRsvps.filter((r) => r.status === "attending").length,
-      notAttending: subRsvps.filter((r) => r.status === "not_attending").length,
-      pending: subRsvps.filter((r) => r.status === "pending" || !r.status).length,
-    };
-  });
-
-  // Recent activity
-  const recentViews = [...sharingEvents]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 10);
+  // Source breakdown
+  const sourceCounts = new Map<string, number>();
+  for (const ev of sharingEvents ?? []) {
+    const src = ev.source || "unknown";
+    sourceCounts.set(src, (sourceCounts.get(src) ?? 0) + 1);
+  }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-bold text-dash-text">Analytics</h1>
-        <p className="mt-1 text-sm text-dash-muted">
-          Track views, RSVPs, and engagement for your website
-        </p>
+    <div className="space-y-6">
+      <h2 className="text-xl font-bold text-dash-text">Analytics</h2>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <p className="text-sm text-dash-muted">Page Views</p>
+          <p className="text-2xl font-bold text-dash-text mt-1">{totalViews}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-dash-muted">Unique Guests</p>
+          <p className="text-2xl font-bold text-dash-text mt-1">{uniqueGuests}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-dash-muted">Total RSVPs</p>
+          <p className="text-2xl font-bold text-dash-text mt-1">{totalRsvps}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-dash-muted">Confirmed</p>
+          <p className="text-2xl font-bold text-green-600 mt-1">{confirmedRsvps}</p>
+        </Card>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Total Views" value={totalViews} icon="👁" />
-        <StatCard label="Unique Guests" value={uniqueGuests} icon="👥" />
-        <StatCard label="Total RSVPs" value={totalRsvps} icon="💌" />
-        <StatCard
-          label="Attending"
-          value={attending}
-          icon="✓"
-          color="success"
-        />
-      </div>
-
-      {/* RSVP Breakdown */}
-      <Card>
-        <h3 className="mb-4 text-sm font-semibold text-dash-text">RSVP Breakdown</h3>
+      {/* RSVP breakdown */}
+      <Card className="p-4">
+        <h3 className="text-sm font-semibold text-dash-text mb-3">RSVP Summary</h3>
         <div className="grid grid-cols-3 gap-4">
-          <RsvpStat label="Attending" count={attending} color="success" />
-          <RsvpStat label="Not Attending" count={notAttending} color="danger" />
-          <RsvpStat label="Pending" count={pending} color="warning" />
+          <div>
+            <p className="text-sm text-dash-muted">Confirmed</p>
+            <p className="text-xl font-semibold text-green-600">{confirmedRsvps}</p>
+          </div>
+          <div>
+            <p className="text-sm text-dash-muted">Declined</p>
+            <p className="text-xl font-semibold text-dash-danger">{declinedRsvps}</p>
+          </div>
+          <div>
+            <p className="text-sm text-dash-muted">Pending</p>
+            <p className="text-xl font-semibold text-dash-muted">{pendingRsvps}</p>
+          </div>
         </div>
       </Card>
 
-      {/* RSVPs by Event */}
-      {rsvpsBySubEvent.length > 0 && (
-        <Card>
-          <h3 className="mb-4 text-sm font-semibold text-dash-text">RSVPs by Event</h3>
-          <div className="space-y-3">
-            {rsvpsBySubEvent.map((item, i) => (
-              <div key={i} className="flex items-center justify-between border-b border-dash-border pb-2 last:border-0">
-                <span className="text-sm font-medium text-dash-text">{item.name}</span>
-                <div className="flex gap-2">
-                  <Badge color="success">{item.attending} attending</Badge>
-                  <Badge color="danger">{item.notAttending} declined</Badge>
-                  <Badge color="warning">{item.pending} pending</Badge>
-                </div>
+      {/* Per-Event RSVPs */}
+      {subEvents && subEvents.length > 0 && (
+        <Card className="p-4">
+          <h3 className="text-sm font-semibold text-dash-text mb-3">RSVPs by Event</h3>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm border-b border-dash-border pb-2">
+              <span className="font-medium text-dash-text">Main Event</span>
+              <span className="text-dash-muted">{rsvpsBySubEvent.get("main")?.length ?? 0}</span>
+            </div>
+            {subEvents.map((se) => (
+              <div key={se.id} className="flex justify-between text-sm border-b border-dash-border pb-2 last:border-0">
+                <span className="font-medium text-dash-text">{se.name}</span>
+                <span className="text-dash-muted">{rsvpsBySubEvent.get(se.id)?.length ?? 0}</span>
               </div>
             ))}
           </div>
         </Card>
       )}
 
-      {/* Views by Source & Device */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card>
-          <h3 className="mb-4 text-sm font-semibold text-dash-text">Views by Source</h3>
-          {Object.keys(viewsBySource).length > 0 ? (
-            <div className="space-y-2">
-              {Object.entries(viewsBySource).map(([source, count]) => (
-                <div key={source} className="flex items-center justify-between">
-                  <span className="text-sm capitalize text-dash-text">{source}</span>
-                  <span className="text-sm font-medium text-dash-muted">{count as number}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-dash-muted">No views yet</p>
-          )}
-        </Card>
-
-        <Card>
-          <h3 className="mb-4 text-sm font-semibold text-dash-text">Views by Device</h3>
-          {Object.keys(viewsByDevice).length > 0 ? (
-            <div className="space-y-2">
-              {Object.entries(viewsByDevice).map(([device, count]) => (
-                <div key={device} className="flex items-center justify-between">
-                  <span className="text-sm capitalize text-dash-text">{device}</span>
-                  <span className="text-sm font-medium text-dash-muted">{count as number}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-dash-muted">No views yet</p>
-          )}
-        </Card>
-      </div>
-
-      {/* Recent Activity */}
-      <Card>
-        <h3 className="mb-4 text-sm font-semibold text-dash-text">Recent Activity</h3>
-        {recentViews.length > 0 ? (
+      {/* Source breakdown */}
+      {sourceCounts.size > 0 && (
+        <Card className="p-4">
+          <h3 className="text-sm font-semibold text-dash-text mb-3">Views by Source</h3>
           <div className="space-y-2">
-            {recentViews.map((view) => (
-              <div key={view.id} className="flex items-center justify-between border-b border-dash-border pb-2 last:border-0">
-                <div className="flex items-center gap-2">
-                  <Badge color="default">{view.event_type}</Badge>
-                  {view.source && <span className="text-sm text-dash-muted">via {view.source}</span>}
-                </div>
-                <span className="text-xs text-dash-muted">{formatDateShort(view.created_at)}</span>
+            {Array.from(sourceCounts.entries()).map(([source, count]) => (
+              <div key={source} className="flex justify-between text-sm">
+                <span className="font-medium text-dash-text capitalize">{source}</span>
+                <span className="text-dash-muted">{count}</span>
               </div>
             ))}
           </div>
-        ) : (
-          <p className="text-sm text-dash-muted">No recent activity</p>
-        )}
-      </Card>
-    </div>
-  );
-}
+        </Card>
+      )}
 
-function StatCard({
-  label,
-  value,
-  icon,
-  color,
-}: {
-  label: string;
-  value: number;
-  icon: string;
-  color?: "success" | "danger" | "warning";
-}) {
-  return (
-    <Card className="text-center">
-      <div className="text-2xl">{icon}</div>
-      <div className="mt-2 text-2xl font-bold text-dash-text">{value}</div>
-      <div className="mt-1 text-sm text-dash-muted">{label}</div>
-    </Card>
-  );
-}
+      {/* Recent views */}
+      {sharingEvents && sharingEvents.length > 0 && (
+        <Card className="p-4">
+          <h3 className="text-sm font-semibold text-dash-text mb-3">Recent Views</h3>
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {sharingEvents.slice(0, 20).map((ev) => (
+              <div key={ev.id} className="flex justify-between text-sm border-b border-dash-border pb-2 last:border-0">
+                <span className="text-dash-text">
+                  {ev.source} {ev.device_type ? `· ${ev.device_type}` : ""}
+                </span>
+                <span className="text-dash-muted">{formatDateTime(ev.created_at)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
-function RsvpStat({
-  label,
-  count,
-  color,
-}: {
-  label: string;
-  count: number;
-  color: "success" | "danger" | "warning";
-}) {
-  return (
-    <div className="text-center">
-      <div className="text-2xl font-bold text-dash-text">{count}</div>
-      <div className="mt-1">
-        <Badge color={color}>{label}</Badge>
-      </div>
+      {totalViews === 0 && totalRsvps === 0 && (
+        <Card className="p-8 text-center">
+          <p className="text-sm text-dash-muted">
+            No analytics data yet. Publish your website and share it with guests to start collecting data.
+          </p>
+        </Card>
+      )}
     </div>
   );
 }

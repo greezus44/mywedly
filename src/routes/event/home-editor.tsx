@@ -1,137 +1,192 @@
-import React, { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
-import { Button } from "../../components/ui/Button";
-import { RichTextEditor } from "../../components/ui/RichTextEditor";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
-import { ImageUpload } from "../../components/ui/ImageUpload";
-import { uploadImage } from "../../lib/upload";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
+import { Select } from "../../components/ui/Input";
+import { Card, ColorInput } from "../../components/ui";
+import { RichTextEditor } from "../../components/ui/RichTextEditor";
+import { HEADING_FONT_OPTIONS } from "../../lib/theme";
 
-interface HomeContent {
-  introHtml?: string;
-  storyHtml?: string;
-  detailsHtml?: string;
+interface ContentSection {
+  heading?: string;
+  headingFont?: string;
+  headingColor?: string;
+  body?: string;
+}
+
+interface EventContent {
+  sections?: ContentSection[];
 }
 
 export function HomeEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const existing = (event.draft_content ?? event.content ?? {}) as HomeContent;
+  const initial = (event.draft_content ?? event.content) as EventContent | null;
+  const [sections, setSections] = useState<ContentSection[]>(initial?.sections ?? []);
 
-  const [introHtml, setIntroHtml] = useState(existing.introHtml ?? "");
-  const [storyHtml, setStoryHtml] = useState(existing.storyHtml ?? "");
-  const [detailsHtml, setDetailsHtml] = useState(existing.detailsHtml ?? "");
-  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    const cnt = (event.draft_content ?? event.content) as EventContent | null;
+    setSections(cnt?.sections ?? []);
+  }, [event]);
 
-  const liveContent: HomeContent = {
-    introHtml,
-    storyHtml,
-    detailsHtml,
-  };
+  const liveContent: EventContent = { sections };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("user_events")
-        .update({ draft_content: liveContent as unknown as Json })
-        .eq("id", eventId)
-        .select("*")
-        .maybeSingle();
+        .update({
+          draft_content: liveContent as unknown as Json,
+        })
+        .eq("id", eventId);
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  const handleImageUpload = async (file: File): Promise<string | null> => {
-    return uploadImage(file, "home", eventId).then((r) => r?.url ?? null);
+  const updateSection = (index: number, patch: Partial<ContentSection>) => {
+    setSections((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  };
+
+  const addSection = () => {
+    setSections((prev) => [...prev, { heading: "", body: "" }]);
+  };
+
+  const removeSection = (index: number) => {
+    setSections((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const moveSection = (index: number, dir: -1 | 1) => {
+    setSections((prev) => {
+      const next = [...prev];
+      const target = index + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-dash-text">Home Editor</h1>
-          <p className="mt-1 text-sm text-dash-muted">
-            Customise the home page content sections
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {saved && <span className="text-sm text-green-600">✓ Saved</span>}
-          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-            Save Changes
+        <h2 className="text-xl font-bold text-dash-text">Home Editor</h2>
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" onClick={addSection}>
+            Add Section
+          </Button>
+          <Button
+            onClick={() => saveMutation.mutate()}
+            loading={saveMutation.isPending}
+          >
+            Save
           </Button>
         </div>
       </div>
 
-      <div className="h-[calc(100vh-220px)] min-h-[500px]">
-        <SplitEditor
-          editor={
-            <div className="space-y-6">
-              {/* Intro Section */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-dash-text">Intro Section</h3>
-                <RichTextEditor
-                  value={introHtml}
-                  onChange={setIntroHtml}
-                  placeholder="Write a warm welcome message for your guests…"
-                />
-              </div>
+      {saveMutation.isError && (
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+        </p>
+      )}
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-green-600">Saved successfully!</p>
+      )}
 
-              {/* Story Section */}
-              <div className="space-y-2 border-t border-dash-border pt-4">
-                <h3 className="text-sm font-semibold text-dash-text">Our Story Section</h3>
-                <RichTextEditor
-                  value={storyHtml}
-                  onChange={setStoryHtml}
-                  placeholder="Share your love story…"
-                />
-              </div>
+      <SplitEditor
+        editor={
+          <div className="space-y-6">
+            {sections.length === 0 && (
+              <Card className="p-8 text-center">
+                <p className="text-sm text-dash-muted mb-4">No sections yet.</p>
+                <Button variant="secondary" onClick={addSection}>Add a section</Button>
+              </Card>
+            )}
 
-              {/* Details Section */}
-              <div className="space-y-2 border-t border-dash-border pt-4">
-                <h3 className="text-sm font-semibold text-dash-text">Event Details Section</h3>
-                <RichTextEditor
-                  value={detailsHtml}
-                  onChange={setDetailsHtml}
-                  placeholder="Add venue, dress code, and other details…"
-                />
-              </div>
+            {sections.map((section, i) => (
+              <Card key={i} className="p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-dash-text">Section {i + 1}</h3>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => moveSection(i, -1)}
+                      disabled={i === 0}
+                      className="text-dash-muted hover:text-dash-text disabled:opacity-30 px-2 py-1 text-sm"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveSection(i, 1)}
+                      disabled={i === sections.length - 1}
+                      className="text-dash-muted hover:text-dash-text disabled:opacity-30 px-2 py-1 text-sm"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeSection(i)}
+                      className="text-dash-danger hover:text-dash-danger-hover px-2 py-1 text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
 
-              {/* Cover Image */}
-              <div className="space-y-2 border-t border-dash-border pt-4">
-                <h3 className="text-sm font-semibold text-dash-text">Home Cover Image</h3>
-                <ImageUpload
-                  value={event.draft_cover_image ?? event.cover_image}
-                  onChange={async (url) => {
-                    const { error } = await supabase
-                      .from("user_events")
-                      .update({ draft_cover_image: url })
-                      .eq("id", eventId);
-                    if (error) console.error(error);
-                    queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-                  }}
-                  onUpload={handleImageUpload}
+                <Input
+                  label="Section heading"
+                  value={section.heading ?? ""}
+                  onChange={(e) => updateSection(i, { heading: e.target.value })}
+                  placeholder="e.g. Our Story"
                 />
-              </div>
-            </div>
-          }
-          preview={
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Select
+                    label="Heading font"
+                    value={section.headingFont ?? ""}
+                    onChange={(e) => updateSection(i, { headingFont: e.target.value })}
+                  >
+                    <option value="">Default</option>
+                    {HEADING_FONT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </Select>
+                  <div>
+                    <span className="block text-sm font-medium text-dash-text mb-1.5">Heading colour</span>
+                    <ColorInput
+                      value={section.headingColor ?? "#000000"}
+                      onChange={(v) => updateSection(i, { headingColor: v })}
+                    />
+                  </div>
+                </div>
+
+                <RichTextEditor
+                  label="Body content"
+                  value={section.body ?? ""}
+                  onChange={(html) => updateSection(i, { body: html })}
+                  placeholder="Write your section content here..."
+                />
+              </Card>
+            ))}
+          </div>
+        }
+        preview={
+          <div className="rounded-lg border border-dash-border bg-dash-surface p-4 overflow-hidden">
             <HomePreview
               event={event}
               theme={event.draft_theme ?? event.theme}
-              coverImage={event.draft_cover_image ?? event.cover_image}
+              content={liveContent}
             />
-          }
-        />
-      </div>
+          </div>
+        }
+      />
     </div>
   );
 }

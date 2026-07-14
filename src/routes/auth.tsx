@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
@@ -11,8 +11,8 @@ export function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,26 +21,24 @@ export function AuthPage() {
 
     try {
       if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
+        const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            data: { full_name: fullName || undefined },
-          },
+          options: { data: { full_name: fullName } },
         });
-        if (error) throw error;
+        if (signUpError) throw signUpError;
         if (data.user) {
           navigate("/dashboard");
+        } else {
+          setError("Check your email to confirm your account.");
         }
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-        if (error) throw error;
-        if (data.user) {
-          navigate("/dashboard");
-        }
+        if (signInError) throw signInError;
+        navigate("/dashboard");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed");
@@ -50,23 +48,23 @@ export function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4 py-12">
+    <div className="min-h-screen flex items-center justify-center bg-dash-bg px-4">
       <div className="w-full max-w-md">
-        <div className="mb-8 text-center">
-          <Link to="/" className="inline-block">
-            <span className="text-2xl font-bold text-dash-primary">MyWedly</span>
+        <div className="text-center mb-8">
+          <Link to="/" className="text-2xl font-bold text-dash-primary">
+            MyWedly
           </Link>
           <h1 className="mt-4 text-2xl font-bold text-dash-text">
-            {mode === "signin" ? "Welcome back" : "Create your account"}
+            {mode === "signin" ? "Sign in to your account" : "Create your account"}
           </h1>
           <p className="mt-2 text-sm text-dash-muted">
             {mode === "signin"
-              ? "Sign in to manage your invitation websites"
-              : "Start building your invitation website today"}
+              ? "Welcome back! Let's build something beautiful."
+              : "Start creating your event website today."}
           </p>
         </div>
 
-        <div className="rounded-xl border border-dash-border bg-dash-surface p-6 shadow-sm">
+        <div className="rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "signup" && (
               <Input
@@ -75,10 +73,9 @@ export function AuthPage() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Jane Doe"
-                autoComplete="name"
+                required
               />
             )}
-
             <Input
               label="Email"
               type="email"
@@ -86,9 +83,7 @@ export function AuthPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               required
-              autoComplete="email"
             />
-
             <Input
               label="Password"
               type="password"
@@ -96,66 +91,41 @@ export function AuthPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
-              autoComplete={mode === "signin" ? "current-password" : "new-password"}
               minLength={6}
             />
 
             {error && (
-              <div className="rounded-lg border border-dash-danger/20 bg-dash-danger/5 px-3 py-2 text-sm text-dash-danger">
+              <p className="text-sm text-dash-danger bg-dash-danger/10 rounded-md p-3">
                 {error}
-              </div>
+              </p>
             )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <LoadingSpinner className="h-4 w-4" />
-                  {mode === "signin" ? "Signing in…" : "Creating account…"}
-                </>
-              ) : mode === "signin" ? (
-                "Sign in"
-              ) : (
-                "Create account"
-              )}
+            <Button type="submit" className="w-full" loading={loading} size="lg">
+              {mode === "signin" ? "Sign in" : "Sign up"}
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-dash-muted">
-            {mode === "signin" ? (
-              <>
-                Don't have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("signup");
-                    setError(null);
-                  }}
-                  className="font-medium text-dash-primary hover:underline"
-                >
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("signin");
-                    setError(null);
-                  }}
-                  className="font-medium text-dash-primary hover:underline"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
+          <div className="mt-6 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === "signin" ? "signup" : "signin");
+                setError(null);
+              }}
+              className="text-sm text-dash-muted hover:text-dash-primary transition-colors"
+            >
+              {mode === "signin"
+                ? "Don't have an account? Sign up"
+                : "Already have an account? Sign in"}
+            </button>
           </div>
         </div>
 
-        <p className="mt-6 text-center text-xs text-dash-muted">
-          By continuing, you agree to MyWedly's Terms of Service and Privacy Policy.
-        </p>
+        <div className="mt-4 text-center">
+          <Link to="/" className="text-sm text-dash-muted hover:text-dash-text transition-colors">
+            ← Back to home
+          </Link>
+        </div>
       </div>
     </div>
   );

@@ -1,29 +1,28 @@
 import React, { createContext, useContext, useMemo } from "react";
 import type { Json } from "./supabase";
-import { jsonToTheme, themeToEventCssVars, DEFAULT_THEME } from "./theme";
+import { jsonToTheme, themeToEventCssVars, type ThemeConfig } from "./theme";
 
 interface EventThemeContextValue {
-  cssVars: Record<string, string>;
+  theme: ThemeConfig;
 }
 
-const EventThemeContext = createContext<EventThemeContextValue>({
-  cssVars: themeToEventCssVars(DEFAULT_THEME),
-});
+const EventThemeContext = createContext<EventThemeContextValue | null>(null);
 
 interface EventThemeProviderProps {
   theme: Json | null | undefined;
   children: React.ReactNode;
-  className?: string;
 }
 
-export function EventThemeProvider({ theme, children, className }: EventThemeProviderProps) {
-  const resolved = useMemo(() => jsonToTheme(theme), [theme]);
-  const cssVars = useMemo(() => themeToEventCssVars(resolved), [resolved]);
-  const style = useMemo(() => cssVars as React.CSSProperties, [cssVars]);
-  const value = useMemo(() => ({ cssVars }), [cssVars]);
+export function EventThemeProvider({ theme, children }: EventThemeProviderProps) {
+  const resolvedTheme = useMemo(() => jsonToTheme(theme), [theme]);
+  const cssVars = useMemo(() => themeToEventCssVars(resolvedTheme), [resolvedTheme]);
+  const contextValue = useMemo(() => ({ theme: resolvedTheme }), [resolvedTheme]);
+
+  const style = cssVars as React.CSSProperties;
+
   return (
-    <EventThemeContext.Provider value={value}>
-      <div className={cn("event-themed", className)} style={style}>
+    <EventThemeContext.Provider value={contextValue}>
+      <div className="event-themed" style={style}>
         {children}
       </div>
     </EventThemeContext.Provider>
@@ -31,9 +30,9 @@ export function EventThemeProvider({ theme, children, className }: EventThemePro
 }
 
 export function useEventTheme(): EventThemeContextValue {
-  return useContext(EventThemeContext);
-}
-
-function cn(...inputs: (string | undefined | null | false)[]): string {
-  return inputs.filter(Boolean).join(" ");
+  const ctx = useContext(EventThemeContext);
+  if (!ctx) {
+    throw new Error("useEventTheme must be used within an EventThemeProvider");
+  }
+  return ctx;
 }

@@ -1,106 +1,130 @@
-import React, { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
-import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
 import { SplitEditor } from "../../components/preview/SplitEditor";
-import { LoginPreview } from "../../components/preview/PreviewRenderers";
+import { LoginPreview, type LoginConfig } from "../../components/preview/PreviewRenderers";
+import { TypographyControls } from "../../components/ui/TypographyControls";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
+import { Card } from "../../components/ui";
+import type { TypographyStyle } from "../../lib/typography";
 
-interface LoginConfig {
-  title?: string;
-  subtitle?: string;
-  ctaText?: string;
-  requireName?: boolean;
-  requireEmail?: boolean;
+function asTypography(value: unknown): TypographyStyle {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as TypographyStyle;
+  }
+  return {};
 }
 
 export function LoginEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const existing = (event.draft_login_config ?? event.login_config ?? {}) as LoginConfig;
+  const initial = (event.draft_login_config ?? event.login_config) as LoginConfig | null;
 
-  const [title, setTitle] = useState(existing.title ?? "");
-  const [subtitle, setSubtitle] = useState(existing.subtitle ?? "");
-  const [ctaText, setCtaText] = useState(existing.ctaText ?? "Continue");
-  const [saved, setSaved] = useState(false);
+  const [heading, setHeading] = useState<TypographyStyle>(asTypography(initial?.heading));
+  const [subheading, setSubheading] = useState<TypographyStyle>(asTypography(initial?.subheading));
+  const [placeholder, setPlaceholder] = useState(initial?.placeholder ?? "Enter your username");
+  const [buttonLabel, setButtonLabel] = useState(initial?.buttonLabel ?? "Sign In");
 
-  const liveConfig: LoginConfig = {
-    title,
-    subtitle,
-    ctaText,
+  useEffect(() => {
+    const cfg = (event.draft_login_config ?? event.login_config) as LoginConfig | null;
+    setHeading(asTypography(cfg?.heading));
+    setSubheading(asTypography(cfg?.subheading));
+    setPlaceholder(cfg?.placeholder ?? "Enter your username");
+    setButtonLabel(cfg?.buttonLabel ?? "Sign In");
+  }, [event]);
+
+  const liveLoginConfig: LoginConfig = {
+    heading,
+    subheading,
+    placeholder,
+    buttonLabel,
   };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("user_events")
-        .update({ draft_login_config: liveConfig as unknown as Json })
-        .eq("id", eventId)
-        .select("*")
-        .maybeSingle();
+        .update({
+          draft_login_config: liveLoginConfig as unknown as Json,
+        })
+        .eq("id", eventId);
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
     },
   });
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-dash-text">Login Editor</h1>
-          <p className="mt-1 text-sm text-dash-muted">
-            Customise the guest login page
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {saved && <span className="text-sm text-green-600">✓ Saved</span>}
-          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-            Save Changes
-          </Button>
-        </div>
+        <h2 className="text-xl font-bold text-dash-text">Login Editor</h2>
+        <Button
+          onClick={() => saveMutation.mutate()}
+          loading={saveMutation.isPending}
+        >
+          Save
+        </Button>
       </div>
 
-      <div className="h-[calc(100vh-220px)] min-h-[500px]">
-        <SplitEditor
-          editor={
-            <div className="space-y-4">
+      {saveMutation.isError && (
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+        </p>
+      )}
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-green-600">Saved successfully!</p>
+      )}
+
+      <SplitEditor
+        editor={
+          <div className="space-y-6">
+            <Card className="p-4 space-y-4">
+              <TypographyControls
+                label="Heading"
+                value={heading}
+                onChange={setHeading}
+              />
+            </Card>
+
+            <Card className="p-4 space-y-4">
+              <TypographyControls
+                label="Subheading"
+                value={subheading}
+                onChange={setSubheading}
+              />
+            </Card>
+
+            <Card className="p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-dash-text">Form Fields</h3>
               <Input
-                label="Title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Welcome to our wedding"
-              />
-              <Textarea
-                label="Subtitle"
-                value={subtitle}
-                onChange={(e) => setSubtitle(e.target.value)}
-                placeholder="e.g. Enter your username to access your invitation"
-                rows={3}
+                label="Placeholder text"
+                value={placeholder}
+                onChange={(e) => setPlaceholder(e.target.value)}
+                placeholder="Enter your username"
               />
               <Input
-                label="CTA Button Text"
-                value={ctaText}
-                onChange={(e) => setCtaText(e.target.value)}
-                placeholder="Continue"
+                label="Button label"
+                value={buttonLabel}
+                onChange={(e) => setButtonLabel(e.target.value)}
+                placeholder="Sign In"
               />
-            </div>
-          }
-          preview={
+            </Card>
+          </div>
+        }
+        preview={
+          <div className="rounded-lg border border-dash-border bg-dash-surface p-4 overflow-hidden">
             <LoginPreview
               event={event}
               theme={event.draft_theme ?? event.theme}
-              coverImage={event.draft_cover_image ?? event.cover_image}
+              loginConfig={liveLoginConfig}
             />
-          }
-        />
-      </div>
+          </div>
+        }
+      />
     </div>
   );
 }

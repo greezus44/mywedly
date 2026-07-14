@@ -4,72 +4,63 @@ import { DatePicker } from "./DatePicker";
 import { TimePicker } from "./TimePicker";
 
 interface DateTimePickerProps {
-  value?: { date: string | null; time: string | null };
-  onChange: (value: { date: string | null; time: string | null }) => void;
+  value?: string;
+  onChange: (isoDateTime: string) => void;
   label?: string;
   className?: string;
-  min?: string;
-  max?: string;
 }
 
 type Tab = "date" | "time";
 
-export function DateTimePicker({ value: valueProp, onChange, label, className, min, max }: DateTimePickerProps) {
-  const value = valueProp ?? { date: null, time: null };
+export function DateTimePicker({ value, onChange, label, className }: DateTimePickerProps) {
   const [tab, setTab] = useState<Tab>("date");
+
+  const datePart = value ? value.split("T")[0] : "";
+  const timePart = value ? value.split("T")[1]?.slice(0, 5) ?? "" : "";
+
+  const handleDate = (isoDate: string) => {
+    const time = timePart || "09:00";
+    onChange(`${isoDate}T${time}:00`);
+  };
+
+  const handleTime = (time: string) => {
+    const date = datePart || new Date().toISOString().split("T")[0];
+    onChange(`${date}T${time}:00`);
+  };
 
   return (
     <div className={cn("w-full", className)}>
-      {label && <label className="mb-1.5 block text-sm font-medium text-dash-text">{label}</label>}
-      <div className="rounded-lg border border-dash-border bg-dash-surface p-1">
-        <div className="mb-2 flex gap-1">
-          <button
-            type="button"
-            onClick={() => setTab("date")}
-            className={cn(
-              "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              tab === "date" ? "bg-dash-primary text-dash-primary-fg" : "text-dash-text hover:bg-dash-bg",
-            )}
-          >
-            Date
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("time")}
-            className={cn(
-              "flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              tab === "time" ? "bg-dash-primary text-dash-primary-fg" : "text-dash-text hover:bg-dash-bg",
-            )}
-          >
-            Time
-          </button>
-        </div>
-        {tab === "date" ? (
-          <DatePicker
-            value={value.date}
-            onChange={(date) => onChange({ ...value, date })}
-            min={min}
-            max={max}
-          />
-        ) : (
-          <TimePicker
-            value={value.time}
-            onChange={(time) => onChange({ ...value, time })}
-          />
-        )}
+      {label && <label className="block text-sm font-medium text-dash-text mb-1.5">{label}</label>}
+      <div className="flex gap-1 mb-2 border-b border-dash-border">
+        <button
+          type="button"
+          onClick={() => setTab("date")}
+          className={cn(
+            "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
+            tab === "date"
+              ? "border-dash-primary text-dash-primary"
+              : "border-transparent text-dash-muted hover:text-dash-text"
+          )}
+        >
+          Date
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("time")}
+          className={cn(
+            "px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px",
+            tab === "time"
+              ? "border-dash-primary text-dash-primary"
+              : "border-transparent text-dash-muted hover:text-dash-text"
+          )}
+        >
+          Time
+        </button>
       </div>
-      {(value.date || value.time) && (
-        <p className="mt-1.5 text-sm text-dash-muted">
-          {value.date && new Date(value.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-          {value.date && value.time && " at "}
-          {value.time && (() => {
-            const [h, m] = value.time.split(":");
-            const hour = parseInt(h, 10);
-            const period = hour >= 12 ? "PM" : "AM";
-            const hour12 = hour % 12 === 0 ? 12 : hour % 12;
-            return `${hour12}:${m} ${period}`;
-          })()}
-        </p>
+      {tab === "date" ? (
+        <DatePicker value={datePart} onChange={handleDate} />
+      ) : (
+        <TimePicker value={timePart} onChange={handleTime} />
       )}
     </div>
   );

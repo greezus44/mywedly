@@ -1,13 +1,14 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type CustomPage, type UserEvent } from "../../lib/supabase";
+import { supabase, type CustomPage, type Json } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { BlockRenderer } from "./block-renderer";
+import { jsonToTheme } from "../../lib/theme";
+import { RichTextContent } from "../../lib/sanitize";
+import { BlockRenderer, type Block } from "./block-renderer";
 
 export default function GuestCustomPage() {
   const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
 
-  // Fetch the published event
   const { data: event, isLoading: eventLoading } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
@@ -18,12 +19,11 @@ export default function GuestCustomPage() {
         .eq("is_published", true)
         .maybeSingle();
       if (error) throw error;
-      return data as UserEvent | null;
+      return data;
     },
     enabled: !!slug,
   });
 
-  // Fetch the custom page
   const { data: page, isLoading: pageLoading } = useQuery({
     queryKey: ["guest-custom-page", event?.id, pageSlug],
     queryFn: async () => {
@@ -59,36 +59,39 @@ export default function GuestCustomPage() {
 
   if (!page) {
     return (
-      <EventThemeProvider theme={event.theme}>
-        <div className="guest-section text-center">
+      <EventThemeProvider theme={event.theme as Json}>
+        <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
           <h1 className="guest-title">Page Not Found</h1>
-          <p className="guest-subtitle mx-auto mb-6">This page could not be found or is no longer available.</p>
-          <Link to={`/e/${slug}/home`} className="event-btn-secondary">Back to Home</Link>
+          <p className="guest-subtitle">This page could not be found or is no longer available.</p>
+          <Link to={`/e/${slug}/home`} className="event-btn-primary">Back to Home</Link>
         </div>
       </EventThemeProvider>
     );
   }
 
+  const theme = jsonToTheme(event.theme);
+  const blocks = Array.isArray(page.blocks) ? (page.blocks as unknown as Block[]) : [];
+  const hasBlocks = blocks.length > 0;
+
   return (
-    <EventThemeProvider theme={event.theme}>
-      <div className="animate-fadeIn">
+    <EventThemeProvider theme={event.theme as Json}>
+      <div className="min-h-screen">
         {page.cover_image_url && (
-          <div className="h-48 w-full overflow-hidden sm:h-64">
-            <img src={page.cover_image_url} alt={page.title} className="h-full w-full object-cover" />
+          <div className="relative h-64 md:h-80 overflow-hidden">
+            <img src={page.cover_image_url} alt={page.title} className="w-full h-full object-cover" />
           </div>
         )}
         <section className="guest-section">
-          <div className="mx-auto max-w-2xl">
-            <h1 className="guest-title text-center">{page.title}</h1>
-            {page.inline_image_url && (
-              <div className="mb-6 overflow-hidden rounded-xl">
-                <img src={page.inline_image_url} alt={page.title} className="w-full object-cover" />
-              </div>
+          <div className="mx-auto max-w-3xl">
+            <h1 className="guest-title mb-4 text-center">{page.title}</h1>
+            {page.inline_image_url && !page.cover_image_url && (
+              <img src={page.inline_image_url} alt={page.title} className="mx-auto mb-6 max-w-full rounded-lg" style={{ borderRadius: "var(--event-radius)" }} />
             )}
-            <BlockRenderer blocks={page.blocks} />
-            <div className="mt-8 text-center">
-              <Link to={`/e/${slug}/home`} className="event-btn-secondary">Back to Home</Link>
-            </div>
+            {hasBlocks ? (
+              <BlockRenderer blocks={blocks} />
+            ) : (
+              page.body && <RichTextContent html={page.body} />
+            )}
           </div>
         </section>
       </div>

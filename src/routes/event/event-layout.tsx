@@ -1,21 +1,17 @@
-import React from "react";
-import {
-  NavLink,
-  Outlet,
-  useParams,
-  useNavigate,
-  Link,
-  useOutletContext,
-} from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useParams, useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { LoadingSpinner, ErrorState, Badge } from "../../components/ui";
+import { LoadingSpinner, ErrorState } from "../../components/ui";
 import { cn } from "../../lib/utils";
 
 interface EventContextValue {
   event: UserEvent;
   eventId: string;
+}
+
+export function useEventContext(): EventContextValue {
+  return useOutletContext<EventContextValue>();
 }
 
 const navTabs = [
@@ -50,7 +46,7 @@ export function EventLayout() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: event, isLoading, isError, error, refetch } = useQuery({
+  const { data: event, isLoading, isError, error } = useQuery({
     queryKey: ["event", eventId],
     queryFn: () => fetchEvent(eventId!),
     enabled: !!eventId,
@@ -58,32 +54,32 @@ export function EventLayout() {
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      if (!event) throw new Error("No event loaded");
-      const { data, error } = await supabase
+      if (!event) throw new Error("Event not loaded");
+      const { data, error: updateError } = await supabase
         .from("user_events")
         .update({
-          name: event.draft_name ?? event.name,
-          event_type: event.draft_event_type ?? event.event_type,
-          event_date: event.draft_event_date ?? event.event_date,
-          event_time: event.draft_event_time ?? event.event_time,
-          venue: event.draft_venue ?? event.venue,
-          address: event.draft_address ?? event.address,
-          cover_image: event.draft_cover_image ?? event.cover_image,
-          cover_config: event.draft_cover_config ?? event.cover_config,
-          theme: event.draft_theme ?? event.theme,
-          logo_config: event.draft_logo_config ?? event.logo_config,
-          content: event.draft_content ?? event.content,
-          login_config: event.draft_login_config ?? event.login_config,
-          sharing_config: event.draft_sharing_config ?? event.sharing_config,
-          slug: event.draft_slug ?? event.slug,
-          rsvp_deadline: event.draft_rsvp_deadline ?? event.rsvp_deadline,
+          slug: event.draft_slug,
+          name: event.draft_name,
+          theme: event.draft_theme,
+          cover_config: event.draft_cover_config,
+          cover_image: event.draft_cover_image,
+          logo_config: event.draft_logo_config,
+          content: event.draft_content,
+          login_config: event.draft_login_config,
+          sharing_config: event.draft_sharing_config,
+          event_date: event.draft_event_date,
+          event_time: event.draft_event_time,
+          venue: event.draft_venue,
+          address: event.draft_address,
+          event_type: event.draft_event_type,
+          rsvp_deadline: event.draft_rsvp_deadline,
           is_published: true,
           published_at: new Date().toISOString(),
         })
         .eq("id", event.id)
-        .select("*")
+        .select()
         .maybeSingle();
-      if (error) throw error;
+      if (updateError) throw updateError;
       return data;
     },
     onSuccess: () => {
@@ -91,75 +87,62 @@ export function EventLayout() {
     },
   });
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate("/");
-  };
-
-  // CRITICAL: While loading, render spinner and DO NOT render Outlet
+  // CRITICAL: While loading, render spinner and DO NOT render <Outlet>
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+      <div className="min-h-screen flex items-center justify-center bg-dash-bg">
         <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
 
-  // CRITICAL: If error, render error message and DO NOT render Outlet
-  if (isError || !event || !eventId) {
+  // CRITICAL: On error, render error message and DO NOT render <Outlet>
+  if (isError || !event) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
+      <div className="min-h-screen flex items-center justify-center bg-dash-bg px-4">
         <ErrorState
-          title="Event not found"
-          message={error instanceof Error ? error.message : "Failed to load event"}
-          onRetry={() => refetch()}
+          title="Failed to load event"
+          description={error instanceof Error ? error.message : "Please try again."}
+          onRetry={() => queryClient.invalidateQueries({ queryKey: ["event", eventId] })}
         />
       </div>
     );
   }
 
-  // CRITICAL: Only render Outlet with non-null context when event is successfully loaded
+  // CRITICAL: Only render <Outlet> when event is successfully loaded, with non-null context
   return (
     <div className="min-h-screen bg-dash-bg">
-      {/* Top bar */}
-      <header className="sticky top-0 z-30 border-b border-dash-border bg-dash-surface/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-4">
-            <Link to="/dashboard" className="text-sm text-dash-muted hover:text-dash-primary">
-              ← Dashboard
-            </Link>
-            <div className="h-4 w-px bg-dash-border" />
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-dash-text">
-                {event.draft_name || event.name}
+      <header className="border-b border-dash-border bg-dash-surface sticky top-0 z-40">
+        <div className="mx-auto max-w-7xl px-4">
+          <div className="h-14 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate("/dashboard")}
+                className="text-sm text-dash-muted hover:text-dash-text transition-colors"
+              >
+                ← Dashboard
+              </button>
+              <span className="text-dash-border">/</span>
+              <span className="text-sm font-semibold text-dash-text truncate max-w-[200px]">
+                {event.draft_name || event.name || "Untitled"}
               </span>
+            </div>
+            <div className="flex items-center gap-2">
               {event.is_published ? (
-                <Badge color="success">Published</Badge>
+                <Badge>Published</Badge>
               ) : (
-                <Badge color="warning">Draft</Badge>
+                <Badge>Draft</Badge>
               )}
+              <Button
+                size="sm"
+                loading={publishMutation.isPending}
+                onClick={() => publishMutation.mutate()}
+              >
+                {event.is_published ? "Update" : "Publish"}
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              loading={publishMutation.isPending}
-              onClick={() => publishMutation.mutate()}
-            >
-              {event.is_published ? "Republish" : "Publish"}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
-              Sign out
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* Nav tabs */}
-      <nav className="sticky top-16 z-20 border-b border-dash-border bg-dash-surface">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="flex gap-1 overflow-x-auto scrollbar-thin py-2">
+          <nav className="flex gap-1 overflow-x-auto pb-2 -mb-px">
             {navTabs.map((tab) => (
               <NavLink
                 key={tab.label}
@@ -167,28 +150,41 @@ export function EventLayout() {
                 end={tab.to === ""}
                 className={({ isActive }) =>
                   cn(
-                    "whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+                    "px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
                     isActive
                       ? "bg-dash-primary text-dash-primary-fg"
-                      : "text-dash-muted hover:bg-dash-bg hover:text-dash-text",
+                      : "text-dash-muted hover:text-dash-text hover:bg-dash-bg"
                   )
                 }
               >
                 {tab.label}
               </NavLink>
             ))}
-          </div>
+          </nav>
         </div>
-      </nav>
+      </header>
 
-      {/* Content */}
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-7xl px-4 py-6">
+        {publishMutation.isError && (
+          <div className="mb-4 rounded-md bg-dash-danger/10 border border-dash-danger/20 p-3 text-sm text-dash-danger">
+            Failed to publish: {publishMutation.error instanceof Error ? publishMutation.error.message : "Unknown error"}
+          </div>
+        )}
+        {publishMutation.isSuccess && (
+          <div className="mb-4 rounded-md bg-green-50 border border-green-200 p-3 text-sm text-green-700">
+            {event.is_published ? "Website updated successfully!" : "Website published successfully!"}
+          </div>
+        )}
         <Outlet context={{ event, eventId: eventId! }} />
       </main>
     </div>
   );
 }
 
-export function useEventContext(): EventContextValue {
-  return useOutletContext<EventContextValue>();
+function Badge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-dash-bg text-dash-muted border border-dash-border">
+      {children}
+    </span>
+  );
 }

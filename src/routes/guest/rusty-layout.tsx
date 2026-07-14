@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate, Outlet, NavLink, Link, useOutletContext } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
+import { useParams, useNavigate, NavLink, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
@@ -7,7 +7,15 @@ import { EventThemeProvider } from "../../lib/theme-context";
 import { RUSTY_THEME } from "../../lib/theme";
 import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
 
+// Re-export the outlet context hook so rusty child routes can use the same context
 export { useGuestOutletContext } from "./guest-layout";
+import { useGuestOutletContext } from "./guest-layout";
+import type { GuestOutletContext } from "./guest-layout";
+
+interface NavItem {
+  label: string;
+  to: string;
+}
 
 export default function RustyLayout() {
   const { slug } = useParams<{ slug: string }>();
@@ -30,14 +38,6 @@ export default function RustyLayout() {
     enabled: !!slug,
   });
 
-  // Redirect to rustic signin if not authenticated
-  useEffect(() => {
-    if (!authLoading && !guest && event && eventId !== event.id) {
-      navigate(`/r/${slug}/signin`, { replace: true });
-    }
-  }, [authLoading, guest, event, eventId, slug, navigate]);
-
-  // Fetch custom pages for nav
   const { data: customPages } = useQuery({
     queryKey: ["guest-custom-pages", event?.id],
     queryFn: async () => {
@@ -54,16 +54,29 @@ export default function RustyLayout() {
     enabled: !!event?.id,
   });
 
-  // Resolve guest invitations
-  const { data: invitedSubEventIds } = useQuery({
-    queryKey: ["guest-invitations", guest?.id, event?.id],
+  const { data: invitationData } = useQuery({
+    queryKey: ["guest-invitations", event?.id, guest?.id],
     queryFn: async () => {
-      if (!guest || !event) return [];
-      const { invitations } = await resolveGuestInvitations(supabase, guest.id, event.id);
-      return getInvitedSubEventIds(invitations);
+      return resolveGuestInvitations(supabase, guest!.id, event!.id);
     },
-    enabled: !!guest && !!event,
+    enabled: !!event?.id && !!guest?.id,
   });
+
+  const invitedSubEventIds = useMemo(
+    () => (invitationData ? getInvitedSubEventIds(invitationData.invitations) : []),
+    [invitationData],
+  );
+
+  // Redirect to rustic sign-in if not authenticated
+  useEffect(() => {
+    if (!authLoading && !guest && event) {
+      navigate(`/r/${slug}/signin`, { replace: true });
+    }
+  }, [authLoading, guest, event, slug, navigate]);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [slug]);
 
   if (eventLoading || authLoading) {
     return (
@@ -77,43 +90,65 @@ export default function RustyLayout() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
         <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
-        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
+        <p className="text-dash-muted">This invitation website could not be found or is no longer available.</p>
       </div>
     );
   }
 
-  if (!guest) {
-    return null; // redirecting to signin
+  if (!guest || eventId !== event.id) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
+      </div>
+    );
   }
 
-  const base = `/r/${slug}`;
-  const navLinks = [
-    { label: "Home", to: `${base}/home` },
-    { label: "RSVP", to: `${base}/rsvp` },
-    { label: "Wishes", to: `${base}/wishes` },
-    { label: "Contact", to: `${base}/contact` },
+  const navItems: NavItem[] = [
+    { label: "Home", to: `/r/${slug}/home` },
+    { label: "RSVP", to: `/r/${slug}/rsvp` },
+    { label: "Wishes", to: `/r/${slug}/wishes` },
+    { label: "Contact", to: `/r/${slug}/contact` },
     ...(customPages ?? []).map((p) => ({
       label: p.nav_label || p.title,
-      to: `${base}/p/${p.slug}`,
+      to: `/r/${slug}/p/${p.slug}`,
     })),
   ];
+
+  const logoConfig = (event.logo_config ?? {}) as { url?: string | null; size?: number };
 
   return (
     <EventThemeProvider theme={RUSTY_THEME as unknown as Json}>
       <div className="min-h-screen">
-        {/* Header with hamburger */}
-        <header className="sticky top-0 z-30 border-b" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
-          <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-4">
-            <Link to={`${base}/home`} className="font-semibold" style={{ color: "var(--event-heading)" }}>
-              {event.name}
-            </Link>
+        <header className="sticky top-0 z-40 border-b" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
+          <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+            <NavLink to={`/r/${slug}/home`} className="flex items-center gap-2">
+              {logoConfig.url ? (
+                <img src={logoConfig.url} alt="Logo" style={{ height: "32px", width: "auto", background: "transparent" }} className="object-contain" />
+              ) : (
+                <span className="text-lg font-bold" style={{ color: "var(--event-heading)" }}>{event.name}</span>
+              )}
+            </NavLink>
+
+            <nav className="hidden md:flex items-center gap-1">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => `guest-nav-link${isActive ? " active" : ""}`}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+
             <button
-              onClick={() => setMenuOpen((v) => !v)}
-              className="p-2"
-              aria-label="Toggle menu"
+              className="md:hidden p-2 rounded-md"
               style={{ color: "var(--event-text)" }}
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-label="Toggle menu"
+              aria-expanded={menuOpen}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 {menuOpen ? (
                   <>
                     <line x1="18" y1="6" x2="6" y2="18" />
@@ -129,34 +164,29 @@ export default function RustyLayout() {
               </svg>
             </button>
           </div>
-        </header>
 
-        {/* Slide-down menu */}
-        {menuOpen && (
-          <nav className="sticky top-16 z-20 border-b px-4 py-3" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
-            <div className="mx-auto flex max-w-4xl flex-col gap-1">
-              {navLinks.map((link) => (
+          {menuOpen && (
+            <nav className="md:hidden border-t px-4 py-2" style={{ borderColor: "var(--event-border)" }}>
+              {navItems.map((item) => (
                 <NavLink
-                  key={link.to}
-                  to={link.to}
-                  onClick={() => setMenuOpen(false)}
-                  className={({ isActive }) =>
-                    `rounded-lg px-3 py-2 text-sm font-medium ${isActive ? "" : ""}`
-                  }
-                  style={({ isActive }) => ({ color: isActive ? "var(--event-primary)" : "var(--event-text)" })}
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => `guest-nav-link block w-full text-left${isActive ? " active" : ""}`}
                 >
-                  {link.label}
+                  {item.label}
                 </NavLink>
               ))}
-            </div>
-          </nav>
-        )}
+            </nav>
+          )}
+        </header>
 
-        {/* Content */}
         <main>
-          <Outlet context={{ event, slug: slug!, theme: RUSTY_THEME, invitedSubEventIds: invitedSubEventIds ?? [] }} />
+          <Outlet context={{ event, slug: slug!, theme: RUSTY_THEME, invitedSubEventIds } satisfies GuestOutletContext} />
         </main>
       </div>
     </EventThemeProvider>
   );
 }
+
+// Keep the hook referenced so tree-shaking doesn't drop the re-export
+void useGuestOutletContext;

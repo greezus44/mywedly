@@ -1,28 +1,24 @@
 import type { Json } from "./supabase";
 
-export interface ThemeColors {
-  bg: string;
-  surface: string;
-  surfaceAlt: string;
-  border: string;
-  text: string;
-  heading: string;
-  muted: string;
-  primary: string;
-  primaryHover: string;
-  primaryFg: string;
-  accent: string;
-}
-
-export interface ThemeFonts {
-  heading: string;
-  body: string;
-  rich: string;
-}
-
 export interface ThemeConfig {
-  colors: ThemeColors;
-  fonts: ThemeFonts;
+  colors: {
+    bg: string;
+    surface: string;
+    surfaceAlt: string;
+    border: string;
+    text: string;
+    heading: string;
+    muted: string;
+    primary: string;
+    primaryHover: string;
+    primaryFg: string;
+    accent: string;
+  };
+  fonts: {
+    heading: string;
+    body: string;
+    rich: string;
+  };
   radius: string;
   fontScale: number;
 }
@@ -39,9 +35,9 @@ export interface SimplifiedThemeConfig {
   primaryHover?: string;
   primaryFg?: string;
   accent?: string;
-  fontHeading?: string;
-  fontBody?: string;
-  fontRich?: string;
+  headingFont?: string;
+  bodyFont?: string;
+  richFont?: string;
   radius?: string;
   fontScale?: number;
 }
@@ -71,24 +67,24 @@ export const DEFAULT_THEME: ThemeConfig = {
 
 export const RUSTY_THEME: ThemeConfig = {
   colors: {
-    bg: "#1c1917",
-    surface: "#292524",
-    surfaceAlt: "rgba(255,255,255,0.05)",
-    border: "#44403c",
-    text: "#f5f5f4",
-    heading: "#fef3c7",
-    muted: "#a8a29e",
-    primary: "#d97706",
-    primaryHover: "#b45309",
-    primaryFg: "#ffffff",
-    accent: "#f59e0b",
+    bg: "#1c1410",
+    surface: "#2a1f18",
+    surfaceAlt: "rgba(255,255,255,0.06)",
+    border: "#3d2e22",
+    text: "#e8d5c4",
+    heading: "#f5e6d3",
+    muted: "#b8a48c",
+    primary: "#c97b4a",
+    primaryHover: "#b06a3c",
+    primaryFg: "#1c1410",
+    accent: "#e09a5e",
   },
   fonts: {
-    heading: "'Playfair Display', serif",
-    body: "Inter, sans-serif",
-    rich: "'Cormorant Garamond', serif",
+    heading: "Georgia, serif",
+    body: "Georgia, serif",
+    rich: "Georgia, serif",
   },
-  radius: "0.5rem",
+  radius: "0.25rem",
   fontScale: 1,
 };
 
@@ -99,109 +95,35 @@ export const THEME_PRESETS: Record<string, ThemeConfig> = {
     colors: {
       bg: "#fdf2f8",
       surface: "#ffffff",
-      surfaceAlt: "rgba(255,255,255,0.08)",
+      surfaceAlt: "rgba(255,255,255,0.6)",
       border: "#fbcfe8",
       text: "#831843",
-      heading: "#9d174d",
+      heading: "#831843",
       muted: "#be185d",
       primary: "#db2777",
       primaryHover: "#be185d",
       primaryFg: "#ffffff",
       accent: "#ec4899",
     },
-    fonts: {
-      heading: "'Playfair Display', serif",
-      body: "Inter, sans-serif",
-      rich: "'Cormorant Garamond', serif",
-    },
-    radius: "0.5rem",
+    fonts: { heading: "Georgia, serif", body: "Georgia, serif", rich: "Georgia, serif" },
+    radius: "0.75rem",
     fontScale: 1,
   },
   sage: {
     colors: {
       bg: "#f0fdf4",
       surface: "#ffffff",
-      surfaceAlt: "rgba(255,255,255,0.08)",
+      surfaceAlt: "rgba(255,255,255,0.6)",
       border: "#bbf7d0",
       text: "#14532d",
-      heading: "#166534",
-      muted: "#15803d",
+      heading: "#14532d",
+      muted: "#16a34a",
       primary: "#16a34a",
       primaryHover: "#15803d",
       primaryFg: "#ffffff",
       accent: "#22c55e",
     },
-    fonts: {
-      heading: "'EB Garamond', serif",
-      body: "Inter, sans-serif",
-      rich: "'Lora', serif",
-    },
-    radius: "0.5rem",
-    fontScale: 1,
-  },
-  navy: {
-    colors: {
-      bg: "#f8fafc",
-      surface: "#ffffff",
-      surfaceAlt: "rgba(255,255,255,0.08)",
-      border: "#cbd5e1",
-      text: "#0f172a",
-      heading: "#1e293b",
-      muted: "#475569",
-      primary: "#1e40af",
-      primaryHover: "#1e3a8a",
-      primaryFg: "#ffffff",
-      accent: "#3b82f6",
-    },
-    fonts: {
-      heading: "'Bodoni Moda', serif",
-      body: "Inter, sans-serif",
-      rich: "'Cardo', serif",
-    },
-    radius: "0.5rem",
-    fontScale: 1,
-  },
-  lavender: {
-    colors: {
-      bg: "#faf5ff",
-      surface: "#ffffff",
-      surfaceAlt: "rgba(255,255,255,0.08)",
-      border: "#e9d5ff",
-      text: "#3b0764",
-      heading: "#5b21b6",
-      muted: "#6b21a8",
-      primary: "#7c3aed",
-      primaryHover: "#6d28d9",
-      primaryFg: "#ffffff",
-      accent: "#a855f7",
-    },
-    fonts: {
-      heading: "'Cormorant Garamond', serif",
-      body: "Inter, sans-serif",
-      rich: "'EB Garamond', serif",
-    },
-    radius: "0.5rem",
-    fontScale: 1,
-  },
-  terracotta: {
-    colors: {
-      bg: "#fdf4f0",
-      surface: "#ffffff",
-      surfaceAlt: "rgba(255,255,255,0.08)",
-      border: "#fed7aa",
-      text: "#7c2d12",
-      heading: "#9a3412",
-      muted: "#c2410c",
-      primary: "#ea580c",
-      primaryHover: "#c2410c",
-      primaryFg: "#ffffff",
-      accent: "#f97316",
-    },
-    fonts: {
-      heading: "'Lora', serif",
-      body: "Inter, sans-serif",
-      rich: "'EB Garamond', serif",
-    },
+    fonts: { heading: "Georgia, serif", body: "Georgia, serif", rich: "Georgia, serif" },
     radius: "0.5rem",
     fontScale: 1,
   },
@@ -219,113 +141,134 @@ export const THEME_PRESETS: Record<string, ThemeConfig> = {
       primaryFg: "#ffffff",
       accent: "#818cf8",
     },
-    fonts: {
-      heading: "'Playfair Display', serif",
-      body: "Inter, sans-serif",
-      rich: "'Cormorant Garamond', serif",
+    fonts: { heading: "Georgia, serif", body: "Georgia, serif", rich: "Georgia, serif" },
+    radius: "0.5rem",
+    fontScale: 1,
+  },
+  ivory: {
+    colors: {
+      bg: "#fafaf9",
+      surface: "#ffffff",
+      surfaceAlt: "rgba(0,0,0,0.03)",
+      border: "#e7e5e4",
+      text: "#1c1917",
+      heading: "#1c1917",
+      muted: "#78716c",
+      primary: "#1c1917",
+      primaryHover: "#292524",
+      primaryFg: "#fafaf9",
+      accent: "#57534e",
     },
+    fonts: { heading: "Georgia, serif", body: "Georgia, serif", rich: "Georgia, serif" },
+    radius: "0.25rem",
+    fontScale: 1,
+  },
+  ocean: {
+    colors: {
+      bg: "#f0f9ff",
+      surface: "#ffffff",
+      surfaceAlt: "rgba(255,255,255,0.6)",
+      border: "#bae6fd",
+      text: "#0c4a6e",
+      heading: "#0c4a6e",
+      muted: "#0369a1",
+      primary: "#0ea5e9",
+      primaryHover: "#0284c7)",
+      primaryFg: "#ffffff",
+      accent: "#38bdf8",
+    },
+    fonts: { heading: "Georgia, serif", body: "Georgia, serif", rich: "Georgia, serif" },
+    radius: "0.5rem",
+    fontScale: 1,
+  },
+  lavender: {
+    colors: {
+      bg: "#faf5ff",
+      surface: "#ffffff",
+      surfaceAlt: "rgba(255,255,255,0.6)",
+      border: "#e9d5ff",
+      text: "#581c87",
+      heading: "#581c87",
+      muted: "#7e22ce",
+      primary: "#9333ea",
+      primaryHover: "#7e22ce",
+      primaryFg: "#ffffff",
+      accent: "#a855f7",
+    },
+    fonts: { heading: "Georgia, serif", body: "Georgia, serif", rich: "Georgia, serif" },
     radius: "0.5rem",
     fontScale: 1,
   },
   forest: {
     colors: {
-      bg: "#f0fdf4",
-      surface: "#ffffff",
-      surfaceAlt: "rgba(255,255,255,0.08)",
-      border: "#a7f3d0",
-      text: "#064e3b",
-      heading: "#065f46",
-      muted: "#047857",
-      primary: "#059669",
-      primaryHover: "#047857",
-      primaryFg: "#ffffff",
-      accent: "#10b981",
+      bg: "#0a1f12",
+      surface: "#13291b",
+      surfaceAlt: "rgba(255,255,255,0.05)",
+      border: "#1e3a26",
+      text: "#d4e8d4",
+      heading: "#e8f5e9",
+      muted: "#a5c9a5",
+      primary: "#4ade80",
+      primaryHover: "#22c55e",
+      primaryFg: "#0a1f12",
+      accent: "#86efac",
     },
-    fonts: {
-      heading: "'Cardo', serif",
-      body: "Inter, sans-serif",
-      rich: "'Lora', serif",
-    },
+    fonts: { heading: "Georgia, serif", body: "Georgia, serif", rich: "Georgia, serif" },
     radius: "0.5rem",
     fontScale: 1,
   },
-  rose: {
+  coral: {
     colors: {
-      bg: "#fff7f7",
+      bg: "#fff7ed",
       surface: "#ffffff",
-      surfaceAlt: "rgba(255,255,255,0.08)",
-      border: "#fecdd3",
-      text: "#881337",
-      heading: "#9f1239",
-      muted: "#be123c",
-      primary: "#e11d48",
-      primaryHover: "#be123c",
+      surfaceAlt: "rgba(255,255,255,0.6)",
+      border: "#fed7aa",
+      text: "#7c2d12",
+      heading: "#7c2d12",
+      muted: "#c2410c",
+      primary: "#f97316",
+      primaryHover: "#ea580c",
       primaryFg: "#ffffff",
-      accent: "#f43f5e",
+      accent: "#fb923c",
     },
-    fonts: {
-      heading: "'Dancing Script', cursive",
-      body: "Inter, sans-serif",
-      rich: "'Cormorant Garamond', serif",
-    },
-    radius: "0.5rem",
-    fontScale: 1,
-  },
-  gold: {
-    colors: {
-      bg: "#fffbeb",
-      surface: "#ffffff",
-      surfaceAlt: "rgba(255,255,255,0.08)",
-      border: "#fde68a",
-      text: "#78350f",
-      heading: "#78350f",
-      muted: "#92400e",
-      primary: "#b45309",
-      primaryHover: "#92400e",
-      primaryFg: "#ffffff",
-      accent: "#d97706",
-    },
-    fonts: {
-      heading: "'Great Vibes', cursive",
-      body: "Inter, sans-serif",
-      rich: "'EB Garamond', serif",
-    },
-    radius: "0.5rem",
+    fonts: { heading: "Georgia, serif", body: "Georgia, serif", rich: "Georgia, serif" },
+    radius: "0.75rem",
     fontScale: 1,
   },
 };
 
 export const RICH_FONT_OPTIONS = [
-  { label: "Georgia", value: "Georgia, serif" },
-  { label: "Cormorant Garamond", value: "'Cormorant Garamond', serif" },
-  { label: "EB Garamond", value: "'EB Garamond', serif" },
-  { label: "Lora", value: "'Lora', serif" },
-  { label: "Cardo", value: "'Cardo', serif" },
-  { label: "Playfair Display", value: "'Playfair Display', serif" },
-  { label: "Bodoni Moda", value: "'Bodoni Moda', serif" },
-  { label: "Inter", value: "Inter, sans-serif" },
-  { label: "Montserrat", value: "'Montserrat', sans-serif" },
-  { label: "Dancing Script", value: "'Dancing Script', cursive" },
-  { label: "Caveat", value: "'Caveat', cursive" },
-  { label: "Great Vibes", value: "'Great Vibes', cursive" },
+  { label: "Georgia (serif)", value: "Georgia, serif" },
+  { label: "Merriweather (serif)", value: "Merriweather, Georgia, serif" },
+  { label: "Playfair Display (serif)", value: "'Playfair Display', Georgia, serif" },
+  { label: "Lora (serif)", value: "Lora, Georgia, serif" },
+  { label: "Inter (sans)", value: "Inter, system-ui, sans-serif" },
+  { label: "System Sans", value: "system-ui, sans-serif" },
+  { label: "Helvetica", value: "Helvetica, Arial, sans-serif" },
+  { label: "Arial", value: "Arial, sans-serif" },
+  { label: "Courier (mono)", value: "'Courier New', monospace" },
+  { label: "Roboto (sans)", value: "Roboto, system-ui, sans-serif" },
+  { label: "Open Sans", value: "'Open Sans', system-ui, sans-serif" },
+  { label: "Montserrat", value: "Montserrat, system-ui, sans-serif" },
 ];
 
 export const HEADING_FONT_OPTIONS = [
-  { label: "Georgia", value: "Georgia, serif" },
-  { label: "Playfair Display", value: "'Playfair Display', serif" },
-  { label: "Cormorant Garamond", value: "'Cormorant Garamond', serif" },
-  { label: "EB Garamond", value: "'EB Garamond', serif" },
-  { label: "Lora", value: "'Lora', serif" },
-  { label: "Bodoni Moda", value: "'Bodoni Moda', serif" },
-  { label: "Cardo", value: "'Cardo', serif" },
-  { label: "Inter", value: "Inter, sans-serif" },
-  { label: "Montserrat", value: "'Montserrat', sans-serif" },
-  { label: "Dancing Script", value: "'Dancing Script', cursive" },
-  { label: "Great Vibes", value: "'Great Vibes', cursive" },
-  { label: "Caveat", value: "'Caveat', cursive" },
+  { label: "Georgia (serif)", value: "Georgia, serif" },
+  { label: "Merriweather (serif)", value: "Merriweather, Georgia, serif" },
+  { label: "Playfair Display (serif)", value: "'Playfair Display', Georgia, serif" },
+  { label: "Lora (serif)", value: "Lora, Georgia, serif" },
+  { label: "Inter (sans)", value: "Inter, system-ui, sans-serif" },
+  { label: "System Sans", value: "system-ui, sans-serif" },
+  { label: "Helvetica", value: "Helvetica, Arial, sans-serif" },
+  { label: "Arial", value: "Arial, sans-serif" },
+  { label: "Courier (mono)", value: "'Courier New', monospace" },
+  { label: "Roboto (sans)", value: "Roboto, system-ui, sans-serif" },
+  { label: "Open Sans", value: "'Open Sans', system-ui, sans-serif" },
+  { label: "Montserrat", value: "Montserrat, system-ui, sans-serif" },
 ];
 
-export function simplifiedToFullTheme(simplified: SimplifiedThemeConfig): ThemeConfig {
+export function simplifiedToFullTheme(simplified: SimplifiedThemeConfig | null | undefined): ThemeConfig {
+  if (!simplified) return { ...DEFAULT_THEME };
   return {
     colors: {
       bg: simplified.bg ?? DEFAULT_THEME.colors.bg,
@@ -341,9 +284,9 @@ export function simplifiedToFullTheme(simplified: SimplifiedThemeConfig): ThemeC
       accent: simplified.accent ?? DEFAULT_THEME.colors.accent,
     },
     fonts: {
-      heading: simplified.fontHeading ?? DEFAULT_THEME.fonts.heading,
-      body: simplified.fontBody ?? DEFAULT_THEME.fonts.body,
-      rich: simplified.fontRich ?? DEFAULT_THEME.fonts.rich,
+      heading: simplified.headingFont ?? DEFAULT_THEME.fonts.heading,
+      body: simplified.bodyFont ?? DEFAULT_THEME.fonts.body,
+      rich: simplified.richFont ?? DEFAULT_THEME.fonts.rich,
     },
     radius: simplified.radius ?? DEFAULT_THEME.radius,
     fontScale: simplified.fontScale ?? DEFAULT_THEME.fontScale,
@@ -363,9 +306,9 @@ export function fullToSimplifiedTheme(theme: ThemeConfig): SimplifiedThemeConfig
     primaryHover: theme.colors.primaryHover,
     primaryFg: theme.colors.primaryFg,
     accent: theme.colors.accent,
-    fontHeading: theme.fonts.heading,
-    fontBody: theme.fonts.body,
-    fontRich: theme.fonts.rich,
+    headingFont: theme.fonts.heading,
+    bodyFont: theme.fonts.body,
+    richFont: theme.fonts.rich,
     radius: theme.radius,
     fontScale: theme.fontScale,
   };
@@ -392,50 +335,49 @@ export function themeToEventCssVars(theme: ThemeConfig): Record<string, string> 
   };
 }
 
-export function slugify(str: string): string {
-  return str
+export function slugify(text: string): string {
+  return text
+    .toString()
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9\s-]/g, "")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replace(/^-+|-+$/g, "");
 }
 
 export function isValidSlug(slug: string): boolean {
-  if (!slug) return false;
-  return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(slug) && slug.length <= 64;
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
 }
 
-export function jsonToTheme(theme: Json | null | undefined): ThemeConfig {
-  if (!theme || typeof theme !== "object" || Array.isArray(theme)) {
-    return DEFAULT_THEME;
+export function jsonToTheme(json: Json | null | undefined): ThemeConfig {
+  if (!json || typeof json !== "object" || Array.isArray(json)) {
+    return { ...DEFAULT_THEME };
   }
-  const t = theme as Record<string, unknown>;
-  const colorsIn = (t.colors && typeof t.colors === "object" && !Array.isArray(t.colors) ? t.colors : {}) as Record<string, unknown>;
-  const fontsIn = (t.fonts && typeof t.fonts === "object" && !Array.isArray(t.fonts) ? t.fonts : {}) as Record<string, unknown>;
-  const colors: ThemeColors = {
-    bg: (colorsIn.bg as string) ?? DEFAULT_THEME.colors.bg,
-    surface: (colorsIn.surface as string) ?? DEFAULT_THEME.colors.surface,
-    surfaceAlt: (colorsIn.surfaceAlt as string) ?? DEFAULT_THEME.colors.surfaceAlt,
-    border: (colorsIn.border as string) ?? DEFAULT_THEME.colors.border,
-    text: (colorsIn.text as string) ?? DEFAULT_THEME.colors.text,
-    heading: (colorsIn.heading as string) ?? DEFAULT_THEME.colors.heading,
-    muted: (colorsIn.muted as string) ?? DEFAULT_THEME.colors.muted,
-    primary: (colorsIn.primary as string) ?? DEFAULT_THEME.colors.primary,
-    primaryHover: (colorsIn.primaryHover as string) ?? DEFAULT_THEME.colors.primaryHover,
-    primaryFg: (colorsIn.primaryFg as string) ?? DEFAULT_THEME.colors.primaryFg,
-    accent: (colorsIn.accent as string) ?? DEFAULT_THEME.colors.accent,
+  const obj = json as Record<string, unknown>;
+  const colorsSrc = (obj.colors as Record<string, unknown> | undefined) ?? {};
+  const fontsSrc = (obj.fonts as Record<string, unknown> | undefined) ?? {};
+  const theme: ThemeConfig = {
+    colors: {
+      bg: (colorsSrc.bg as string) ?? DEFAULT_THEME.colors.bg,
+      surface: (colorsSrc.surface as string) ?? DEFAULT_THEME.colors.surface,
+      surfaceAlt: (colorsSrc.surfaceAlt as string) ?? DEFAULT_THEME.colors.surfaceAlt,
+      border: (colorsSrc.border as string) ?? DEFAULT_THEME.colors.border,
+      text: (colorsSrc.text as string) ?? DEFAULT_THEME.colors.text,
+      heading: (colorsSrc.heading as string) ?? DEFAULT_THEME.colors.heading,
+      muted: (colorsSrc.muted as string) ?? DEFAULT_THEME.colors.muted,
+      primary: (colorsSrc.primary as string) ?? DEFAULT_THEME.colors.primary,
+      primaryHover: (colorsSrc.primaryHover as string) ?? DEFAULT_THEME.colors.primaryHover,
+      primaryFg: (colorsSrc.primaryFg as string) ?? DEFAULT_THEME.colors.primaryFg,
+      accent: (colorsSrc.accent as string) ?? DEFAULT_THEME.colors.accent,
+    },
+    fonts: {
+      heading: (fontsSrc.heading as string) ?? DEFAULT_THEME.fonts.heading,
+      body: (fontsSrc.body as string) ?? DEFAULT_THEME.fonts.body,
+      rich: (fontsSrc.rich as string) ?? DEFAULT_THEME.fonts.rich,
+    },
+    radius: (obj.radius as string) ?? DEFAULT_THEME.radius,
+    fontScale: typeof obj.fontScale === "number" ? obj.fontScale : DEFAULT_THEME.fontScale,
   };
-  const fonts: ThemeFonts = {
-    heading: (fontsIn.heading as string) ?? DEFAULT_THEME.fonts.heading,
-    body: (fontsIn.body as string) ?? DEFAULT_THEME.fonts.body,
-    rich: (fontsIn.rich as string) ?? DEFAULT_THEME.fonts.rich,
-  };
-  return {
-    colors,
-    fonts,
-    radius: (t.radius as string) ?? DEFAULT_THEME.radius,
-    fontScale: typeof t.fontScale === "number" ? t.fontScale : DEFAULT_THEME.fontScale,
-  };
+  return theme;
 }

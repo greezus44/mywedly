@@ -8,23 +8,15 @@ interface SplitEditorProps {
   editorRatio?: number;
 }
 
-export function SplitEditor({ editor, preview, previewClassName, editorRatio = 1 }: SplitEditorProps) {
-  const previewRatio = 2 - editorRatio;
-  const editorWidth = `${(editorRatio / 2) * 100}%`;
-  const previewWidth = `${(previewRatio / 2) * 100}%`;
-
+export function SplitEditor({ editor, preview, previewClassName, editorRatio = 0.5 }: SplitEditorProps) {
+  const editorWidth = `${editorRatio * 100}%`;
+  const previewWidth = `${(1 - editorRatio) * 100}%`;
   return (
-    <div className="flex h-full w-full overflow-hidden rounded-xl border border-dash-border bg-dash-surface">
-      <div
-        className="h-full overflow-y-auto scrollbar-thin border-r border-dash-border p-4"
-        style={{ width: editorWidth, flexShrink: 0 }}
-      >
+    <div className="flex flex-col lg:flex-row gap-4 w-full">
+      <div style={{ width: editorWidth }} className="w-full lg:w-auto">
         {editor}
       </div>
-      <div
-        className={cn("h-full overflow-y-auto scrollbar-thin bg-dash-bg", previewClassName)}
-        style={{ width: previewWidth, flexShrink: 0 }}
-      >
+      <div style={{ width: previewWidth }} className={cn("w-full lg:w-auto", previewClassName)}>
         {preview}
       </div>
     </div>

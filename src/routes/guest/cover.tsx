@@ -1,7 +1,6 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
-import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { jsonToTheme } from "../../lib/theme";
 import { resolveTypography } from "../../lib/typography";

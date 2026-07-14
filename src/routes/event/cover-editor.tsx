@@ -1,225 +1,205 @@
-import React, { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
-import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { RangeInput } from "../../components/ui";
-import { TypographyControls } from "../../components/ui/TypographyControls";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import {
   CoverPreview,
   type CoverConfig,
   type LogoConfig,
 } from "../../components/preview/PreviewRenderers";
+import { TypographyControls } from "../../components/ui/TypographyControls";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
+import { RangeInput, Card } from "../../components/ui";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { uploadImage } from "../../lib/upload";
 import type { TypographyStyle } from "../../lib/typography";
 
-function asTypography(value: unknown, fallbackText: string): TypographyStyle {
+function asTypography(value: unknown): TypographyStyle {
   if (value && typeof value === "object" && !Array.isArray(value)) {
-    const v = value as TypographyStyle;
-    return {
-      text: v.text ?? fallbackText,
-      fontFamily: v.fontFamily,
-      fontSize: v.fontSize,
-      fontWeight: v.fontWeight,
-      color: v.color,
-      align: v.align,
-      italic: v.italic,
-      underline: v.underline,
-      letterSpacing: v.letterSpacing,
-      lineHeight: v.lineHeight,
-    };
+    return value as TypographyStyle;
   }
-  if (typeof value === "string") {
-    return { text: value };
-  }
-  return { text: fallbackText };
+  return {};
 }
 
 export function CoverEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const initialConfig = (event.draft_cover_config ?? event.cover_config ?? {}) as CoverConfig;
-  const initialLogo = (event.draft_logo_config ?? event.logo_config ?? {}) as LogoConfig;
-  const initialImage = event.draft_cover_image ?? event.cover_image ?? null;
+  const initial = (event.draft_cover_config ?? event.cover_config) as CoverConfig | null;
+  const initialLogo = (event.draft_logo_config ?? event.logo_config) as LogoConfig | null;
 
-  const [heading, setHeading] = useState<TypographyStyle>(
-    asTypography(initialConfig.heading, event.name || "Event Title"),
-  );
-  const [subheading, setSubheading] = useState<TypographyStyle>(
-    asTypography(initialConfig.subheading, ""),
-  );
-  const [eyebrow, setEyebrow] = useState<TypographyStyle>(
-    asTypography(initialConfig.eyebrow, ""),
-  );
-  const [ctaText, setCtaText] = useState(initialConfig.ctaText ?? "");
-  const [overlayOpacity, setOverlayOpacity] = useState(initialConfig.overlayOpacity ?? 0.4);
-  const [coverImage, setCoverImage] = useState<string | null>(initialImage);
-  const [logoUrl, setLogoUrl] = useState<string | null>(initialLogo.url ?? null);
-  const [logoSize, setLogoSize] = useState(initialLogo.size ?? 80);
-  const [saved, setSaved] = useState(false);
+  const [eyebrow, setEyebrow] = useState<TypographyStyle>(asTypography(initial?.eyebrow));
+  const [heading, setHeading] = useState<TypographyStyle>(asTypography(initial?.heading));
+  const [subheading, setSubheading] = useState<TypographyStyle>(asTypography(initial?.subheading));
+  const [ctaLabel, setCtaLabel] = useState(initial?.ctaLabel ?? "");
+  const [overlay, setOverlay] = useState(initial?.overlay ?? 0.3);
+  const [logoConfig, setLogoConfig] = useState<LogoConfig>(initialLogo ?? {});
+  const [coverImage, setCoverImage] = useState<string | null>(event.draft_cover_image ?? event.cover_image);
+
+  useEffect(() => {
+    const cfg = (event.draft_cover_config ?? event.cover_config) as CoverConfig | null;
+    setEyebrow(asTypography(cfg?.eyebrow));
+    setHeading(asTypography(cfg?.heading));
+    setSubheading(asTypography(cfg?.subheading));
+    setCtaLabel(cfg?.ctaLabel ?? "");
+    setOverlay(cfg?.overlay ?? 0.3);
+    setLogoConfig((event.draft_logo_config ?? event.logo_config) as LogoConfig ?? {});
+    setCoverImage(event.draft_cover_image ?? event.cover_image);
+  }, [event]);
 
   const liveCoverConfig: CoverConfig = {
     eyebrow,
     heading,
     subheading,
-    ctaText,
-    overlayOpacity,
-  };
-
-  const liveLogoConfig: LogoConfig = {
-    url: logoUrl,
-    size: logoSize,
-    align: "center",
+    ctaLabel,
+    overlay,
   };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
-        draft_cover_config: liveCoverConfig as unknown as Json,
-        draft_logo_config: liveLogoConfig as unknown as Json,
-        draft_cover_image: coverImage,
-      };
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("user_events")
-        .update(payload)
-        .eq("id", eventId)
-        .select("*")
-        .maybeSingle();
+        .update({
+          draft_cover_config: liveCoverConfig as unknown as Json,
+          draft_logo_config: logoConfig as unknown as Json,
+          draft_cover_image: coverImage,
+        })
+        .eq("id", eventId);
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  const handleSave = () => {
-    saveMutation.mutate();
+  const handleLogoUpload = async (file: File) => {
+    const result = await uploadImage(file, `${eventId}/logo-${Date.now()}`);
+    if ("error" in result) {
+      alert(result.error);
+      return;
+    }
+    setLogoConfig((prev) => ({ ...prev, imageUrl: result.url }));
   };
 
-  const handleImageUpload = async (file: File): Promise<string | null> => {
-    return uploadImage(file, "cover", eventId).then((r) => r?.url ?? null);
-  };
-
-  const handleLogoUpload = async (file: File): Promise<string | null> => {
-    return uploadImage(file, "logo", eventId).then((r) => r?.url ?? null);
+  const handleCoverUpload = async (file: File) => {
+    const result = await uploadImage(file, `${eventId}/cover-${Date.now()}`);
+    if ("error" in result) {
+      alert(result.error);
+      return;
+    }
+    setCoverImage(result.url);
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-dash-text">Cover Editor</h1>
-          <p className="mt-1 text-sm text-dash-muted">
-            Customise the cover page of your invitation website
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          {saved && (
-            <span className="text-sm text-green-600">✓ Saved</span>
-          )}
-          <Button onClick={handleSave} loading={saveMutation.isPending}>
-            Save Changes
-          </Button>
-        </div>
+        <h2 className="text-xl font-bold text-dash-text">Cover Editor</h2>
+        <Button
+          onClick={() => saveMutation.mutate()}
+          loading={saveMutation.isPending}
+        >
+          Save
+        </Button>
       </div>
 
-      <div className="h-[calc(100vh-220px)] min-h-[500px]">
-        <SplitEditor
-          editor={
-            <div className="space-y-6">
-              {/* Cover Image */}
-              <ImageUpload
-                label="Cover Background Image"
-                value={coverImage}
-                onChange={setCoverImage}
-                onUpload={handleImageUpload}
+      {saveMutation.isError && (
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+        </p>
+      )}
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-green-600">Saved successfully!</p>
+      )}
+
+      <SplitEditor
+        editor={
+          <div className="space-y-6">
+            <Card className="p-4 space-y-4">
+              <h3 className="text-sm font-semibold text-dash-text">Title</h3>
+              <TypographyControls
+                label="Heading"
+                value={heading}
+                onChange={setHeading}
               />
+            </Card>
 
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-dash-text">
-                  Overlay Opacity
-                </label>
-                <RangeInput
-                  value={Math.round(overlayOpacity * 100)}
-                  onChange={(v) => setOverlayOpacity(v / 100)}
-                  min={0}
-                  max={100}
-                  step={5}
-                />
-              </div>
+            <Card className="p-4 space-y-4">
+              <TypographyControls
+                label="Subtitle"
+                value={subheading}
+                onChange={setSubheading}
+              />
+            </Card>
 
-              {/* Typography Controls */}
-              <div className="space-y-4 border-t border-dash-border pt-4">
-                <TypographyControls
-                  label="Eyebrow (Body)"
-                  value={eyebrow}
-                  onChange={setEyebrow}
-                />
-              </div>
+            <Card className="p-4 space-y-4">
+              <TypographyControls
+                label="Eyebrow"
+                value={eyebrow}
+                onChange={setEyebrow}
+              />
+            </Card>
 
-              <div className="space-y-4 border-t border-dash-border pt-4">
-                <TypographyControls
-                  label="Title (Heading)"
-                  value={heading}
-                  onChange={setHeading}
-                />
-              </div>
+            <Card className="p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-dash-text">Call to Action</h3>
+              <Input
+                label="Button label"
+                value={ctaLabel}
+                onChange={(e) => setCtaLabel(e.target.value)}
+                placeholder="e.g. RSVP Now"
+              />
+              <RangeInput
+                label="Overlay opacity"
+                value={Math.round(overlay * 100)}
+                onChange={(v) => setOverlay(v / 100)}
+                min={0}
+                max={80}
+                step={5}
+              />
+            </Card>
 
-              <div className="space-y-4 border-t border-dash-border pt-4">
-                <TypographyControls
-                  label="Subtitle (Subheading)"
-                  value={subheading}
-                  onChange={setSubheading}
-                />
-              </div>
+            <Card className="p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-dash-text">Cover Image</h3>
+              <ImageUpload
+                value={coverImage}
+                onUpload={handleCoverUpload}
+                onRemove={() => setCoverImage(null)}
+                label="Upload cover image"
+              />
+            </Card>
 
-              <div className="border-t border-dash-border pt-4">
-                <Input
-                  label="CTA Button Text"
-                  value={ctaText}
-                  onChange={(e) => setCtaText(e.target.value)}
-                  placeholder="e.g. RSVP Now"
-                />
-              </div>
-
-              {/* Logo */}
-              <div className="space-y-4 border-t border-dash-border pt-4">
-                <h3 className="text-sm font-semibold text-dash-text">Logo</h3>
-                <ImageUpload
-                  label="Logo Image"
-                  value={logoUrl}
-                  onChange={setLogoUrl}
-                  onUpload={handleLogoUpload}
-                />
-                <RangeInput
-                  label="Logo Size (px)"
-                  value={logoSize}
-                  onChange={setLogoSize}
-                  min={24}
-                  max={200}
-                  step={4}
-                />
-              </div>
-            </div>
-          }
-          preview={
+            <Card className="p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-dash-text">Logo</h3>
+              <ImageUpload
+                value={logoConfig.imageUrl ?? null}
+                onUpload={handleLogoUpload}
+                onRemove={() => setLogoConfig((prev) => ({ ...prev, imageUrl: null }))}
+                label="Upload logo"
+              />
+              <RangeInput
+                label="Logo size (px)"
+                value={logoConfig.size ?? 80}
+                onChange={(v) => setLogoConfig((prev) => ({ ...prev, size: v }))}
+                min={32}
+                max={200}
+                step={4}
+              />
+            </Card>
+          </div>
+        }
+        preview={
+          <div className="rounded-lg border border-dash-border bg-dash-surface p-4 overflow-hidden">
             <CoverPreview
               event={event}
               theme={event.draft_theme ?? event.theme}
               coverConfig={liveCoverConfig}
-              logoConfig={liveLogoConfig}
+              logoConfig={logoConfig}
               coverImage={coverImage}
             />
-          }
-        />
-      </div>
+          </div>
+        }
+      />
     </div>
   );
 }
