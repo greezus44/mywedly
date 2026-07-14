@@ -4,27 +4,17 @@ export type BlockType =
   | "heading"
   | "paragraph"
   | "image"
-  | "button"
   | "divider"
   | "spacer"
-  | "gallery"
-  | "video"
-  | "quote"
-  | "list";
+  | "button";
 
 export interface BlockContent {
   text?: string;
-  level?: number;
-  align?: "left" | "center" | "right";
-  src?: string;
+  url?: string;
   alt?: string;
-  width?: string;
-  href?: string;
+  align?: "left" | "center" | "right";
+  level?: 1 | 2 | 3;
   variant?: "primary" | "secondary";
-  height?: number;
-  items?: string[];
-  images?: string[];
-  caption?: string;
 }
 
 export interface Block {
@@ -33,62 +23,75 @@ export interface Block {
   content: BlockContent;
 }
 
-export const BLOCK_TYPES: { type: BlockType; label: string; icon: string; description: string }[] = [
-  { type: "heading", label: "Heading", icon: "H", description: "A section heading" },
-  { type: "paragraph", label: "Paragraph", icon: "¶", description: "A block of text" },
-  { type: "image", label: "Image", icon: "🖼", description: "A single image" },
-  { type: "button", label: "Button", icon: "⬚", description: "A call-to-action button" },
-  { type: "divider", label: "Divider", icon: "—", description: "A horizontal line" },
-  { type: "spacer", label: "Spacer", icon: "⇕", description: "Vertical spacing" },
-  { type: "gallery", label: "Gallery", icon: "▦", description: "Multiple images" },
-  { type: "video", label: "Video", icon: "▶", description: "Embedded video URL" },
-  { type: "quote", label: "Quote", icon: "❝", description: "A styled quote" },
-  { type: "list", label: "List", icon: "☰", description: "A bulleted list" },
+export const BLOCK_TYPES: Array<{
+  type: BlockType;
+  label: string;
+  icon: string;
+  description: string;
+}> = [
+  {
+    type: "heading",
+    label: "Heading",
+    icon: "H",
+    description: "Add a section heading",
+  },
+  {
+    type: "paragraph",
+    label: "Text",
+    icon: "¶",
+    description: "Add a paragraph of text",
+  },
+  {
+    type: "image",
+    label: "Image",
+    icon: "🖼",
+    description: "Upload or link an image",
+  },
+  {
+    type: "button",
+    label: "Button",
+    icon: "◉",
+    description: "Add a call-to-action button",
+  },
+  {
+    type: "divider",
+    label: "Divider",
+    icon: "—",
+    description: "Add a horizontal divider",
+  },
+  {
+    type: "spacer",
+    label: "Spacer",
+    icon: "␣",
+    description: "Add vertical spacing",
+  },
 ];
 
 export function createBlock(type: BlockType): Block {
-  const id = `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const content: BlockContent = {};
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    type,
+    content: getDefaultContent(type),
+  };
+}
+
+function getDefaultContent(type: BlockType): BlockContent {
   switch (type) {
     case "heading":
-      content.text = "New Heading";
-      content.level = 2;
-      content.align = "left";
-      break;
+      return { text: "New Heading", level: 2, align: "left" };
     case "paragraph":
-      content.text = "Write your text here...";
-      content.align = "left";
-      break;
+      return { text: "Write your text here...", align: "left" };
     case "image":
-      content.src = "";
-      content.alt = "";
-      content.width = "100%";
-      break;
+      return { url: "", alt: "", align: "center" };
     case "button":
-      content.text = "Click here";
-      content.href = "";
-      content.variant = "primary";
-      break;
+      return { text: "Click here", url: "", variant: "primary", align: "center" };
     case "divider":
-      break;
+      return { align: "center" };
     case "spacer":
-      content.height = 40;
-      break;
-    case "gallery":
-      content.images = [];
-      break;
-    case "video":
-      content.src = "";
-      break;
-    case "quote":
-      content.text = "A memorable quote";
-      content.caption = "";
-      break;
-    case "list":
-      content.items = ["First item", "Second item"];
-      break;
+      return {};
+    default:
+      return {};
   }
-  return { id, type, content };
 }
 
 export function blocksToJson(blocks: Block[]): Json {
@@ -96,6 +99,6 @@ export function blocksToJson(blocks: Block[]): Json {
 }
 
 export function jsonToBlocks(json: Json | null | undefined): Block[] {
-  if (!json || typeof json !== "object" || !Array.isArray(json)) return [];
+  if (!json || !Array.isArray(json)) return [];
   return json as unknown as Block[];
 }

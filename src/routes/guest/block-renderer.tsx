@@ -1,87 +1,251 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type EventSchedule, type EventGuest } from "../../lib/supabase";
 import { resolveTypography } from "../../lib/typography";
-import { getCountdown, formatDate, formatTime12 } from "../../lib/utils";
+import { supabase, type Json, type EventSchedule, type EventMessage } from "../../lib/supabase";
+import { useGuestOutletContext } from "./guest-layout";
+import { formatDate, formatTime12, getCountdown, cn } from "../../lib/utils";
 
-/* ── Block shape ── */
-type Blocks = Record<string, unknown>[];
-
-/* ── Helpers ── */
-function asStr(v: unknown, fb = ""): string {
-  return typeof v === "string" ? v : fb;
-}
-function asNum(v: unknown, fb = 0): number {
-  return typeof v === "number" && isFinite(v) ? v : fb;
-}
-function asStrArr(v: unknown): string[] {
-  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+export interface Block {
+  id: string;
+  type: string;
+  content: Record<string, unknown>;
 }
 
-/* ── Countdown ── */
-const CountdownBlock: React.FC<{ target: string }> = ({ target }) => {
-  const [count, setCount] = useState(() => getCountdown(target));
-  useEffect(() => {
-    const t = setInterval(() => setCount(getCountdown(target)), 1000);
-    return () => clearInterval(t);
-  }, [target]);
-  if (count.isPast) {
-    return <p className="guest-subtitle text-center">The moment has arrived.</p>;
-  }
-  const items = [
-    { label: "Days", value: count.days },
-    { label: "Hours", value: count.hours },
-    { label: "Minutes", value: count.minutes },
-    { label: "Seconds", value: count.seconds },
-  ];
+export function jsonToBlocks(json: Json | null | undefined): Block[] {
+  if (!json || !Array.isArray(json)) return [];
+  return json as unknown as Block[];
+}
+
+export function BlockRenderer({ blocks }: { blocks: Block[] }) {
   return (
-    <div className="flex justify-center gap-4 sm:gap-8">
-      {items.map((it) => (
-        <div key={it.label} className="text-center">
-          <div className="text-3xl font-bold sm:text-5xl" style={{ color: "var(--event-heading)" }}>
-            {String(it.value).padStart(2, "0")}
+    <div className="space-y-6">
+      {blocks.map((block, index) => (
+        <BlockView key={block.id ?? index} block={block} index={index} />
+      ))}
+    </div>
+  );
+}
+
+type BP = { block: Block; className?: string; style?: React.CSSProperties };
+
+function BlockView({ block, index }: { block: Block; index: number }) {
+  const p = { block, className: "animate-slideUpStagger", style: { animationDelay: `${index * 60}ms` } as React.CSSProperties };
+  switch (block.type) {
+    case "heading": return <HeadingBlock {...p} />;
+    case "paragraph": return <ParagraphBlock {...p} />;
+    case "image": return <ImageBlock {...p} />;
+    case "spacer": return <SpacerBlock block={block} />;
+    case "divider": return <DividerBlock {...p} />;
+    case "gallery": return <GalleryBlock {...p} />;
+    case "video": return <VideoBlock {...p} />;
+    case "button": return <ButtonBlock {...p} />;
+    case "columns": return <ColumnsBlock {...p} />;
+    case "list": return <ListBlock {...p} />;
+    case "quote": return <QuoteBlock {...p} />;
+    case "countdown": return <CountdownBlock {...p} />;
+    case "map": return <MapBlock {...p} />;
+    case "rsvp-form": return <RsvpFormBlock {...p} />;
+    case "guest-list": return <GuestListBlock {...p} />;
+    case "schedule": return <ScheduleBlock {...p} />;
+    case "venue": return <VenueBlock {...p} />;
+    case "faq": return <FaqBlock {...p} />;
+    default: return null;
+  }
+}
+function HeadingBlock({ block, className, style }: BP) {
+  const { text, style: ts } = resolveTypography(block.content.text, "");
+  const level = (block.content.level as number) ?? 2;
+  const align = ((block.content.align as string) ?? "left") as React.CSSProperties["textAlign"];
+  const Tag = `h${Math.min(Math.max(level, 1), 6)}` as keyof React.JSX.IntrinsicElements;
+  return React.createElement(Tag, { className, style: { textAlign: align, ...ts, ...style } }, text);
+}
+function ParagraphBlock({ block, className, style }: BP) {
+  const { text, style: ts } = resolveTypography(block.content.text, "");
+  const align = ((block.content.align as string) ?? "left") as React.CSSProperties["textAlign"];
+  return <p className={className} style={{ textAlign: align, ...ts, ...style }}>{text}</p>;
+}
+function ImageBlock({ block, className, style }: BP) {
+  const url = (block.content.url as string) ?? "";
+  const alt = (block.content.alt as string) ?? "";
+  const align = (block.content.align as string) ?? "center";
+  const cap = (block.content.caption as string) ?? "";
+  if (!url) return null;
+  const j = align === "left" ? "justify-start" : align === "right" ? "justify-end" : "justify-center";
+  return (
+    <figure className={cn("flex flex-col", j, className)} style={style}>
+      <img src={url} alt={alt} className="max-w-full rounded-lg" style={{ borderRadius: "var(--event-radius)" }} />
+      {cap && <figcaption className="mt-2 text-sm" style={{ color: "var(--event-muted)" }}>{cap}</figcaption>}
+    </figure>
+  );
+}
+function SpacerBlock({ block }: { block: Block }) {
+  return <div style={{ height: `${(block.content.height as number) ?? 48}px` }} />;
+}
+function DividerBlock({ className, style }: BP) {
+  return <hr className={cn("border-0 border-t", className)} style={{ borderColor: "var(--event-border)", ...style }} />;
+}
+function ButtonBlock({ block, className, style }: BP) {
+  const { text } = resolveTypography(block.content.text, "Click here");
+  const url = (block.content.url as string) ?? "";
+  const variant = (block.content.variant as string) ?? "primary";
+  const align = (block.content.align as string) ?? "center";
+  const j = align === "left" ? "justify-start" : align === "right" ? "justify-end" : "justify-center";
+  const cls = variant === "secondary" ? "event-btn-secondary" : "event-btn-primary";
+  return (
+    <div className={cn("flex", j, className)} style={style}>
+      {url ? <a href={url} className={cls} target="_blank" rel="noopener noreferrer">{text}</a> : <button className={cls}>{text}</button>}
+    </div>
+  );
+}
+function GalleryBlock({ block, className, style }: BP) {
+  const images = (block.content.images as Array<{ url?: string; alt?: string }>) ?? [];
+  if (!images.length) return null;
+  const cols = Math.min(Math.max((block.content.columns as number) ?? 3, 1), 4);
+  return (
+    <div className={cn("grid gap-4", className)} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, ...style }}>
+      {images.filter((i) => i.url).map((img, i) => (
+        <img key={i} src={img.url} alt={img.alt ?? ""} className="w-full rounded-lg object-cover" style={{ borderRadius: "var(--event-radius)" }} />
+      ))}
+    </div>
+  );
+}
+function VideoBlock({ block, className, style }: BP) {
+  const url = (block.content.url as string) ?? "";
+  const cap = (block.content.caption as string) ?? "";
+  if (!url) return null;
+  const isYT = /youtube\.com|youtu\.be/.test(url);
+  const embed = isYT ? url.replace("watch?v=", "embed/").replace("youtu.be/", "youtube.com/embed/") : url;
+  return (
+    <figure className={className} style={style}>
+      <div className="overflow-hidden rounded-lg" style={{ borderRadius: "var(--event-radius)" }}>
+        {isYT ? (
+          <iframe src={embed} title={cap || "Video"} className="aspect-video w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+        ) : (
+          <video src={url} controls className="aspect-video w-full rounded-lg" style={{ borderRadius: "var(--event-radius)" }} />
+        )}
+      </div>
+      {cap && <figcaption className="mt-2 text-sm" style={{ color: "var(--event-muted)" }}>{cap}</figcaption>}
+    </figure>
+  );
+}
+function ColumnsBlock({ block, className, style }: BP) {
+  const columns = (block.content.columns as Array<{ text?: unknown }>) ?? [];
+  if (!columns.length) return null;
+  return (
+    <div className={cn("grid gap-6", className)} style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))`, ...style }}>
+      {columns.map((col, i) => {
+        const { text, style: ts } = resolveTypography(col.text, "");
+        return <div key={i} className="rich-content" style={ts}>{text}</div>;
+      })}
+    </div>
+  );
+}
+function ListBlock({ block, className, style }: BP) {
+  const items = (block.content.items as string[]) ?? [];
+  if (!items.length) return null;
+  const Tag = (block.content.ordered as boolean) ? "ol" : "ul";
+  return (
+    <Tag className={cn("space-y-1.5 pl-6", className)} style={{ color: "var(--event-text)", ...style }}>
+      {items.map((item, i) => <li key={i}>{item}</li>)}
+    </Tag>
+  );
+}
+function QuoteBlock({ block, className, style }: BP) {
+  const { text, style: ts } = resolveTypography(block.content.text, "");
+  const author = (block.content.author as string) ?? "";
+  return (
+    <blockquote className={cn("border-l-4 pl-6 italic", className)} style={{ borderColor: "var(--event-primary)", color: "var(--event-muted)", ...ts, ...style }}>
+      <p>"{text}"</p>
+      {author && <footer className="mt-2 text-sm not-italic" style={{ color: "var(--event-muted)" }}>— {author}</footer>}
+    </blockquote>
+  );
+}
+function CountdownBlock({ block, className, style }: BP) {
+  const target = (block.content.target as string) ?? "";
+  const { text: label } = resolveTypography(block.content.label, "");
+  const [c, setC] = useState(() => getCountdown(target));
+  useEffect(() => {
+    const id = setInterval(() => setC(getCountdown(target)), 1000);
+    return () => clearInterval(id);
+  }, [target]);
+  if (c.done) return <div className={cn("text-center", className)} style={style}><p className="guest-subtitle">{label || "The big day is here!"}</p></div>;
+  const units = [{ v: c.days, l: "Days" }, { v: c.hours, l: "Hours" }, { v: c.minutes, l: "Minutes" }, { v: c.seconds, l: "Seconds" }];
+  return (
+    <div className={cn("text-center", className)} style={style}>
+      {label && <p className="guest-eyebrow mb-4">{label}</p>}
+      <div className="flex justify-center gap-4">
+        {units.map((u) => (
+          <div key={u.l} className="event-card text-center" style={{ minWidth: "5rem", padding: "1.25rem 0.5rem" }}>
+            <div className="text-3xl font-bold" style={{ color: "var(--event-heading)" }}>{String(u.v).padStart(2, "0")}</div>
+            <div className="mt-1 text-xs uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>{u.l}</div>
           </div>
-          <div className="mt-1 text-xs uppercase tracking-widest" style={{ color: "var(--event-muted)" }}>
-            {it.label}
-          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function MapBlock({ block, className, style }: BP) {
+  const q = encodeURIComponent(((block.content.address as string) ?? "") || ((block.content.label as string) ?? ""));
+  return (
+    <div className={cn("overflow-hidden rounded-lg", className)} style={{ borderRadius: "var(--event-radius)", ...style }}>
+      <iframe src={`https://www.google.com/maps?q=${q}&output=embed`} title="Map" className="h-72 w-full" loading="lazy" />
+    </div>
+  );
+}
+function RsvpFormBlock({ className, style }: BP) {
+  const { slug } = useGuestOutletContext();
+  const navigate = useNavigate();
+  return (
+    <div className={cn("text-center", className)} style={style}>
+      <p className="guest-subtitle mb-6">Let us know if you can make it.</p>
+      <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">RSVP Now</button>
+    </div>
+  );
+}
+function GuestListBlock({ className, style }: BP) {
+  const { event } = useGuestOutletContext();
+  const { data: messages } = useQuery({
+    queryKey: ["event-messages", event.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("event_messages").select("*").eq("event_id", event.id).order("created_at", { ascending: false }).limit(20);
+      if (error) throw error;
+      return (data ?? []) as EventMessage[];
+    },
+  });
+  const list = messages ?? [];
+  if (!list.length) return <p className={cn("text-sm", className)} style={{ color: "var(--event-muted)", ...style }}>No messages yet.</p>;
+  return (
+    <div className={cn("grid gap-4 sm:grid-cols-2", className)} style={style}>
+      {list.map((m) => (
+        <div key={m.id} className="event-card" style={{ padding: "1.25rem" }}>
+          <p className="text-sm" style={{ color: "var(--event-text)" }}>{m.message}</p>
+          <p className="mt-2 text-xs font-medium" style={{ color: "var(--event-muted)" }}>— {m.guest_name}</p>
         </div>
       ))}
     </div>
   );
-};
-
-/* ── Schedule block ── */
-const ScheduleBlock: React.FC<{ eventId: string }> = ({ eventId }) => {
-  const { data, isLoading } = useQuery({
-    queryKey: ["block-schedule", eventId],
+}
+function ScheduleBlock({ className, style }: BP) {
+  const { event } = useGuestOutletContext();
+  const { data: schedule } = useQuery({
+    queryKey: ["guest-schedule", event.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_schedules")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("order_index", { ascending: true });
+      const { data, error } = await supabase.from("event_schedule").select("*").eq("event_id", event.id).order("order_index", { ascending: true });
       if (error) throw error;
       return (data ?? []) as EventSchedule[];
     },
-    enabled: !!eventId,
   });
-  if (isLoading) {
-    return <div className="h-6 w-6 mx-auto animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />;
-  }
-  const items = data ?? [];
-  if (items.length === 0) return null;
+  const items = schedule ?? [];
+  if (!items.length) return null;
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className={cn("space-y-4", className)} style={style}>
       {items.map((s) => (
-        <div key={s.id} className="event-card flex gap-4">
-          {s.cover_image && <img src={s.cover_image} alt={s.title} className="h-16 w-16 rounded-lg object-cover" />}
-          <div className="flex-1">
+        <div key={s.id} className="event-card flex items-start gap-4" style={{ padding: "1.5rem" }}>
+          {s.cover_image && <img src={s.cover_image} alt="" className="h-16 w-16 flex-shrink-0 rounded-lg object-cover" style={{ borderRadius: "var(--event-radius)" }} />}
+          <div>
             <h3 className="text-lg font-semibold" style={{ color: "var(--event-heading)" }}>{s.title}</h3>
-            {(s.schedule_date || s.start_time) && (
-              <p className="text-sm" style={{ color: "var(--event-muted)" }}>
-                {s.schedule_date && formatDate(s.schedule_date)}{s.start_time && ` at ${formatTime12(s.start_time)}`}
-              </p>
-            )}
+            {s.schedule_date && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{formatDate(s.schedule_date)}{s.start_time ? ` at ${formatTime12(s.start_time)}` : ""}</p>}
             {s.venue && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{s.venue}</p>}
             {s.description && <p className="mt-1 text-sm" style={{ color: "var(--event-text)" }}>{s.description}</p>}
           </div>
@@ -89,204 +253,38 @@ const ScheduleBlock: React.FC<{ eventId: string }> = ({ eventId }) => {
       ))}
     </div>
   );
-};
-
-/* ── Guest list block ── */
-const GuestListBlock: React.FC<{ eventId: string }> = ({ eventId }) => {
-  const { data, isLoading } = useQuery({
-    queryKey: ["block-guest-list", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_guests")
-        .select("id, name, group_name, side")
-        .eq("event_id", eventId)
-        .order("name", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as Pick<EventGuest, "id" | "name" | "group_name" | "side">[];
-    },
-    enabled: !!eventId,
-  });
-  if (isLoading) {
-    return <div className="h-6 w-6 mx-auto animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />;
-  }
-  const guests = data ?? [];
-  if (guests.length === 0) return null;
+}
+function VenueBlock({ block, className, style }: BP) {
+  const name = (block.content.name as string) ?? "";
+  const address = (block.content.address as string) ?? "";
+  const q = encodeURIComponent(`${name} ${address}`.trim());
   return (
-    <div className="mx-auto max-w-2xl">
-      <ul className="grid gap-2 sm:grid-cols-2">
-        {guests.map((g) => (
-          <li key={g.id} className="event-card py-3 text-sm font-medium" style={{ color: "var(--event-text)" }}>
-            {g.name}
-            {g.group_name && <span className="ml-2 text-xs" style={{ color: "var(--event-muted)" }}>· {g.group_name}</span>}
-          </li>
-        ))}
-      </ul>
+    <div className={cn("event-card", className)} style={{ padding: "1.75rem", ...style }}>
+      {name && <h3 className="text-lg font-semibold" style={{ color: "var(--event-heading)" }}>{name}</h3>}
+      {address && <p className="mt-1 text-sm" style={{ color: "var(--event-muted)" }}>{address}</p>}
+      {q && (
+        <div className="mt-4 overflow-hidden rounded-lg" style={{ borderRadius: "var(--event-radius)" }}>
+          <iframe src={`https://www.google.com/maps?q=${q}&output=embed`} title="Venue map" className="h-64 w-full" loading="lazy" />
+        </div>
+      )}
     </div>
   );
-};
-
-/* ── FAQ block ── */
-const FaqBlock: React.FC<{ items: { q: string; a: string }[] }> = ({ items }) => {
-  const [open, setOpen] = useState<number | null>(0);
-  if (items.length === 0) return null;
+}
+function FaqBlock({ block, className, style }: BP) {
+  const items = (block.content.items as Array<{ question?: string; answer?: string }>) ?? [];
+  const [openIdx, setOpenIdx] = useState<number | null>(null);
+  if (!items.length) return null;
   return (
-    <div className="mx-auto max-w-2xl space-y-3">
-      {items.map((it, i) => (
-        <div key={i} className="event-card">
-          <button onClick={() => setOpen(open === i ? null : i)} className="flex w-full items-center justify-between text-left">
-            <span className="font-semibold" style={{ color: "var(--event-heading)" }}>{it.q}</span>
-            <span className="ml-4 text-xl" style={{ color: "var(--event-muted)" }}>{open === i ? "−" : "+"}</span>
+    <div className={cn("space-y-3", className)} style={style}>
+      {items.map((item, i) => (
+        <div key={i} className="event-card" style={{ padding: "1.25rem 1.5rem" }}>
+          <button onClick={() => setOpenIdx(openIdx === i ? null : i)} className="flex w-full items-center justify-between text-left">
+            <span className="font-semibold" style={{ color: "var(--event-heading)" }}>{item.question}</span>
+            <span className="ml-4 flex-shrink-0" style={{ color: "var(--event-primary)" }}>{openIdx === i ? "−" : "+"}</span>
           </button>
-          {open === i && <p className="mt-3 text-sm animate-fadeIn" style={{ color: "var(--event-text)" }}>{it.a}</p>}
+          {openIdx === i && item.answer && <p className="mt-3 text-sm animate-fadeIn" style={{ color: "var(--event-text)" }}>{item.answer}</p>}
         </div>
       ))}
     </div>
   );
-};
-
-/* ── Single block renderer ── */
-function renderBlock(block: Record<string, unknown>, eventId: string): React.ReactNode {
-  const type = typeof block.type === "string" ? block.type : "";
-  const c = (block.content ?? {}) as Record<string, unknown>;
-  switch (type) {
-    case "heading": {
-      const { text, style } = resolveTypography(c.text);
-      const level = Math.min(Math.max(asNum(c.level, 2), 1), 6);
-      const Tag = `h${level}` as keyof React.JSX.IntrinsicElements;
-      return <Tag style={{ textAlign: asStr(c.align) as React.CSSProperties["textAlign"], ...style }}>{text}</Tag>;
-    }
-    case "paragraph": {
-      const { text, style } = resolveTypography(c.text);
-      return <p style={{ textAlign: asStr(c.align) as React.CSSProperties["textAlign"], ...style }}>{text}</p>;
-    }
-    case "image": {
-      const src = asStr(c.src);
-      if (!src) return null;
-      return <img src={src} alt={asStr(c.alt)} className="mx-auto rounded-2xl" style={{ width: asStr(c.width, "100%"), maxWidth: "100%" }} />;
-    }
-    case "spacer":
-      return <div style={{ height: asNum(c.height, 40) }} />;
-    case "divider":
-      return <hr style={{ borderColor: "var(--event-border)" }} />;
-    case "gallery": {
-      const imgs = asStrArr(c.images);
-      if (imgs.length === 0) return null;
-      return (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {imgs.map((src, i) => <img key={i} src={src} alt="" className="aspect-square w-full rounded-xl object-cover" />)}
-        </div>
-      );
-    }
-    case "video": {
-      const src = asStr(c.src);
-      if (!src) return null;
-      return (
-        <div className="aspect-video overflow-hidden rounded-2xl">
-          <iframe src={src} className="h-full w-full" title="Video" allowFullScreen />
-        </div>
-      );
-    }
-    case "button": {
-      const { text, style } = resolveTypography(c.text);
-      const href = asStr(c.href, "#");
-      const cls = asStr(c.variant) === "secondary" ? "event-btn-secondary" : "event-btn-primary";
-      return (
-        <div className="text-center">
-          <a href={href} target="_blank" rel="noopener noreferrer" className={cls} style={style}>{text}</a>
-        </div>
-      );
-    }
-    case "columns": {
-      const cols = asStrArr(c.items);
-      return (
-        <div className="grid gap-6 sm:grid-cols-2">
-          {cols.map((col, i) => {
-            const { text, style } = resolveTypography(col);
-            return <div key={i} style={style}>{text}</div>;
-          })}
-        </div>
-      );
-    }
-    case "list": {
-      const items = asStrArr(c.items);
-      return (
-        <ul className="mx-auto max-w-2xl list-inside list-disc space-y-1" style={{ color: "var(--event-text)" }}>
-          {items.map((it, i) => <li key={i}>{it}</li>)}
-        </ul>
-      );
-    }
-    case "quote": {
-      const { text, style } = resolveTypography(c.text);
-      const caption = asStr(c.caption);
-      return (
-        <blockquote className="mx-auto max-w-2xl border-l-4 pl-6 italic" style={{ borderColor: "var(--event-primary)", color: "var(--event-muted)", ...style }}>
-          "{text}"
-          {caption && <footer className="mt-2 text-sm not-italic">— {caption}</footer>}
-        </blockquote>
-      );
-    }
-    case "countdown":
-      return <CountdownBlock target={asStr(c.target || c.date)} />;
-    case "map": {
-      const addr = asStr(c.address || c.location);
-      const src = `https://maps.google.com/maps?q=${encodeURIComponent(addr)}&output=embed`;
-      return (
-        <div className="mx-auto max-w-2xl overflow-hidden rounded-2xl" style={{ border: "1px solid var(--event-border)" }}>
-          <iframe src={src} className="h-64 w-full" loading="lazy" title="Map" />
-        </div>
-      );
-    }
-    case "rsvp-form":
-      return <p className="text-center guest-subtitle">RSVP form available on the RSVP page.</p>;
-    case "guest-list":
-      return <GuestListBlock eventId={eventId} />;
-    case "schedule":
-      return <ScheduleBlock eventId={eventId} />;
-    case "venue": {
-      const name = asStr(c.name || c.venue);
-      const addr = asStr(c.address);
-      return (
-        <div className="mx-auto max-w-2xl event-card text-center">
-          {name && <h3 className="text-xl font-semibold" style={{ color: "var(--event-heading)" }}>{name}</h3>}
-          {addr && <p className="mt-1 text-sm" style={{ color: "var(--event-muted)" }}>{addr}</p>}
-        </div>
-      );
-    }
-    case "faq": {
-      const raw = c.items;
-      const items = Array.isArray(raw)
-        ? raw.map((r) => {
-            if (r && typeof r === "object" && !Array.isArray(r)) {
-              const o = r as Record<string, unknown>;
-              return { q: asStr(o.q || o.question), a: asStr(o.a || o.answer) };
-            }
-            return { q: "", a: "" };
-          }).filter((r) => r.q)
-        : [];
-      return <FaqBlock items={items} />;
-    }
-    default:
-      return null;
-  }
-}
-
-/* ── Main exported component ── */
-export function BlockRenderer({ blocks, eventId }: { blocks: Blocks; eventId?: string }) {
-  const ctxEventId = React.useContext(EventIdContext);
-  const effectiveEventId = eventId ?? ctxEventId;
-  return (
-    <div className="space-y-8">
-      {blocks.map((block, i) => (
-        <div key={typeof block.id === "string" ? block.id : `block-${i}`} className="guest-section-tight">
-          <div className="mx-auto max-w-3xl">{renderBlock(block, effectiveEventId)}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* Context so schedule/guest-list blocks can fetch data */
-const EventIdContext = React.createContext<string>("");
-export function BlockEventIdProvider({ eventId, children }: { eventId: string; children: React.ReactNode }) {
-  return <EventIdContext.Provider value={eventId}>{children}</EventIdContext.Provider>;
 }

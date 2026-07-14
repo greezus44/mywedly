@@ -26,9 +26,9 @@ export interface UserEvent {
   id: string;
   creator_id: string;
   name: string;
-  draft_name: string;
+  draft_name: string | null;
   event_type: string;
-  draft_event_type: string;
+  draft_event_type: string | null;
   event_date: string | null;
   draft_event_date: string | null;
   event_time: string | null;
@@ -92,14 +92,14 @@ export interface EventGuest {
   group_name: string | null;
   side: string | null;
   group_id: string | null;
-  token: string | null;
+  token: string;
   rsvp_status: string;
   rsvp_submitted_at: string | null;
   plus_ones: number;
   dietary: string | null;
   message: string | null;
   created_at: string;
-  table_number: number | null;
+  table_number: string | null;
 }
 
 export interface GuestGroup {
@@ -124,7 +124,7 @@ export interface EventRsvp {
   guest_name: string;
   status: string;
   plus_ones: number;
-  guest_count: number;
+  plus_one_names: string[];
   dietary: string | null;
   dietary_notes: string | null;
   message: string | null;
@@ -199,7 +199,7 @@ export interface SharingEvent {
   event_id: string;
   event_type: string;
   guest_id: string | null;
-  source: string | null;
+  source: string;
   device_type: string | null;
   metadata: Json;
   created_at: string;

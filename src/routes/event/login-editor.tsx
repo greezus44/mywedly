@@ -1,43 +1,29 @@
-import React, { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { LoginPreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, FormField } from "../../components/ui";
+import { Input, Card } from "../../components/ui";
 
 interface LoginConfig {
-  heading: string;
-  subtitle: string;
-  usernamePlaceholder: string;
-  buttonText: string;
+  heading?: string;
+  subheading?: string;
+  placeholder?: string;
+  ctaText?: string;
 }
 
-function parseLoginConfig(raw: Json | null | undefined): LoginConfig {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return {
-      heading: "Welcome",
-      subtitle: "Please sign in to view the invitation",
-      usernamePlaceholder: "Enter your username",
-      buttonText: "Enter",
-    };
-  }
-  const obj = raw as Record<string, unknown>;
-  return {
-    heading: typeof obj.heading === "string" ? obj.heading : "Welcome",
-    subtitle: typeof obj.subtitle === "string" ? obj.subtitle : "Please sign in to view the invitation",
-    usernamePlaceholder: typeof obj.usernamePlaceholder === "string" ? obj.usernamePlaceholder : "Enter your username",
-    buttonText: typeof obj.buttonText === "string" ? obj.buttonText : "Enter",
-  };
-}
-
-export const LoginEditor: React.FC = () => {
+export function LoginEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
+  const [config, setConfig] = useState<LoginConfig>({});
 
-  const [config, setConfig] = useState<LoginConfig>(() => parseLoginConfig(event.draft_login_config));
-  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    setConfig(
+      (event.draft_login_config ?? event.login_config ?? {}) as LoginConfig
+    );
+  }, [event]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -51,77 +37,80 @@ export const LoginEditor: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  const handleSave = () => {
-    saveMutation.mutate();
-  };
+  const editor = (
+    <div className="p-4 space-y-4">
+      <h3 className="text-sm font-semibold text-dash-text">Login Page Settings</h3>
+      <Input
+        label="Heading"
+        type="text"
+        value={config.heading ?? ""}
+        onChange={(e) => setConfig({ ...config, heading: e.target.value })}
+        placeholder="Welcome"
+      />
+      <Input
+        label="Subheading"
+        type="text"
+        value={config.subheading ?? ""}
+        onChange={(e) => setConfig({ ...config, subheading: e.target.value })}
+        placeholder="Enter your username to view the invitation"
+      />
+      <Input
+        label="Input placeholder"
+        type="text"
+        value={config.placeholder ?? ""}
+        onChange={(e) => setConfig({ ...config, placeholder: e.target.value })}
+        placeholder="Your username"
+      />
+      <Input
+        label="Button text"
+        type="text"
+        value={config.ctaText ?? ""}
+        onChange={(e) => setConfig({ ...config, ctaText: e.target.value })}
+        placeholder="View Invitation"
+      />
+
+      <div className="flex items-center justify-between pt-2 border-t border-dash-border">
+        {saveMutation.isError && (
+          <p className="text-sm text-dash-danger">
+            {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+          </p>
+        )}
+        {saveMutation.isSuccess && (
+          <p className="text-sm text-green-600">Saved!</p>
+        )}
+        <Button
+          onClick={() => saveMutation.mutate()}
+          loading={saveMutation.isPending}
+          className="ml-auto"
+        >
+          Save changes
+        </Button>
+      </div>
+    </div>
+  );
+
+  const preview = (
+    <div className="p-4">
+      <Card className="overflow-hidden">
+        <LoginPreview config={config as unknown as Json} />
+      </Card>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-dash-text">Login Editor</h2>
-          <p className="text-sm text-dash-muted">Customize the guest login page.</p>
-        </div>
-        <Button onClick={handleSave} loading={saveMutation.isPending} disabled={saveMutation.isPending}>
-          {saved ? "Saved!" : "Save Changes"}
-        </Button>
-      </div>
-
-      {saveMutation.isError && (
-        <p className="text-sm text-dash-danger">
-          Error: {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+      <div>
+        <h2 className="text-xl font-bold text-dash-text">Login Editor</h2>
+        <p className="text-sm text-dash-muted">
+          Customize the login page guests see before viewing your invitation
         </p>
-      )}
-
-      <SplitEditor
-        editor={
-          <div className="space-y-4">
-            <FormField label="Heading">
-              <Input
-                value={config.heading}
-                onChange={(e) => setConfig((prev) => ({ ...prev, heading: e.target.value }))}
-                placeholder="Welcome"
-              />
-            </FormField>
-            <FormField label="Subtitle">
-              <Textarea
-                value={config.subtitle}
-                onChange={(e) => setConfig((prev) => ({ ...prev, subtitle: e.target.value }))}
-                placeholder="Please sign in to view the invitation"
-              />
-            </FormField>
-            <FormField label="Username placeholder">
-              <Input
-                value={config.usernamePlaceholder}
-                onChange={(e) => setConfig((prev) => ({ ...prev, usernamePlaceholder: e.target.value }))}
-                placeholder="Enter your username"
-              />
-            </FormField>
-            <FormField label="Button text">
-              <Input
-                value={config.buttonText}
-                onChange={(e) => setConfig((prev) => ({ ...prev, buttonText: e.target.value }))}
-                placeholder="Enter"
-              />
-            </FormField>
-          </div>
-        }
-        preview={
-          <div className="p-4">
-            <LoginPreview
-              loginConfig={config}
-              eventName={event.draft_name}
-              coverImage={event.draft_cover_image}
-            />
-          </div>
-        }
-        editorRatio={0.45}
-      />
+      </div>
+      <div className="h-[calc(100vh-220px)] min-h-[500px]">
+        <SplitEditor editor={editor} preview={preview} />
+      </div>
     </div>
   );
-};
+}

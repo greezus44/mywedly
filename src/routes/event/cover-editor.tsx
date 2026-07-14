@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
@@ -6,7 +6,7 @@ import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { Button } from "../../components/ui/Button";
-import { RangeInput, FormField } from "../../components/ui";
+import { Input, RangeInput, Card, LoadingSpinner } from "../../components/ui";
 import { cn } from "../../lib/utils";
 
 interface LogoConfig {
@@ -16,43 +16,35 @@ interface LogoConfig {
 }
 
 interface CoverConfig {
-  overlay: string;
-  align: "left" | "center" | "right";
-  position: string;
+  title?: string;
+  subtitle?: string;
+  date?: string;
+  venue?: string;
+  coverImage?: string;
 }
 
-function parseLogoConfig(raw: Json | null | undefined): LogoConfig {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { url: null, size: 120, align: "center" };
-  }
-  const obj = raw as Record<string, unknown>;
-  return {
-    url: typeof obj.url === "string" ? obj.url : null,
-    size: typeof obj.size === "number" ? obj.size : 120,
-    align: (typeof obj.align === "string" ? obj.align : "center") as LogoConfig["align"],
-  };
-}
+const DEFAULT_LOGO: LogoConfig = { url: null, size: 120, align: "center" };
 
-function parseCoverConfig(raw: Json | null | undefined): CoverConfig {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { overlay: "rgba(0,0,0,0.35)", align: "center", position: "center" };
-  }
-  const obj = raw as Record<string, unknown>;
-  return {
-    overlay: typeof obj.overlay === "string" ? obj.overlay : "rgba(0,0,0,0.35)",
-    align: (typeof obj.align === "string" ? obj.align : "center") as CoverConfig["align"],
-    position: typeof obj.position === "string" ? obj.position : "center",
-  };
-}
-
-export const CoverEditor: React.FC = () => {
+export function CoverEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const [logoConfig, setLogoConfig] = useState<LogoConfig>(() => parseLogoConfig(event.draft_logo_config));
-  const [coverImage, setCoverImage] = useState<string | null>(event.draft_cover_image);
-  const [coverConfig, setCoverConfig] = useState<CoverConfig>(() => parseCoverConfig(event.draft_cover_config));
-  const [saved, setSaved] = useState(false);
+  const [logoConfig, setLogoConfig] = useState<LogoConfig>(DEFAULT_LOGO);
+  const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [coverConfig, setCoverConfig] = useState<CoverConfig>({});
+
+  useEffect(() => {
+    const storedLogo = (event.draft_logo_config ?? event.logo_config ?? {}) as Record<string, unknown>;
+    setLogoConfig({
+      url: (storedLogo.url as string) ?? null,
+      size: (storedLogo.size as number) ?? 120,
+      align: (storedLogo.align as "left" | "center" | "right") ?? "center",
+    });
+    setCoverImage(event.draft_cover_image ?? event.cover_image ?? null);
+    setCoverConfig(
+      (event.draft_cover_config ?? event.cover_config ?? {}) as CoverConfig
+    );
+  }, [event]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -68,48 +60,155 @@ export const CoverEditor: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  const handleSave = () => {
-    saveMutation.mutate();
-  };
-
-  const alignButtons = [
-    { value: "left" as const, label: "Left" },
-    { value: "center" as const, label: "Center" },
-    { value: "right" as const, label: "Right" },
+  const alignments: { value: "left" | "center" | "right"; label: string }[] = [
+    { value: "left", label: "Left" },
+    { value: "center", label: "Center" },
+    { value: "right", label: "Right" },
   ];
 
-  const previewContent = useMemo(
-    () => (
-      <div className="p-4">
+  const editor = (
+    <div className="p-4 space-y-6">
+      {/* Logo section */}
+      <div>
+        <h3 className="text-sm font-semibold text-dash-text mb-3">Logo</h3>
+        <ImageUpload
+          value={logoConfig.url}
+          onChange={(url) => setLogoConfig({ ...logoConfig, url })}
+          pathPrefix={`events/${eventId}/logo`}
+          aspectRatio="square"
+          label="Upload logo"
+        />
         {logoConfig.url && (
-          <div
-            className="mb-4"
-            style={{ textAlign: logoConfig.align }}
-          >
-            <img
-              src={logoConfig.url}
-              alt="Logo"
-              style={{ width: `${logoConfig.size}px`, height: "auto", display: "inline-block" }}
-            />
-          </div>
+          <>
+            <div className="mt-3">
+              <RangeInput
+                label="Logo size"
+                value={logoConfig.size}
+                onChange={(size) => setLogoConfig({ ...logoConfig, size })}
+                min={40}
+                max={300}
+                step={10}
+              />
+            </div>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-dash-text mb-1">
+                Alignment
+              </label>
+              <div className="flex gap-1">
+                {alignments.map((align) => (
+                  <button
+                    key={align.value}
+                    type="button"
+                    onClick={() => setLogoConfig({ ...logoConfig, align: align.value })}
+                    className={cn(
+                      "px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                      logoConfig.align === align.value
+                        ? "bg-dash-primary text-dash-primary-fg"
+                        : "bg-dash-bg text-dash-text hover:bg-dash-border"
+                    )}
+                  >
+                    {align.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
         )}
-        <CoverPreview
-          coverImage={coverImage}
-          coverConfig={coverConfig}
-          eventName={event.draft_name}
-          eventType={event.draft_event_type}
-          eventDate={event.draft_event_date}
-          eventTime={event.draft_event_time}
-          venue={event.draft_venue}
+      </div>
+
+      {/* Cover image */}
+      <div>
+        <h3 className="text-sm font-semibold text-dash-text mb-3">Cover Image</h3>
+        <ImageUpload
+          value={coverImage}
+          onChange={(url) => setCoverImage(url)}
+          pathPrefix={`events/${eventId}/cover`}
+          aspectRatio="wide"
+          label="Upload cover image"
         />
       </div>
-    ),
-    [logoConfig, coverImage, coverConfig, event],
+
+      {/* Cover text */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-dash-text">Cover Text</h3>
+        <Input
+          label="Title"
+          type="text"
+          value={coverConfig.title ?? ""}
+          onChange={(e) => setCoverConfig({ ...coverConfig, title: e.target.value })}
+          placeholder="Our Wedding"
+        />
+        <Input
+          label="Subtitle"
+          type="text"
+          value={coverConfig.subtitle ?? ""}
+          onChange={(e) => setCoverConfig({ ...coverConfig, subtitle: e.target.value })}
+          placeholder="We're getting married"
+        />
+        <Input
+          label="Date"
+          type="text"
+          value={coverConfig.date ?? ""}
+          onChange={(e) => setCoverConfig({ ...coverConfig, date: e.target.value })}
+          placeholder="December 31, 2025"
+        />
+        <Input
+          label="Venue"
+          type="text"
+          value={coverConfig.venue ?? ""}
+          onChange={(e) => setCoverConfig({ ...coverConfig, venue: e.target.value })}
+          placeholder="Garden Venue"
+        />
+      </div>
+
+      <div className="flex items-center justify-between pt-2 border-t border-dash-border">
+        {saveMutation.isError && (
+          <p className="text-sm text-dash-danger">
+            {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+          </p>
+        )}
+        {saveMutation.isSuccess && (
+          <p className="text-sm text-green-600">Saved!</p>
+        )}
+        <Button
+          onClick={() => saveMutation.mutate()}
+          loading={saveMutation.isPending}
+          className="ml-auto"
+        >
+          Save changes
+        </Button>
+      </div>
+    </div>
+  );
+
+  const preview = (
+    <div className="p-4">
+      <Card className="overflow-hidden">
+        <CoverPreview
+          config={{ ...coverConfig, coverImage } as unknown as Json}
+        />
+      </Card>
+      {logoConfig.url && (
+        <div className="mt-4 flex justify-center">
+          <img
+            src={logoConfig.url}
+            alt="Logo"
+            style={{
+              width: `${logoConfig.size}px`,
+              height: "auto",
+            }}
+            className={cn(
+              logoConfig.align === "left" && "mr-auto",
+              logoConfig.align === "right" && "ml-auto",
+              logoConfig.align === "center" && "mx-auto",
+            )}
+          />
+        </div>
+      )}
+    </div>
   );
 
   return (
@@ -117,143 +216,19 @@ export const CoverEditor: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-dash-text">Cover Editor</h2>
-          <p className="text-sm text-dash-muted">Customize your cover image and logo.</p>
+          <p className="text-sm text-dash-muted">
+            Customize the cover page of your invitation website
+          </p>
         </div>
-        <Button onClick={handleSave} loading={saveMutation.isPending} disabled={saveMutation.isPending}>
-          {saved ? "Saved!" : "Save Changes"}
-        </Button>
       </div>
-
-      {saveMutation.isError && (
-        <p className="text-sm text-dash-danger">
-          Error: {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
-        </p>
+      {saveMutation.isPending && (
+        <div className="flex items-center gap-2 text-sm text-dash-muted">
+          <LoadingSpinner className="h-4 w-4" /> Saving...
+        </div>
       )}
-
-      <SplitEditor
-        editor={
-          <div className="space-y-6">
-            {/* Logo Section */}
-            <div>
-              <h3 className="mb-3 text-sm font-semibold text-dash-text">Logo</h3>
-              <ImageUpload
-                value={logoConfig.url}
-                onChange={(url) => setLogoConfig((prev) => ({ ...prev, url }))}
-                folder="logo"
-                eventId={eventId}
-                label="Upload logo"
-                aspectRatio="square"
-              />
-              {logoConfig.url && (
-                <div className="mt-4 space-y-4">
-                  <RangeInput
-                    label="Logo size"
-                    value={logoConfig.size}
-                    min={40}
-                    max={300}
-                    step={10}
-                    onChange={(size) => setLogoConfig((prev) => ({ ...prev, size }))}
-                    format={(v) => `${v}px`}
-                  />
-                  <FormField label="Logo alignment">
-                    <div className="flex gap-2">
-                      {alignButtons.map((btn) => (
-                        <button
-                          key={btn.value}
-                          type="button"
-                          onClick={() => setLogoConfig((prev) => ({ ...prev, align: btn.value }))}
-                          className={cn(
-                            "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
-                            logoConfig.align === btn.value
-                              ? "border-dash-primary bg-dash-primary text-dash-primary-fg"
-                              : "border-dash-border bg-dash-surface text-dash-text hover:bg-dash-bg",
-                          )}
-                        >
-                          {btn.label}
-                        </button>
-                      ))}
-                    </div>
-                  </FormField>
-                </div>
-              )}
-            </div>
-
-            <hr className="border-dash-border" />
-
-            {/* Cover Image Section */}
-            <div>
-              <h3 className="mb-3 text-sm font-semibold text-dash-text">Cover Image</h3>
-              <ImageUpload
-                value={coverImage}
-                onChange={setCoverImage}
-                folder="cover"
-                eventId={eventId}
-                label="Upload cover image"
-                aspectRatio="wide"
-              />
-            </div>
-
-            <hr className="border-dash-border" />
-
-            {/* Cover Config */}
-            <div>
-              <h3 className="mb-3 text-sm font-semibold text-dash-text">Cover Settings</h3>
-              <div className="space-y-4">
-                <FormField label="Overlay color">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={coverConfig.overlay.startsWith("rgba") || coverConfig.overlay.startsWith("rgb") ? "#000000" : coverConfig.overlay}
-                      onChange={(e) => setCoverConfig((prev) => ({ ...prev, overlay: e.target.value }))}
-                      className="h-10 w-12 cursor-pointer rounded border border-dash-border bg-dash-surface p-1"
-                    />
-                    <input
-                      type="text"
-                      value={coverConfig.overlay}
-                      onChange={(e) => setCoverConfig((prev) => ({ ...prev, overlay: e.target.value }))}
-                      className="h-10 flex-1 rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text"
-                    />
-                  </div>
-                </FormField>
-                <FormField label="Text alignment">
-                  <div className="flex gap-2">
-                    {alignButtons.map((btn) => (
-                      <button
-                        key={btn.value}
-                        type="button"
-                        onClick={() => setCoverConfig((prev) => ({ ...prev, align: btn.value }))}
-                        className={cn(
-                          "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
-                          coverConfig.align === btn.value
-                            ? "border-dash-primary bg-dash-primary text-dash-primary-fg"
-                            : "border-dash-border bg-dash-surface text-dash-text hover:bg-dash-bg",
-                        )}
-                      >
-                        {btn.label}
-                      </button>
-                    ))}
-                  </div>
-                </FormField>
-                <FormField label="Image position">
-                  <select
-                    value={coverConfig.position}
-                    onChange={(e) => setCoverConfig((prev) => ({ ...prev, position: e.target.value }))}
-                    className="h-10 w-full rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text"
-                  >
-                    <option value="center">Center</option>
-                    <option value="top">Top</option>
-                    <option value="bottom">Bottom</option>
-                    <option value="left">Left</option>
-                    <option value="right">Right</option>
-                  </select>
-                </FormField>
-              </div>
-            </div>
-          </div>
-        }
-        preview={previewContent}
-        editorRatio={0.45}
-      />
+      <div className="h-[calc(100vh-220px)] min-h-[500px]">
+        <SplitEditor editor={editor} preview={preview} />
+      </div>
     </div>
   );
-};
+}

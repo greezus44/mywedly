@@ -1,47 +1,46 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { ColorInput, RangeInput, FormField } from "../../components/ui";
-import { Select } from "../../components/ui/Input";
-import { cn } from "../../lib/utils";
+import { Card, ColorInput, Select } from "../../components/ui";
 import {
   THEME_PRESETS,
-  DEFAULT_THEME,
   HEADING_FONT_OPTIONS,
   RICH_FONT_OPTIONS,
+  fullToSimplifiedTheme,
+  simplifiedToFullTheme,
   type SimplifiedThemeConfig,
-  type ThemeConfig,
 } from "../../lib/theme";
+import { cn } from "../../lib/utils";
 
-const PRESET_NAMES = Object.keys(THEME_PRESETS);
+const presetKeys = Object.keys(THEME_PRESETS);
 
-const COLOR_FIELDS: { key: keyof ThemeConfig["colors"]; label: string }[] = [
+const colorFields: { key: keyof SimplifiedThemeConfig; label: string }[] = [
+  { key: "bg", label: "Background" },
+  { key: "surface", label: "Surface" },
   { key: "primary", label: "Primary" },
   { key: "primaryHover", label: "Primary Hover" },
   { key: "accent", label: "Accent" },
-  { key: "bg", label: "Background" },
-  { key: "surface", label: "Surface" },
   { key: "text", label: "Text" },
 ];
 
-export const ThemeEditor: React.FC = () => {
+export function ThemeEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
+  const [theme, setTheme] = useState<SimplifiedThemeConfig>({});
 
-  const [theme, setTheme] = useState<SimplifiedThemeConfig>(() => {
-    if (!event.draft_theme || typeof event.draft_theme !== "object") return {};
-    return event.draft_theme as unknown as SimplifiedThemeConfig;
-  });
-  const [saved, setSaved] = useState(false);
-
-  const currentTheme: ThemeConfig = {
-    colors: { ...DEFAULT_THEME.colors, ...theme.colors },
-    fonts: { ...DEFAULT_THEME.fonts, ...theme.fonts },
-    radius: theme.radius ?? DEFAULT_THEME.radius,
-    fontScale: theme.fontScale ?? DEFAULT_THEME.fontScale,
-  };
+  useEffect(() => {
+    const draftTheme = event.draft_theme ?? event.theme ?? {};
+    // Check if it's already simplified or a full theme
+    const obj = draftTheme as Record<string, unknown>;
+    if (obj.colors) {
+      // It's a full theme — convert to simplified
+      setTheme(fullToSimplifiedTheme(obj as unknown as ReturnType<typeof simplifiedToFullTheme>));
+    } else {
+      setTheme(obj as SimplifiedThemeConfig);
+    }
+  }, [event]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -55,240 +54,196 @@ export const ThemeEditor: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  const handleSave = () => {
-    saveMutation.mutate();
+  const applyPreset = (presetKey: string) => {
+    const preset = THEME_PRESETS[presetKey];
+    if (preset) {
+      setTheme(fullToSimplifiedTheme(preset));
+    }
   };
 
-  const applyPreset = (presetName: string) => {
-    const preset = THEME_PRESETS[presetName];
-    if (!preset) return;
-    setTheme({
-      colors: { ...preset.colors },
-      fonts: { ...preset.fonts },
-      radius: preset.radius,
-      fontScale: preset.fontScale,
-    });
+  const updateColor = (key: keyof SimplifiedThemeConfig, value: string) => {
+    setTheme({ ...theme, [key]: value });
   };
 
-  const updateColor = (key: keyof ThemeConfig["colors"], value: string) => {
-    setTheme((prev) => ({
-      ...prev,
-      colors: { ...prev.colors, [key]: value },
-    }));
-  };
+  const editor = (
+    <div className="p-4 space-y-6">
+      {/* Presets */}
+      <div>
+        <h3 className="text-sm font-semibold text-dash-text mb-3">Theme Presets</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          {presetKeys.map((key) => {
+            const preset = THEME_PRESETS[key];
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => applyPreset(key)}
+                className="rounded-lg border border-dash-border p-2 hover:border-dash-primary transition-colors text-left"
+              >
+                <div
+                  className="h-12 w-full rounded-md mb-1.5 flex items-center justify-center"
+                  style={{ backgroundColor: preset.colors.bg, borderColor: preset.colors.border, borderWidth: 1 }}
+                >
+                  <div className="flex gap-1">
+                    <span className="h-4 w-4 rounded-full" style={{ backgroundColor: preset.colors.primary }} />
+                    <span className="h-4 w-4 rounded-full" style={{ backgroundColor: preset.colors.accent }} />
+                  </div>
+                </div>
+                <span className="text-xs font-medium text-dash-text capitalize">{key}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-  const updateFont = (key: keyof ThemeConfig["fonts"], value: string) => {
-    setTheme((prev) => ({
-      ...prev,
-      fonts: { ...prev.fonts, [key]: value },
-    }));
-  };
+      {/* Colors */}
+      <div>
+        <h3 className="text-sm font-semibold text-dash-text mb-3">Colors</h3>
+        <div className="grid grid-cols-2 gap-3">
+          {colorFields.map((field) => (
+            <ColorInput
+              key={field.key}
+              label={field.label}
+              value={(theme[field.key] as string) ?? "#ffffff"}
+              onChange={(value) => updateColor(field.key, value)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Fonts */}
+      <div>
+        <h3 className="text-sm font-semibold text-dash-text mb-3">Fonts</h3>
+        <div className="space-y-3">
+          <Select
+            label="Heading font"
+            value={theme.headingFont ?? "Georgia, serif"}
+            onChange={(e) => setTheme({ ...theme, headingFont: e.target.value })}
+          >
+            {HEADING_FONT_OPTIONS.map((font) => (
+              <option key={font.value} value={font.value}>
+                {font.label}
+              </option>
+            ))}
+          </Select>
+          <Select
+            label="Body font"
+            value={theme.bodyFont ?? "Georgia, serif"}
+            onChange={(e) => setTheme({ ...theme, bodyFont: e.target.value })}
+          >
+            {RICH_FONT_OPTIONS.map((font) => (
+              <option key={font.value} value={font.value}>
+                {font.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between pt-2 border-t border-dash-border">
+        {saveMutation.isError && (
+          <p className="text-sm text-dash-danger">
+            {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+          </p>
+        )}
+        {saveMutation.isSuccess && (
+          <p className="text-sm text-green-600">Saved!</p>
+        )}
+        <Button
+          onClick={() => saveMutation.mutate()}
+          loading={saveMutation.isPending}
+          className="ml-auto"
+        >
+          Save changes
+        </Button>
+      </div>
+    </div>
+  );
+
+  const preview = (
+    <div className="p-4">
+      <Card className="overflow-hidden">
+        <div
+          className="event-themed min-h-[400px] p-8"
+          style={{
+            backgroundColor: theme.bg,
+            color: theme.text,
+            fontFamily: theme.bodyFont,
+            borderRadius: theme.radius,
+          } as React.CSSProperties}
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-widest mb-2"
+            style={{ color: theme.muted }}
+          >
+            Welcome
+          </p>
+          <h1
+            className="text-3xl font-bold mb-3"
+            style={{ color: theme.heading, fontFamily: theme.headingFont }}
+          >
+            Our Wedding
+          </h1>
+          <p className="text-base mb-4" style={{ color: theme.muted }}>
+            We invite you to celebrate with us on our special day.
+          </p>
+          <button
+            className="px-6 py-2 rounded font-semibold text-sm uppercase tracking-wide"
+            style={{
+              backgroundColor: theme.primary,
+              color: theme.primaryFg,
+              borderRadius: theme.radius,
+            }}
+          >
+            View Invitation
+          </button>
+          <div
+            className="mt-6 rounded-lg border p-4"
+            style={{
+              backgroundColor: theme.surface,
+              borderColor: theme.border,
+              borderRadius: theme.radius,
+            }}
+          >
+            <h3 className="text-lg font-semibold mb-1" style={{ color: theme.heading }}>
+              Our Story
+            </h3>
+            <p className="text-sm" style={{ color: theme.text }}>
+              A love story worth celebrating.
+            </p>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-dash-text">Theme Editor</h2>
-          <p className="text-sm text-dash-muted">Customize colors, fonts, and styling.</p>
-        </div>
-        <Button onClick={handleSave} loading={saveMutation.isPending} disabled={saveMutation.isPending}>
-          {saved ? "Saved!" : "Save Changes"}
-        </Button>
-      </div>
-
-      {saveMutation.isError && (
-        <p className="text-sm text-dash-danger">
-          Error: {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+      <div>
+        <h2 className="text-xl font-bold text-dash-text">Theme Editor</h2>
+        <p className="text-sm text-dash-muted">
+          Customize the colors and fonts of your invitation website
         </p>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Left: Controls */}
-        <div className="space-y-6">
-          {/* Presets */}
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-dash-text">Presets</h3>
-            <div className="grid grid-cols-5 gap-2">
-              {PRESET_NAMES.map((name) => {
-                const preset = THEME_PRESETS[name];
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => applyPreset(name)}
-                    className={cn(
-                      "rounded-lg border-2 p-2 transition-all hover:scale-105",
-                      "border-dash-border hover:border-dash-primary",
-                    )}
-                    title={name}
-                  >
-                    <div
-                      className="mb-1 h-8 w-full rounded"
-                      style={{ backgroundColor: preset.colors.primary }}
-                    />
-                    <span className="block truncate text-xs capitalize text-dash-muted">{name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <hr className="border-dash-border" />
-
-          {/* Colors */}
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-dash-text">Colors</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {COLOR_FIELDS.map((field) => (
-                <ColorInput
-                  key={field.key}
-                  label={field.label}
-                  value={currentTheme.colors[field.key]}
-                  onChange={(value) => updateColor(field.key, value)}
-                />
-              ))}
-            </div>
-          </div>
-
-          <hr className="border-dash-border" />
-
-          {/* Fonts */}
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-dash-text">Fonts</h3>
-            <div className="space-y-3">
-              <FormField label="Heading font">
-                <Select
-                  value={currentTheme.fonts.heading}
-                  onChange={(e) => updateFont("heading", e.target.value)}
-                >
-                  {HEADING_FONT_OPTIONS.map((font) => (
-                    <option key={font} value={font}>{font.split(",")[0]}</option>
-                  ))}
-                </Select>
-              </FormField>
-              <FormField label="Body font">
-                <Select
-                  value={currentTheme.fonts.body}
-                  onChange={(e) => updateFont("body", e.target.value)}
-                >
-                  {RICH_FONT_OPTIONS.map((font) => (
-                    <option key={font} value={font}>{font.split(",")[0]}</option>
-                  ))}
-                </Select>
-              </FormField>
-            </div>
-          </div>
-
-          <hr className="border-dash-border" />
-
-          {/* Radius & Scale */}
-          <div>
-            <h3 className="mb-3 text-sm font-semibold text-dash-text">Layout</h3>
-            <div className="space-y-4">
-              <FormField label="Border radius">
-                <Select
-                  value={currentTheme.radius}
-                  onChange={(e) => setTheme((prev) => ({ ...prev, radius: e.target.value }))}
-                >
-                  <option value="0rem">None</option>
-                  <option value="0.25rem">Small</option>
-                  <option value="0.375rem">Medium</option>
-                  <option value="0.5rem">Default</option>
-                  <option value="0.625rem">Large</option>
-                  <option value="0.75rem">Extra Large</option>
-                  <option value="0.875rem">2XL</option>
-                  <option value="1rem">3XL</option>
-                </Select>
-              </FormField>
-              <RangeInput
-                label="Font scale"
-                value={currentTheme.fontScale}
-                min={0.8}
-                max={1.5}
-                step={0.05}
-                onChange={(value) => setTheme((prev) => ({ ...prev, fontScale: value }))}
-                format={(v) => `${(v * 100).toFixed(0)}%`}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Preview */}
-        <div className="rounded-lg border border-dash-border bg-dash-bg p-4">
-          <h3 className="mb-3 text-sm font-semibold text-dash-text">Preview</h3>
+      </div>
+      <div className="h-[calc(100vh-220px)] min-h-[500px]">
+        <div className="flex flex-col md:flex-row gap-4 h-full">
           <div
-            className="overflow-hidden rounded-lg border"
-            style={{
-              backgroundColor: currentTheme.colors.bg,
-              borderColor: currentTheme.colors.border,
-              fontFamily: currentTheme.fonts.body,
-              color: currentTheme.colors.text,
-              borderRadius: currentTheme.radius,
-            }}
+            className="overflow-auto rounded-lg border border-dash-border bg-dash-surface"
+            style={{ flex: "0.5 1 0" }}
           >
-            <div className="p-6">
-              <p
-                style={{
-                  color: currentTheme.colors.muted,
-                  fontSize: `${currentTheme.fontScale * 0.875}rem`,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                }}
-              >
-                Our Wedding
-              </p>
-              <h1
-                style={{
-                  color: currentTheme.colors.heading,
-                  fontFamily: currentTheme.fonts.heading,
-                  fontSize: `${currentTheme.fontScale * 2}rem`,
-                  fontWeight: 700,
-                  marginTop: "0.5rem",
-                }}
-              >
-                Jane &amp; John
-              </h1>
-              <p style={{ color: currentTheme.colors.muted, marginTop: "0.5rem" }}>
-                Saturday, June 15, 2025 at 4:00 PM
-              </p>
-              <div
-                style={{
-                  backgroundColor: currentTheme.colors.surface,
-                  border: `1px solid ${currentTheme.colors.border}`,
-                  borderRadius: currentTheme.radius,
-                  padding: "1rem",
-                  marginTop: "1.5rem",
-                }}
-              >
-                <p style={{ color: currentTheme.colors.heading, fontWeight: 600 }}>
-                  Grand Ballroom Hotel
-                </p>
-                <p style={{ color: currentTheme.colors.muted, fontSize: "0.875rem", marginTop: "0.25rem" }}>
-                  123 Main Street, New York
-                </p>
-              </div>
-              <button
-                style={{
-                  backgroundColor: currentTheme.colors.primary,
-                  color: currentTheme.colors.primaryFg,
-                  borderRadius: currentTheme.radius,
-                  padding: "0.625rem 1.5rem",
-                  fontWeight: 600,
-                  marginTop: "1.5rem",
-                  width: "100%",
-                }}
-              >
-                RSVP Now
-              </button>
-            </div>
+            {editor}
+          </div>
+          <div
+            className={cn("overflow-auto rounded-lg border border-dash-border bg-dash-surface")}
+            style={{ flex: "0.5 1 0" }}
+          >
+            {preview}
           </div>
         </div>
       </div>
     </div>
   );
-};
+}

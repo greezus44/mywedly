@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { cn } from "../../lib/utils";
 
-export interface DatePickerProps {
+interface DatePickerProps {
   value: string | null;
   onChange: (isoDate: string | null) => void;
   label?: string;
@@ -11,38 +11,38 @@ export interface DatePickerProps {
   max?: string;
 }
 
-function toIsoDate(date: Date): string {
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const DAY_NAMES = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+function toISODate(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 
-function parseIsoDate(iso: string | null): Date | null {
+function parseISODate(iso: string | null | undefined): Date | null {
   if (!iso) return null;
   const [y, m, d] = iso.split("-").map(Number);
   if (!y || !m || !d) return null;
   return new Date(y, m - 1, d);
 }
 
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
+function formatDateDisplay(iso: string | null): string {
+  if (!iso) return "";
+  const date = parseISODate(iso);
+  if (!date) return "";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
-const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-
-export const DatePicker: React.FC<DatePickerProps> = ({
+export function DatePicker({
   value,
   onChange,
   label,
@@ -50,133 +50,118 @@ export const DatePicker: React.FC<DatePickerProps> = ({
   className,
   min,
   max,
-}) => {
+}: DatePickerProps) {
   const [open, setOpen] = useState(false);
+  const [viewMonth, setViewMonth] = useState(() => {
+    const d = parseISODate(value);
+    return d ?? new Date();
+  });
   const containerRef = useRef<HTMLDivElement>(null);
-  const selected = parseIsoDate(value);
-  const [viewYear, setViewYear] = useState(selected?.getFullYear() ?? new Date().getFullYear());
-  const [viewMonth, setViewMonth] = useState(selected?.getMonth() ?? new Date().getMonth());
 
   useEffect(() => {
-    if (!open) return;
-    function handleClickOutside(e: MouseEvent) {
+    function handleClick(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    if (open) {
+      document.addEventListener("mousedown", handleClick);
+      return () => document.removeEventListener("mousedown", handleClick);
+    }
   }, [open]);
 
-  const days = useMemo(() => {
-    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
-    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-    const cells: (Date | null)[] = [];
-    for (let i = 0; i < firstDay; i++) cells.push(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(viewYear, viewMonth, d));
-    return cells;
-  }, [viewYear, viewMonth]);
-
-  const minDate = parseIsoDate(min ?? null);
-  const maxDate = parseIsoDate(max ?? null);
-
-  function isDisabled(d: Date): boolean {
-    if (minDate && d < minDate) return true;
-    if (maxDate && d > maxDate) return true;
-    return false;
-  }
-
-  function prevMonth() {
-    if (viewMonth === 0) {
-      setViewMonth(11);
-      setViewYear((y) => y - 1);
-    } else {
-      setViewMonth((m) => m - 1);
+  useEffect(() => {
+    if (open) {
+      const d = parseISODate(value);
+      setViewMonth(d ?? new Date());
     }
-  }
+  }, [open, value]);
 
-  function nextMonth() {
-    if (viewMonth === 11) {
-      setViewMonth(0);
-      setViewYear((y) => y + 1);
-    } else {
-      setViewMonth((m) => m + 1);
-    }
-  }
+  const handleSelect = useCallback(
+    (day: Date) => {
+      onChange(toISODate(day));
+      setOpen(false);
+    },
+    [onChange]
+  );
 
-  function selectDate(d: Date) {
-    if (isDisabled(d)) return;
-    onChange(toIsoDate(d));
-    setOpen(false);
-  }
+  const prevMonth = () => {
+    setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1));
+  };
+  const nextMonth = () => {
+    setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1));
+  };
 
-  const displayValue = selected
-    ? selected.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    : "";
+  const year = viewMonth.getFullYear();
+  const month = viewMonth.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const daysInMonth = lastDay.getDate();
+  const startWeekday = firstDay.getDay();
+
+  const cells: (Date | null)[] = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+
+  const selectedDate = parseISODate(value);
+  const minDate = parseISODate(min);
+  const maxDate = parseISODate(max);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   return (
-    <div ref={containerRef} className={cn("relative w-full", className)}>
-      {label && <label className="mb-1.5 block text-sm font-medium text-dash-text">{label}</label>}
+    <div className={cn("relative", className)} ref={containerRef}>
+      {label && <label className="block text-sm font-medium text-dash-text mb-1">{label}</label>}
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(!open)}
         className={cn(
-          "flex h-10 w-full items-center justify-between rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text transition-colors hover:border-dash-primary focus:outline-none focus:ring-2 focus:ring-dash-primary/40",
+          "w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-left text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
         )}
       >
-        <span className={displayValue ? "text-dash-text" : "text-dash-muted"}>
-          {displayValue || placeholder}
-        </span>
-        <svg className="h-4 w-4 text-dash-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
+        {value ? formatDateDisplay(value) : <span className="text-dash-muted">{placeholder}</span>}
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-dash-border bg-dash-surface p-3 shadow-lg">
-          <div className="mb-3 flex items-center justify-between">
-            <button type="button" onClick={prevMonth} className="rounded p-1 text-dash-muted hover:bg-dash-bg">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+        <div className="absolute z-50 mt-1 rounded-lg border border-dash-border bg-dash-surface shadow-lg p-3 w-72">
+          <div className="flex items-center justify-between mb-3">
+            <button type="button" onClick={prevMonth} className="px-2 py-1 rounded hover:bg-dash-bg text-dash-text">
+              ‹
             </button>
             <span className="text-sm font-medium text-dash-text">
-              {MONTHS[viewMonth]} {viewYear}
+              {MONTH_NAMES[month]} {year}
             </span>
-            <button type="button" onClick={nextMonth} className="rounded p-1 text-dash-muted hover:bg-dash-bg">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            <button type="button" onClick={nextMonth} className="px-2 py-1 rounded hover:bg-dash-bg text-dash-text">
+              ›
             </button>
           </div>
-          <div className="mb-1 grid grid-cols-7 gap-1">
-            {WEEKDAYS.map((wd) => (
-              <div key={wd} className="text-center text-xs font-medium text-dash-muted">{wd}</div>
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {DAY_NAMES.map((d) => (
+              <div key={d} className="text-center text-xs text-dash-muted font-medium py-1">
+                {d}
+              </div>
             ))}
           </div>
           <div className="grid grid-cols-7 gap-1">
-            {days.map((d, i) => {
-              if (!d) return <div key={i} />;
-              const isSelected =
-                selected &&
-                d.getFullYear() === selected.getFullYear() &&
-                d.getMonth() === selected.getMonth() &&
-                d.getDate() === selected.getDate();
-              const disabled = isDisabled(d);
+            {cells.map((date, i) => {
+              if (!date) return <div key={i} />;
+              const isSelected = selectedDate && date.getTime() === selectedDate.getTime();
+              const isDisabled =
+                Boolean((minDate && date < minDate) || (maxDate && date > maxDate));
               return (
                 <button
                   key={i}
                   type="button"
-                  disabled={disabled}
-                  onClick={() => selectDate(d)}
+                  disabled={isDisabled}
+                  onClick={() => handleSelect(date)}
                   className={cn(
-                    "h-8 rounded text-sm transition-colors",
-                    disabled
-                      ? "cursor-not-allowed text-dash-muted opacity-40"
+                    "text-sm rounded h-8 w-8 flex items-center justify-center transition-colors",
+                    isSelected
+                      ? "bg-dash-primary text-dash-primary-fg"
                       : "text-dash-text hover:bg-dash-bg",
-                    isSelected && "bg-dash-primary text-dash-primary-fg hover:bg-dash-primary-hover",
+                    isDisabled && "opacity-30 cursor-not-allowed hover:bg-transparent"
                   )}
                 >
-                  {d.getDate()}
+                  {date.getDate()}
                 </button>
               );
             })}
@@ -188,7 +173,7 @@ export const DatePicker: React.FC<DatePickerProps> = ({
                 onChange(null);
                 setOpen(false);
               }}
-              className="mt-2 w-full text-xs text-dash-muted hover:text-dash-danger"
+              className="mt-2 text-xs text-dash-muted hover:text-dash-text w-full text-center"
             >
               Clear
             </button>
@@ -197,4 +182,4 @@ export const DatePicker: React.FC<DatePickerProps> = ({
       )}
     </div>
   );
-};
+}

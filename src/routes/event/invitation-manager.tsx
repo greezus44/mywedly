@@ -1,127 +1,153 @@
-import React, { useState, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type SubEvent, type GuestGroup, type GuestInvitationOverride } from "../../lib/supabase";
-import { useEventContext } from "./event-layout";
-import { Button } from "../../components/ui/Button";
-import { Card, LoadingSpinner, Badge, Toggle } from "../../components/ui";
+import { useState, useEffect, useCallback } from "react";
+import { supabase, type SubEvent, type GuestInvitationOverride } from "../../lib/supabase";
 import { cn } from "../../lib/utils";
+import { LoadingSpinner } from "../../components/ui";
 
-export interface InvitationManagerProps {
-  subEvent: SubEvent;
+interface InvitationManagerProps {
+  eventId: string;
+  guestId: string;
 }
 
-export const InvitationManager: React.FC<InvitationManagerProps> = ({ subEvent }) => {
-  const { eventId } = useEventContext();
-  const queryClient = useQueryClient();
+interface ResolvedInvitation {
+  subEventId: string;
+  invited: boolean;
+  source: "group" | "override" | "default";
+}
 
-  const { data: groups, isLoading: groupsLoading } = useQuery({
-    queryKey: ["guest-groups", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("guest_groups")
+export function InvitationManager({ eventId, guestId }: InvitationManagerProps) {
+  const [subEvents, setSubEvents] = useState<SubEvent[]>([]);
+  const [overrides, setOverrides] = useState<Map<string, boolean>>(new Map());
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data: subs, error: subError } = await supabase
+        .from("sub_events")
         .select("*")
-        .eq("event_id", eventId)
-        .order("sort_order", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as GuestGroup[];
-    },
-  });
+        .eq("parent_event_id", eventId)
+        .order("display_order", { ascending: true });
 
-  const { data: assignments } = useQuery({
-    queryKey: ["sub-event-group-assignments", subEvent.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sub_event_group_assignments")
-        .select("*")
-        .eq("sub_event_id", subEvent.id);
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+      if (subError) throw subError;
+      setSubEvents((subs ?? []) as SubEvent[]);
 
-  const { data: overrides } = useQuery({
-    queryKey: ["guest-invitation-overrides", subEvent.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: ovData, error: ovError } = await supabase
         .from("guest_invitation_overrides")
         .select("*")
-        .eq("sub_event_id", subEvent.id);
-      if (error) throw error;
-      return (data ?? []) as GuestInvitationOverride[];
-    },
-  });
+        .eq("guest_id", guestId);
 
-  const assignedGroupIds = useMemo(() => {
-    return new Set((assignments ?? []).map((a) => a.group_id));
-  }, [assignments]);
+      if (ovError) throw ovError;
 
-  const toggleAssignment = useMutation({
-    mutationFn: async (args: { groupId: string; shouldAssign: boolean }) => {
-      const { groupId, shouldAssign } = args;
-      if (shouldAssign) {
+      const map = new Map<string, boolean>();
+      for (const ov of (ovData ?? []) as GuestInvitationOverride[]) {
+        map.set(ov.sub_event_id, ov.is_invited);
+      }
+      setOverrides(map);
+    } catch (err) {
+      console.error("Failed to load invitation data:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [eventId, guestId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const toggleInvitation = async (subEventId: string, invited: boolean) => {
+    setSaving(subEventId);
+    try {
+      const existing = overrides.has(subEventId);
+      if (existing) {
         const { error } = await supabase
-          .from("sub_event_group_assignments")
-          .insert({ sub_event_id: subEvent.id, group_id: groupId });
+          .from("guest_invitation_overrides")
+          .update({ is_invited: invited })
+          .eq("guest_id", guestId)
+          .eq("sub_event_id", subEventId);
         if (error) throw error;
       } else {
         const { error } = await supabase
-          .from("sub_event_group_assignments")
-          .delete()
-          .eq("sub_event_id", subEvent.id)
-          .eq("group_id", groupId);
+          .from("guest_invitation_overrides")
+          .insert({
+            guest_id: guestId,
+            sub_event_id: subEventId,
+            is_invited: invited,
+          });
         if (error) throw error;
       }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sub-event-group-assignments", subEvent.id] });
-    },
-  });
 
-  const handleToggleGroup = (groupId: string, checked: boolean) => {
-    toggleAssignment.mutate({ groupId, shouldAssign: checked });
+      setOverrides((prev) => {
+        const next = new Map(prev);
+        next.set(subEventId, invited);
+        return next;
+      });
+    } catch (err) {
+      console.error("Failed to update invitation:", err);
+    } finally {
+      setSaving(null);
+    }
   };
 
-  if (groupsLoading) {
-    return <LoadingSpinner size="sm" label="Loading groups..." />;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <LoadingSpinner className="h-6 w-6" />
+      </div>
+    );
+  }
+
+  if (subEvents.length === 0) {
+    return (
+      <p className="text-sm text-dash-muted py-4">
+        No events created yet. Create events first to manage invitations.
+      </p>
+    );
   }
 
   return (
-    <div className="space-y-3">
-      <div>
-        <h4 className="text-sm font-semibold text-dash-text">Invitation Groups</h4>
-        <p className="text-xs text-dash-muted">
-          Select which groups are invited to this Event. Individual guest overrides take precedence.
-        </p>
-      </div>
-      {(!groups || groups.length === 0) && (
-        <p className="text-sm text-dash-muted">No groups available. Create groups in the Guest Groups tab.</p>
-      )}
-      {groups && groups.length > 0 && (
-        <div className="space-y-2">
-          {groups.map((group) => {
-            const isAssigned = assignedGroupIds.has(group.id);
-            return (
-              <div
-                key={group.id}
-                className="flex items-center justify-between rounded-md border border-dash-border bg-dash-surface px-3 py-2"
-              >
-                <span className="text-sm font-medium text-dash-text">{group.name}</span>
-                <Toggle
-                  checked={isAssigned}
-                  onChange={(checked) => handleToggleGroup(group.id, checked)}
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-dash-text">
+        Invited Events
+      </label>
+      <p className="text-xs text-dash-muted mb-3">
+        Click to toggle whether this guest is invited to each event.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {subEvents.map((subEvent) => {
+          const isInvited = overrides.has(subEvent.id)
+            ? overrides.get(subEvent.id)!
+            : true; // default: invited
+          const isSaving = saving === subEvent.id;
+          return (
+            <button
+              key={subEvent.id}
+              type="button"
+              disabled={isSaving}
+              onClick={() => toggleInvitation(subEvent.id, !isInvited)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+                isInvited
+                  ? "border-dash-primary/30 bg-dash-primary/10 text-dash-primary"
+                  : "border-dash-border bg-dash-bg text-dash-muted",
+                isSaving && "opacity-50 cursor-wait"
+              )}
+            >
+              {isSaving ? (
+                <LoadingSpinner className="h-3 w-3" />
+              ) : (
+                <span
+                  className={cn(
+                    "h-2 w-2 rounded-full",
+                    isInvited ? "bg-dash-primary" : "bg-dash-border"
+                  )}
                 />
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {(overrides && overrides.length > 0) && (
-        <div className="mt-3">
-          <p className="text-xs font-medium text-dash-muted">
-            {overrides.length} individual guest override{overrides.length !== 1 ? "s" : ""} active
-          </p>
-        </div>
-      )}
+              )}
+              {subEvent.name}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
-};
+}

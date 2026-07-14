@@ -1,234 +1,241 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type EventGuest, type GuestGroup, type SubEvent, type GuestInvitationOverride } from "../../lib/supabase";
+import { supabase, type EventGuest, type GuestGroup } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { Card, Modal, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
-import { GuestForm, RsvpBadge, guestToForm, EMPTY_GUEST_FORM, type GuestFormValues } from "./guest-form";
+import {
+  Input,
+  Select,
+  Card,
+  Modal,
+  LoadingSpinner,
+  ErrorState,
+  EmptyState,
+} from "../../components/ui";
+import { InvitationManager } from "./invitation-manager";
+import {
+  guestToForm,
+  emptyGuestForm,
+  RsvpBadge,
+  RSVP_STATUS_OPTIONS,
+  SIDE_OPTIONS,
+  type GuestFormValues,
+} from "./guest-form";
 import { cn, generateUsername } from "../../lib/utils";
 
-export const GuestsPage: React.FC = () => {
+async function fetchGuests(eventId: string): Promise<EventGuest[]> {
+  const { data, error } = await supabase
+    .from("event_guests")
+    .select("*")
+    .eq("event_id", eventId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as EventGuest[];
+}
+
+async function fetchGroups(eventId: string): Promise<GuestGroup[]> {
+  const { data, error } = await supabase
+    .from("guest_groups")
+    .select("*")
+    .eq("event_id", eventId)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as GuestGroup[];
+}
+
+async function createGuest(
+  eventId: string,
+  form: GuestFormValues
+): Promise<void> {
+  const token = crypto.randomUUID();
+  const username = form.username || generateUsername(form.name);
+  const { error } = await supabase.from("event_guests").insert({
+    event_id: eventId,
+    name: form.name,
+    username,
+    email: form.email || null,
+    phone: form.phone || null,
+    group_id: form.group_id || null,
+    group_name: form.group_name,
+    side: form.side || null,
+    rsvp_status: form.rsvp_status,
+    plus_ones: form.plus_ones,
+    dietary: form.dietary || null,
+    message: form.message || null,
+    table_number: form.table_number || null,
+    token,
+  });
+  if (error) throw error;
+}
+
+async function updateGuest(
+  id: string,
+  form: GuestFormValues
+): Promise<void> {
+  const { error } = await supabase
+    .from("event_guests")
+    .update({
+      name: form.name,
+      username: form.username || generateUsername(form.name),
+      email: form.email || null,
+      phone: form.phone || null,
+      group_id: form.group_id || null,
+      group_name: form.group_name,
+      side: form.side || null,
+      rsvp_status: form.rsvp_status,
+      plus_ones: form.plus_ones,
+      dietary: form.dietary || null,
+      message: form.message || null,
+      table_number: form.table_number || null,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+async function deleteGuest(id: string): Promise<void> {
+  const { error } = await supabase.from("event_guests").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export function GuestsPage() {
   const { eventId } = useEventContext();
   const queryClient = useQueryClient();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<GuestFormValues>(EMPTY_GUEST_FORM);
+  const [showModal, setShowModal] = useState(false);
+  const [editingGuest, setEditingGuest] = useState<EventGuest | null>(null);
+  const [form, setForm] = useState<GuestFormValues>(emptyGuestForm());
   const [search, setSearch] = useState("");
-  const [filterGroup, setFilterGroup] = useState<string>("");
+  const [groupFilter, setGroupFilter] = useState("all");
+  const [showInvitations, setShowInvitations] = useState(false);
+  const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
 
-  const { data: guests, isLoading, isError, refetch } = useQuery({
-    queryKey: ["event-guests", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_guests")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as EventGuest[];
-    },
+  const { data: guests, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ["guests", eventId],
+    queryFn: () => fetchGuests(eventId),
   });
 
   const { data: groups } = useQuery({
-    queryKey: ["guest-groups", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("guest_groups")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("sort_order", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as GuestGroup[];
-    },
+    queryKey: ["groups", eventId],
+    queryFn: () => fetchGroups(eventId),
   });
-
-  const { data: subEvents } = useQuery({
-    queryKey: ["sub-events", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sub_events")
-        .select("*")
-        .eq("parent_event_id", eventId)
-        .order("display_order", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as SubEvent[];
-    },
-  });
-
-  const { data: overrides } = useQuery({
-    queryKey: ["guest-invitation-overrides-all", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("guest_invitation_overrides")
-        .select("*");
-      if (error) throw error;
-      return (data ?? []) as GuestInvitationOverride[];
-    },
-  });
-
-  const groupMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const g of groups ?? []) {
-      map.set(g.id, g.name);
-    }
-    return map;
-  }, [groups]);
-
-  const filteredGuests = useMemo(() => {
-    let list = guests ?? [];
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter((g) =>
-        g.name.toLowerCase().includes(q) ||
-        (g.email ?? "").toLowerCase().includes(q) ||
-        (g.username ?? "").toLowerCase().includes(q)
-      );
-    }
-    if (filterGroup) {
-      list = list.filter((g) => g.group_id === filterGroup);
-    }
-    return list;
-  }, [guests, search, filterGroup]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
-        event_id: eventId,
-        name: form.name,
-        username: form.username || generateUsername(form.name),
-        email: form.email,
-        phone: form.phone,
-        group_name: form.group_id ? (groupMap.get(form.group_id) ?? null) : form.group_name,
-        side: form.side,
-        group_id: form.group_id,
-        rsvp_status: form.rsvp_status,
-        plus_ones: form.plus_ones,
-        dietary: form.dietary,
-        message: form.message,
-        table_number: form.table_number,
-      };
-      if (editingId) {
-        const { error } = await supabase
-          .from("event_guests")
-          .update(payload)
-          .eq("id", editingId);
-        if (error) throw error;
+      if (editingGuest) {
+        await updateGuest(editingGuest.id, form);
       } else {
-        const { error } = await supabase
-          .from("event_guests")
-          .insert(payload);
-        if (error) throw error;
+        await createGuest(eventId, form);
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
-      setModalOpen(false);
-      setForm(EMPTY_GUEST_FORM);
-      setEditingId(null);
+      queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
+      setShowModal(false);
+      setEditingGuest(null);
+      setForm(emptyGuestForm());
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("event_guests")
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => deleteGuest(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
     },
   });
 
-  const toggleOverride = useMutation({
-    mutationFn: async ({ guestId, subEventId, isInvited }: { guestId: string; subEventId: string; isInvited: boolean }) => {
-      const existing = (overrides ?? []).find(
-        (o) => o.guest_id === guestId && o.sub_event_id === subEventId,
-      );
-      if (existing) {
-        const { error } = await supabase
-          .from("guest_invitation_overrides")
-          .update({ is_invited: isInvited })
-          .eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("guest_invitation_overrides")
-          .insert({ guest_id: guestId, sub_event_id: subEventId, is_invited: isInvited });
-        if (error) throw error;
+  const filteredGuests = useMemo(() => {
+    if (!guests) return [];
+    return guests.filter((guest) => {
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        if (
+          !guest.name.toLowerCase().includes(q) &&
+          !(guest.email ?? "").toLowerCase().includes(q)
+        ) {
+          return false;
+        }
       }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guest-invitation-overrides-all", eventId] });
-    },
-  });
+      if (groupFilter !== "all") {
+        if (groupFilter === "none") {
+          if (guest.group_id) return false;
+        } else if (guest.group_id !== groupFilter) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [guests, search, groupFilter]);
 
   const openCreate = () => {
-    setForm(EMPTY_GUEST_FORM);
-    setEditingId(null);
-    setModalOpen(true);
+    setEditingGuest(null);
+    setForm(emptyGuestForm());
+    setShowModal(true);
   };
 
   const openEdit = (guest: EventGuest) => {
+    setEditingGuest(guest);
     setForm(guestToForm(guest));
-    setEditingId(guest.id);
-    setModalOpen(true);
+    setShowModal(true);
   };
 
-  const isGuestInvitedToSubEvent = (guestId: string, subEventId: string): boolean => {
-    const override = (overrides ?? []).find(
-      (o) => o.guest_id === guestId && o.sub_event_id === subEventId,
-    );
-    if (override) return override.is_invited;
-    // Default: invited unless explicitly excluded
-    return true;
+  const openInvitations = (guestId: string) => {
+    setSelectedGuestId(guestId);
+    setShowInvitations(true);
   };
-
-  if (isLoading) {
-    return <LoadingSpinner size="md" label="Loading guests..." />;
-  }
-
-  if (isError) {
-    return <ErrorState onRetry={() => refetch()} />;
-  }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-dash-text">Guests</h2>
-          <p className="text-sm text-dash-muted">Manage your guest list and track RSVPs.</p>
+          <p className="text-sm text-dash-muted">
+            Manage your guest list and invitations
+          </p>
         </div>
-        <Button onClick={openCreate}>Add Guest</Button>
+        <Button onClick={openCreate}>Add guest</Button>
       </div>
 
-      {/* Search & Filter */}
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, email, or username..."
-          className="flex-1"
+      {/* Filters */}
+      <Card className="p-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Input
+            type="text"
+            placeholder="Search by name or email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Select
+            value={groupFilter}
+            onChange={(e) => setGroupFilter(e.target.value)}
+          >
+            <option value="all">All groups</option>
+            <option value="none">No group</option>
+            {groups?.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      </Card>
+
+      {isLoading && (
+        <div className="flex items-center justify-center py-20">
+          <LoadingSpinner className="h-8 w-8" />
+        </div>
+      )}
+
+      {isError && (
+        <ErrorState
+          title="Failed to load guests"
+          description={error instanceof Error ? error.message : undefined}
+          onRetry={() => refetch()}
         />
-        <select
-          value={filterGroup}
-          onChange={(e) => setFilterGroup(e.target.value)}
-          className="h-10 rounded-md border border-dash-border bg-dash-surface px-3 text-sm text-dash-text"
-        >
-          <option value="">All groups</option>
-          {(groups ?? []).map((g) => (
-            <option key={g.id} value={g.id}>{g.name}</option>
-          ))}
-        </select>
-      </div>
+      )}
 
-      {(!guests || guests.length === 0) && (
+      {guests && guests.length === 0 && (
         <EmptyState
           title="No guests yet"
-          description="Add guests to your invitation website."
-          action={<Button onClick={openCreate}>Add Guest</Button>}
+          description="Add guests to your invitation list to get started."
+          action={<Button onClick={openCreate}>Add guest</Button>}
         />
       )}
 
@@ -240,108 +247,203 @@ export const GuestsPage: React.FC = () => {
       )}
 
       {filteredGuests.length > 0 && (
-        <div className="space-y-3">
-          {filteredGuests.map((guest) => (
-            <Card key={guest.id}>
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-semibold text-dash-text">{guest.name}</h3>
-                    <RsvpBadge status={guest.rsvp_status} />
-                    {guest.group_id && groupMap.get(guest.group_id) && (
-                      <Badge variant="primary">{groupMap.get(guest.group_id)}</Badge>
-                    )}
-                    {guest.side && (
-                      <Badge>{guest.side}</Badge>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-dash-muted">
-                    {guest.username && <span>@{guest.username}</span>}
-                    {guest.email && <span>{guest.email}</span>}
-                    {guest.phone && <span>{guest.phone}</span>}
-                    {guest.plus_ones > 0 && <span>+{guest.plus_ones} guest{guest.plus_ones !== 1 ? "s" : ""}</span>}
-                    {guest.table_number != null && <span>Table {guest.table_number}</span>}
-                  </div>
-                  {/* Invited Events as clickable chips */}
-                  {subEvents && subEvents.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {subEvents.map((sub) => {
-                        const invited = isGuestInvitedToSubEvent(guest.id, sub.id);
-                        return (
-                          <button
-                            key={sub.id}
-                            type="button"
-                            onClick={() =>
-                              toggleOverride.mutate({
-                                guestId: guest.id,
-                                subEventId: sub.id,
-                                isInvited: !invited,
-                              })
-                            }
-                            className={cn(
-                              "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
-                              invited
-                                ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
-                                : "border-dash-border bg-dash-bg text-dash-muted hover:bg-dash-surface",
-                            )}
-                            title={invited ? "Click to un-invite" : "Click to invite"}
-                          >
-                            {sub.name}
-                          </button>
-                        );
-                      })}
+        <div className="space-y-2">
+          {filteredGuests.map((guest) => {
+            const groupName = groups?.find((g) => g.id === guest.group_id)?.name;
+            return (
+              <Card key={guest.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-dash-text">{guest.name}</h3>
+                      <RsvpBadge status={guest.rsvp_status} />
                     </div>
-                  )}
+                    <div className="mt-1 flex flex-wrap gap-3 text-sm text-dash-muted">
+                      {guest.email && <span>{guest.email}</span>}
+                      {guest.phone && <span>{guest.phone}</span>}
+                      {groupName && (
+                        <span className="rounded-full bg-dash-bg px-2 py-0.5 text-xs">
+                          {groupName}
+                        </span>
+                      )}
+                      {guest.side && (
+                        <span className="capitalize">{guest.side}</span>
+                      )}
+                      {guest.plus_ones > 0 && (
+                        <span>+{guest.plus_ones} plus one{guest.plus_ones > 1 ? "s" : ""}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openInvitations(guest.id)}
+                    >
+                      Invitations
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(guest)}>
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        if (confirm(`Remove ${guest.name} from the guest list?`)) {
+                          deleteMutation.mutate(guest.id);
+                        }
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => openEdit(guest)}>Edit</Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      if (confirm(`Delete guest "${guest.name}"?`)) {
-                        deleteMutation.mutate(guest.id);
-                      }
-                    }}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
+      {/* Create/Edit modal */}
       <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={editingId ? "Edit Guest" : "Add Guest"}
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={editingGuest ? "Edit Guest" : "Add Guest"}
         size="lg"
       >
-        <div className="space-y-4">
-          <GuestForm
-            values={form}
-            onChange={setForm}
-            groups={groups?.map((g) => ({ id: g.id, name: g.name }))}
+        <div className="space-y-3">
+          <Input
+            label="Name"
+            type="text"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="Guest name"
+            required
           />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Username"
+              type="text"
+              value={form.username ?? ""}
+              onChange={(e) => setForm({ ...form, username: e.target.value || null })}
+              placeholder="Auto-generated"
+            />
+            <Select
+              label="Group"
+              value={form.group_id ?? ""}
+              onChange={(e) => {
+                const groupId = e.target.value || null;
+                const groupName = groups?.find((g) => g.id === groupId)?.name ?? null;
+                setForm({ ...form, group_id: groupId, group_name: groupName });
+              }}
+            >
+              <option value="">No group</option>
+              {groups?.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Email"
+              type="email"
+              value={form.email ?? ""}
+              onChange={(e) => setForm({ ...form, email: e.target.value || null })}
+              placeholder="email@example.com"
+            />
+            <Input
+              label="Phone"
+              type="tel"
+              value={form.phone ?? ""}
+              onChange={(e) => setForm({ ...form, phone: e.target.value || null })}
+              placeholder="Phone number"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Side"
+              value={form.side ?? ""}
+              onChange={(e) => setForm({ ...form, side: e.target.value || null })}
+            >
+              {SIDE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
+            <Select
+              label="RSVP status"
+              value={form.rsvp_status}
+              onChange={(e) => setForm({ ...form, rsvp_status: e.target.value })}
+            >
+              {RSVP_STATUS_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Plus ones"
+              type="number"
+              min={0}
+              value={form.plus_ones}
+              onChange={(e) => setForm({ ...form, plus_ones: Number(e.target.value) || 0 })}
+            />
+            <Input
+              label="Table number"
+              type="text"
+              value={form.table_number ?? ""}
+              onChange={(e) => setForm({ ...form, table_number: e.target.value || null })}
+              placeholder="e.g. Table 1"
+            />
+          </div>
+          <Input
+            label="Dietary requirements"
+            type="text"
+            value={form.dietary ?? ""}
+            onChange={(e) => setForm({ ...form, dietary: e.target.value || null })}
+            placeholder="Allergies or preferences"
+          />
+
           {saveMutation.isError && (
             <p className="text-sm text-dash-danger">
               {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
             </p>
           )}
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="secondary" onClick={() => setShowModal(false)}>
+              Cancel
+            </Button>
             <Button
               onClick={() => saveMutation.mutate()}
               loading={saveMutation.isPending}
-              disabled={saveMutation.isPending || !form.name.trim()}
+              disabled={!form.name.trim()}
             >
-              {editingId ? "Update" : "Add"}
+              {editingGuest ? "Save changes" : "Add guest"}
             </Button>
           </div>
         </div>
       </Modal>
+
+      {/* Invitations modal */}
+      <Modal
+        open={showInvitations}
+        onClose={() => {
+          setShowInvitations(false);
+          setSelectedGuestId(null);
+        }}
+        title="Manage Invitations"
+        size="lg"
+      >
+        {selectedGuestId && (
+          <InvitationManager eventId={eventId} guestId={selectedGuestId} />
+        )}
+      </Modal>
     </div>
   );
-};
+}

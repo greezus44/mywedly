@@ -16,97 +16,42 @@ export default function GuestSignIn() {
   const { data: event, isLoading } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("slug", slug)
-        .eq("is_published", true)
-        .maybeSingle();
+      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
     enabled: !!slug,
   });
 
-  // If already signed in for this event, redirect to home
-  useEffect(() => {
-    if (event && guest && eventId === event.id) {
-      navigate(`/e/${slug}/home`, { replace: true });
-    }
-  }, [event, guest, eventId, slug, navigate]);
+  useEffect(() => { if (event && guest && eventId === event.id) navigate(`/e/${slug}/home`, { replace: true }); }, [event, guest, eventId, slug, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!event) return;
-    setError(null);
-    setSubmitting(true);
-    // signIn uses username (not email) — validated against host-assigned username
+    setError(null); setSubmitting(true);
     const result = await signIn(event.id, username.trim());
     setSubmitting(false);
-    if (result.error) {
-      setError(result.error);
-    } else {
-      navigate(`/e/${slug}/home`, { replace: true });
-    }
+    if (result.error) setError(result.error);
+    else navigate(`/e/${slug}/home`, { replace: true });
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
-      </div>
-    );
-  }
-
-  if (!event) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
-        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
-        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
-      </div>
-    );
-  }
+  if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
+  if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
 
   return (
     <EventThemeProvider theme={event.theme}>
       <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
         <div className="w-full max-w-md">
-          <div className="mb-8 text-center">
-            <h1 className="guest-title mb-2">{event.name}</h1>
-            <p className="guest-subtitle">Enter your username to view your invitation</p>
-          </div>
+          <div className="mb-8 text-center"><h1 className="guest-title mb-2">{event.name}</h1><p className="guest-subtitle">Enter your username to view your invitation</p></div>
           <form onSubmit={handleSubmit} className="event-card space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                Username
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="event-input"
-                placeholder="Your assigned username"
-                required
-                autoFocus
-              />
+              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>Username</label>
+              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder="Your assigned username" required autoFocus />
             </div>
-            {error && (
-              <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>
-            )}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="event-btn-primary w-full"
-              style={{ opacity: submitting ? 0.6 : 1 }}
-            >
-              {submitting ? "Signing in..." : "Sign In"}
-            </button>
+            {error && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
+            <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1 }}>{submitting ? "Signing in..." : "Sign In"}</button>
           </form>
-          <div className="mt-6 text-center">
-            <Link to={`/e/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>
-              Back to cover
-            </Link>
-          </div>
+          <div className="mt-6 text-center"><Link to={`/e/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>Back to cover</Link></div>
         </div>
       </div>
     </EventThemeProvider>

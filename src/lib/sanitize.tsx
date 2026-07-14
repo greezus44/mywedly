@@ -1,135 +1,103 @@
 import React from "react";
+import { cn } from "./utils";
 
 const ALLOWED_TAGS = new Set([
-  "p",
-  "br",
-  "strong",
-  "em",
-  "u",
-  "s",
-  "ol",
-  "ul",
-  "li",
-  "a",
-  "span",
-  "div",
-  "h1",
-  "h2",
-  "h3",
-  "h4",
-  "h5",
-  "h6",
-  "blockquote",
-  "img",
-  "figure",
-  "figcaption",
-  "hr",
+  "a", "abbr", "b", "blockquote", "br", "cite", "code", "dd", "del", "div",
+  "dl", "dt", "em", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img",
+  "ins", "kbd", "li", "mark", "ol", "p", "pre", "q", "s", "samp", "small",
+  "span", "strong", "sub", "sup", "ul", "u",
 ]);
 
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
   a: new Set(["href", "title", "target", "rel"]),
-  img: new Set(["src", "alt", "width", "height"]),
+  img: new Set(["src", "alt", "title", "width", "height"]),
   span: new Set(["style", "class"]),
   div: new Set(["style", "class"]),
   p: new Set(["style", "class"]),
-  h1: new Set(["style", "class"]),
-  h2: new Set(["style", "class"]),
-  h3: new Set(["style", "class"]),
-  h4: new Set(["style", "class"]),
-  h5: new Set(["style", "class"]),
-  h6: new Set(["style", "class"]),
-  blockquote: new Set(["style", "class"]),
-  li: new Set(["style", "class"]),
-  ul: new Set(["style", "class"]),
-  ol: new Set(["style", "class"]),
-  figure: new Set(["style", "class"]),
-  figcaption: new Set(["style", "class"]),
+  "*": new Set(["style", "class"]),
 };
 
-const ALLOWED_STYLE_PROPS = new Set([
-  "color",
-  "background-color",
-  "font-weight",
-  "font-style",
-  "text-decoration",
-  "text-align",
-  "font-size",
-  "line-height",
-  "margin",
-  "margin-top",
-  "margin-bottom",
-  "padding",
-  "font-family",
+const ALLOWED_PROTOCOLS = new Set([
+  "http:", "https:", "mailto:", "tel:", "data:",
 ]);
 
-function sanitizeStyleValue(prop: string, value: string): string {
-  // block any url() or expression() in styles to prevent CSS-based attacks
-  if (/url\s*\(|expression\s*\(|javascript:/i.test(value)) return "";
-  if (!ALLOWED_STYLE_PROPS.has(prop)) return "";
-  return value;
-}
-
-function sanitizeNode(node: Element): void {
-  const tag = node.tagName.toLowerCase();
-  if (!ALLOWED_TAGS.has(tag)) {
-    // replace disallowed element with its children
-    while (node.firstChild) {
-      node.parentNode?.insertBefore(node.firstChild, node);
-    }
-    node.parentNode?.removeChild(node);
-    return;
-  }
-  // sanitize attributes
-  const allowed = ALLOWED_ATTRS[tag] ?? new Set<string>();
-  const attrs = Array.from(node.attributes);
-  for (const attr of attrs) {
-    const name = attr.name.toLowerCase();
-    if (!allowed.has(name)) {
-      node.removeAttribute(name);
-      continue;
-    }
-    if (name === "href" || name === "src") {
-      const val = attr.value.trim();
-      if (/^\s*javascript:/i.test(val) || /^\s*data:text\/html/i.test(val)) {
-        node.removeAttribute(name);
-      }
-    }
-    if (name === "target") {
-      node.setAttribute("target", "_blank");
-      node.setAttribute("rel", "noopener noreferrer");
-    }
-    if (name === "style") {
-      const cleaned = attr.value
-        .split(";")
-        .map((part) => {
-          const idx = part.indexOf(":");
-          if (idx === -1) return "";
-          const prop = part.slice(0, idx).trim().toLowerCase();
-          const val = part.slice(idx + 1).trim();
-          const safe = sanitizeStyleValue(prop, val);
-          return safe ? `${prop}: ${safe}` : "";
-        })
-        .filter(Boolean)
-        .join("; ");
-      if (cleaned) node.setAttribute("style", cleaned);
-      else node.removeAttribute("style");
-    }
-  }
-  // recurse into children (copy array since we mutate)
-  const children = Array.from(node.children);
-  for (const child of children) sanitizeNode(child);
+function isDomParserAvailable(): boolean {
+  return typeof window !== "undefined" && typeof window.DOMParser !== "undefined";
 }
 
 export function sanitizeHtml(html: string): string {
   if (!html) return "";
-  if (typeof window === "undefined" || typeof DOMParser === "undefined") return html;
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(`<div id="__sanitize_root">${html}</div>`, "text/html");
-  const root = doc.getElementById("__sanitize_root");
-  if (!root) return "";
-  const children = Array.from(root.children);
-  for (const child of children) sanitizeNode(child);
-  return root.innerHTML;
+  if (!isDomParserAvailable()) {
+    return html.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/on\w+\s*=/gi, "");
+  }
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const fragment = doc.body;
+
+  function cleanNode(node: Node) {
+    const children = Array.from(node.childNodes);
+    for (const child of children) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const el = child as Element;
+        const tag = el.tagName.toLowerCase();
+        if (!ALLOWED_TAGS.has(tag)) {
+          // Replace disallowed element with its children (preserve text content)
+          const parent = el.parentNode;
+          if (parent) {
+            while (el.firstChild) {
+              parent.insertBefore(el.firstChild, el);
+            }
+            parent.removeChild(el);
+          }
+          continue;
+        }
+        // Clean attributes
+        const allowed = ALLOWED_ATTRS[tag] ?? ALLOWED_ATTRS["*"];
+        const allAttrs = Array.from(el.attributes);
+        for (const attr of allAttrs) {
+          const name = attr.name.toLowerCase();
+          if (!allowed.has(name)) {
+            el.removeAttribute(attr.name);
+            continue;
+          }
+          if (name === "href" || name === "src") {
+            const val = attr.value.trim().toLowerCase();
+            try {
+              const url = new URL(attr.value, window.location.origin);
+              if (!ALLOWED_PROTOCOLS.has(url.protocol)) {
+                el.removeAttribute(attr.name);
+              }
+            } catch {
+              if (val && !val.startsWith("#")) {
+                el.removeAttribute(attr.name);
+              }
+            }
+          }
+          if (name === "style") {
+            // Remove potentially dangerous CSS (expression, javascript:)
+            const val = attr.value.replace(/expression\s*\(/gi, "").replace(/javascript:/gi, "");
+            el.setAttribute("style", val);
+          }
+        }
+        // Force rel on anchor tags
+        if (tag === "a") {
+          el.setAttribute("rel", "noopener noreferrer");
+          const href = el.getAttribute("href");
+          if (href && (href.startsWith("http://") || href.startsWith("https://"))) {
+            el.setAttribute("target", "_blank");
+          }
+        }
+        cleanNode(el);
+      } else if (child.nodeType === Node.TEXT_NODE) {
+        // Keep text nodes as-is
+      } else {
+        // Remove comments, processing instructions, etc.
+        child.parentNode?.removeChild(child);
+      }
+    }
+  }
+
+  cleanNode(fragment);
+  return fragment.innerHTML;
 }
 
 interface RichTextContentProps {
@@ -137,12 +105,12 @@ interface RichTextContentProps {
   className?: string;
 }
 
-export const RichTextContent: React.FC<RichTextContentProps> = ({ html, className }) => {
+export function RichTextContent({ html, className }: RichTextContentProps): React.ReactElement {
   const clean = React.useMemo(() => sanitizeHtml(html), [html]);
   return (
     <div
-      className={className ? `rich-content ${className}` : "rich-content"}
+      className={cn("rich-content", className)}
       dangerouslySetInnerHTML={{ __html: clean }}
     />
   );
-};
+}

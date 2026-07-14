@@ -1,207 +1,231 @@
-import React, { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type SharingEvent, type EventRsvp } from "../../lib/supabase";
+import { supabase } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
-import { Card, LoadingSpinner, ErrorState } from "../../components/ui";
-import { formatDate } from "../../lib/utils";
+import { Card, LoadingSpinner, ErrorState, EmptyState } from "../../components/ui";
+import { formatDate, formatDateTime } from "../../lib/utils";
 
-export const AnalyticsPage: React.FC = () => {
-  const { eventId } = useEventContext();
+interface SharingStat {
+  event_type: string;
+  count: number;
+}
 
-  const { data: sharingEvents, isLoading: sharingLoading, isError: sharingError, refetch: refetchSharing } = useQuery({
-    queryKey: ["sharing-events", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sharing_events")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as SharingEvent[];
-    },
+interface RsvpStat {
+  status: string;
+  count: number;
+}
+
+async function fetchSharingStats(eventId: string): Promise<SharingStat[]> {
+  const { data, error } = await supabase
+    .from("sharing_events")
+    .select("event_type")
+    .eq("wedding_id", eventId);
+
+  if (error) throw error;
+
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    const type = (row as { event_type: string }).event_type;
+    counts[type] = (counts[type] ?? 0) + 1;
+  }
+
+  return Object.entries(counts).map(([event_type, count]) => ({
+    event_type,
+    count,
+  }));
+}
+
+async function fetchRsvpStats(eventId: string): Promise<RsvpStat[]> {
+  const { data, error } = await supabase
+    .from("event_rsvps")
+    .select("status")
+    .eq("event_id", eventId);
+
+  if (error) throw error;
+
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    const status = (row as { status: string }).status;
+    counts[status] = (counts[status] ?? 0) + 1;
+  }
+
+  return Object.entries(counts).map(([status, count]) => ({ status, count }));
+}
+
+async function fetchRecentViews(
+  eventId: string
+): Promise<Array<{ id: string; event_type: string; source: string | null; created_at: string }>> {
+  const { data, error } = await supabase
+    .from("sharing_events")
+    .select("id, event_type, source, created_at")
+    .eq("wedding_id", eventId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  if (error) throw error;
+  return (data ?? []) as Array<{ id: string; event_type: string; source: string | null; created_at: string }>;
+}
+
+export function AnalyticsPage() {
+  const { event, eventId } = useEventContext();
+
+  const {
+    data: sharingStats,
+    isLoading: sharingLoading,
+    isError: sharingError,
+  } = useQuery({
+    queryKey: ["analytics", "sharing", eventId],
+    queryFn: () => fetchSharingStats(eventId),
   });
 
-  const { data: rsvps, isLoading: rsvpLoading, isError: rsvpError } = useQuery({
-    queryKey: ["event-rsvps-analytics", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_rsvps")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("submitted_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as EventRsvp[];
-    },
+  const {
+    data: rsvpStats,
+    isLoading: rsvpLoading,
+    isError: rsvpError,
+  } = useQuery({
+    queryKey: ["analytics", "rsvp", eventId],
+    queryFn: () => fetchRsvpStats(eventId),
   });
 
-  const stats = useMemo(() => {
-    const totalVisits = sharingEvents?.length ?? 0;
-    const uniqueGuests = new Set(
-      (sharingEvents ?? []).filter((e) => e.guest_id).map((e) => e.guest_id),
-    ).size;
-    const bySource: Record<string, number> = {};
-    for (const e of sharingEvents ?? []) {
-      const src = e.source ?? "unknown";
-      bySource[src] = (bySource[src] ?? 0) + 1;
-    }
-    const byDevice: Record<string, number> = {};
-    for (const e of sharingEvents ?? []) {
-      const dev = e.device_type ?? "unknown";
-      byDevice[dev] = (byDevice[dev] ?? 0) + 1;
-    }
+  const {
+    data: recentViews,
+    isLoading: viewsLoading,
+  } = useQuery({
+    queryKey: ["analytics", "views", eventId],
+    queryFn: () => fetchRecentViews(eventId),
+  });
 
-    const rsvpList = rsvps ?? [];
-    const totalRsvps = rsvpList.length;
-    const attending = rsvpList.filter((r) => r.status === "attending").length;
-    const declined = rsvpList.filter((r) => r.status === "declined").length;
-    const pending = rsvpList.filter((r) => r.status === "pending" || !r.status).length;
-    const totalGuests = rsvpList.reduce((sum, r) => sum + (r.guest_count || 0), 0);
+  const totalViews = sharingStats?.reduce((sum, s) => sum + s.count, 0) ?? 0;
+  const totalRsvps = rsvpStats?.reduce((sum, s) => sum + s.count, 0) ?? 0;
+  const attendingCount = rsvpStats?.find((s) => s.status === "attending")?.count ?? 0;
+  const notAttendingCount = rsvpStats?.find((s) => s.status === "not_attending")?.count ?? 0;
+  const pendingCount = rsvpStats?.find((s) => s.status === "pending")?.count ?? 0;
 
-    return {
-      totalVisits,
-      uniqueGuests,
-      bySource,
-      byDevice,
-      totalRsvps,
-      attending,
-      declined,
-      pending,
-      totalGuests,
-    };
-  }, [sharingEvents, rsvps]);
+  const isLoading = sharingLoading || rsvpLoading || viewsLoading;
+  const isError = sharingError || rsvpError;
 
-  const recentVisits = useMemo(() => {
-    return (sharingEvents ?? []).slice(0, 10);
-  }, [sharingEvents]);
-
-  if (sharingLoading || rsvpLoading) {
+  if (isError) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <LoadingSpinner size="md" label="Loading analytics..." />
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-dash-text">Analytics</h2>
+        <ErrorState title="Failed to load analytics" />
       </div>
     );
   }
 
-  if (sharingError || rsvpError) {
+  if (isLoading) {
     return (
-      <ErrorState
-        title="Failed to load analytics"
-        message="We couldn't load your analytics data."
-        onRetry={() => {
-          refetchSharing();
-        }}
-      />
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-dash-text">Analytics</h2>
+        <div className="flex items-center justify-center py-20">
+          <LoadingSpinner className="h-8 w-8" />
+        </div>
+      </div>
     );
   }
+
+  const hasData = totalViews > 0 || totalRsvps > 0;
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold text-dash-text">Analytics</h2>
-        <p className="text-sm text-dash-muted">Track visits and RSVP responses.</p>
+        <p className="text-sm text-dash-muted">
+          Track views and RSVPs for {event.name}
+        </p>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <p className="text-sm text-dash-muted">Total Visits</p>
-          <p className="mt-1 text-3xl font-bold text-dash-text">{stats.totalVisits}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-dash-muted">Unique Guests Visited</p>
-          <p className="mt-1 text-3xl font-bold text-dash-text">{stats.uniqueGuests}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-dash-muted">Total RSVPs</p>
-          <p className="mt-1 text-3xl font-bold text-dash-text">{stats.totalRsvps}</p>
-        </Card>
-        <Card>
-          <p className="text-sm text-dash-muted">Total Guests Attending</p>
-          <p className="mt-1 text-3xl font-bold text-dash-text">{stats.totalGuests}</p>
-        </Card>
-      </div>
-
-      {/* RSVP Breakdown */}
-      <Card>
-        <h3 className="mb-4 text-sm font-semibold text-dash-text">RSVP Breakdown</h3>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-            <p className="text-sm text-green-700">Attending</p>
-            <p className="mt-1 text-2xl font-bold text-green-800">{stats.attending}</p>
+      {!hasData ? (
+        <EmptyState
+          title="No data yet"
+          description="Once you publish and share your invitation website, analytics will appear here."
+        />
+      ) : (
+        <>
+          {/* Summary cards */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="p-5">
+              <p className="text-sm text-dash-muted">Total Views</p>
+              <p className="mt-2 text-3xl font-bold text-dash-text">{totalViews}</p>
+            </Card>
+            <Card className="p-5">
+              <p className="text-sm text-dash-muted">Total RSVPs</p>
+              <p className="mt-2 text-3xl font-bold text-dash-text">{totalRsvps}</p>
+            </Card>
+            <Card className="p-5">
+              <p className="text-sm text-dash-muted">Attending</p>
+              <p className="mt-2 text-3xl font-bold text-green-600">{attendingCount}</p>
+            </Card>
+            <Card className="p-5">
+              <p className="text-sm text-dash-muted">Not Attending</p>
+              <p className="mt-2 text-3xl font-bold text-red-600">{notAttendingCount}</p>
+            </Card>
           </div>
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-            <p className="text-sm text-red-700">Declined</p>
-            <p className="mt-1 text-2xl font-bold text-red-800">{stats.declined}</p>
-          </div>
-          <div className="rounded-lg border border-dash-border bg-dash-bg p-4">
-            <p className="text-sm text-dash-muted">Pending</p>
-            <p className="mt-1 text-2xl font-bold text-dash-text">{stats.pending}</p>
-          </div>
-        </div>
-      </Card>
 
-      {/* Visit Sources & Devices */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <h3 className="mb-4 text-sm font-semibold text-dash-text">Visit Sources</h3>
-          {Object.keys(stats.bySource).length === 0 ? (
-            <p className="text-sm text-dash-muted">No visit data yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {Object.entries(stats.bySource).map(([source, count]) => (
-                <div key={source} className="flex items-center justify-between">
-                  <span className="text-sm capitalize text-dash-text">{source}</span>
-                  <span className="text-sm font-medium text-dash-muted">{count}</span>
+          {/* RSVP breakdown */}
+          <Card className="p-5">
+            <h3 className="text-sm font-semibold text-dash-text mb-4">RSVP Breakdown</h3>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-dash-text w-24">Attending</span>
+                <div className="flex-1 h-4 rounded-full bg-dash-bg overflow-hidden">
+                  <div
+                    className="h-full bg-green-500 rounded-full"
+                    style={{ width: `${totalRsvps > 0 ? (attendingCount / totalRsvps) * 100 : 0}%` }}
+                  />
                 </div>
-              ))}
-            </div>
-          )}
-        </Card>
-        <Card>
-          <h3 className="mb-4 text-sm font-semibold text-dash-text">Device Types</h3>
-          {Object.keys(stats.byDevice).length === 0 ? (
-            <p className="text-sm text-dash-muted">No device data yet.</p>
-          ) : (
-            <div className="space-y-2">
-              {Object.entries(stats.byDevice).map(([device, count]) => (
-                <div key={device} className="flex items-center justify-between">
-                  <span className="text-sm capitalize text-dash-text">{device}</span>
-                  <span className="text-sm font-medium text-dash-muted">{count}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      {/* Recent Visits */}
-      <Card>
-        <h3 className="mb-4 text-sm font-semibold text-dash-text">Recent Visits</h3>
-        {recentVisits.length === 0 ? (
-          <p className="text-sm text-dash-muted">No visits recorded yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {recentVisits.map((visit) => (
-              <div
-                key={visit.id}
-                className="flex items-center justify-between rounded-md border border-dash-border bg-dash-bg px-3 py-2"
-              >
-                <div>
-                  <span className="text-sm font-medium text-dash-text">
-                    {visit.source ?? "Direct"}
-                  </span>
-                  <span className="ml-2 text-xs text-dash-muted">
-                    {visit.device_type ?? "unknown"}
-                  </span>
-                </div>
-                <span className="text-xs text-dash-muted">
-                  {formatDate(visit.created_at)}
-                </span>
+                <span className="text-sm font-medium text-dash-text w-8 text-right">{attendingCount}</span>
               </div>
-            ))}
-          </div>
-        )}
-      </Card>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-dash-text w-24">Not Attending</span>
+                <div className="flex-1 h-4 rounded-full bg-dash-bg overflow-hidden">
+                  <div
+                    className="h-full bg-red-500 rounded-full"
+                    style={{ width: `${totalRsvps > 0 ? (notAttendingCount / totalRsvps) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="text-sm font-medium text-dash-text w-8 text-right">{notAttendingCount}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-dash-text w-24">Pending</span>
+                <div className="flex-1 h-4 rounded-full bg-dash-bg overflow-hidden">
+                  <div
+                    className="h-full bg-amber-500 rounded-full"
+                    style={{ width: `${totalRsvps > 0 ? (pendingCount / totalRsvps) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="text-sm font-medium text-dash-text w-8 text-right">{pendingCount}</span>
+              </div>
+            </div>
+          </Card>
+
+          {/* Recent views */}
+          {recentViews && recentViews.length > 0 && (
+            <Card className="p-5">
+              <h3 className="text-sm font-semibold text-dash-text mb-4">Recent Views</h3>
+              <div className="space-y-2">
+                {recentViews.map((view) => (
+                  <div
+                    key={view.id}
+                    className="flex items-center justify-between text-sm py-2 border-b border-dash-border last:border-0"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-dash-text font-medium capitalize">
+                        {view.event_type}
+                      </span>
+                      {view.source && (
+                        <span className="text-dash-muted">from {view.source}</span>
+                      )}
+                    </div>
+                    <span className="text-dash-muted text-xs">
+                      {formatDateTime(view.created_at)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </>
+      )}
     </div>
   );
-};
+}

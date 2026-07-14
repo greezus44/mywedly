@@ -1,38 +1,31 @@
 import React from "react";
 import { cn } from "../../lib/utils";
 
-export interface SplitEditorProps {
+interface SplitEditorProps {
   editor: React.ReactNode;
   preview: React.ReactNode;
   previewClassName?: string;
-  editorRatio?: number; // 0..1, fraction of width for editor; rest goes to preview
+  editorRatio?: number;
 }
 
-export const SplitEditor: React.FC<SplitEditorProps> = ({
-  editor,
-  preview,
-  previewClassName,
-  editorRatio = 0.5,
-}) => {
-  const editorBasis = `${Math.round(editorRatio * 100)}%`;
-  const previewBasis = `${Math.round((1 - editorRatio) * 100)}%`;
+export function SplitEditor({ editor, preview, previewClassName, editorRatio = 0.5 }: SplitEditorProps) {
+  const editorFlex = editorRatio;
+  const previewFlex = 1 - editorRatio;
+
   return (
-    <div className="flex h-full w-full flex-col gap-4 lg:flex-row">
+    <div className="flex flex-col md:flex-row gap-4 h-full">
       <div
-        style={{ flexBasis: editorBasis }}
-        className="min-h-0 flex-1 overflow-auto rounded-lg border border-dash-border bg-dash-surface p-4"
+        className="overflow-auto rounded-lg border border-dash-border bg-dash-surface"
+        style={{ flex: `${editorFlex} 1 0` }}
       >
         {editor}
       </div>
       <div
-        style={{ flexBasis: previewBasis }}
-        className={cn(
-          "min-h-0 flex-1 overflow-auto rounded-lg border border-dash-border bg-dash-bg",
-          previewClassName,
-        )}
+        className={cn("overflow-auto rounded-lg border border-dash-border bg-dash-surface", previewClassName)}
+        style={{ flex: `${previewFlex} 1 0` }}
       >
         {preview}
       </div>
     </div>
   );
-};
+}

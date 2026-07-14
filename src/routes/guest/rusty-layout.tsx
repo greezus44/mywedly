@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, NavLink, Link, Outlet, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME, themeToEventCssVars, jsonToTheme } from "../../lib/theme";
+import { jsonToTheme, RUSTY_THEME, type ThemeConfig as ThemeConfigType } from "../../lib/theme";
 import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
 import { cn } from "../../lib/utils";
-import { type GuestOutletContext, useGuestOutletContext } from "./guest-layout";
+import { useGuestOutletContext, type GuestOutletContext } from "./guest-layout";
 
 // Re-export so rusty child routes can import from ./rusty-layout
 export { useGuestOutletContext };
@@ -24,12 +24,7 @@ export default function RustyLayout() {
   const { data: event, isLoading: eventLoading, error: eventError } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("slug", slug)
-        .eq("is_published", true)
-        .maybeSingle();
+      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
@@ -39,13 +34,7 @@ export default function RustyLayout() {
   const { data: customPages } = useQuery({
     queryKey: ["guest-custom-pages", event?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("custom_pages")
-        .select("*")
-        .eq("event_id", event!.id)
-        .eq("is_published", true)
-        .eq("show_in_nav", true)
-        .order("sort_order", { ascending: true });
+      const { data, error } = await supabase.from("custom_pages").select("*").eq("event_id", event!.id).eq("is_published", true).eq("show_in_nav", true).order("sort_order", { ascending: true });
       if (error) throw error;
       return (data ?? []) as CustomPage[];
     },
@@ -63,16 +52,12 @@ export default function RustyLayout() {
   });
 
   useEffect(() => { setMenuOpen(false); }, [location.pathname]);
-
   useEffect(() => {
     if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
+    const handler = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false); };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
-
   useEffect(() => {
     if (!menuOpen) return;
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
@@ -80,39 +65,32 @@ export default function RustyLayout() {
     return () => document.removeEventListener("keydown", handler);
   }, [menuOpen]);
 
-  if (!authLoading && !guest && event) {
-    navigate(`/r/${slug}/signin`, { replace: true });
-    return null;
-  }
-
-  if (authLoading || eventLoading || (event && guest && eventId === event.id && invitationsLoading)) {
+  // Redirect to /r/:slug/signin (not /e/:slug/signin)
+  if (!authLoading && !guest && event) { navigate(`/r/${slug}/signin`, { replace: true }); return null; }
+  if (authLoading || eventLoading || (event && guest && eventId === event.id && invitationsLoading))
     return (
       <div className="flex min-h-screen items-center justify-center bg-dash-bg">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
       </div>
     );
-  }
-
-  if (eventError || !event) {
+  if (eventError || !event)
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
         <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
         <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
-  }
+  if (!guest || eventId !== event.id) { navigate(`/r/${slug}/signin`, { replace: true }); return null; }
 
-  if (!guest || eventId !== event.id) {
-    navigate(`/r/${slug}/signin`, { replace: true });
-    return null;
-  }
-
-  const theme = jsonToTheme(event.theme);
+  // Use published theme, but fall back to RUSTY_THEME if none set
+  const theme: ThemeConfigType = event.theme ? jsonToTheme(event.theme) : RUSTY_THEME;
+  const themeJson: Json = event.theme ?? (RUSTY_THEME as unknown as Json);
   const invitedIds = invitedSubEventIds ?? [];
   const hasInvitedEvents = invitedIds.length > 0;
   const headerPages = (customPages ?? []).filter((p) => !p.is_footer);
   const footerPages = (customPages ?? []).filter((p) => p.is_footer);
 
+  // Menu items use /r/ prefix
   const menuItems = [
     { to: `/r/${slug}/home`, label: "Home" },
     ...(hasInvitedEvents ? [{ to: `/r/${slug}/rsvp`, label: "RSVP" }] : []),
@@ -120,14 +98,12 @@ export default function RustyLayout() {
     { to: `/r/${slug}/contact`, label: "Contact" },
     ...headerPages.map((p) => ({ to: `/r/${slug}/p/${p.slug}`, label: p.nav_label || p.title })),
   ];
-
   const contextValue: GuestOutletContext = { event, slug: slug!, theme, invitedSubEventIds: invitedIds };
-  const rustyVars = themeToEventCssVars(RUSTY_THEME) as React.CSSProperties;
 
   return (
-    <EventThemeProvider theme={event.theme}>
-      <div className="min-h-screen" style={rustyVars}>
-        {/* Hamburger Menu — top-left corner */}
+    <EventThemeProvider theme={themeJson}>
+      <div className="min-h-screen">
+        {/* Hamburger menu — same as guest-layout */}
         <div ref={menuRef} className="fixed left-4 top-4 z-50">
           <button
             onClick={() => setMenuOpen(!menuOpen)}
@@ -148,12 +124,11 @@ export default function RustyLayout() {
               <span className="block h-[2px] w-5 rounded-full transition-all duration-300" style={{ backgroundColor: "var(--event-text)", transform: menuOpen ? "translateY(-7px) rotate(-45deg)" : "none" }} />
             </div>
           </button>
-
           {menuOpen && (
             <nav
               id="rusty-nav-menu"
               role="menu"
-              aria-label="Rustic guest navigation"
+              aria-label="Rustic navigation"
               className="absolute left-0 top-14 w-64 origin-top-left animate-scaleIn rounded-2xl py-2 shadow-xl"
               style={{ backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}
             >

@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
+import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME, themeToEventCssVars } from "../../lib/theme";
+import { RUSTY_THEME } from "../../lib/theme";
 
 export default function RustySignIn() {
   const { slug } = useParams<{ slug: string }>();
@@ -17,23 +17,15 @@ export default function RustySignIn() {
   const { data: event, isLoading } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("slug", slug)
-        .eq("is_published", true)
-        .maybeSingle();
+      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
     enabled: !!slug,
   });
 
-  // If already signed in for this event, redirect to home
   useEffect(() => {
-    if (event && guest && eventId === event.id) {
-      navigate(`/r/${slug}/home`, { replace: true });
-    }
+    if (event && guest && eventId === event.id) navigate(`/r/${slug}/home`, { replace: true });
   }, [event, guest, eventId, slug, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,35 +35,30 @@ export default function RustySignIn() {
     setSubmitting(true);
     const result = await signIn(event.id, username.trim());
     setSubmitting(false);
-    if (result.error) {
-      setError(result.error);
-    } else {
-      navigate(`/r/${slug}/home`, { replace: true });
-    }
+    if (result.error) setError(result.error);
+    else navigate(`/r/${slug}/home`, { replace: true });
   };
 
-  if (isLoading) {
+  if (isLoading)
     return (
       <div className="flex min-h-screen items-center justify-center bg-dash-bg">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
       </div>
     );
-  }
 
-  if (!event) {
+  if (!event)
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
         <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
         <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
-  }
 
-  const rustyVars = themeToEventCssVars(RUSTY_THEME) as React.CSSProperties;
+  const themeJson: Json = event.theme ?? (RUSTY_THEME as unknown as Json);
 
   return (
-    <EventThemeProvider theme={event.theme}>
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16" style={rustyVars}>
+    <EventThemeProvider theme={themeJson}>
+      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
         <div className="w-full max-w-md">
           <div className="mb-8 text-center">
             <h1 className="guest-title mb-2">{event.name}</h1>
@@ -92,9 +79,7 @@ export default function RustySignIn() {
                 autoFocus
               />
             </div>
-            {error && (
-              <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>
-            )}
+            {error && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
             <button
               type="submit"
               disabled={submitting}
