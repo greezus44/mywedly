@@ -1,12 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventMessage } from "../../lib/supabase";
-import type { EventContent } from "../../components/preview/PreviewRenderers";
-import { Button } from "../../components/ui/Button";
-import { Card, LoadingSpinner, ErrorState, EmptyState } from "../../components/ui";
+import { Button, Card, LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
-import { RichTextContent } from "../../lib/sanitize";
+import { sanitizeHtml } from "../../lib/sanitize";
 import { formatDateTime } from "../../lib/utils";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
@@ -14,119 +12,72 @@ interface EventContextValue { event: UserEvent; eventId: string; }
 export function WishesPage() {
   const { event, eventId } = useOutletContext<EventContextValue>();
   const queryClient = useQueryClient();
-
-  const { data: messages, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["event-messages", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_messages")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as EventMessage[];
-    },
-  });
-
-  const { data: guests } = useQuery({
-    queryKey: ["event-guests", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_guests")
-        .select("id, name")
-        .eq("event_id", eventId);
-      if (error) throw error;
-      return (data ?? []) as Array<{ id: string; name: string }>;
-    },
-  });
-
+  const [showEditContent, setShowEditContent] = useState(false);
   const [pageContent, setPageContent] = useState<string>("");
-  const [saved, setSaved] = useState(false);
+  const [savingContent, setSavingContent] = useState(false);
 
-  useEffect(() => {
-    const content = (event.draft_content ?? event.content ?? {}) as EventContent;
-    // Look for a "wishes" section or use content.wishesPage
-    const wishesHtml = (content as Record<string, unknown>).wishesPage as string | undefined;
-    setPageContent(wishesHtml ?? "");
-  }, [event]);
+  const { data: messages, isLoading, isError, error } = useQuery({
+    queryKey: ["event-messages", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("event_messages").select("*, event_guests(name)").eq("event_id", eventId).order("created_at", { ascending: false }); if (error) throw error; return data as (EventMessage & { event_guests: { name: string | null } | null })[]; },
+  });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("event_messages").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: async (id: string) => { const { error } = await supabase.from("event_messages").delete().eq("id", id); if (error) throw error; },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event-messages", eventId] }),
   });
 
-  const saveContentMutation = useMutation({
-    mutationFn: async () => {
-      const content = (event.draft_content ?? event.content ?? {}) as EventContent;
-      const updated = { ...content, wishesPage: pageContent } as Record<string, unknown>;
-      const { error } = await supabase
-        .from("user_events")
-        .update({ draft_content: updated })
-        .eq("id", eventId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    },
-  });
+  const content = (event.draft_content ?? event.content ?? {}) as Record<string, unknown>;
+  const wishesContent = (content.wishesPageContent as string) ?? "";
 
-  const guestName = (guestId: string) => guests?.find((g) => g.id === guestId)?.name ?? "Unknown Guest";
+  const openEditContent = () => { setPageContent(wishesContent); setShowEditContent(true); };
+
+  const saveContent = async () => {
+    setSavingContent(true);
+    try {
+      const newContent = { ...content, wishesPageContent: pageContent };
+      const { error } = await supabase.from("user_events").update({ draft_content: newContent }).eq("id", eventId);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] }); setShowEditContent(false);
+    } catch { /* ignore */ }
+    finally { setSavingContent(false); }
+  };
 
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
-  if (isError) return <ErrorState title="Failed to load wishes" message={error instanceof Error ? error.message : "Unknown error"} onRetry={() => refetch()} />;
+  if (isError) return <ErrorState title="Failed to load wishes" message={error instanceof Error ? error.message : "Unknown error"} />;
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-dash-text">Wishes</h2>
-
-      {/* Wishes page content editor */}
-      <Card>
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-dash-text">Wishes Page Content</h3>
-          <div className="flex items-center gap-3">
-            {saved && <span className="text-sm text-green-600">Saved!</span>}
-            <Button size="sm" onClick={() => saveContentMutation.mutate()} loading={saveContentMutation.isPending}>Save</Button>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-dash-text">Wishes</h2>
+        <Button size="sm" variant="secondary" onClick={openEditContent}>Edit Page Content</Button>
+      </div>
+      {!messages || messages.length === 0 ? (
+        <EmptyState title="No wishes yet" description="Wishes from your guests will appear here." />
+      ) : (
+        <div className="space-y-3">
+          {messages.map((msg) => (
+            <Card key={msg.id}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="font-semibold text-dash-text">{msg.event_guests?.name ?? "Guest"}</p>
+                  <p className="mt-1 text-sm text-dash-text">{msg.message}</p>
+                  <p className="mt-1 text-xs text-dash-muted">{formatDateTime(msg.created_at)}</p>
+                </div>
+                <button onClick={() => deleteMutation.mutate(msg.id)} className="text-xs text-dash-danger hover:underline">Delete</button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+      <Modal open={showEditContent} onClose={() => setShowEditContent(false)} title="Edit Wishes Page Content">
+        <div className="space-y-4">
+          <RichTextEditor value={pageContent} onChange={setPageContent} placeholder="Write a message for your guests..." />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setShowEditContent(false)}>Cancel</Button>
+            <Button onClick={saveContent} loading={savingContent}>Save</Button>
           </div>
         </div>
-        <RichTextEditor
-          value={pageContent}
-          onChange={setPageContent}
-          placeholder="Add a message that appears above the wishes..."
-        />
-      </Card>
-
-      {/* Wishes list */}
-      <Card>
-        <h3 className="mb-4 text-sm font-semibold text-dash-text">Guest Wishes ({messages?.length ?? 0})</h3>
-        {!messages || messages.length === 0 ? (
-          <EmptyState title="No wishes yet" description="Wishes from guests will appear here." />
-        ) : (
-          <div className="space-y-3">
-            {messages.map((msg) => (
-              <div key={msg.id} className="rounded border border-dash-border p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-medium text-dash-text">{guestName(msg.guest_id)}</span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-dash-muted">{formatDateTime(msg.created_at)}</span>
-                    <button
-                      onClick={() => deleteMutation.mutate(msg.id)}
-                      className="text-xs text-dash-danger hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-                <RichTextContent html={msg.message} className="text-sm text-dash-text" />
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
+      </Modal>
     </div>
   );
 }

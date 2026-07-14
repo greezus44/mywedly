@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { jsonToTheme, RUSTY_THEME } from "../../lib/theme";
+import { RUSTY_THEME } from "../../lib/theme";
 import { resolveTypography } from "../../lib/typography";
 
 interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; }
@@ -27,15 +27,12 @@ export default function RustySignIn() {
     enabled: !!slug,
   });
 
-  useEffect(() => {
-    if (event && guest && eventId === event.id) navigate(`/r/${slug}/home`, { replace: true });
-  }, [event, guest, eventId, slug, navigate]);
+  useEffect(() => { if (event && guest && eventId === event.id) navigate(`/r/${slug}/home`, { replace: true }); }, [event, guest, eventId, slug, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!event || !username.trim()) return;
-    setError(null);
-    setSubmitting(true);
+    setError(null); setSubmitting(true);
     const result = await signIn(event.id, username.trim());
     setSubmitting(false);
     if (result.error) setError(result.error);
@@ -45,8 +42,6 @@ export default function RustySignIn() {
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
 
-  const theme = jsonToTheme(event.theme);
-  const rustyTheme = { ...RUSTY_THEME, colors: theme.colors, fonts: theme.fonts };
   const loginConfig = (event.login_config ?? {}) as LoginConfig;
   const heading = resolveTypography(loginConfig.heading, (event.name ?? undefined) || "Welcome");
   const subheading = resolveTypography(loginConfig.subheading, "Please sign in to view your invitation");
@@ -54,7 +49,7 @@ export default function RustySignIn() {
   const buttonLabel = loginConfig.buttonLabel || "Sign In";
 
   return (
-    <EventThemeProvider theme={rustyTheme}>
+    <EventThemeProvider theme={RUSTY_THEME}>
       <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
         <div className="w-full max-w-md">
           <div className="mb-8 text-center">

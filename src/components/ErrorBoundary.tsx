@@ -24,18 +24,24 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     console.error("ErrorBoundary caught:", error, errorInfo);
   }
 
+  handleReset = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
   render(): ReactNode {
     if (this.state.hasError) {
       if (this.props.fallback) return this.props.fallback;
       return (
         <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
           <h1 className="text-2xl font-bold text-dash-text">Something went wrong</h1>
-          <p className="text-dash-muted">{this.state.error?.message || "An unexpected error occurred."}</p>
+          <p className="max-w-md text-sm text-dash-muted">
+            {this.state.error?.message ?? "An unexpected error occurred."}
+          </p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={this.handleReset}
             className="rounded-lg bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg hover:bg-dash-primary-hover"
           >
-            Reload page
+            Try again
           </button>
         </div>
       );

@@ -1,16 +1,15 @@
-import { useEffect, useState } from "react";
+import { resolveTypography, type TypographyStyle } from "../../lib/typography";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { resolveTypography } from "../../lib/typography";
-import { getCountdown } from "../../lib/utils";
+import { DEFAULT_THEME } from "../../lib/theme";
 
 export interface CoverConfig {
-  eyebrow?: unknown;
-  heading?: unknown;
-  subheading?: unknown;
-  bodyHtml?: string;
-  ctaText?: string;
   background?: { image?: string | null; color?: string; position?: string; fit?: string };
   overlayOpacity?: number;
+  eyebrow?: TypographyStyle;
+  heading?: TypographyStyle;
+  subheading?: TypographyStyle;
+  bodyHtml?: string;
+  ctaText?: string;
 }
 
 export interface LogoConfig {
@@ -22,8 +21,8 @@ export interface LogoConfig {
 }
 
 export interface LoginConfig {
-  heading?: unknown;
-  subheading?: unknown;
+  heading?: TypographyStyle;
+  subheading?: TypographyStyle;
   placeholder?: string;
   buttonLabel?: string;
 }
@@ -36,25 +35,34 @@ export interface HomeLogo {
 }
 
 export interface HomeSection {
-  heading?: unknown;
+  heading?: TypographyStyle;
   body?: string;
 }
 
 export interface EventContent {
-  logo?: HomeLogo;
-  heading?: unknown;
+  logo?: HomeLogo | null;
+  heading?: TypographyStyle;
   body?: string;
   sections?: HomeSection[];
 }
 
-function CoverPreview({ config, eventName, logo }: { config: CoverConfig; eventName?: string; logo?: LogoConfig | null }) {
-  const eyebrow = resolveTypography(config.eyebrow, "");
-  const heading = resolveTypography(config.heading, eventName ?? "");
-  const subheading = resolveTypography(config.subheading, "");
+export interface RsvpConfig {
+  heading?: TypographyStyle;
+  body?: string;
+  buttonLabel?: string;
+}
+
+interface PreviewWrapperProps {
+  children: React.ReactNode;
+}
+
+function PreviewWrapper({ children }: PreviewWrapperProps) {
+  return <EventThemeProvider theme={DEFAULT_THEME}>{children}</EventThemeProvider>;
+}
+
+export function CoverPreview({ config, eventName, logo }: { config: CoverConfig; eventName?: string; logo?: LogoConfig | null }) {
   const bg = config.background ?? {};
   const overlay = (typeof config.overlayOpacity === "number" ? config.overlayOpacity : 30) / 100;
-  const ctaText = config.ctaText || "Enter";
-
   const bgStyle: React.CSSProperties = {};
   if (bg.image) {
     bgStyle.backgroundImage = `url(${bg.image})`;
@@ -64,71 +72,79 @@ function CoverPreview({ config, eventName, logo }: { config: CoverConfig; eventN
   } else if (bg.color) {
     bgStyle.backgroundColor = bg.color;
   }
+  const eyebrow = resolveTypography(config.eyebrow, "");
+  const heading = resolveTypography(config.heading, eventName ?? undefined);
+  const subheading = resolveTypography(config.subheading, "");
+  const buttonText = config.ctaText || "Enter";
+  const logoSize = typeof logo?.size === "number" ? logo.size : 120;
+  const logoAlign = logo?.align || "center";
 
   return (
-    <EventThemeProvider theme={null}>
-      <div className="relative flex min-h-[400px] flex-col items-center justify-center overflow-hidden" style={bgStyle}>
+    <PreviewWrapper>
+      <div className="relative flex min-h-[400px] flex-col items-center justify-center overflow-hidden rounded-lg" style={bgStyle}>
         {bg.image && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />}
-        <div className="relative z-10 flex w-full max-w-md flex-col items-center px-6 py-12 text-center">
+        <div className="relative z-10 flex w-full max-w-lg flex-col items-center px-6 py-12 text-center">
           {logo?.url && (
-            <div className="mb-6 flex justify-center">
-              <img src={logo.url} alt="" style={{ height: `${logo.size ?? 120}px`, width: "auto" }} className="object-contain" />
+            <div className="mb-6 flex w-full" style={{ justifyContent: logoAlign === "left" ? "flex-start" : logoAlign === "right" ? "flex-end" : "center" }}>
+              <img src={logo.url} alt="Logo" style={{ height: `${logoSize}px`, width: "auto", maxHeight: "200px", background: "transparent" }} className="object-contain" />
             </div>
           )}
           {eyebrow.text && <p className="guest-eyebrow mb-2" style={eyebrow.style}>{eyebrow.text}</p>}
           {heading.text && <h1 className="guest-title mb-3" style={heading.style}>{heading.text}</h1>}
           {subheading.text && <p className="guest-subtitle mb-3" style={subheading.style}>{subheading.text}</p>}
-          {config.bodyHtml && <div className="rich-content mb-6 max-w-sm" dangerouslySetInnerHTML={{ __html: config.bodyHtml }} />}
-          <button type="button" className="event-btn-primary">{ctaText}</button>
+          {config.bodyHtml && <div className="rich-content mb-8 max-w-md" dangerouslySetInnerHTML={{ __html: config.bodyHtml }} />}
+          <button type="button" className="event-btn-primary pointer-events-none">{buttonText}</button>
         </div>
       </div>
-    </EventThemeProvider>
+    </PreviewWrapper>
   );
 }
 
-function LoginPreview({ config, eventName }: { config: LoginConfig; eventName?: string }) {
-  const heading = resolveTypography(config.heading, (eventName ?? "") || "Welcome");
+export function LoginPreview({ config, eventName }: { config: LoginConfig; eventName?: string }) {
+  const heading = resolveTypography(config.heading, (eventName ?? undefined) || "Welcome");
   const subheading = resolveTypography(config.subheading, "Please sign in to view your invitation");
   const placeholder = config.placeholder || "Enter your username";
   const buttonLabel = config.buttonLabel || "Sign In";
 
   return (
-    <EventThemeProvider theme={null}>
-      <div className="flex min-h-[400px] flex-col items-center justify-center px-6 py-12">
-        <div className="w-full max-w-sm">
+    <PreviewWrapper>
+      <div className="flex min-h-[400px] flex-col items-center justify-center px-6 py-12 rounded-lg">
+        <div className="w-full max-w-md">
           <div className="mb-6 text-center">
             {heading.text && <h1 className="guest-title mb-2" style={heading.style}>{heading.text}</h1>}
             {subheading.text && <p className="guest-subtitle" style={subheading.style}>{subheading.text}</p>}
           </div>
-          <div className="event-card space-y-3">
-            <label className="block text-center text-sm font-medium" style={{ color: "var(--event-text)" }}>{placeholder}</label>
-            <input type="text" className="event-input" placeholder={placeholder} style={{ textAlign: "center" }} readOnly />
-            <button type="button" className="event-btn-primary w-full">{buttonLabel}</button>
+          <div className="event-card space-y-4">
+            <div>
+              <label className="mb-1.5 block text-center text-sm font-medium" style={{ color: "var(--event-text)" }}>{placeholder}</label>
+              <input type="text" className="event-input" placeholder={placeholder} style={{ textAlign: "center" }} readOnly />
+            </div>
+            <button type="button" className="event-btn-primary w-full pointer-events-none">{buttonLabel}</button>
           </div>
         </div>
       </div>
-    </EventThemeProvider>
+    </PreviewWrapper>
   );
 }
 
-function HomePreview({ content, eventName }: { content: EventContent; eventName?: string }) {
+export function HomePreview({ content }: { content: EventContent }) {
   const sections = content.sections ?? ((content.heading !== undefined || content.body !== undefined) ? [{ heading: content.heading, body: content.body }] : []);
   const logo = content.logo;
 
   return (
-    <EventThemeProvider theme={null}>
-      <div>
+    <PreviewWrapper>
+      <div className="min-h-[400px] rounded-lg">
         {logo?.url && (
-          <div style={{ paddingTop: logo.marginTop ? `${logo.marginTop}px` : undefined, paddingBottom: logo.marginBottom ? `${logo.marginBottom}px` : "1.5rem", display: "flex", justifyContent: "center" }}>
+          <div
+            style={{
+              paddingTop: logo.marginTop ? `${logo.marginTop}px` : undefined,
+              paddingBottom: logo.marginBottom != null ? `${Math.min(logo.marginBottom, 8)}px` : "0.5rem",
+              display: "flex",
+              justifyContent: "center",
+            }}
+          >
             <img src={logo.url} alt="" className="home-logo" style={{ maxWidth: logo.size ? `${logo.size}px` : "140px", height: "auto", width: "auto" }} />
           </div>
-        )}
-        {sections.length === 0 && !logo?.url && (
-          <section className="guest-section text-center">
-            <div className="mx-auto max-w-md">
-              <p className="guest-subtitle">{eventName ? `Welcome to ${eventName}` : ""}</p>
-            </div>
-          </section>
         )}
         {sections.map((section, i) => {
           const headingText = resolveTypography(section.heading, "").text;
@@ -143,46 +159,34 @@ function HomePreview({ content, eventName }: { content: EventContent; eventName?
           );
         })}
       </div>
-    </EventThemeProvider>
+    </PreviewWrapper>
   );
 }
 
-function RsvpPreview({ eventName }: { eventName?: string }) {
-  const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false });
-
-  useEffect(() => {
-    const tick = () => setCountdown(getCountdown(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, []);
+export function RsvpPreview({ config }: { config: RsvpConfig }) {
+  const heading = resolveTypography(config.heading, "RSVP");
+  const buttonLabel = config.buttonLabel || "Submit RSVP";
 
   return (
-    <EventThemeProvider theme={null}>
-      <div className="flex min-h-[400px] flex-col items-center justify-center px-6 py-12">
-        <div className="w-full max-w-md text-center">
-          <h1 className="guest-title mb-2">RSVP</h1>
-          {eventName && <p className="guest-subtitle mb-6">{eventName}</p>}
+    <PreviewWrapper>
+      <div className="flex min-h-[400px] flex-col items-center justify-center rounded-lg px-6 py-12">
+        <div className="w-full max-w-md">
+          <div className="mb-6 text-center">
+            {heading.text && <h1 className="guest-title mb-2" style={heading.style}>{heading.text}</h1>}
+          </div>
+          {config.body && <div className="rich-content mb-6" dangerouslySetInnerHTML={{ __html: config.body }} />}
           <div className="event-card space-y-4">
-            <div className="flex justify-center gap-3">
-              {(["days", "hours", "minutes", "seconds"] as const).map((unit) => (
-                <div key={unit} className="flex flex-col items-center">
-                  <span className="text-2xl font-bold" style={{ color: "var(--event-primary)" }}>
-                    {String(countdown[unit]).padStart(2, "0")}
-                  </span>
-                  <span className="text-xs uppercase" style={{ color: "var(--event-muted)" }}>{unit}</span>
-                </div>
-              ))}
+            <div>
+              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>Will you attend?</label>
+              <div className="flex gap-2">
+                <button type="button" className="event-btn-primary flex-1 pointer-events-none">Yes</button>
+                <button type="button" className="event-btn-secondary flex-1 pointer-events-none">No</button>
+              </div>
             </div>
-            <div className="space-y-2">
-              <button type="button" className="event-btn-primary w-full">Will Attend</button>
-              <button type="button" className="event-btn-secondary w-full">Cannot Attend</button>
-            </div>
+            <button type="button" className="event-btn-primary w-full pointer-events-none">{buttonLabel}</button>
           </div>
         </div>
       </div>
-    </EventThemeProvider>
+    </PreviewWrapper>
   );
 }
-
-export { CoverPreview, LoginPreview, HomePreview, RsvpPreview };

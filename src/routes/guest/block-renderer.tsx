@@ -1,225 +1,109 @@
-import { useState, useEffect } from "react";
-import type { BlockContent } from "../../routes/event/block-types";
-import { getCountdown, formatTime12, formatDate } from "../../lib/utils";
+import { useEffect, useState } from "react";
+import type { BlockContent } from "../event/block-types";
+import { getCountdown } from "../../lib/utils";
 
-interface BlockRendererProps {
-  block: BlockContent;
-}
-
-export function BlockRenderer({ block }: BlockRendererProps) {
-  const d = block.data;
-  const style: React.CSSProperties = {};
-
+export function BlockRenderer({ block }: { block: BlockContent }) {
   switch (block.type) {
-    case "heading": {
-      const level = (d.level as number) ?? 2;
-      const text = (d.text as string) ?? "";
-      const align = (d.align as string) ?? "center";
-      style.textAlign = align as "left" | "center" | "right";
-      const Tag = (`h${level}` as "h1" | "h2" | "h3");
-      return <Tag style={style} className="guest-title">{text}</Tag>;
-    }
-
-    case "paragraph": {
-      return <div className="rich-content" dangerouslySetInnerHTML={{ __html: (d.html as string) ?? "" }} />;
-    }
-
-    case "image": {
-      const url = d.url as string;
-      if (!url) return null;
-      return <img src={url} alt={(d.alt as string) ?? ""} className="mx-auto max-w-full rounded-lg" style={{ width: d.width === "full" ? "100%" : "auto" }} />;
-    }
-
-    case "spacer": {
-      return <div style={{ height: `${(d.height as number) ?? 40}px` }} />;
-    }
-
-    case "divider": {
-      return <hr style={{ border: "none", borderTop: `1px solid var(--event-border)`, margin: "1rem 0" }} />;
-    }
-
-    case "gallery": {
-      const images = (d.images as string[]) ?? [];
-      const cols = (d.columns as number) ?? 3;
-      if (images.length === 0) return null;
-      return (
-        <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(cols, images.length)}, 1fr)` }}>
-          {images.map((url, i) => (
-            <img key={i} src={url} alt="" className="w-full rounded-lg object-cover" />
-          ))}
-        </div>
-      );
-    }
-
-    case "video": {
-      const url = d.url as string;
-      if (!url) return null;
-      const youtube = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/);
-      const vimeo = url.match(/vimeo\.com\/(\d+)/);
-      if (youtube) {
-        return (
-          <div className="aspect-video w-full">
-            <iframe src={`https://www.youtube.com/embed/${youtube[1]}`} className="h-full w-full rounded-lg" allowFullScreen title={(d.title as string) ?? "Video"} />
+    case "heading":
+      return <h2 className="guest-title mx-auto mb-4 max-w-3xl" style={{ textAlign: "center" }}>{block.text}</h2>;
+    case "paragraph":
+      return <p className="rich-content mx-auto max-w-3xl" style={{ textAlign: "center" }}>{block.text}</p>;
+    case "image":
+      return block.url ? <div className="guest-section text-center"><img src={block.url} alt={block.text ?? ""} className="mx-auto max-w-full rounded-lg" style={{ borderRadius: "var(--event-radius)" }} /></div> : null;
+    case "spacer":
+      return <div style={{ height: `${block.height ?? 40}px` }} />;
+    case "divider":
+      return <div className="mx-auto max-w-3xl"><hr style={{ borderColor: "var(--event-border)" }} /></div>;
+    case "gallery":
+      return block.images && block.images.length > 0 ? (
+        <div className="guest-section"><div className="mx-auto grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-3">
+          {block.images.filter(Boolean).map((src, i) => <img key={i} src={src} alt="" className="h-32 w-full rounded-lg object-cover sm:h-40" style={{ borderRadius: "var(--event-radius)" }} />)}
+        </div></div>
+      ) : null;
+    case "video":
+      return block.url ? <div className="guest-section text-center"><div className="mx-auto max-w-2xl"><div className="relative aspect-video overflow-hidden rounded-lg" style={{ borderRadius: "var(--event-radius)" }}>{getVideoEmbed(block.url)}</div></div></div> : null;
+    case "button":
+      return block.text ? <div className="guest-section text-center"><a href={block.href ?? "#"} target="_blank" rel="noopener noreferrer" className="event-btn-primary inline-block">{block.text}</a></div> : null;
+    case "columns":
+      return block.columns && block.columns.length > 0 ? (
+        <div className="guest-section"><div className="mx-auto grid max-w-4xl gap-4 sm:grid-cols-2">
+          {block.columns.map((col, i) => <div key={i}>{col.map((b, j) => <BlockRenderer key={j} block={b} />)}</div>)}
+        </div></div>
+      ) : null;
+    case "list":
+      return block.items && block.items.length > 0 ? (
+        <div className="guest-section"><ul className="rich-content mx-auto max-w-3xl list-disc pl-6">{block.items.map((item, i) => <li key={i}>{item}</li>)}</ul></div>
+      ) : null;
+    case "quote":
+      return block.text ? (
+        <div className="guest-section text-center"><blockquote className="rich-content mx-auto max-w-2xl text-lg italic" style={{ color: "var(--event-muted)" }}>"{block.text}"{block.author ? <footer className="mt-2 text-sm">— {block.author}</footer> : null}</blockquote></div>
+      ) : null;
+    case "countdown":
+      return <CountdownBlock targetDate={block.targetDate} />;
+    case "map":
+      return block.address ? (
+        <div className="guest-section text-center">
+          <div className="mx-auto max-w-2xl">
+            <p className="guest-subtitle mb-3">{block.address}</p>
+            <iframe title="Map" width="100%" height="300" loading="lazy" className="rounded-lg" style={{ borderRadius: "var(--event-radius)", border: "1px solid var(--event-border)" }} src={`https://maps.google.com/maps?q=${encodeURIComponent(block.address)}&output=embed`} />
           </div>
-        );
-      }
-      if (vimeo) {
-        return (
-          <div className="aspect-video w-full">
-            <iframe src={`https://player.vimeo.com/video/${vimeo[1]}`} className="h-full w-full rounded-lg" allowFullScreen title={(d.title as string) ?? "Video"} />
-          </div>
-        );
-      }
-      return <video src={url} controls className="w-full rounded-lg" />;
-    }
-
-    case "button": {
-      const text = (d.text as string) ?? "";
-      const url = (d.url as string) ?? "";
-      if (!text) return null;
-      const cls = d.style === "secondary" ? "event-btn-secondary" : "event-btn-primary";
-      if (url) {
-        return <a href={url} target="_blank" rel="noopener noreferrer" className={cls}>{text}</a>;
-      }
-      return <button type="button" className={cls}>{text}</button>;
-    }
-
-    case "columns": {
-      const columns = (d.columns as Array<{ html: string }>) ?? [];
-      return (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {columns.map((col, i) => (
-            <div key={i} className="rich-content" dangerouslySetInnerHTML={{ __html: col.html ?? "" }} />
-          ))}
         </div>
-      );
-    }
-
-    case "list": {
-      const items = (d.items as string[]) ?? [];
-      const ordered = d.ordered as boolean;
-      const Tag = ordered ? "ol" : "ul";
+      ) : null;
+    case "rsvp-form":
+      return <div className="guest-section text-center"><a href="#" className="event-btn-primary inline-block">RSVP Now</a></div>;
+    case "guest-list":
+      return null;
+    case "schedule":
+      return null;
+    case "venue":
       return (
-        <Tag className="rich-content pl-6">
-          {items.map((item, i) => <li key={i}>{item}</li>)}
-        </Tag>
-      );
-    }
-
-    case "quote": {
-      const text = (d.text as string) ?? "";
-      const author = (d.author as string) ?? "";
-      return (
-        <blockquote className="rich-content border-l-4 pl-4 italic" style={{ borderColor: "var(--event-border)", color: "var(--event-muted)" }}>
-          {text}
-          {author && <footer className="mt-2 text-sm not-italic">— {author}</footer>}
-        </blockquote>
-      );
-    }
-
-    case "countdown": {
-      const target = d.targetDate as string;
-      const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false });
-      useEffect(() => {
-        if (!target) return;
-        const tick = () => setCountdown(getCountdown(target));
-        tick();
-        const id = setInterval(tick, 1000);
-        return () => clearInterval(id);
-      }, [target]);
-      if (!target) return null;
-      return (
-        <div className="text-center">
-          {d.label ? <p className="guest-subtitle mb-4">{d.label as string}</p> : null}
-          <div className="flex justify-center gap-4">
-            {(["days", "hours", "minutes", "seconds"] as const).map((unit) => (
-              <div key={unit} className="flex flex-col items-center">
-                <span className="text-3xl font-bold" style={{ color: "var(--event-primary)" }}>
-                  {String(countdown[unit]).padStart(2, "0")}
-                </span>
-                <span className="text-xs uppercase" style={{ color: "var(--event-muted)" }}>{unit}</span>
-              </div>
-            ))}
+        <div className="guest-section text-center">
+          <div className="mx-auto max-w-2xl">
+            {block.heading && <h2 className="guest-title mb-3">{block.heading}</h2>}
+            {block.text && <p className="guest-subtitle mb-2">{block.text}</p>}
+            {block.address && <p className="guest-subtitle">{block.address}</p>}
           </div>
         </div>
       );
-    }
-
-    case "map": {
-      const address = (d.address as string) ?? "";
-      if (!address) return null;
-      const encoded = encodeURIComponent(address);
-      const zoom = (d.zoom as number) ?? 15;
-      return (
-        <div className="overflow-hidden rounded-lg">
-          <iframe
-            src={`https://maps.google.com/maps?q=${encoded}&z=${zoom}&output=embed`}
-            className="h-64 w-full border-0"
-            title="Map"
-            loading="lazy"
-          />
-        </div>
-      );
-    }
-
-    case "rsvp-form": {
-      return (
-        <div className="text-center">
-          <h3 className="guest-title mb-4">{(d.title as string) ?? "RSVP"}</h3>
-          <p className="guest-subtitle" style={{ color: "var(--event-muted)" }}>Please use the RSVP page to respond.</p>
-        </div>
-      );
-    }
-
-    case "guest-list": {
-      return (
-        <div>
-          <h3 className="guest-title mb-4 text-center">{(d.title as string) ?? "Guests"}</h3>
-          <p style={{ color: "var(--event-muted)" }} className="text-center">Guest list will appear here.</p>
-        </div>
-      );
-    }
-
-    case "schedule": {
-      return (
-        <div>
-          <h3 className="guest-title mb-4 text-center">{(d.title as string) ?? "Schedule"}</h3>
-          <p style={{ color: "var(--event-muted)" }} className="text-center">Schedule will appear here.</p>
-        </div>
-      );
-    }
-
-    case "venue": {
-      const name = (d.name as string) ?? "";
-      const address = (d.address as string) ?? "";
-      return (
-        <div className="event-card text-center">
-          {name && <h3 className="guest-title mb-2">{name}</h3>}
-          {address && <p className="guest-subtitle">{address}</p>}
-          {address && (
-            <a href={`https://maps.google.com/maps?q=${encodeURIComponent(address)}`} target="_blank" rel="noopener noreferrer" className="event-btn-secondary mt-4 inline-block">
-              View on Map
-            </a>
-          )}
-        </div>
-      );
-    }
-
-    case "faq": {
-      const items = (d.items as Array<{ question: string; answer: string }>) ?? [];
-      return (
-        <div className="space-y-4">
-          {items.map((item, i) => (
-            <details key={i} className="event-card">
-              <summary className="cursor-pointer font-medium" style={{ color: "var(--event-heading)" }}>{item.question}</summary>
-              <p className="mt-2 text-sm" style={{ color: "var(--event-text)" }}>{item.answer}</p>
-            </details>
+    case "faq":
+      return block.faqs && block.faqs.length > 0 ? (
+        <div className="guest-section"><div className="mx-auto max-w-2xl space-y-4">
+          {block.faqs.map((faq, i) => (
+            <div key={i} className="event-card">
+              <h3 className="mb-1" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>{faq.question}</h3>
+              <p className="text-sm" style={{ color: "var(--event-text)" }}>{faq.answer}</p>
+            </div>
           ))}
-        </div>
-      );
-    }
-
+        </div></div>
+      ) : null;
     default:
       return null;
   }
+}
+
+function CountdownBlock({ targetDate }: { targetDate?: string }) {
+  const [countdown, setCountdown] = useState(getCountdown(targetDate ?? null));
+  useEffect(() => { const t = setInterval(() => setCountdown(getCountdown(targetDate ?? null)), 1000); return () => clearInterval(t); }, [targetDate]);
+  if (!targetDate) return null;
+  if (countdown.isPast) return <div className="guest-section text-center"><p className="guest-subtitle">The event has begun!</p></div>;
+  return (
+    <div className="guest-section text-center">
+      <div className="mx-auto flex max-w-md justify-center gap-6">
+        {[{ label: "Days", value: countdown.days }, { label: "Hours", value: countdown.hours }, { label: "Minutes", value: countdown.minutes }, { label: "Seconds", value: countdown.seconds }].map((item) => (
+          <div key={item.label} className="text-center">
+            <div className="text-3xl font-bold" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>{String(item.value).padStart(2, "0")}</div>
+            <div className="text-xs uppercase" style={{ color: "var(--event-muted)" }}>{item.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function getVideoEmbed(url: string): React.ReactNode {
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+  if (ytMatch) return <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${ytMatch[1]}`} title="Video" allowFullScreen />;
+  const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeoMatch) return <iframe width="100%" height="100%" src={`https://player.vimeo.com/video/${vimeoMatch[1]}`} title="Video" allowFullScreen />;
+  return <iframe width="100%" height="100%" src={url} title="Video" allowFullScreen />;
 }

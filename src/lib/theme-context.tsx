@@ -24,10 +24,8 @@ export function EventThemeProvider({ theme, children }: EventThemeProviderProps)
   );
 }
 
-export function useEventTheme(): ThemeConfig {
+export function useEventTheme(): EventThemeContextValue {
   const ctx = useContext(EventThemeContext);
-  if (!ctx) {
-    return jsonToTheme(null);
-  }
-  return ctx.theme;
+  if (!ctx) throw new Error("useEventTheme must be used within EventThemeProvider");
+  return ctx;
 }

@@ -52,6 +52,9 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
 .event-themed .event-info-card { background-color:var(--event-surface);border:1px solid var(--event-border);border-radius:var(--event-radius);padding:1.75rem;transition:all 0.3s ease; }
 .event-themed .home-logo { display:block;margin-left:auto;margin-right:auto;background:transparent;border:none;box-shadow:none; }
 
+/* FIX #2: RSVP section background matches theme background */
+.event-themed .rsvp-section { background-color: var(--event-bg); }
+
 .scrollbar-thin::-webkit-scrollbar { width:6px;height:6px; }
 .scrollbar-thin::-webkit-scrollbar-track { background:transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background:var(--dash-border);border-radius:3px; }

@@ -26,17 +26,12 @@ export default function GuestSignIn() {
     enabled: !!slug,
   });
 
-  useEffect(() => {
-    if (event && guest && eventId === event.id) navigate(`/e/${slug}/home`, { replace: true });
-  }, [event, guest, eventId, slug, navigate]);
+  useEffect(() => { if (event && guest && eventId === event.id) navigate(`/e/${slug}/home`, { replace: true }); }, [event, guest, eventId, slug, navigate]);
 
-  // FIX #4: handleSubmit is the form's onSubmit — triggered by both the button
-  // click AND pressing Enter in the input field. Auth is always enforced.
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!event || !username.trim()) return;
-    setError(null);
-    setSubmitting(true);
+    setError(null); setSubmitting(true);
     const result = await signIn(event.id, username.trim());
     setSubmitting(false);
     if (result.error) setError(result.error);
@@ -60,7 +55,6 @@ export default function GuestSignIn() {
             <h1 className="guest-title mb-2" style={heading.style}>{heading.text}</h1>
             <p className="guest-subtitle" style={subheading.style}>{subheading.text}</p>
           </div>
-          {/* FIX #4: <form> wrapper ensures Enter key triggers handleSubmit */}
           <form onSubmit={handleSubmit} className="event-card space-y-4">
             <div>
               <label className="mb-1.5 block text-center text-sm font-medium" style={{ color: "var(--event-text)" }}>{placeholder}</label>

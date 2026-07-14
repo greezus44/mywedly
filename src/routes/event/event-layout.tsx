@@ -6,10 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, Modal } from "../../components/ui";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
-
-export function useEventContext(): EventContextValue {
-  return useOutletContext<EventContextValue>();
-}
+export function useEventContext(): EventContextValue { return useOutletContext<EventContextValue>(); }
 
 const navTabs = [
   { label: "Cover", to: "" }, { label: "Login", to: "login" }, { label: "Home", to: "home" },
@@ -27,11 +24,7 @@ export function EventLayout() {
 
   const { data: event, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["event", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId).maybeSingle();
-      if (error) throw error;
-      return data as UserEvent | null;
-    },
+    queryFn: async () => { const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId).maybeSingle(); if (error) throw error; return data as UserEvent | null; },
     enabled: !!eventId,
   });
 
@@ -50,12 +43,7 @@ export function EventLayout() {
       }).eq("id", event.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["events"] });
-      queryClient.invalidateQueries({ queryKey: ["published-event"] });
-      setShowPublish(false);
-    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event", eventId] }); queryClient.invalidateQueries({ queryKey: ["events"] }); queryClient.invalidateQueries({ queryKey: ["published-event"] }); setShowPublish(false); },
   });
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center"><LoadingSpinner /></div>;
@@ -77,9 +65,7 @@ export function EventLayout() {
           </div>
         </div>
         <nav className="mx-auto hidden max-w-7xl items-center gap-1 px-4 pb-2 sm:flex sm:px-6 overflow-x-auto scrollbar-thin">
-          {navTabs.map((tab) => (
-            <NavLink key={tab.to} to={tab.to} end={tab.to === ""} className={({ isActive }) => `whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${isActive ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"}`}>{tab.label}</NavLink>
-          ))}
+          {navTabs.map((tab) => <NavLink key={tab.to} to={tab.to} end={tab.to === ""} className={({ isActive }) => `whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${isActive ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"}`}>{tab.label}</NavLink>)}
         </nav>
       </header>
       <div className="sm:hidden">

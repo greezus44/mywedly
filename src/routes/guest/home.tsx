@@ -12,14 +12,34 @@ export default function GuestHome() {
 
   return (
     <div>
+      {/* FIX #1: Reduced spacing between logo and body text */}
       {logo?.url && (
-        <div style={{ paddingTop: logo.marginTop ? `${logo.marginTop}px` : undefined, paddingBottom: logo.marginBottom ? `${logo.marginBottom}px` : "1.5rem", display: "flex", justifyContent: "center" }}>
-          <img src={logo.url} alt="" className="home-logo" style={{ maxWidth: logo.size ? `${logo.size}px` : "140px", height: "auto", width: "auto" }} />
+        <div
+          style={{
+            paddingTop: logo.marginTop ? `${logo.marginTop}px` : undefined,
+            // FIX #1: reduced bottom margin from 1.5rem to 0.5rem
+            paddingBottom: logo.marginBottom != null ? `${Math.min(logo.marginBottom, 8)}px` : "0.5rem",
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
+          <img
+            src={logo.url}
+            alt=""
+            className="home-logo"
+            style={{ maxWidth: logo.size ? `${logo.size}px` : "140px", height: "auto", width: "auto" }}
+          />
         </div>
       )}
+
       {sections.length === 0 && !logo?.url && (
-        <section className="guest-section text-center"><div className="mx-auto max-w-md"><p className="guest-subtitle">Welcome to {event.name}. Check back soon for updates.</p></div></section>
+        <section className="guest-section text-center">
+          <div className="mx-auto max-w-md">
+            <p className="guest-subtitle">Welcome to {event.name}. Check back soon for updates.</p>
+          </div>
+        </section>
       )}
+
       {sections.map((section, i) => {
         const headingText = getTypographyText(section.heading, "");
         const headingStyle = getTypographyStyle(section.heading);
@@ -32,8 +52,15 @@ export default function GuestHome() {
           </section>
         );
       })}
+
+      {/* FIX #1: Reduced spacing between body text and RSVP button.
+          FIX #2: RSVP section uses rsvp-section class so background matches theme. */}
       {invitedSubEventIds.length > 0 && (
-        <section className="guest-section text-center"><button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">RSVP Now</button></section>
+        <section className="rsvp-section text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
+          <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">
+            RSVP Now
+          </button>
+        </section>
       )}
     </div>
   );
