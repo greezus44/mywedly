@@ -1,14 +1,18 @@
-import React, { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
+import { cn } from "./utils";
 
 const ALLOWED_TAGS = new Set([
-  "p", "br", "strong", "em", "u", "s", "ol", "ul", "li",
-  "h1", "h2", "h3", "h4", "h5", "h6", "a", "img",
-  "blockquote", "span", "div",
+  "p", "br", "strong", "b", "em", "i", "u", "s", "del", "ins",
+  "h1", "h2", "h3", "h4", "h5", "h6",
+  "ul", "ol", "li",
+  "a", "img", "blockquote", "hr",
+  "span", "div", "figure", "figcaption",
+  "table", "thead", "tbody", "tr", "th", "td",
 ]);
 
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
   a: new Set(["href", "title", "target", "rel"]),
-  img: new Set(["src", "alt", "title", "width", "height"]),
+  img: new Set(["src", "alt", "width", "height", "style"]),
   span: new Set(["style", "class"]),
   div: new Set(["style", "class"]),
   p: new Set(["style", "class"]),
@@ -18,95 +22,111 @@ const ALLOWED_ATTRS: Record<string, Set<string>> = {
   h4: new Set(["style", "class"]),
   h5: new Set(["style", "class"]),
   h6: new Set(["style", "class"]),
+  td: new Set(["style", "class"]),
+  th: new Set(["style", "class"]),
+  figure: new Set(["style", "class"]),
+  figcaption: new Set(["style", "class"]),
   blockquote: new Set(["style", "class"]),
 };
 
 const ALLOWED_STYLE_PROPS = new Set([
-  "color",
-  "background-color",
-  "font-weight",
-  "font-style",
-  "text-decoration",
-  "text-align",
-  "font-size",
-  "line-height",
-  "margin",
-  "padding",
+  "color", "background-color", "font-size", "font-family",
+  "font-weight", "font-style", "text-align", "text-decoration",
+  "line-height", "margin", "padding", "border",
 ]);
 
-function sanitizeStyle(style: string): string {
-  return style
-    .split(";")
-    .map((decl) => decl.trim())
-    .filter((decl) => {
-      if (!decl) return false;
-      const [prop] = decl.split(":");
-      if (!prop) return false;
-      return ALLOWED_STYLE_PROPS.has(prop.trim().toLowerCase());
-    })
-    .join("; ");
-}
-
-export function sanitizeHtml(dirty: string): string {
-  if (typeof window === "undefined" || typeof DOMParser === "undefined") {
-    return dirty;
-  }
+export function sanitizeHtml(html: string): string {
+  if (!html) return "";
   const parser = new DOMParser();
-  const doc = parser.parseFromString(`<body>${dirty}</body>`, "text/html");
-  const body = doc.body;
+  const doc = parser.parseFromString(html, "text/html");
 
-  const walk = (node: Element) => {
-    const children = Array.from(node.children);
-    for (const el of children) {
-      const tag = el.tagName.toLowerCase();
-      if (!ALLOWED_TAGS.has(tag)) {
-        // Replace disallowed element with its children (unwrap)
-        const parent = el.parentNode;
-        if (!parent) continue;
-        while (el.firstChild) {
-          parent.insertBefore(el.firstChild, el);
-        }
-        parent.removeChild(el);
+  function cleanNode(node: Node): void {
+    if (node.nodeType === Node.TEXT_NODE) return;
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      node.parentNode?.removeChild(node);
+      return;
+    }
+    const el = node as Element;
+    const tag = el.tagName.toLowerCase();
+
+    if (!ALLOWED_TAGS.has(tag)) {
+      const parent = el.parentNode;
+      while (el.firstChild) {
+        parent?.insertBefore(el.firstChild, el);
+      }
+      parent?.removeChild(el);
+      return;
+    }
+
+    const allowedAttrs = ALLOWED_ATTRS[tag] ?? new Set<string>();
+    const attrs = Array.from(el.attributes);
+    for (const attr of attrs) {
+      if (!allowedAttrs.has(attr.name)) {
+        el.removeAttribute(attr.name);
         continue;
       }
-      // Clean attributes
-      const allowed = ALLOWED_ATTRS[tag];
-      const attrs = Array.from(el.attributes);
-      for (const attr of attrs) {
-        if (!allowed || !allowed.has(attr.name.toLowerCase())) {
+      if (attr.name === "href" || attr.name === "src") {
+        const val = attr.value;
+        if (val.startsWith("javascript:") || val.startsWith("data:text/html")) {
           el.removeAttribute(attr.name);
-        } else if (attr.name.toLowerCase() === "style") {
-          el.setAttribute("style", sanitizeStyle(attr.value));
-        } else if (attr.name.toLowerCase() === "href") {
-          const href = attr.value;
-          if (!/^(https?:|mailto:|tel:|#)/i.test(href)) {
-            el.removeAttribute("href");
-          }
-        } else if (attr.name.toLowerCase() === "target") {
-          el.setAttribute("target", "_blank");
-          el.setAttribute("rel", "noopener noreferrer");
         }
       }
-      walk(el);
+      if (attr.name === "style") {
+        const cleaned = cleanStyle(attr.value);
+        if (cleaned) {
+          el.setAttribute("style", cleaned);
+        } else {
+          el.removeAttribute("style");
+        }
+      }
     }
-  };
 
-  walk(body);
-  return body.innerHTML;
+    if (tag === "a") {
+      el.setAttribute("target", "_blank");
+      el.setAttribute("rel", "noopener noreferrer");
+    }
+
+    const children = Array.from(el.childNodes);
+    for (const child of children) {
+      cleanNode(child);
+    }
+  }
+
+  function cleanStyle(styleStr: string): string {
+    const decls = styleStr.split(";");
+    const valid: string[] = [];
+    for (const decl of decls) {
+      const [prop, ...valParts] = decl.split(":");
+      const p = prop?.trim().toLowerCase();
+      const v = valParts.join(":").trim();
+      if (p && v && ALLOWED_STYLE_PROPS.has(p)) {
+        valid.push(`${p}: ${v}`);
+      }
+    }
+    return valid.join("; ");
+  }
+
+  const bodyChildren = Array.from(doc.body.childNodes);
+  for (const child of bodyChildren) {
+    cleanNode(child);
+  }
+
+  return doc.body.innerHTML;
 }
 
-export function RichTextContent({
-  html,
-  className,
-}: {
+interface RichTextContentProps {
   html: string;
   className?: string;
-}) {
-  const clean = useMemo(() => sanitizeHtml(html ?? ""), [html]);
+}
+
+export function RichTextContent({ html, className }: RichTextContentProps) {
+  const sanitized = useMemo(() => sanitizeHtml(html ?? ""), [html]);
+  const style: CSSProperties = {};
   return (
     <div
-      className={["rich-content", className].filter(Boolean).join(" ")}
-      dangerouslySetInnerHTML={{ __html: clean }}
+      className={cn("rich-content", className)}
+      style={style}
+      dangerouslySetInnerHTML={{ __html: sanitized }}
     />
   );
 }

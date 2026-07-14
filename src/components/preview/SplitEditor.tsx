@@ -1,30 +1,41 @@
-import React, { type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
-export interface SplitEditorProps {
+interface SplitEditorProps {
   editor: ReactNode;
   preview: ReactNode;
-  className?: string;
-  /** Ratio of editor width, 0-1 (default 0.4) */
+  previewClassName?: string;
   editorRatio?: number;
 }
 
-export function SplitEditor({ editor, preview, className, editorRatio = 0.4 }: SplitEditorProps) {
+export function SplitEditor({
+  editor,
+  preview,
+  previewClassName,
+  editorRatio = 0.5,
+}: SplitEditorProps) {
   const editorWidth = `${editorRatio * 100}%`;
   const previewWidth = `${(1 - editorRatio) * 100}%`;
+
   return (
-    <div className={cn("flex h-full w-full gap-0 overflow-hidden", className)}>
+    <div className="flex h-full w-full overflow-hidden rounded-lg border border-dash-border bg-dash-surface">
       <div
-        className="h-full overflow-y-auto scrollbar-thin border-r border-dash-border bg-dash-surface p-4"
-        style={{ width: editorWidth, flexShrink: 0 }}
+        className="flex flex-col overflow-y-auto scrollbar-thin border-r border-dash-border"
+        style={{ width: editorWidth, minWidth: editorWidth }}
       >
-        {editor}
+        <div className="sticky top-0 z-10 border-b border-dash-border bg-dash-bg/80 px-4 py-2 backdrop-blur-sm">
+          <h3 className="text-sm font-semibold text-dash-text">Editor</h3>
+        </div>
+        <div className="flex-1 p-4">{editor}</div>
       </div>
       <div
-        className="h-full overflow-y-auto scrollbar-thin bg-dash-bg"
-        style={{ width: previewWidth, flexGrow: 1 }}
+        className={cn("flex flex-col overflow-y-auto scrollbar-thin", previewClassName)}
+        style={{ width: previewWidth, minWidth: previewWidth }}
       >
-        {preview}
+        <div className="sticky top-0 z-10 border-b border-dash-border bg-dash-bg/80 px-4 py-2 backdrop-blur-sm">
+          <h3 className="text-sm font-semibold text-dash-text">Preview</h3>
+        </div>
+        <div className="flex-1 p-4">{preview}</div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { Input, Textarea, Select } from "./Input";
 import { TimePicker } from "./TimePicker";
@@ -7,22 +7,18 @@ import { DateTimePicker } from "./DateTimePicker";
 
 export { Input, Textarea, Select, TimePicker, DatePicker, DateTimePicker };
 
-// --- Card ---
-
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn("rounded-xl border border-dash-border bg-dash-surface shadow-sm", className)}>
+    <div className={cn("rounded-lg border border-dash-border bg-dash-surface shadow-sm", className)}>
       {children}
     </div>
   );
 }
 
-// --- Badge ---
+export type BadgeVariant = "default" | "success" | "warning" | "danger" | "info";
 
-type BadgeVariant = "default" | "success" | "warning" | "danger" | "info";
-
-const badgeVariants: Record<BadgeVariant, string> = {
-  default: "bg-dash-surface text-dash-text border-dash-border",
+const badgeVariantClasses: Record<BadgeVariant, string> = {
+  default: "bg-dash-bg text-dash-text border-dash-border",
   success: "bg-green-50 text-green-700 border-green-200",
   warning: "bg-amber-50 text-amber-700 border-amber-200",
   danger: "bg-red-50 text-red-700 border-red-200",
@@ -42,8 +38,8 @@ export function Badge({
     <span
       className={cn(
         "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
-        badgeVariants[variant],
-        className,
+        badgeVariantClasses[variant],
+        className
       )}
     >
       {children}
@@ -51,59 +47,56 @@ export function Badge({
   );
 }
 
-// --- EmptyState ---
-
 export function EmptyState({
   title,
   description,
   action,
   icon,
+  className,
 }: {
   title: string;
   description?: string;
   action?: ReactNode;
   icon?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-dash-border bg-dash-surface/50 px-6 py-12 text-center">
-      {icon && <div className="mb-3 text-dash-muted">{icon}</div>}
-      <h3 className="text-base font-semibold text-dash-text">{title}</h3>
-      {description && <p className="mt-1 text-sm text-dash-muted max-w-sm">{description}</p>}
+    <div className={cn("flex flex-col items-center justify-center py-12 text-center", className)}>
+      {icon && <div className="mb-4 text-dash-muted">{icon}</div>}
+      <h3 className="text-lg font-semibold text-dash-text">{title}</h3>
+      {description && <p className="mt-1 text-sm text-dash-muted max-w-md">{description}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
 
-// --- Toggle ---
-
 export function Toggle({
   checked,
   onChange,
   label,
-  disabled,
+  className,
 }: {
   checked: boolean;
-  onChange: (v: boolean) => void;
+  onChange: (checked: boolean) => void;
   label?: string;
-  disabled?: boolean;
+  className?: string;
 }) {
   return (
-    <label className={cn("inline-flex items-center gap-2 cursor-pointer select-none", disabled && "opacity-50 cursor-not-allowed")}>
+    <label className={cn("inline-flex items-center gap-2 cursor-pointer", className)}>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
-        disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
-          checked ? "bg-dash-primary" : "bg-dash-border",
+          "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+          checked ? "bg-dash-primary" : "bg-dash-border"
         )}
       >
         <span
           className={cn(
             "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-            checked ? "translate-x-6" : "translate-x-1",
+            checked ? "translate-x-6" : "translate-x-1"
           )}
         />
       </button>
@@ -112,20 +105,20 @@ export function Toggle({
   );
 }
 
-// --- ColorInput ---
-
 export function ColorInput({
-  label,
   value,
   onChange,
+  label,
+  className,
 }: {
-  label?: string;
   value: string;
-  onChange: (v: string) => void;
+  onChange: (value: string) => void;
+  label?: string;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      {label && <span className="text-sm font-medium text-dash-text">{label}</span>}
+    <div className={cn("flex flex-col gap-1", className)}>
+      {label && <label className="text-sm font-medium text-dash-text">{label}</label>}
       <div className="flex items-center gap-2">
         <input
           type="color"
@@ -137,35 +130,35 @@ export function ColorInput({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="flex-1 rounded-lg border border-dash-border bg-dash-surface px-2.5 py-1.5 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+          className="flex-1 rounded-md border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
         />
       </div>
     </div>
   );
 }
 
-// --- RangeInput ---
-
 export function RangeInput({
-  label,
   value,
+  onChange,
   min = 0,
   max = 100,
   step = 1,
-  onChange,
+  label,
+  className,
 }: {
-  label?: string;
   value: number;
+  onChange: (value: number) => void;
   min?: number;
   max?: number;
   step?: number;
-  onChange: (v: number) => void;
+  label?: string;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-col gap-1">
+    <div className={cn("flex flex-col gap-1", className)}>
       {label && (
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-dash-text">{label}</span>
+          <label className="text-sm font-medium text-dash-text">{label}</label>
           <span className="text-xs text-dash-muted">{value}</span>
         </div>
       )}
@@ -175,69 +168,63 @@ export function RangeInput({
         min={min}
         max={max}
         step={step}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full accent-dash-primary"
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full cursor-pointer accent-dash-primary"
       />
     </div>
   );
 }
 
-// --- FormField ---
-
 export function FormField({
   label,
   error,
-  required,
   children,
+  className,
   hint,
 }: {
   label?: string;
   error?: string;
-  required?: boolean;
   children: ReactNode;
+  className?: string;
   hint?: string;
 }) {
   return (
-    <div className="w-full">
+    <div className={cn("w-full", className)}>
       {label && (
-        <label className="block text-sm font-medium text-dash-text mb-1">
-          {label}
-          {required && <span className="text-dash-danger ml-0.5">*</span>}
-        </label>
+        <label className="block text-sm font-medium text-dash-text mb-1.5">{label}</label>
       )}
       {children}
       {hint && !error && <p className="mt-1 text-xs text-dash-muted">{hint}</p>}
-      {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
   );
 }
-
-// --- Skeleton ---
 
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn("animate-pulse rounded bg-dash-border/50", className)} />;
 }
 
-// --- ErrorState ---
-
 export function ErrorState({
-  title = "Something went wrong",
-  description,
+  message,
   onRetry,
+  className,
 }: {
-  title?: string;
-  description?: string;
+  message?: string;
   onRetry?: () => void;
+  className?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dash-border bg-dash-surface px-6 py-12 text-center">
-      <div className="mb-3 text-3xl">⚠️</div>
-      <h3 className="text-base font-semibold text-dash-text">{title}</h3>
-      {description && <p className="mt-1 text-sm text-dash-muted max-w-sm">{description}</p>}
+    <div className={cn("flex flex-col items-center justify-center py-12 text-center", className)}>
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+        </svg>
+      </div>
+      <p className="text-sm text-dash-text">{message ?? "Something went wrong."}</p>
       {onRetry && (
         <button
           onClick={onRetry}
-          className="mt-4 rounded-lg bg-dash-primary px-4 py-2 text-sm font-semibold text-dash-primary-fg hover:bg-dash-primary-hover"
+          className="mt-4 rounded-md bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg hover:bg-dash-primary-hover"
         >
           Try again
         </button>
@@ -246,27 +233,40 @@ export function ErrorState({
   );
 }
 
-// --- LoadingSpinner ---
-
-export function LoadingSpinner({ className }: { className?: string }) {
+export function LoadingSpinner({ className, size }: { className?: string; size?: "sm" | "md" | "lg" }) {
+  const sizeClasses = {
+    sm: "h-4 w-4",
+    md: "h-6 w-6",
+    lg: "h-8 w-8",
+  };
   return (
     <svg
-      className={cn("animate-spin h-5 w-5 text-dash-primary", className)}
+      className={cn("animate-spin text-dash-primary", sizeClasses[size ?? "md"], className)}
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"
+      aria-hidden="true"
     >
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
     </svg>
   );
 }
 
-// --- Modal ---
+export type ModalSize = "sm" | "md" | "lg" | "xl";
 
-type ModalSize = "sm" | "md" | "lg" | "xl";
-
-const modalSizes: Record<ModalSize, string> = {
+const modalSizeClasses: Record<ModalSize, string> = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-lg",
@@ -278,53 +278,48 @@ export function Modal({
   onClose,
   title,
   children,
-  footer,
   size = "md",
+  className,
 }: {
   open: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
-  footer?: ReactNode;
   size?: ModalSize;
+  className?: string;
 }) {
-  React.useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
-
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={onClose} />
+      <div
+        className="fixed inset-0 bg-black/50 transition-opacity"
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <div
         className={cn(
-          "relative w-full rounded-xl border border-dash-border bg-dash-surface shadow-xl animate-slideUp",
-          modalSizes[size],
+          "relative z-10 w-full rounded-lg border border-dash-border bg-dash-surface shadow-xl",
+          modalSizeClasses[size],
+          className
         )}
+        role="dialog"
+        aria-modal="true"
       >
         {title && (
-          <div className="flex items-center justify-between border-b border-dash-border px-5 py-3">
-            <h3 className="text-base font-semibold text-dash-text">{title}</h3>
+          <div className="flex items-center justify-between border-b border-dash-border px-4 py-3">
+            <h2 className="text-lg font-semibold text-dash-text">{title}</h2>
             <button
               onClick={onClose}
               className="rounded p-1 text-dash-muted hover:bg-dash-bg hover:text-dash-text"
               aria-label="Close"
             >
-              ✕
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
         )}
-        <div className="px-5 py-4 max-h-[70vh] overflow-y-auto scrollbar-thin">{children}</div>
-        {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-dash-border px-5 py-3">
-            {footer}
-          </div>
-        )}
+        <div className="px-4 py-4">{children}</div>
       </div>
     </div>
   );

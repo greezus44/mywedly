@@ -1,169 +1,145 @@
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { LoginPreview } from "../../components/preview/PreviewRenderers";
-import { EventThemeProvider } from "../../lib/theme-context";
-import { simplifiedToFullTheme, fullToSimplifiedTheme, type ThemeConfig } from "../../lib/theme";
-import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
+import { Input, Select } from "../../components/ui/Input";
 import { Toggle } from "../../components/ui";
-import { cn } from "../../lib/utils";
+import { Button } from "../../components/ui/Button";
 
 interface LoginConfig {
-  mode: "open" | "password";
-  password?: string;
   heading?: string;
-  subheading?: string;
+  subtitle?: string;
   placeholder?: string;
-  cta?: string;
+  buttonText?: string;
+  requireName?: boolean;
+  requireCode?: boolean;
+  passwordMode?: "name" | "code" | "name+code" | "open";
 }
 
-const DEFAULT_CONFIG: LoginConfig = {
-  mode: "open",
-  heading: "Enter your name to continue",
-  subheading: "Please enter the name on your invitation",
-  placeholder: "Your full name",
-  cta: "Continue",
+const defaultConfig: LoginConfig = {
+  heading: "Enter your invite code",
+  subtitle: "Please enter the code from your invitation",
+  placeholder: "Enter code",
+  buttonText: "Continue",
+  requireName: true,
+  requireCode: true,
+  passwordMode: "name+code",
 };
 
 export default function LoginEditor() {
-  const { event } = useOutletContext<{ event: UserEvent }>();
+  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
   const queryClient = useQueryClient();
 
-  const [config, setConfig] = useState<LoginConfig>(
-    (event.draft_login_config ?? event.login_config ?? DEFAULT_CONFIG) as LoginConfig,
+  const config = (event.draft_login_config ?? event.login_config ?? defaultConfig) as LoginConfig;
+
+  const [heading, setHeading] = useState(config.heading ?? defaultConfig.heading!);
+  const [subtitle, setSubtitle] = useState(config.subtitle ?? defaultConfig.subtitle!);
+  const [placeholder, setPlaceholder] = useState(config.placeholder ?? defaultConfig.placeholder!);
+  const [buttonText, setButtonText] = useState(config.buttonText ?? defaultConfig.buttonText!);
+  const [passwordMode, setPasswordMode] = useState<LoginConfig["passwordMode"]>(
+    config.passwordMode ?? "name+code"
   );
+  const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    setConfig(
-      (event.draft_login_config ?? event.login_config ?? DEFAULT_CONFIG) as LoginConfig,
-    );
-  }, [event]);
-
-  const themeConfig = (event.draft_theme ?? event.theme ?? {}) as unknown as ThemeConfig;
-  const fullTheme = Object.keys(themeConfig).length
-    ? themeConfig
-    : simplifiedToFullTheme(fullToSimplifiedTheme({} as ThemeConfig));
-
-  const previewEvent: Partial<UserEvent> = {
-    ...event,
-    login_config: config as unknown as Json,
-  };
+  const requireName = passwordMode === "name" || passwordMode === "name+code";
+  const requireCode = passwordMode === "code" || passwordMode === "name+code";
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const newConfig: LoginConfig = {
+        heading,
+        subtitle,
+        placeholder,
+        buttonText,
+        requireName,
+        requireCode,
+        passwordMode,
+      };
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_login_config: config as unknown as Json })
-        .eq("id", event.id);
+        .update({ draft_login_config: newConfig as unknown as Json })
+        .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", event.id] });
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  const update = (patch: Partial<LoginConfig>) => setConfig({ ...config, ...patch });
+  const previewEvent: Partial<UserEvent> = {
+    ...event,
+    login_config: {
+      heading,
+      subtitle,
+      placeholder,
+      buttonText,
+      requireName,
+      requireCode,
+    },
+  };
 
   return (
-    <SplitEditor
-      editorRatio={0.4}
-      editor={
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-dash-text">Login Editor</h2>
-            <Button
-              size="sm"
-              onClick={() => saveMutation.mutate()}
-              loading={saveMutation.isPending}
-            >
-              Save Changes
-            </Button>
-          </div>
-
-          {saveMutation.isSuccess && (
-            <p className="text-sm text-green-600">Saved successfully!</p>
-          )}
-          {saveMutation.isError && (
-            <p className="text-sm text-dash-danger">
-              {saveMutation.error instanceof Error
-                ? saveMutation.error.message
-                : "Failed to save"}
-            </p>
-          )}
-
-          <div>
-            <span className="block text-sm font-medium text-dash-text mb-2">
-              Access Mode
-            </span>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => update({ mode: "open" })}
-                className={cn(
-                  "flex-1 rounded-lg border px-4 py-2 text-sm font-medium transition-colors",
-                  config.mode === "open"
-                    ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
-                    : "border-dash-border text-dash-muted hover:text-dash-text",
-                )}
-              >
-                Open Access
-              </button>
-              <button
-                type="button"
-                onClick={() => update({ mode: "password" })}
-                className={cn(
-                  "flex-1 rounded-lg border px-4 py-2 text-sm font-medium transition-colors",
-                  config.mode === "password"
-                    ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
-                    : "border-dash-border text-dash-muted hover:text-dash-text",
-                )}
-              >
-                Password Protected
-              </button>
-            </div>
-          </div>
-
-          {config.mode === "password" && (
-            <Input
-              label="Password"
-              placeholder="Enter a password"
-              value={config.password ?? ""}
-              onChange={(e) => update({ password: e.target.value })}
-            />
-          )}
-
-          <hr className="border-dash-border" />
-
-          <Input
-            label="Heading"
-            value={config.heading ?? ""}
-            onChange={(e) => update({ heading: e.target.value })}
-          />
-          <Input
-            label="Subheading"
-            value={config.subheading ?? ""}
-            onChange={(e) => update({ subheading: e.target.value })}
-          />
-          <Input
-            label="Placeholder"
-            value={config.placeholder ?? ""}
-            onChange={(e) => update({ placeholder: e.target.value })}
-          />
-          <Input
-            label="Button Text"
-            value={config.cta ?? ""}
-            onChange={(e) => update({ cta: e.target.value })}
-          />
+    <div className="mx-auto max-w-7xl p-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-dash-text">Login Editor</h2>
+        <div className="flex items-center gap-2">
+          {saved && <span className="text-sm text-green-600">Saved!</span>}
+          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+            Save Changes
+          </Button>
         </div>
-      }
-      preview={
-        <EventThemeProvider initialTheme={fullTheme}>
-          <LoginPreview event={previewEvent} />
-        </EventThemeProvider>
-      }
-    />
+      </div>
+
+      <div className="h-[calc(100vh-200px)]">
+        <SplitEditor
+          editor={
+            <div className="space-y-4">
+              <Input
+                label="Heading"
+                value={heading}
+                onChange={(e) => setHeading(e.target.value)}
+              />
+              <Input
+                label="Subtitle"
+                value={subtitle}
+                onChange={(e) => setSubtitle(e.target.value)}
+              />
+              <Select
+                label="Login Mode"
+                value={passwordMode}
+                onChange={(e) => setPasswordMode(e.target.value as LoginConfig["passwordMode"])}
+              >
+                <option value="open">Open (no login required)</option>
+                <option value="name">Name only</option>
+                <option value="code">Code only</option>
+                <option value="name+code">Name + Code</option>
+              </Select>
+              {requireCode && (
+                <Input
+                  label="Code Placeholder"
+                  value={placeholder}
+                  onChange={(e) => setPlaceholder(e.target.value)}
+                />
+              )}
+              <Input
+                label="Button Text"
+                value={buttonText}
+                onChange={(e) => setButtonText(e.target.value)}
+              />
+              {saveMutation.isError && (
+                <p className="text-sm text-red-600">
+                  {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed."}
+                </p>
+              )}
+            </div>
+          }
+          preview={<LoginPreview event={previewEvent} />}
+        />
+      </div>
+    </div>
   );
 }

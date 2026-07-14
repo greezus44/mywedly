@@ -1,38 +1,47 @@
-import React, { useState, useEffect } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventGuest, type Json } from "../../lib/supabase";
+import { useGuestAuth, useSignIn } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { DEFAULT_THEME, type ThemeConfig } from "../../lib/theme";
-import { formatDate, formatTime12 } from "../../lib/utils";
-import { useGuestAuth } from "../../lib/guest-auth";
+import { DEFAULT_THEME, jsonToTheme, type ThemeConfig } from "../../lib/theme";
+import { formatDate, getCountdown } from "../../lib/utils";
 
 interface CoverConfig {
-  subtitle?: string;
-  overlayOpacity?: number;
-  titleColor?: string;
+  headline?: string;
+  subheadline?: string;
+  showDate?: boolean;
+  showVenue?: boolean;
+  showCountdown?: boolean;
 }
-
 interface LoginConfig {
+  heading?: string;
+  subtitle?: string;
+  buttonText?: string;
   passwordMode?: "none" | "optional" | "required";
   password?: string;
-  heading?: string;
-  subheading?: string;
-  cta?: string;
 }
 
-function parseTheme(event: UserEvent | null): ThemeConfig {
-  if (!event) return DEFAULT_THEME;
-  const raw = (event.theme ?? {}) as unknown as ThemeConfig;
-  if (raw && typeof raw === "object" && "bg" in raw) return raw;
-  return DEFAULT_THEME;
+function parseJson<T>(json: Json | null | undefined, defaults: T): T {
+  if (!json || typeof json !== "object") return defaults;
+  return { ...defaults, ...(json as object) } as T;
 }
 
-export default function Cover() {
-  const { slug } = useParams<{ slug: string }>();
+const defaultCover: CoverConfig = {
+  headline: "", subheadline: "", showDate: true, showVenue: true, showCountdown: true,
+};
+const defaultLogin: LoginConfig = {
+  heading: "Enter your username",
+  subtitle: "Please enter the username from your invitation",
+  buttonText: "Continue",
+  passwordMode: "none",
+};
+
+export default function CoverPage() {
+  const { slug = "" } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { guestName, eventId, signIn } = useGuestAuth();
-
+  const auth = useGuestAuth();
+  const signIn = useSignIn();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -44,173 +53,173 @@ export default function Cover() {
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("slug", slug!)
+        .eq("slug", slug)
         .eq("is_published", true)
         .maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
-    enabled: !!slug,
   });
 
   // Auto-redirect to home if already signed in for this event
   useEffect(() => {
-    if (event && guestName && eventId === event.id) {
+    if (event && auth.isAuthenticated && auth.eventId === event.id) {
       navigate(`/e/${slug}/home`, { replace: true });
     }
-  }, [event, guestName, eventId, slug, navigate]);
+  }, [event, auth, slug, navigate]);
 
-  const loginConfig = (event?.login_config ?? {}) as unknown as LoginConfig;
-  const coverConfig = (event?.cover_config ?? {}) as unknown as CoverConfig;
-  const showPassword = loginConfig.passwordMode && loginConfig.passwordMode !== "none";
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!event || !username.trim()) return;
     setError(null);
+    const trimmed = username.trim();
+    if (!trimmed) {
+      setError("Please enter your username.");
+      return;
+    }
+    if (!event) return;
+    const loginConfig = parseJson(event.login_config, defaultLogin);
+    if (loginConfig.passwordMode === "required" && !password) {
+      setError("Please enter the password.");
+      return;
+    }
+    if (
+      loginConfig.passwordMode !== "none" &&
+      loginConfig.password &&
+      password !== loginConfig.password
+    ) {
+      setError("Incorrect password.");
+      return;
+    }
     setSubmitting(true);
-
     try {
-      if (showPassword && loginConfig.passwordMode === "required") {
-        if (password !== (loginConfig.password ?? "")) {
-          setError("Incorrect password.");
-          setSubmitting(false);
-          return;
-        }
-      }
-
-      const { data: guest, error: guestError } = await supabase
+      const { data, error: queryError } = await supabase
         .from("event_guests")
         .select("*")
-        .ilike("username", username.trim())
+        .ilike("username", trimmed)
         .eq("event_id", event.id)
         .maybeSingle();
-
-      if (guestError) throw guestError;
-
-      if (!guest) {
+      if (queryError) throw queryError;
+      if (!data) {
         setError("Username not found");
-        setSubmitting(false);
         return;
       }
-
-      signIn((guest as EventGuest).name, event.id, (guest as EventGuest).id);
+      const guest = data as EventGuest;
+      signIn(guest.name, event.id, guest.id, guest.token);
       navigate(`/e/${slug}/home`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setSubmitting(false);
     }
-  };
+  }
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="animate-pulse text-gray-400">Loading…</div>
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <div className="animate-spin h-8 w-8 rounded-full border-2 border-dash-primary border-t-transparent" />
       </div>
     );
   }
 
   if (isError || !event) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-50 px-6 text-center">
-        <p className="text-lg text-gray-600">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Invitation not found</h1>
+        <p className="max-w-md text-dash-muted">
           This invitation website could not be found or is no longer available.
         </p>
-        <Link to="/" className="text-sm font-semibold text-blue-600 hover:underline">
-          Go to homepage
+        <Link
+          to="/"
+          className="rounded-md bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg hover:bg-dash-primary-hover"
+        >
+          Go home
         </Link>
       </div>
     );
   }
 
-  const theme = parseTheme(event);
-  const overlayOpacity = coverConfig.overlayOpacity ?? 0.3;
-  const titleColor = coverConfig.titleColor || "#ffffff";
+  const theme: ThemeConfig = jsonToTheme(event.theme as Json | null) ?? DEFAULT_THEME;
+  const coverConfig = parseJson(event.cover_config as Json | null, defaultCover);
+  const loginConfig = parseJson(event.login_config as Json | null, defaultLogin);
+  const countdown = getCountdown(event.event_date);
+  const headline = coverConfig.headline || event.name;
+  const subheadline = coverConfig.subheadline || "";
 
   return (
     <EventThemeProvider initialTheme={theme}>
-      <div
-        className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden"
-        style={{
-          backgroundImage: event.cover_image ? `url(${event.cover_image})` : undefined,
-          backgroundColor: event.cover_image ? undefined : "var(--event-surface)",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      >
+      <div className="event-themed relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
         {event.cover_image && (
-          <div className="absolute inset-0" style={{ backgroundColor: "#000", opacity: overlayOpacity }} />
+          <img
+            src={event.cover_image}
+            alt=""
+            className="absolute inset-0 h-full w-full object-cover"
+          />
         )}
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="relative z-10 w-full max-w-md px-6 py-12 text-center text-white">
+          {subheadline && (
+            <p className="mb-2 text-sm uppercase tracking-widest opacity-90">{subheadline}</p>
+          )}
+          <h1 className="mb-4 text-4xl font-bold md:text-5xl">{headline}</h1>
+          {coverConfig.showDate && event.event_date && (
+            <p className="mb-1 text-lg opacity-95">{formatDate(event.event_date)}</p>
+          )}
+          {coverConfig.showVenue && event.venue && (
+            <p className="mb-4 text-base opacity-90">{event.venue}</p>
+          )}
+          {coverConfig.showCountdown && !countdown.isPast && (
+            <div className="mt-6 mb-8 flex justify-center gap-4">
+              {(["days", "hours", "minutes", "seconds"] as const).map((unit) => (
+                <div key={unit} className="flex flex-col items-center">
+                  <span className="text-2xl font-bold">
+                    {countdown[unit].toString().padStart(2, "0")}
+                  </span>
+                  <span className="text-xs uppercase tracking-wide opacity-80">{unit}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
-        <div className="relative z-10 w-full max-w-md px-6 text-center">
-          {/* Cover info */}
-          <div className="mb-10" style={{ color: titleColor }}>
-            <p className="text-sm uppercase tracking-widest" style={{ opacity: 0.85 }}>
-              {event.event_type || "Invitation"}
-            </p>
-            <h1 className="mt-2 text-4xl font-bold" style={{ fontFamily: "var(--event-font-heading)" }}>
-              {event.name}
-            </h1>
-            {coverConfig.subtitle && (
-              <p className="mt-3 text-lg" style={{ opacity: 0.9 }}>
-                {coverConfig.subtitle}
-              </p>
+          <form
+            onSubmit={handleSubmit}
+            className="mx-auto mt-8 w-full max-w-sm space-y-3 rounded-lg bg-white/10 p-6 backdrop-blur-sm"
+          >
+            <h2 className="text-xl font-semibold text-white">{loginConfig.heading}</h2>
+            {loginConfig.subtitle && (
+              <p className="text-sm text-white/80">{loginConfig.subtitle}</p>
             )}
-            <p className="mt-2 text-base" style={{ opacity: 0.85 }}>
-              {formatDate(event.event_date)}
-              {event.event_time ? ` at ${formatTime12(event.event_time)}` : ""}
-            </p>
-            {event.venue && (
-              <p className="mt-1 text-sm" style={{ opacity: 0.8 }}>
-                {event.venue}
-              </p>
-            )}
-          </div>
-
-          {/* Sign-in form */}
-          <div className="event-card text-left">
-            <h2 className="text-center text-xl font-bold" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>
-              {loginConfig.heading ?? "Enter your username to continue"}
-            </h2>
-            <p className="mt-1 text-center text-sm" style={{ color: "var(--event-muted)" }}>
-              {loginConfig.subheading ?? "Please enter the username on your invitation"}
-            </p>
-
-            <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your username"
+              className="event-input w-full"
+              autoComplete="username"
+              autoFocus
+            />
+            {loginConfig.passwordMode !== "none" && (
               <input
-                type="text"
-                placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="event-input"
-                autoComplete="username"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                className="event-input w-full"
+                autoComplete="current-password"
               />
-
-              {showPassword && (
-                <input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="event-input"
-                  autoComplete="current-password"
-                />
-              )}
-
-              {error && (
-                <p className="text-sm text-red-600">{error}</p>
-              )}
-
-              <button
-                type="submit"
-                disabled={submitting || !username.trim()}
-                className="event-btn-primary w-full disabled:opacity-50"
-              >
-                {submitting ? "Checking…" : (loginConfig.cta ?? "Continue")}
-              </button>
-            </form>
-          </div>
+            )}
+            {error && (
+              <p className="text-sm text-red-200" role="alert">
+                {error}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="event-btn-primary w-full disabled:opacity-60"
+            >
+              {submitting ? "Checking…" : loginConfig.buttonText || "Continue"}
+            </button>
+          </form>
         </div>
       </div>
     </EventThemeProvider>

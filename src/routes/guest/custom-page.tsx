@@ -1,267 +1,190 @@
-import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type CustomPage, type UserEvent } from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { DEFAULT_THEME, type ThemeConfig } from "../../lib/theme";
+import { DEFAULT_THEME, jsonToTheme, type ThemeConfig } from "../../lib/theme";
 import { RichTextContent } from "../../lib/sanitize";
-import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
+import { cn, formatDate, formatTime12, getCountdown } from "../../lib/utils";
 
-interface Block {
-  id: string;
-  type: string;
-  data: Record<string, unknown>;
+interface Block { id: string; type: string; [key: string]: any; }
+
+export default function GuestCustomPage() {
+  const { slug = "", pageSlug = "" } = useParams<{ slug: string; pageSlug: string }>();
+  const navigate = useNavigate();
+
+  const { data: event, isLoading: eventLoading } = useQuery({
+    queryKey: ["guest-event", slug],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("user_events").select("*")
+        .eq("slug", slug).eq("is_published", true).maybeSingle();
+      if (error) throw error;
+      return data as UserEvent | null;
+    },
+  });
+
+  const { data: page, isLoading: pageLoading } = useQuery({
+    queryKey: ["guest-custom-page", slug, pageSlug], enabled: !!event,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("custom_pages").select("*")
+        .eq("slug", pageSlug).eq("event_id", event!.id).eq("is_published", true).maybeSingle();
+      if (error) throw error;
+      return data as CustomPage | null;
+    },
+  });
+
+  if (eventLoading || pageLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="animate-spin h-8 w-8 rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
+  if (!event) return <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4 text-center"><p className="max-w-md text-dash-muted">This invitation website could not be found or is no longer available.</p></div>;
+  if (!page) return <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4 text-center"><p className="max-w-md text-dash-muted">This page could not be found.</p></div>;
+
+  const theme: ThemeConfig = jsonToTheme(event.theme as Json | null) ?? DEFAULT_THEME;
+  const blocks = (page.blocks as Block[]) ?? [];
+
+  return (
+    <EventThemeProvider initialTheme={theme}>
+      <div className="event-themed min-h-screen">
+        <header className="border-b border-event-border bg-event-surface/95">
+          <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
+            <button onClick={() => navigate(`/e/${slug}/home`)} className="text-sm text-event-muted hover:text-event-heading">← {event.name}</button>
+            <span className="font-event text-base font-semibold text-event-heading">{page.title}</span>
+          </div>
+        </header>
+        <main className="mx-auto max-w-3xl px-4 py-10">
+          {blocks.length === 0 ? <p className="text-sm text-event-muted">No content yet.</p> : (
+            <div className="space-y-6">{blocks.map((block) => <BlockRenderer key={block.id} block={block} event={event} />)}</div>
+          )}
+        </main>
+      </div>
+    </EventThemeProvider>
+  );
 }
 
-function parseTheme(event: UserEvent | null): ThemeConfig {
-  if (!event) return DEFAULT_THEME;
-  const raw = (event.theme ?? {}) as unknown as ThemeConfig;
-  if (raw && typeof raw === "object" && "bg" in raw) return raw;
-  return DEFAULT_THEME;
-}
-
-// --- Block Renderer ---
-
-function BlockRenderer({ block }: { block: Block }) {
-  const d = block.data;
+function BlockRenderer({ block, event }: { block: Block; event: UserEvent }) {
   switch (block.type) {
-    case "heading":
-      return React.createElement(
-        (d.level as string) || "h2",
-        { className: "mt-4 mb-2 font-bold", style: { color: "var(--event-heading)" } },
-        (d.text as string) ?? "",
-      );
-    case "paragraph":
-      return <RichTextContent html={(d.text as string) ?? ""} className="my-2" />;
-    case "image":
-      return d.url ? (
-        <img src={d.url as string} alt={(d.alt as string) || ""} className="my-4 w-full rounded-lg" style={{ borderRadius: "var(--event-radius)" }} />
-      ) : (
-        <div className="my-4 flex h-32 items-center justify-center rounded-lg border-2 border-dashed text-sm" style={{ borderColor: "var(--event-border)", color: "var(--event-muted)" }}>
-          Image placeholder
-        </div>
-      );
-    case "spacer":
-      return <div style={{ height: (d.height as number) || 40 }} />;
-    case "divider":
-      return <hr className="my-4" style={{ borderColor: "var(--event-border)" }} />;
-    case "gallery": {
-      const images = (d.images as { url?: string; alt?: string }[]) ?? [];
-      return images.length > 0 ? (
-        <div className="my-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {images.map((img, i) => (
-            <img key={i} src={img.url} alt={img.alt || ""} className="w-full rounded-lg" style={{ borderRadius: "var(--event-radius)" }} />
-          ))}
-        </div>
-      ) : (
-        <div className="my-4 flex h-32 items-center justify-center rounded-lg border-2 border-dashed text-sm" style={{ borderColor: "var(--event-border)", color: "var(--event-muted)" }}>
-          Gallery placeholder
-        </div>
-      );
+    case "heading": {
+      const level = Math.min(Math.max(Number(block.level ?? 2), 1), 6);
+      const Tag = `h${level}` as keyof JSX.IntrinsicElements;
+      return <Tag className="text-event-heading font-semibold">{block.text}</Tag>;
     }
-    case "video":
-      return d.url ? (
-        <div className="my-4 aspect-video overflow-hidden rounded-lg" style={{ borderRadius: "var(--event-radius)" }}>
-          <iframe src={d.url as string} className="h-full w-full" title="Video" allowFullScreen style={{ border: 0 }} />
-        </div>
-      ) : (
-        <div className="my-4 flex h-32 items-center justify-center rounded-lg border-2 border-dashed text-sm" style={{ borderColor: "var(--event-border)", color: "var(--event-muted)" }}>
-          Video placeholder
-        </div>
-      );
-    case "button":
-      return (
-        <div className="my-4 text-center">
-          <a href={(d.url as string) || "#"} className="event-btn-primary inline-block" target={d.url && d.url.toString().startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer">
-            {(d.text as string) || "Button"}
-          </a>
-        </div>
-      );
-    case "columns": {
-      const cols = (d.columns as { text?: string }[]) ?? [];
-      return (
-        <div className="my-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {cols.map((c, i) => (
-            <div key={i} className="event-card">
-              <RichTextContent html={c.text ?? ""} />
-            </div>
-          ))}
-        </div>
-      );
+    case "paragraph": return <RichTextContent html={block.text ?? ""} />;
+    case "image": return block.url ? <img src={block.url} alt={block.alt ?? ""} className="w-full rounded-lg border border-event-border" /> : null;
+    case "spacer": return <div style={{ height: `${block.height ?? 40}px` }} />;
+    case "divider": return <hr className="border-event-border" />;
+    case "gallery": return (
+      <div className={cn("grid gap-2")} style={{ gridTemplateColumns: `repeat(${block.columns ?? 3}, minmax(0, 1fr))` }}>
+        {(block.images ?? []).filter((u: string) => !!u).map((url: string, i: number) => (
+          <img key={i} src={url} alt="" className="aspect-square w-full rounded-lg border border-event-border object-cover" />
+        ))}
+      </div>
+    );
+    case "video": {
+      const url = block.url ?? "";
+      const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+      const embed = m ? `https://www.youtube.com/embed/${m[1]}` : url;
+      return url ? <div className="aspect-video w-full overflow-hidden rounded-lg border border-event-border"><iframe src={embed} className="h-full w-full" allowFullScreen /></div> : null;
     }
+    case "button": return block.url ? (
+      <a href={block.url} target="_blank" rel="noopener noreferrer" className="event-btn-primary inline-block">{block.text ?? "Click here"}</a>
+    ) : null;
+    case "columns": return (
+      <div className="grid gap-4 sm:grid-cols-2">
+        {(block.columns ?? []).map((col: string, i: number) => <RichTextContent key={i} html={col ?? ""} />)}
+      </div>
+    );
     case "list": {
-      const items = (d.items as string[]) ?? [];
-      return (
-        <ul className="my-4 list-disc pl-5 text-sm" style={{ color: "var(--event-text)" }}>
-          {items.map((item, i) => <li key={i}>{item}</li>)}
-        </ul>
+      const items = block.items ?? [];
+      return block.ordered ? (
+        <ol className="list-decimal space-y-1 pl-6 text-event-text">{items.map((item: string, i: number) => <li key={i}>{item}</li>)}</ol>
+      ) : (
+        <ul className="list-disc space-y-1 pl-6 text-event-text">{items.map((item: string, i: number) => <li key={i}>{item}</li>)}</ul>
       );
     }
-    case "quote":
-      return (
-        <blockquote className="my-4 border-l-4 pl-4 italic" style={{ borderColor: "var(--event-border)", color: "var(--event-muted)" }}>
-          "{(d.text as string) ?? ""}"
-          {d.author ? <footer className="mt-1 not-italic text-xs">— {d.author as string}</footer> : null}
-        </blockquote>
-      );
+    case "quote": return (
+      <blockquote className="border-l-4 border-event-border pl-4 italic text-event-muted">
+        <p>{block.text}</p>{block.author && <footer className="mt-1 text-sm not-italic">— {block.author}</footer>}
+      </blockquote>
+    );
     case "countdown": {
-      const target = (d.targetDate as string) || "";
-      const cd = getCountdown(target);
-      if (cd.isPast) return <p className="my-4 text-center text-sm" style={{ color: "var(--event-muted)" }}>This moment has passed.</p>;
+      const c = getCountdown(block.targetDate);
+      if (c.isPast) return <p className="text-event-muted">This moment has arrived.</p>;
       return (
-        <div className="my-4 flex justify-center gap-3">
-          {[{ l: "Days", v: cd.days }, { l: "Hrs", v: cd.hours }, { l: "Min", v: cd.minutes }, { l: "Sec", v: cd.seconds }].map((it) => (
-            <div key={it.l} className="event-card text-center" style={{ minWidth: 64 }}>
-              <div className="text-xl font-bold" style={{ color: "var(--event-primary)" }}>{it.v}</div>
-              <div className="text-xs uppercase" style={{ color: "var(--event-muted)" }}>{it.l}</div>
+        <div className="event-card flex justify-center gap-6 text-center">
+          {(["days", "hours", "minutes", "seconds"] as const).map((u) => (
+            <div key={u} className="flex flex-col items-center">
+              <span className="text-2xl font-bold text-event-heading">{c[u].toString().padStart(2, "0")}</span>
+              <span className="text-xs uppercase text-event-muted">{u}</span>
             </div>
           ))}
         </div>
       );
     }
     case "map": {
-      const addr = (d.address as string) || "";
-      return addr ? (
-        <div className="my-4 overflow-hidden event-card" style={{ padding: 0 }}>
-          <iframe title="Map" src={`https://maps.google.com/maps?q=${encodeURIComponent(addr)}&output=embed`} className="w-full" style={{ height: 250, border: 0 }} loading="lazy" />
-        </div>
-      ) : (
-        <div className="my-4 flex h-40 items-center justify-center rounded-lg border-2 border-dashed text-sm" style={{ borderColor: "var(--event-border)", color: "var(--event-muted)" }}>
-          Map placeholder
+      const addr = block.address ?? event.address ?? "";
+      const link = addr ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}` : null;
+      return (
+        <div className="event-card space-y-2">
+          {block.heading && <h3 className="text-lg font-semibold text-event-heading">{block.heading}</h3>}
+          {addr && <p className="text-event-text">{addr}</p>}
+          {link && <a href={link} target="_blank" rel="noopener noreferrer" className="event-btn-secondary inline-block">📍 View on map</a>}
         </div>
       );
     }
+    case "schedule": return (
+      <div className="event-card">
+        {block.heading && <h3 className="mb-3 text-lg font-semibold text-event-heading">{block.heading}</h3>}
+        <ScheduleBlock eventId={event.id} />
+      </div>
+    );
+    case "venue": return (
+      <div className="event-card">
+        {block.heading && <h3 className="mb-3 text-lg font-semibold text-event-heading">{block.heading}</h3>}
+        {event.venue && <p className="text-event-text">{event.venue}</p>}
+        {event.address && <p className="text-event-text">{event.address}</p>}
+      </div>
+    );
+    case "faq": return (
+      <div className="space-y-3">
+        {(block.items ?? []).map((item: { question: string; answer: string }, i: number) => (
+          <div key={i} className="event-card">
+            <h3 className="font-semibold text-event-heading">{item.question}</h3>
+            <p className="mt-1 text-event-text">{item.answer}</p>
+          </div>
+        ))}
+      </div>
+    );
     case "rsvp-form":
-      return (
-        <div className="my-4 event-card text-center">
-          <p className="text-sm" style={{ color: "var(--event-muted)" }}>
-            Please visit the RSVP page to submit your response.
-          </p>
-        </div>
-      );
-    case "guest-list":
-      return (
-        <div className="my-4 event-card text-center">
-          <p className="text-sm" style={{ color: "var(--event-muted)" }}>Guest list is not publicly visible.</p>
-        </div>
-      );
-    case "schedule":
-      return (
-        <div className="my-4 event-card text-center">
-          <p className="text-sm" style={{ color: "var(--event-muted)" }}>Schedule details will appear here.</p>
-        </div>
-      );
-    case "venue": {
-      const name = (d.name as string) || "";
-      const addr = (d.address as string) || "";
-      return (
-        <div className="my-4 event-card">
-          {name && <h4 className="font-semibold" style={{ color: "var(--event-heading)" }}>{name}</h4>}
-          {addr && <p className="mt-1 text-sm" style={{ color: "var(--event-text)" }}>{addr}</p>}
-        </div>
-      );
-    }
-    case "faq": {
-      const items = (d.items as { q?: string; a?: string }[]) ?? [];
-      return (
-        <div className="my-4 space-y-2">
-          {items.map((item, i) => (
-            <div key={i} className="event-card">
-              <p className="font-medium" style={{ color: "var(--event-heading)" }}>{item.q ?? ""}</p>
-              <p className="mt-1 text-sm" style={{ color: "var(--event-text)" }}>{item.a ?? ""}</p>
-            </div>
-          ))}
-        </div>
-      );
-    }
-    default:
-      return null;
+    case "guest-list": return (
+      <div className="event-card text-center">
+        {block.heading && <h3 className="mb-2 text-lg font-semibold text-event-heading">{block.heading}</h3>}
+        <a href={`#/e/${event.slug ?? ""}/rsvp`} className="event-btn-primary inline-block">Go to RSVP</a>
+      </div>
+    );
+    default: return null;
   }
 }
 
-// --- Main Component ---
-
-export default function CustomPage() {
-  const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
-
-  const { data: event, isLoading: eventLoading } = useQuery({
-    queryKey: ["guest-event", slug],
+function ScheduleBlock({ eventId }: { eventId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["guest-schedule", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("slug", slug!)
-        .eq("is_published", true)
-        .maybeSingle();
+      const { data, error } = await supabase.from("event_schedule").select("*")
+        .eq("event_id", eventId).order("order_index", { ascending: true });
       if (error) throw error;
-      return data as UserEvent | null;
+      return data;
     },
-    enabled: !!slug,
   });
-
-  const { data: page, isLoading: pageLoading, isError, refetch } = useQuery({
-    queryKey: ["guest-custom-page", slug, pageSlug],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("custom_pages")
-        .select("*")
-        .eq("slug", pageSlug!)
-        .eq("is_published", true)
-        .maybeSingle();
-      if (error) throw error;
-      return data as CustomPage | null;
-    },
-    enabled: !!pageSlug,
-  });
-
-  if (eventLoading || pageLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50">
-        <div className="animate-pulse text-gray-400">Loading…</div>
-      </div>
-    );
-  }
-
-  if (isError || !event || !page) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-50 px-6 text-center">
-        <p className="text-lg text-gray-600">
-          This invitation website could not be found or is no longer available.
-        </p>
-        <Link to="/" className="text-sm font-semibold text-blue-600 hover:underline">
-          Go to homepage
-        </Link>
-      </div>
-    );
-  }
-
-  const theme = parseTheme(event);
-  const blocks = (page.blocks as unknown as Block[]) ?? [];
-
+  if (isLoading) return <div className="flex justify-center py-4"><div className="animate-spin h-5 w-5 rounded-full border-2 border-event-primary border-t-transparent" /></div>;
+  if (!data || data.length === 0) return <p className="text-sm text-event-muted">No schedule items.</p>;
   return (
-    <EventThemeProvider initialTheme={theme}>
-      <div className="min-h-screen px-4 py-8">
-        <div className="mx-auto max-w-2xl">
-          <Link to={`/e/${slug}/home`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>
-            ← Back
-          </Link>
-          <h1 className="mt-4 text-center text-3xl font-bold" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>
-            {page.title}
-          </h1>
-          {page.cover_image_url && (
-            <img src={page.cover_image_url} alt={page.title} className="mt-4 w-full rounded-lg" style={{ borderRadius: "var(--event-radius)" }} />
-          )}
-          <div className="mt-4">
-            {blocks.length > 0 ? (
-              blocks.map((block) => <BlockRenderer key={block.id} block={block} />)
-            ) : (
-              <p className="text-center text-sm" style={{ color: "var(--event-muted)" }}>
-                No content yet.
-              </p>
-            )}
-          </div>
+    <div className="space-y-2">
+      {data.map((item) => (
+        <div key={item.id} className="border-l-2 border-event-border pl-3">
+          <p className="font-medium text-event-heading">{item.title}</p>
+          <p className="text-xs text-event-muted">
+            {formatDate(item.schedule_date)}{item.start_time && ` · ${formatTime12(item.start_time)}`}{item.venue && ` · ${item.venue}`}
+          </p>
+          {item.description && <p className="mt-1 text-sm text-event-text">{item.description}</p>}
         </div>
-      </div>
-    </EventThemeProvider>
+      ))}
+    </div>
   );
 }

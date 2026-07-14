@@ -7,6 +7,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
   },
 });
 
@@ -15,7 +16,7 @@ export type Json =
   | number
   | boolean
   | null
-  | { [key: string]: Json | Json[] }
+  | { [key: string]: Json | undefined }
   | Json[];
 
 export interface Profile {
@@ -105,7 +106,7 @@ export interface EventGuest {
   dietary: string | null;
   message: string | null;
   created_at: string;
-  table_number: string | null;
+  table_number: number | null;
 }
 
 export interface GuestGroup {
@@ -143,13 +144,13 @@ export interface EventSchedule {
   event_id: string;
   title: string;
   description: string | null;
-  schedule_date: string | null;
+  schedule_date: string;
   start_time: string | null;
   end_time: string | null;
   venue: string | null;
   address: string | null;
   dress_code: string | null;
-  category: string | null;
+  category: string;
   cover_image: string | null;
   order_index: number;
   created_at: string;
@@ -170,7 +171,7 @@ export interface CustomPage {
   event_id: string | null;
   slug: string;
   title: string;
-  body: string | null;
+  body: string;
   cover_image_url: string | null;
   inline_image_url: string | null;
   sort_order: number;
@@ -204,7 +205,7 @@ export interface SharingEvent {
   wedding_id: string;
   event_type: string;
   guest_id: string | null;
-  source: string | null;
+  source: string;
   device_type: string | null;
   metadata: Json;
   created_at: string;
