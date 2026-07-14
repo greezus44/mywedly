@@ -1,15 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
 
 export type Json =
   | string
@@ -102,11 +96,11 @@ export interface EventGuest {
   token: string;
   rsvp_status: string;
   rsvp_submitted_at: string | null;
-  plus_ones: number;
+  plus_ones: number | null;
   dietary: string | null;
   message: string | null;
   created_at: string;
-  table_number: number | null;
+  table_number: string | null;
 }
 
 export interface GuestGroup {
@@ -131,7 +125,7 @@ export interface EventRsvp {
   guest_id: string;
   guest_name: string;
   status: string;
-  plus_ones: number;
+  plus_ones: number | null;
   dietary: string | null;
   message: string | null;
   answers: Json;
@@ -171,7 +165,7 @@ export interface CustomPage {
   event_id: string | null;
   slug: string;
   title: string;
-  body: string;
+  body: string | null;
   cover_image_url: string | null;
   inline_image_url: string | null;
   sort_order: number;

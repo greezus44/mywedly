@@ -1,95 +1,119 @@
 import React, { forwardRef } from "react";
 import { cn } from "../../lib/utils";
 
-interface BaseProps {
+const baseFieldClasses =
+  "w-full rounded-lg border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted/60 focus:outline-none focus:ring-2 focus:ring-dash-primary/30 transition-colors";
+
+const labelClasses =
+  "block text-sm font-medium text-dash-text mb-1.5";
+const errorClasses =
+  "block text-xs text-dash-danger mt-1";
+
+export interface InputProps
+  extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
 }
 
-const baseInputClasses =
-  "w-full rounded-md border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted/60 focus:outline-none focus:ring-2 focus:ring-dash-primary/30 focus:border-dash-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
-
-function wrapLabel(label: string | undefined, error: string | undefined, id: string | undefined, children: React.ReactNode) {
-  if (!label && !error) return children;
-  return (
-    <div className="space-y-1.5">
-      {label && (
-        <label htmlFor={id} className="block text-sm font-medium text-dash-text">
-          {label}
-        </label>
-      )}
-      {children}
-      {error && <p className="text-xs text-dash-danger">{error}</p>}
-    </div>
-  );
-}
-
-export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement>, BaseProps {}
-
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ className, label, error, id, ...props }, ref) => {
     const inputId = id || props.name;
-    const input = (
-      <input
-        ref={ref}
-        id={inputId}
-        className={cn(
-          baseInputClasses,
-          error ? "border-dash-danger" : "border-dash-border",
-          className,
+    return (
+      <div className="w-full">
+        {label && (
+          <label htmlFor={inputId} className={labelClasses}>
+            {label}
+          </label>
         )}
-        {...props}
-      />
+        <input
+          ref={ref}
+          id={inputId}
+          className={cn(
+            baseFieldClasses,
+            error ? "border-dash-danger" : "border-dash-border",
+            className
+          )}
+          {...props}
+        />
+        {error && <span className={errorClasses}>{error}</span>}
+      </div>
     );
-    return wrapLabel(label, error, inputId, input);
-  },
+  }
 );
 Input.displayName = "Input";
 
-export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement>, BaseProps {}
+export interface TextareaProps
+  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label?: string;
+  error?: string;
+}
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ className, label, error, id, ...props }, ref) => {
     const inputId = id || props.name;
-    const textarea = (
-      <textarea
-        ref={ref}
-        id={inputId}
-        className={cn(
-          baseInputClasses,
-          "resize-y min-h-[80px]",
-          error ? "border-dash-danger" : "border-dash-border",
-          className,
+    return (
+      <div className="w-full">
+        {label && (
+          <label htmlFor={inputId} className={labelClasses}>
+            {label}
+          </label>
         )}
-        {...props}
-      />
+        <textarea
+          ref={ref}
+          id={inputId}
+          className={cn(
+            baseFieldClasses,
+            "min-h-[80px] resize-y",
+            error ? "border-dash-danger" : "border-dash-border",
+            className
+          )}
+          {...props}
+        />
+        {error && <span className={errorClasses}>{error}</span>}
+      </div>
     );
-    return wrapLabel(label, error, inputId, textarea);
-  },
+  }
 );
 Textarea.displayName = "Textarea";
 
-export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement>, BaseProps {}
+export interface SelectProps
+  extends React.SelectHTMLAttributes<HTMLSelectElement> {
+  label?: string;
+  error?: string;
+}
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, label, error, id, children, ...props }, ref) => {
     const inputId = id || props.name;
-    const select = (
-      <select
-        ref={ref}
-        id={inputId}
-        className={cn(
-          baseInputClasses,
-          "cursor-pointer",
-          error ? "border-dash-danger" : "border-dash-border",
-          className,
+    return (
+      <div className="w-full">
+        {label && (
+          <label htmlFor={inputId} className={labelClasses}>
+            {label}
+          </label>
         )}
-        {...props}
-      >
-        {children}
-      </select>
+        <select
+          ref={ref}
+          id={inputId}
+          className={cn(
+            baseFieldClasses,
+            "cursor-pointer appearance-none bg-no-repeat pr-9",
+            error ? "border-dash-danger" : "border-dash-border",
+            className
+          )}
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")",
+            backgroundPosition: "right 0.5rem center",
+            backgroundSize: "1.25rem",
+          }}
+          {...props}
+        >
+          {children}
+        </select>
+        {error && <span className={errorClasses}>{error}</span>}
+      </div>
     );
-    return wrapLabel(label, error, inputId, select);
-  },
+  }
 );
 Select.displayName = "Select";

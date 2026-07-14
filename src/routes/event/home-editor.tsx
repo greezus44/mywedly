@@ -1,136 +1,182 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
-import { Button } from "../../components/ui/Button";
-import { Card } from "../../components/ui";
-import { RichTextEditor } from "../../components/ui/RichTextEditor";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
+import { Input } from "../../components/ui";
+import { RichTextEditor } from "../../components/ui/RichTextEditor";
+import { Button } from "../../components/ui/Button";
+import { EventThemeProvider } from "../../lib/theme-context";
+import { jsonToTheme } from "../../lib/theme";
 import type { EventOutletContext } from "./event-layout";
 
-interface HomeContent {
-  intro?: string;
-  story?: string;
-  details?: string;
+interface ContentConfig {
+  welcomeText?: string;
+  storyTitle?: string;
+  storyBody?: string;
+  rsvpTitle?: string;
+  rsvpBody?: string;
+  rsvpButtonText?: string;
+  scheduleText?: string;
 }
 
-function getHomeContent(event: UserEvent): HomeContent {
-  const draft = event.draft_content as Record<string, unknown> | null;
-  const published = event.content as Record<string, unknown> | null;
-  const cfg = (draft ?? published ?? {}) as Record<string, unknown>;
-  return {
-    intro: (cfg.intro as string) || "",
-    story: (cfg.story as string) || "",
-    details: (cfg.details as string) || "",
-  };
+function parseConfig(json: Json | null | undefined): ContentConfig {
+  if (!json || typeof json !== "object") return {};
+  return json as ContentConfig;
 }
 
-export default function HomeEditor(): React.ReactElement {
+export default function HomeEditor() {
   const { event, eventId } = useOutletContext<EventOutletContext>();
   const queryClient = useQueryClient();
 
-  const [content, setContent] = useState<HomeContent>(() => getHomeContent(event));
-
-  useEffect(() => {
-    setContent(getHomeContent(event));
-  }, [event]);
+  const existing = parseConfig(event.draft_content ?? event.content);
+  const [config, setConfig] = useState<ContentConfig>({
+    welcomeText: existing.welcomeText ?? "",
+    storyTitle: existing.storyTitle ?? "Our Story",
+    storyBody: existing.storyBody ?? "<p>Share the story of how you met and fell in love.</p>",
+    rsvpTitle: existing.rsvpTitle ?? "RSVP",
+    rsvpBody: existing.rsvpBody ?? "<p>Let us know if you can make it!</p>",
+    rsvpButtonText: existing.rsvpButtonText ?? "Respond Now",
+    scheduleText: existing.scheduleText ?? "",
+  });
+  const [saved, setSaved] = useState(false);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_content: content as unknown as Json })
+        .update({
+          draft_content: config as unknown as Json,
+        })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user-event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  const previewEvent: UserEvent = {
+  const previewEvent = {
     ...event,
-    content: { ...content },
+    content: config as unknown as Json,
   };
 
+  const theme = jsonToTheme(event.draft_theme ?? event.theme);
+
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-dash-text">Home Page</h2>
-          <p className="mt-1 text-sm text-dash-muted">
-            Edit the content sections of your home page
-          </p>
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-dash-border bg-dash-surface px-4 py-3">
+        <h2 className="text-lg font-semibold text-dash-text">Home Editor</h2>
+        <div className="flex items-center gap-2">
+          {saved && <span className="text-sm text-green-600">Saved!</span>}
+          <Button
+            onClick={() => saveMutation.mutate()}
+            loading={saveMutation.isPending}
+          >
+            Save Changes
+          </Button>
         </div>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-          disabled={saveMutation.isPending}
-        >
-          Save Changes
-        </Button>
       </div>
 
-      {saveMutation.isError && (
-        <div className="mb-4 rounded-md border border-dash-danger/20 bg-dash-danger/5 px-4 py-3">
-          <p className="text-sm text-dash-danger">
-            {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save"}
-          </p>
-        </div>
-      )}
-      {saveMutation.isSuccess && (
-        <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-3">
-          <p className="text-sm text-green-700">Changes saved successfully</p>
-        </div>
-      )}
+      <div className="flex-1 overflow-hidden">
+        <SplitEditor
+          editorRatio={0.4}
+          editor={
+            <div className="space-y-6 p-4">
+              {/* Welcome */}
+              <div>
+                <h3 className="mb-3 text-sm font-semibold text-dash-text">
+                  Welcome Section
+                </h3>
+                <Input
+                  label="Welcome Text"
+                  value={config.welcomeText ?? ""}
+                  onChange={(e) =>
+                    setConfig({ ...config, welcomeText: e.target.value })
+                  }
+                  placeholder="We invite you to celebrate our special day."
+                />
+              </div>
 
-      <SplitEditor
-        editor={
-          <div className="space-y-6 p-5">
-            <Card>
-              <h3 className="text-sm font-semibold text-dash-text mb-1">Introduction</h3>
-              <p className="text-xs text-dash-muted mb-3">
-                The main welcome message at the top of your home page
-              </p>
-              <RichTextEditor
-                value={content.intro ?? ""}
-                onChange={(html) => setContent({ ...content, intro: html })}
-                placeholder="Write your welcome message..."
-              />
-            </Card>
+              {/* Story */}
+              <div>
+                <h3 className="mb-3 text-sm font-semibold text-dash-text">
+                  Story Section
+                </h3>
+                <div className="space-y-3">
+                  <Input
+                    label="Story Title"
+                    value={config.storyTitle ?? ""}
+                    onChange={(e) =>
+                      setConfig({ ...config, storyTitle: e.target.value })
+                    }
+                    placeholder="Our Story"
+                  />
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-dash-text">
+                      Story Body
+                    </label>
+                    <RichTextEditor
+                      value={config.storyBody ?? ""}
+                      onChange={(html) =>
+                        setConfig({ ...config, storyBody: html })
+                      }
+                      placeholder="Share your story..."
+                    />
+                  </div>
+                </div>
+              </div>
 
-            <Card>
-              <h3 className="text-sm font-semibold text-dash-text mb-1">Our Story</h3>
-              <p className="text-xs text-dash-muted mb-3">
-                Share the story of how you met or your journey together
-              </p>
-              <RichTextEditor
-                value={content.story ?? ""}
-                onChange={(html) => setContent({ ...content, story: html })}
-                placeholder="Tell your story..."
-              />
-            </Card>
-
-            <Card>
-              <h3 className="text-sm font-semibold text-dash-text mb-1">Event Details</h3>
-              <p className="text-xs text-dash-muted mb-3">
-                Additional information about your event
-              </p>
-              <RichTextEditor
-                value={content.details ?? ""}
-                onChange={(html) => setContent({ ...content, details: html })}
-                placeholder="Add event details..."
-              />
-            </Card>
-          </div>
-        }
-        preview={
-          <div className="event-themed bg-event-bg">
-            <HomePreview event={previewEvent} />
-          </div>
-        }
-      />
+              {/* RSVP */}
+              <div>
+                <h3 className="mb-3 text-sm font-semibold text-dash-text">
+                  RSVP Section
+                </h3>
+                <div className="space-y-3">
+                  <Input
+                    label="RSVP Title"
+                    value={config.rsvpTitle ?? ""}
+                    onChange={(e) =>
+                      setConfig({ ...config, rsvpTitle: e.target.value })
+                    }
+                    placeholder="RSVP"
+                  />
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-dash-text">
+                      RSVP Body
+                    </label>
+                    <RichTextEditor
+                      value={config.rsvpBody ?? ""}
+                      onChange={(html) =>
+                        setConfig({ ...config, rsvpBody: html })
+                      }
+                      placeholder="Let us know if you can make it!"
+                    />
+                  </div>
+                  <Input
+                    label="RSVP Button Text"
+                    value={config.rsvpButtonText ?? ""}
+                    onChange={(e) =>
+                      setConfig({ ...config, rsvpButtonText: e.target.value })
+                    }
+                    placeholder="Respond Now"
+                  />
+                </div>
+              </div>
+            </div>
+          }
+          preview={
+            <div className="p-4">
+              <EventThemeProvider initialTheme={theme}>
+                <HomePreview event={previewEvent} />
+              </EventThemeProvider>
+            </div>
+          }
+        />
+      </div>
     </div>
   );
 }

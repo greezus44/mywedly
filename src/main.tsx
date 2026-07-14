@@ -27,6 +27,7 @@ import AnalyticsPage from "./routes/event/analytics";
 import SettingsPage from "./routes/event/settings";
 
 import GuestCover from "./routes/guest/cover";
+import GuestSignIn from "./routes/guest/signin";
 import GuestLayout from "./routes/guest/guest-layout";
 import GuestHome from "./routes/guest/home";
 import GuestRsvp from "./routes/guest/rsvp";
@@ -35,6 +36,7 @@ import GuestContact from "./routes/guest/contact";
 import GuestCustomPage from "./routes/guest/custom-page";
 
 import RustyCover from "./routes/guest/rusty-cover";
+import RustySignIn from "./routes/guest/rusty-signin";
 import RustyLayout from "./routes/guest/rusty-layout";
 import RustyHome from "./routes/guest/rusty-home";
 import RustyRsvp from "./routes/guest/rusty-rsvp";
@@ -74,6 +76,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               </Route>
 
               <Route path="/e/:slug" element={<GuestCover />} />
+              <Route path="/e/:slug/signin" element={<GuestSignIn />} />
               <Route path="/e/:slug/home" element={<GuestLayout />}><Route index element={<GuestHome />} /></Route>
               <Route path="/e/:slug/events" element={<GuestLayout />}><Route index element={<GuestHome />} /></Route>
               <Route path="/e/:slug/rsvp" element={<GuestLayout />}><Route index element={<GuestRsvp />} /></Route>
@@ -82,6 +85,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/e/:slug/p/:pageSlug" element={<GuestLayout />}><Route index element={<GuestCustomPage />} /></Route>
 
               <Route path="/r/:slug" element={<RustyCover />} />
+              <Route path="/r/:slug/signin" element={<RustySignIn />} />
               <Route path="/r/:slug/home" element={<RustyLayout />}><Route index element={<RustyHome />} /></Route>
               <Route path="/r/:slug/rsvp" element={<RustyLayout />}><Route index element={<RustyRsvp />} /></Route>
               <Route path="/r/:slug/wishes" element={<RustyLayout />}><Route index element={<RustyWishes />} /></Route>

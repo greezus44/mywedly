@@ -1,19 +1,27 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type SubEvent } from "../../lib/supabase";
+import { supabase, type SubEvent, type GuestGroup, type EventGuest } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
-import { Card, Modal, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
+import {
+  Input,
+  Textarea,
+  Card,
+  Modal,
+  LoadingSpinner,
+  ErrorState,
+  EmptyState,
+  Badge,
+  Toggle,
+} from "../../components/ui";
 import { DatePicker, TimePicker } from "../../components/ui";
-import { formatDate, formatTime12 } from "../../lib/utils";
+import { formatDate, formatTime12, cn } from "../../lib/utils";
 import { InvitationManager } from "./invitation-manager";
 import type { EventOutletContext } from "./event-layout";
 
 interface SubEventForm {
   name: string;
   date: string | null;
-  time: string | null;
   start_time: string | null;
   end_time: string | null;
   venue: string;
@@ -21,12 +29,12 @@ interface SubEventForm {
   description: string;
   dress_code: string;
   rsvp_enabled: boolean;
+  rsvp_deadline: string | null;
 }
 
 const EMPTY_FORM: SubEventForm = {
   name: "",
   date: null,
-  time: null,
   start_time: null,
   end_time: null,
   venue: "",
@@ -34,18 +42,20 @@ const EMPTY_FORM: SubEventForm = {
   description: "",
   dress_code: "",
   rsvp_enabled: true,
+  rsvp_deadline: null,
 };
 
-export default function Events(): React.ReactElement {
+export default function Events() {
   const { eventId } = useOutletContext<EventOutletContext>();
   const queryClient = useQueryClient();
 
-  const [showModal, setShowModal] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SubEventForm>(EMPTY_FORM);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data: subEvents, isLoading, error } = useQuery({
+  // Fetch sub-events
+  const { data: subEvents, isLoading, error, refetch } = useQuery({
     queryKey: ["sub-events", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -58,44 +68,44 @@ export default function Events(): React.ReactElement {
     },
   });
 
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      const maxOrder = subEvents?.length ?? 0;
-      const { error } = await supabase.from("sub_events").insert({
-        parent_event_id: eventId,
-        wedding_id: eventId,
-        name: form.name,
-        date: form.date,
-        time: form.start_time,
-        start_time: form.start_time,
-        end_time: form.end_time,
-        venue: form.venue || null,
-        address: form.address || null,
-        description: form.description || null,
-        dress_code: form.dress_code || null,
-        rsvp_enabled: form.rsvp_enabled,
-        order_index: maxOrder,
-        display_order: maxOrder,
-      });
+  // Fetch groups for InvitationManager
+  const { data: groups } = useQuery({
+    queryKey: ["guest-groups", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("guest_groups")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("sort_order", { ascending: true });
       if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] });
-      setShowModal(false);
-      setForm(EMPTY_FORM);
-      setEditingId(null);
+      return data as GuestGroup[];
     },
   });
 
-  const updateMutation = useMutation({
+  // Fetch guests for InvitationManager
+  const { data: guests } = useQuery({
+    queryKey: ["event-guests", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_guests")
+        .select("*")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data as EventGuest[];
+    },
+  });
+
+  const createMutation = useMutation({
     mutationFn: async () => {
-      if (!editingId) throw new Error("No event selected");
+      const displayOrder = subEvents?.length ?? 0;
       const { error } = await supabase
         .from("sub_events")
-        .update({
+        .insert({
+          parent_event_id: eventId,
+          wedding_id: eventId,
           name: form.name,
           date: form.date,
-          time: form.start_time,
           start_time: form.start_time,
           end_time: form.end_time,
           venue: form.venue || null,
@@ -103,189 +113,258 @@ export default function Events(): React.ReactElement {
           description: form.description || null,
           dress_code: form.dress_code || null,
           rsvp_enabled: form.rsvp_enabled,
+          rsvp_deadline: form.rsvp_deadline,
+          display_order: displayOrder,
+          order_index: displayOrder,
+        });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] });
+      setModalOpen(false);
+      setForm(EMPTY_FORM);
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingId) return;
+      const { error } = await supabase
+        .from("sub_events")
+        .update({
+          name: form.name,
+          date: form.date,
+          start_time: form.start_time,
+          end_time: form.end_time,
+          venue: form.venue || null,
+          address: form.address || null,
+          description: form.description || null,
+          dress_code: form.dress_code || null,
+          rsvp_enabled: form.rsvp_enabled,
+          rsvp_deadline: form.rsvp_deadline,
         })
         .eq("id", editingId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] });
-      setShowModal(false);
-      setForm(EMPTY_FORM);
+      setModalOpen(false);
       setEditingId(null);
+      setForm(EMPTY_FORM);
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("sub_events").delete().eq("id", id);
+    mutationFn: async () => {
+      if (!deleteId) return;
+      const { error } = await supabase
+        .from("sub_events")
+        .delete()
+        .eq("id", deleteId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] });
+      setDeleteId(null);
     },
   });
 
-  function handleEdit(sub: SubEvent): void {
-    setEditingId(sub.id);
-    setForm({
-      name: sub.name,
-      date: sub.date,
-      time: sub.time,
-      start_time: sub.start_time ?? sub.time,
-      end_time: sub.end_time,
-      venue: sub.venue ?? "",
-      address: sub.address ?? "",
-      description: sub.description ?? "",
-      dress_code: sub.dress_code ?? "",
-      rsvp_enabled: sub.rsvp_enabled,
-    });
-    setShowModal(true);
-  }
-
-  function handleAdd(): void {
+  const handleAdd = () => {
     setEditingId(null);
     setForm(EMPTY_FORM);
-    setShowModal(true);
-  }
+    setModalOpen(true);
+  };
 
-  const isSaving = createMutation.isPending || updateMutation.isPending;
-  const saveError = createMutation.error || updateMutation.error;
+  const handleEdit = (se: SubEvent) => {
+    setEditingId(se.id);
+    setForm({
+      name: se.name,
+      date: se.date,
+      start_time: se.start_time,
+      end_time: se.end_time,
+      venue: se.venue ?? "",
+      address: se.address ?? "",
+      description: se.description ?? "",
+      dress_code: se.dress_code ?? "",
+      rsvp_enabled: se.rsvp_enabled,
+      rsvp_deadline: se.rsvp_deadline,
+    });
+    setModalOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!form.name.trim()) return;
+    if (editingId) {
+      updateMutation.mutate();
+    } else {
+      createMutation.mutate();
+    }
+  };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <LoadingSpinner className="h-8 w-8" />
+      <div className="flex h-full items-center justify-center">
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   if (error) {
-    return <ErrorState message={error.message} />;
+    return (
+      <div className="p-4">
+        <ErrorState
+          title="Failed to load events"
+          message={error.message}
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-3xl">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-dash-text">Events</h2>
-          <p className="mt-1 text-sm text-dash-muted">
-            Manage the individual events within your celebration
-          </p>
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-4xl space-y-6 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-dash-text">Events</h2>
+            <p className="mt-1 text-sm text-dash-muted">
+              Manage individual events within your celebration
+            </p>
+          </div>
+          <Button onClick={handleAdd}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Add Event
+          </Button>
         </div>
-        <Button onClick={handleAdd}>
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Event
-        </Button>
-      </div>
 
-      {subEvents && subEvents.length > 0 ? (
-        <div className="space-y-3">
-          {subEvents.map((sub) => (
-            <div key={sub.id}>
-              <Card className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-sm font-semibold text-dash-text">{sub.name}</h3>
-                    {sub.rsvp_enabled && <Badge variant="success">RSVP</Badge>}
+        {/* Sub-events list */}
+        {subEvents && subEvents.length > 0 ? (
+          <div className="space-y-3">
+            {subEvents.map((se, idx) => (
+              <Card key={se.id} className="p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-dash-primary/10 text-dash-primary">
+                      <span className="text-xs font-bold">{idx + 1}</span>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-dash-text">
+                          {se.name}
+                        </h3>
+                        {se.rsvp_enabled ? (
+                          <Badge variant="success">RSVP</Badge>
+                        ) : (
+                          <Badge>No RSVP</Badge>
+                        )}
+                      </div>
+                      {se.date && (
+                        <p className="mt-1 text-sm text-dash-muted">
+                          {formatDate(se.date)}
+                          {se.start_time && ` · ${formatTime12(se.start_time)}`}
+                          {se.end_time && ` – ${formatTime12(se.end_time)}`}
+                        </p>
+                      )}
+                      {se.venue && (
+                        <p className="mt-1 text-sm text-dash-muted">
+                          📍 {se.venue}
+                        </p>
+                      )}
+                      {se.description && (
+                        <p className="mt-2 text-sm text-dash-text">
+                          {se.description}
+                        </p>
+                      )}
+                      {se.dress_code && (
+                        <p className="mt-1 text-xs text-dash-muted">
+                          Dress code: {se.dress_code}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  {sub.date && (
-                    <p className="text-sm text-dash-muted">{formatDate(sub.date)}</p>
-                  )}
-                  {(sub.start_time || sub.end_time) && (
-                    <p className="text-sm text-dash-muted">
-                      {sub.start_time ? formatTime12(sub.start_time) : ""}
-                      {sub.start_time && sub.end_time ? " - " : ""}
-                      {sub.end_time ? formatTime12(sub.end_time) : ""}
-                    </p>
-                  )}
-                  {sub.venue && (
-                    <p className="text-sm text-dash-muted mt-1">{sub.venue}</p>
-                  )}
-                  {sub.description && (
-                    <p className="text-sm text-dash-muted mt-1">{sub.description}</p>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1 shrink-0">
-                  <Button variant="ghost" size="sm" onClick={() => handleEdit(sub)}>
-                    Edit
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setExpandedId(expandedId === sub.id ? null : sub.id)}
-                  >
-                    {expandedId === sub.id ? "Hide" : "Invitations"}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    loading={deleteMutation.isPending}
-                    onClick={() => {
-                      if (confirm(`Delete "${sub.name}"?`)) {
-                        deleteMutation.mutate(sub.id);
-                      }
-                    }}
-                  >
-                    Delete
-                  </Button>
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleEdit(se)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setDeleteId(se.id)}
+                    >
+                      <svg className="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.107 48.107 0 013.478-.397m7.5 0v-.916c0-1.616-1.314-2.9-2.94-2.9H10.5c-1.626 0-2.94 1.284-2.94 2.9v.916" />
+                      </svg>
+                    </Button>
+                  </div>
                 </div>
               </Card>
-              {expandedId === sub.id && (
-                <div className="mt-2 ml-4">
-                  <InvitationManager subEventId={sub.id} subEventName={sub.name} eventId={eventId} />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <Card>
+            ))}
+          </div>
+        ) : (
           <EmptyState
+            title="No events yet"
+            description="Add individual events like Ceremony, Reception, or Mehndi to organize your celebration."
             icon={
-              <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
               </svg>
             }
-            title="No events yet"
-            description="Add events like Ceremony, Reception, or Pre-party to organize your celebration."
-            action={<Button onClick={handleAdd}>Add Event</Button>}
+            action={<Button onClick={handleAdd}>Add First Event</Button>}
           />
-        </Card>
-      )}
+        )}
 
-      {/* Modal */}
+        {/* Invitation Manager */}
+        {subEvents && subEvents.length > 0 && (
+          <div className="pt-4">
+            <InvitationManager
+              eventId={eventId}
+              subEvents={subEvents}
+              groups={groups ?? []}
+              guests={guests ?? []}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Add/Edit modal */}
       <Modal
-        open={showModal}
-        onClose={() => setShowModal(false)}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
         title={editingId ? "Edit Event" : "Add Event"}
         size="lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              loading={createMutation.isPending || updateMutation.isPending}
+              disabled={!form.name.trim()}
+            >
+              {editingId ? "Update" : "Add"}
+            </Button>
+          </>
+        }
       >
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (editingId) {
-              updateMutation.mutate();
-            } else {
-              createMutation.mutate();
-            }
-          }}
-          className="space-y-4"
-        >
+        <div className="space-y-4">
           <Input
-            label="Event name"
+            label="Event Name"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="e.g. Ceremony, Reception, Pre-party"
-            required
-            autoFocus
+            placeholder="e.g. Ceremony, Reception"
           />
           <Textarea
             label="Description"
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
-            placeholder="Additional details..."
+            placeholder="Optional description"
             rows={2}
           />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -294,29 +373,18 @@ export default function Events(): React.ReactElement {
               value={form.date}
               onChange={(v) => setForm({ ...form, date: v })}
             />
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={form.rsvp_enabled}
-                  onChange={(e) => setForm({ ...form, rsvp_enabled: e.target.checked })}
-                  className="h-4 w-4 text-dash-primary focus:ring-dash-primary"
-                />
-                <span className="text-sm text-dash-text">Enable RSVP for this event</span>
-              </label>
+            <div className="grid grid-cols-2 gap-2">
+              <TimePicker
+                label="Start"
+                value={form.start_time}
+                onChange={(v) => setForm({ ...form, start_time: v })}
+              />
+              <TimePicker
+                label="End"
+                value={form.end_time}
+                onChange={(v) => setForm({ ...form, end_time: v })}
+              />
             </div>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <TimePicker
-              label="Start time"
-              value={form.start_time}
-              onChange={(v) => setForm({ ...form, start_time: v })}
-            />
-            <TimePicker
-              label="End time"
-              value={form.end_time}
-              onChange={(v) => setForm({ ...form, end_time: v })}
-            />
           </div>
           <Input
             label="Venue"
@@ -328,30 +396,47 @@ export default function Events(): React.ReactElement {
             label="Address"
             value={form.address}
             onChange={(e) => setForm({ ...form, address: e.target.value })}
-            placeholder="e.g. 123 Main St, City, State"
+            placeholder="e.g. 123 Main St, City"
           />
           <Input
-            label="Dress code"
+            label="Dress Code"
             value={form.dress_code}
             onChange={(e) => setForm({ ...form, dress_code: e.target.value })}
-            placeholder="e.g. Black tie, Cocktail, Casual"
+            placeholder="e.g. Black tie"
           />
-          {saveError && (
-            <div className="rounded-md border border-dash-danger/20 bg-dash-danger/5 px-4 py-3">
-              <p className="text-sm text-dash-danger">
-                {saveError instanceof Error ? saveError.message : "Failed to save"}
-              </p>
-            </div>
-          )}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>
+          <Toggle
+            checked={form.rsvp_enabled}
+            onChange={(v) => setForm({ ...form, rsvp_enabled: v })}
+            label="Enable RSVP for this event"
+          />
+        </div>
+      </Modal>
+
+      {/* Delete confirmation */}
+      <Modal
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        title="Delete Event"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteId(null)}>
               Cancel
             </Button>
-            <Button type="submit" loading={isSaving} disabled={isSaving}>
-              {editingId ? "Update" : "Add"}
+            <Button
+              variant="danger"
+              onClick={() => deleteMutation.mutate()}
+              loading={deleteMutation.isPending}
+            >
+              Delete
             </Button>
-          </div>
-        </form>
+          </>
+        }
+      >
+        <p className="text-sm text-dash-text">
+          Are you sure you want to delete this event? This will also remove all
+          associated invitation assignments.
+        </p>
       </Modal>
     </div>
   );

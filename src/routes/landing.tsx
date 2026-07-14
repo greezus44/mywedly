@@ -4,130 +4,150 @@ import { SiteHeader } from "../components/site/SiteHeader";
 import { SiteFooter } from "../components/site/SiteFooter";
 import { Button } from "../components/ui/Button";
 
-const features = [
+const FEATURES: { title: string; description: string; icon: React.ReactNode }[] = [
   {
-    icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 4a2 2 0 114 0v1m-6 0V4a2 2 0 112 0v1m-4 0h8a2 2 0 012 2v3a6 6 0 01-6 6 6 6 0 01-6-6V6a2 2 0 012-2z" />
-      </svg>
-    ),
     title: "Beautiful Templates",
-    description: "Choose from professionally designed templates and customize every detail to match your style.",
-  },
-  {
+    description:
+      "Choose from dozens of professionally designed templates and customize them to match your style.",
     icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-5.13a4 4 0 11-8 0 4 4 0 018 0zm6 0a4 4 0 11-8 0 4 4 0 018 0z" />
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 3 3 0 005.78-1.128zm0 0a3 3 0 015.78 1.128 3 3 0 00-5.78-1.128zM17 16h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" />
       </svg>
     ),
+  },
+  {
     title: "Guest Management",
-    description: "Organize guests into groups, track RSVPs, and manage invitations for every event.",
-  },
-  {
+    description:
+      "Import guests, organize them into groups, and track RSVPs all in one place.",
     icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.353 9.327 9.327 0 00-1.213 2.933zM3.75 18a4.5 4.5 0 01.702-2.395 4.5 4.5 0 014.5-2.105 4.5 4.5 0 014.5 2.105A4.5 4.5 0 0113.5 18a4.5 4.5 0 01-4.5 4.5A4.5 4.5 0 013.75 18z" />
       </svg>
     ),
+  },
+  {
     title: "RSVP Tracking",
-    description: "Collect and monitor RSVP responses in real-time with detailed analytics and insights.",
-  },
-  {
+    description:
+      "Collect and manage RSVP responses in real-time with automatic updates and notifications.",
     icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
+  },
+  {
     title: "Custom Pages",
-    description: "Build custom pages with a drag-and-drop block editor — no coding required.",
-  },
-  {
+    description:
+      "Build custom pages with a drag-and-drop editor. Add schedules, maps, FAQs, and more.",
     icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
       </svg>
     ),
-    title: "Schedule & Timeline",
-    description: "Plan out every moment with a detailed schedule for all your events.",
   },
   {
+    title: "Share Anywhere",
+    description:
+      "Share your invitation website with a custom URL and QR code. Reach guests on any device.",
     icon: (
-      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z" />
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
       </svg>
     ),
-    title: "Easy Sharing",
-    description: "Share your website with a custom URL and QR code. Track visits and engagement.",
+  },
+  {
+    title: "Analytics",
+    description:
+      "Track visits, views, and RSVP responses with built-in analytics to stay on top of everything.",
+    icon: (
+      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 13.125 4.5 13.125 6 15c1.5 1.875 3 4.5 3 4.5s3-9 9-12" />
+      </svg>
+    ),
   },
 ];
 
-export default function Landing(): React.ReactElement {
+export default function Landing() {
   return (
     <div className="min-h-screen bg-dash-bg">
       <SiteHeader />
 
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-dash-primary/5 to-transparent" />
-        <div className="relative mx-auto max-w-6xl px-4 py-20 md:py-28 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-dash-border bg-dash-surface px-4 py-1.5 text-sm text-dash-muted">
-            <span className="flex h-2 w-2 rounded-full bg-dash-primary" />
-            Create your invitation website in minutes
-          </div>
-          <h1 className="mt-6 text-4xl font-bold tracking-tight text-dash-text md:text-6xl">
-            Beautiful invitation websites
-            <br />
-            <span className="text-dash-primary">for your special day</span>
-          </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-dash-muted">
-            MyWedly helps you create stunning invitation websites for weddings and events.
-            Manage guests, track RSVPs, and share your story — all in one place.
-          </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link to="/auth">
-              <Button size="lg">Get started free</Button>
-            </Link>
-            <Link to="/auth">
-              <Button variant="secondary" size="lg">Sign in</Button>
-            </Link>
+        <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
+          <div className="mx-auto max-w-3xl text-center">
+            <h1 className="text-4xl font-bold tracking-tight text-dash-text sm:text-6xl">
+              Create your dream{" "}
+              <span className="text-dash-primary">wedding website</span> in minutes
+            </h1>
+            <p className="mx-auto mt-6 max-w-2xl text-lg text-dash-muted">
+              Share your special day with guests through a beautiful, personalized
+              invitation website. Manage RSVPs, share your story, and keep everyone
+              in the loop — all in one place.
+            </p>
+            <div className="mt-8 flex items-center justify-center gap-3">
+              <Link to="/auth">
+                <Button size="lg">Get started free</Button>
+              </Link>
+              <a href="#features">
+                <Button variant="secondary" size="lg">
+                  Learn more
+                </Button>
+              </a>
+            </div>
           </div>
         </div>
+        <div className="absolute inset-x-0 top-0 -z-10 h-[600px] bg-gradient-to-b from-dash-primary/5 to-transparent" />
       </section>
 
       {/* Features */}
-      <section className="mx-auto max-w-6xl px-4 py-16 md:py-24">
-        <div className="text-center">
-          <h2 className="text-3xl font-bold text-dash-text md:text-4xl">Everything you need</h2>
-          <p className="mx-auto mt-4 max-w-2xl text-lg text-dash-muted">
-            Powerful features to help you create and manage the perfect invitation website.
+      <section id="features" className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <h2 className="text-3xl font-bold text-dash-text">
+            Everything you need
+          </h2>
+          <p className="mt-3 text-dash-muted">
+            Powerful features to make your wedding planning effortless.
           </p>
         </div>
-        <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature) => (
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((feature) => (
             <div
               key={feature.title}
-              className="rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm transition-shadow hover:shadow-md"
+              className="rounded-xl border border-dash-border bg-dash-surface p-6 shadow-sm transition-shadow hover:shadow-md"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-dash-primary/10 text-dash-primary">
                 {feature.icon}
               </div>
-              <h3 className="mt-4 text-lg font-semibold text-dash-text">{feature.title}</h3>
-              <p className="mt-2 text-sm text-dash-muted">{feature.description}</p>
+              <h3 className="mt-4 text-lg font-semibold text-dash-text">
+                {feature.title}
+              </h3>
+              <p className="mt-2 text-sm text-dash-muted">
+                {feature.description}
+              </p>
             </div>
           ))}
         </div>
       </section>
 
       {/* CTA */}
-      <section className="mx-auto max-w-6xl px-4 py-16 md:py-24">
-        <div className="rounded-2xl border border-dash-border bg-dash-surface p-12 text-center shadow-sm">
-          <h2 className="text-3xl font-bold text-dash-text md:text-4xl">Ready to get started?</h2>
-          <p className="mx-auto mt-4 max-w-xl text-lg text-dash-muted">
-            Create your free account and build your invitation website today.
+      <section className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+        <div className="rounded-2xl bg-gradient-to-r from-dash-primary to-dash-primary-hover px-8 py-16 text-center">
+          <h2 className="text-3xl font-bold text-white">
+            Ready to share your special day?
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-white/90">
+            Join thousands of couples who have created beautiful wedding
+            invitation websites with MyWedly.
           </p>
           <div className="mt-8">
             <Link to="/auth">
-              <Button size="lg">Create your website</Button>
+              <Button
+                size="lg"
+                className="bg-white text-dash-primary hover:bg-white/90"
+              >
+                Create your website
+              </Button>
             </Link>
           </div>
         </div>

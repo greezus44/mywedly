@@ -1,53 +1,80 @@
 import React from "react";
-import { Link } from "react-router-dom";
 import { cn } from "../../lib/utils";
 
 export interface SiteHeaderProps {
   className?: string;
 }
 
-export function SiteHeader({ className }: SiteHeaderProps): React.ReactElement {
+const NAV_LINKS: { label: string; href: string }[] = [
+  { label: "Features", href: "#features" },
+  { label: "Templates", href: "#templates" },
+  { label: "Pricing", href: "#pricing" },
+  { label: "FAQ", href: "#faq" },
+];
+
+export function SiteHeader({ className }: SiteHeaderProps) {
   return (
-    <header className={cn("sticky top-0 z-40 border-b border-dash-border bg-dash-surface/80 backdrop-blur", className)}>
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-        <Link to="/" className="flex items-center gap-2">
-          <span className="text-xl font-bold text-dash-text">
+    <header
+      className={cn(
+        "sticky top-0 z-50 w-full border-b border-dash-border bg-dash-surface/80 backdrop-blur-md",
+        className
+      )}
+    >
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+        {/* Logo */}
+        <a href="/" className="flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-dash-primary text-dash-primary-fg">
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 15.5c-1.874 0-3.625.554-5 1.5m-9-1.5c1.874 0 3.625.554 5 1.5m4-1.5c-1.874 0-3.625.554-5 1.5m0 0V12m0 5.5v3.5m0-9V4m0 0C9.5 4 8 5.5 8 7.5S9.5 11 11 11s3-1.5 3-3.5S12.5 4 11 4z"
+              />
+            </svg>
+          </span>
+          <span className="text-lg font-bold text-dash-text">
             My<span className="text-dash-primary">Wedly</span>
           </span>
-        </Link>
-        <nav className="flex items-center gap-1">
-          <Link
-            to="/"
-            className="rounded-md px-3 py-2 text-sm font-medium text-dash-muted hover:text-dash-text hover:bg-dash-bg transition-colors"
-          >
-            Home
-          </Link>
-          <Link
-            to="/templates"
-            className="rounded-md px-3 py-2 text-sm font-medium text-dash-muted hover:text-dash-text hover:bg-dash-bg transition-colors"
-          >
-            Templates
-          </Link>
-          <Link
-            to="/pricing"
-            className="rounded-md px-3 py-2 text-sm font-medium text-dash-muted hover:text-dash-text hover:bg-dash-bg transition-colors"
-          >
-            Pricing
-          </Link>
-          <Link
-            to="/login"
-            className="rounded-md px-3 py-2 text-sm font-medium text-dash-muted hover:text-dash-text hover:bg-dash-bg transition-colors"
+        </a>
+
+        {/* Desktop nav */}
+        <nav className="hidden items-center gap-1 md:flex">
+          {NAV_LINKS.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              className="rounded-md px-3 py-2 text-sm font-medium text-dash-muted transition-colors hover:text-dash-text"
+            >
+              {link.label}
+            </a>
+          ))}
+        </nav>
+
+        {/* CTA buttons */}
+        <div className="flex items-center gap-2">
+          <a
+            href="/login"
+            className="hidden rounded-lg px-3 py-2 text-sm font-medium text-dash-text transition-colors hover:bg-dash-bg sm:inline-block"
           >
             Sign in
-          </Link>
-          <Link
-            to="/signup"
-            className="rounded-md bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg hover:bg-dash-primary-hover transition-colors"
+          </a>
+          <a
+            href="/register"
+            className="rounded-lg bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg transition-colors hover:bg-dash-primary-hover"
           >
             Get started
-          </Link>
-        </nav>
+          </a>
+        </div>
       </div>
     </header>
   );
 }
+
+export default SiteHeader;

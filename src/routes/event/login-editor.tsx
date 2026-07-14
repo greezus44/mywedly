@@ -1,184 +1,199 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
-import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { Toggle, Card } from "../../components/ui";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { LoginPreview } from "../../components/preview/PreviewRenderers";
+import { Input, Toggle } from "../../components/ui";
+import { Button } from "../../components/ui/Button";
+import { EventThemeProvider } from "../../lib/theme-context";
+import { jsonToTheme } from "../../lib/theme";
 import type { EventOutletContext } from "./event-layout";
 
 interface LoginConfig {
-  mode?: "name" | "password";
   heading?: string;
   subtitle?: string;
   placeholder?: string;
   buttonText?: string;
-  passwordPrompt?: string;
+  requireGuestName?: boolean;
+  backgroundImage?: string;
+  passwordMode?: "none" | "optional" | "required";
+  password?: string;
 }
 
-function getLoginConfig(event: UserEvent): LoginConfig {
-  const draft = event.draft_login_config as Record<string, unknown> | null;
-  const published = event.login_config as Record<string, unknown> | null;
-  const cfg = (draft ?? published ?? {}) as Record<string, unknown>;
-  return {
-    mode: (cfg.mode as "name" | "password") || "name",
-    heading: (cfg.heading as string) || "Enter your name to continue",
-    subtitle: (cfg.subtitle as string) || "Please enter the name on your invitation",
-    placeholder: (cfg.placeholder as string) || "Your full name",
-    buttonText: (cfg.buttonText as string) || "View Invitation",
-    passwordPrompt: (cfg.passwordPrompt as string) || "Enter your password to continue",
-  };
+function parseConfig(json: Json | null | undefined): LoginConfig {
+  if (!json || typeof json !== "object") return {};
+  return json as LoginConfig;
 }
 
-export default function LoginEditor(): React.ReactElement {
+export default function LoginEditor() {
   const { event, eventId } = useOutletContext<EventOutletContext>();
   const queryClient = useQueryClient();
 
-  const [config, setConfig] = useState<LoginConfig>(() => getLoginConfig(event));
-
-  useEffect(() => {
-    setConfig(getLoginConfig(event));
-  }, [event]);
+  const existing = parseConfig(event.draft_login_config ?? event.login_config);
+  const [config, setConfig] = useState<LoginConfig>({
+    heading: existing.heading ?? "Welcome",
+    subtitle: existing.subtitle ?? "Enter your name to view the invitation",
+    placeholder: existing.placeholder ?? "Your full name",
+    buttonText: existing.buttonText ?? "View Invitation",
+    requireGuestName: existing.requireGuestName ?? true,
+    passwordMode: existing.passwordMode ?? "none",
+    password: existing.password ?? "",
+  });
+  const [saved, setSaved] = useState(false);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_login_config: config as unknown as Json })
+        .update({
+          draft_login_config: config as unknown as Json,
+        })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user-event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  // Build a preview event with the current config
-  const previewEvent: UserEvent = {
+  const previewEvent = {
     ...event,
-    login_config: { ...config },
+    login_config: config as unknown as Json,
   };
 
+  const theme = jsonToTheme(event.draft_theme ?? event.theme);
+
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-dash-text">Login Page</h2>
-          <p className="mt-1 text-sm text-dash-muted">
-            Configure how guests access your invitation website
-          </p>
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-dash-border bg-dash-surface px-4 py-3">
+        <h2 className="text-lg font-semibold text-dash-text">Login Editor</h2>
+        <div className="flex items-center gap-2">
+          {saved && <span className="text-sm text-green-600">Saved!</span>}
+          <Button
+            onClick={() => saveMutation.mutate()}
+            loading={saveMutation.isPending}
+          >
+            Save Changes
+          </Button>
         </div>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-          disabled={saveMutation.isPending}
-        >
-          Save Changes
-        </Button>
       </div>
 
-      {saveMutation.isError && (
-        <div className="mb-4 rounded-md border border-dash-danger/20 bg-dash-danger/5 px-4 py-3">
-          <p className="text-sm text-dash-danger">
-            {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save"}
-          </p>
-        </div>
-      )}
-      {saveMutation.isSuccess && (
-        <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-3">
-          <p className="text-sm text-green-700">Changes saved successfully</p>
-        </div>
-      )}
-
-      <SplitEditor
-        editor={
-          <div className="space-y-6 p-5">
-            <Card>
-              <h3 className="text-sm font-semibold text-dash-text mb-4">Authentication Mode</h3>
-              <div className="space-y-3">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="mode"
-                    value="name"
-                    checked={config.mode === "name"}
-                    onChange={() => setConfig({ ...config, mode: "name" })}
-                    className="h-4 w-4 text-dash-primary focus:ring-dash-primary"
-                  />
-                  <div>
-                    <span className="text-sm font-medium text-dash-text">Name-based login</span>
-                    <p className="text-xs text-dash-muted">Guests enter their name to find their invitation</p>
-                  </div>
+      <div className="flex-1 overflow-hidden">
+        <SplitEditor
+          editorRatio={0.4}
+          editor={
+            <div className="space-y-5 p-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-dash-text">
+                  Password Mode
                 </label>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="mode"
-                    value="password"
-                    checked={config.mode === "password"}
-                    onChange={() => setConfig({ ...config, mode: "password" })}
-                    className="h-4 w-4 text-dash-primary focus:ring-dash-primary"
-                  />
-                  <div>
-                    <span className="text-sm font-medium text-dash-text">Password login</span>
-                    <p className="text-xs text-dash-muted">Guests enter a shared password to access the site</p>
-                  </div>
-                </label>
+                <div className="flex flex-col gap-2">
+                  {(["none", "optional", "required"] as const).map((mode) => (
+                    <label
+                      key={mode}
+                      className="flex items-center gap-2 text-sm text-dash-text"
+                    >
+                      <input
+                        type="radio"
+                        name="passwordMode"
+                        checked={config.passwordMode === mode}
+                        onChange={() =>
+                          setConfig({ ...config, passwordMode: mode })
+                        }
+                        className="accent-dash-primary"
+                      />
+                      <span className="capitalize">{mode}</span>
+                      {mode === "none" && (
+                        <span className="text-xs text-dash-muted">
+                          (no password)
+                        </span>
+                      )}
+                      {mode === "optional" && (
+                        <span className="text-xs text-dash-muted">
+                          (guests can skip)
+                        </span>
+                      )}
+                      {mode === "required" && (
+                        <span className="text-xs text-dash-muted">
+                          (must enter)
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
               </div>
-            </Card>
 
-            <Card>
-              <h3 className="text-sm font-semibold text-dash-text mb-4">Content</h3>
-              <div className="space-y-4">
+              {config.passwordMode && config.passwordMode !== "none" && (
                 <Input
-                  label={config.mode === "password" ? "Password prompt" : "Heading"}
-                  value={config.mode === "password" ? config.passwordPrompt ?? "" : config.heading ?? ""}
+                  label="Password"
+                  type="text"
+                  value={config.password ?? ""}
                   onChange={(e) =>
-                    config.mode === "password"
-                      ? setConfig({ ...config, passwordPrompt: e.target.value })
-                      : setConfig({ ...config, heading: e.target.value })
+                    setConfig({ ...config, password: e.target.value })
                   }
+                  placeholder="Enter a password for guests"
                 />
-                <Input
-                  label="Subtitle"
-                  value={config.subtitle ?? ""}
-                  onChange={(e) => setConfig({ ...config, subtitle: e.target.value })}
-                />
-                {config.mode === "name" && (
-                  <Input
-                    label="Placeholder"
-                    value={config.placeholder ?? ""}
-                    onChange={(e) => setConfig({ ...config, placeholder: e.target.value })}
-                  />
-                )}
-                <Input
-                  label="Button text"
-                  value={config.buttonText ?? ""}
-                  onChange={(e) => setConfig({ ...config, buttonText: e.target.value })}
-                />
-              </div>
-            </Card>
+              )}
 
-            <Card>
-              <Toggle
-                checked={config.mode === "password"}
-                onChange={(checked) =>
-                  setConfig({ ...config, mode: checked ? "password" : "name" })
+              <hr className="border-dash-border" />
+
+              <Input
+                label="Heading"
+                value={config.heading ?? ""}
+                onChange={(e) =>
+                  setConfig({ ...config, heading: e.target.value })
                 }
-                label="Use password protection"
-                description="Require a shared password instead of guest name lookup"
+                placeholder="Welcome"
               />
-            </Card>
-          </div>
-        }
-        preview={
-          <div className="event-themed bg-event-bg">
-            <LoginPreview event={previewEvent} />
-          </div>
-        }
-      />
+
+              <Input
+                label="Subtitle"
+                value={config.subtitle ?? ""}
+                onChange={(e) =>
+                  setConfig({ ...config, subtitle: e.target.value })
+                }
+                placeholder="Enter your name to view the invitation"
+              />
+
+              <Input
+                label="Name Placeholder"
+                value={config.placeholder ?? ""}
+                onChange={(e) =>
+                  setConfig({ ...config, placeholder: e.target.value })
+                }
+                placeholder="Your full name"
+              />
+
+              <Input
+                label="Button Text"
+                value={config.buttonText ?? ""}
+                onChange={(e) =>
+                  setConfig({ ...config, buttonText: e.target.value })
+                }
+                placeholder="View Invitation"
+              />
+
+              <Toggle
+                checked={config.requireGuestName ?? true}
+                onChange={(v) =>
+                  setConfig({ ...config, requireGuestName: v })
+                }
+                label="Require guest name"
+              />
+            </div>
+          }
+          preview={
+            <div className="p-4">
+              <EventThemeProvider initialTheme={theme}>
+                <LoginPreview event={previewEvent} />
+              </EventThemeProvider>
+            </div>
+          }
+        />
+      </div>
     </div>
   );
 }

@@ -3,20 +3,27 @@ import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type GuestGroup } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { Card, Modal, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
+import {
+  Input,
+  Card,
+  Modal,
+  LoadingSpinner,
+  ErrorState,
+  EmptyState,
+  Badge,
+} from "../../components/ui";
 import type { EventOutletContext } from "./event-layout";
 
-export default function Groups(): React.ReactElement {
+export default function Groups() {
   const { eventId } = useOutletContext<EventOutletContext>();
   const queryClient = useQueryClient();
 
-  const [showModal, setShowModal] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [sortOrder, setSortOrder] = useState(0);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data: groups, isLoading, error } = useQuery({
+  const { data: groups, isLoading, error, refetch } = useQuery({
     queryKey: ["guest-groups", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -29,9 +36,9 @@ export default function Groups(): React.ReactElement {
     },
   });
 
-  // Count guests per group
-  const { data: groupCounts } = useQuery({
-    queryKey: ["group-counts", eventId],
+  // Get guest counts per group
+  const { data: guestCounts } = useQuery({
+    queryKey: ["guest-counts-by-group", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_guests")
@@ -50,200 +57,224 @@ export default function Groups(): React.ReactElement {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const maxOrder = groups?.length ?? 0;
-      const { error } = await supabase.from("guest_groups").insert({
-        event_id: eventId,
-        wedding_id: eventId,
-        name,
-        sort_order: sortOrder || maxOrder,
-      });
+      const sortOrder = groups?.length ?? 0;
+      const { error } = await supabase
+        .from("guest_groups")
+        .insert({
+          event_id: eventId,
+          name,
+          sort_order: sortOrder,
+        });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
-      setShowModal(false);
+      setModalOpen(false);
       setName("");
-      setSortOrder(0);
-      setEditingId(null);
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      if (!editingId) throw new Error("No group selected");
+      if (!editingId) return;
       const { error } = await supabase
         .from("guest_groups")
-        .update({ name, sort_order: sortOrder })
+        .update({ name })
         .eq("id", editingId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
-      setShowModal(false);
-      setName("");
-      setSortOrder(0);
+      setModalOpen(false);
       setEditingId(null);
+      setName("");
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("guest_groups").delete().eq("id", id);
+    mutationFn: async () => {
+      if (!deleteId) return;
+      const { error } = await supabase
+        .from("guest_groups")
+        .delete()
+        .eq("id", deleteId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["group-counts", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["guest-counts-by-group", eventId] });
+      setDeleteId(null);
     },
   });
 
-  function handleEdit(group: GuestGroup): void {
-    setEditingId(group.id);
-    setName(group.name);
-    setSortOrder(group.sort_order);
-    setShowModal(true);
-  }
-
-  function handleAdd(): void {
+  const handleAdd = () => {
     setEditingId(null);
     setName("");
-    setSortOrder(groups?.length ?? 0);
-    setShowModal(true);
-  }
+    setModalOpen(true);
+  };
 
-  const isSaving = createMutation.isPending || updateMutation.isPending;
-  const saveError = createMutation.error || updateMutation.error;
+  const handleEdit = (group: GuestGroup) => {
+    setEditingId(group.id);
+    setName(group.name);
+    setModalOpen(true);
+  };
+
+  const handleSave = () => {
+    if (!name.trim()) return;
+    if (editingId) {
+      updateMutation.mutate();
+    } else {
+      createMutation.mutate();
+    }
+  };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <LoadingSpinner className="h-8 w-8" />
+      <div className="flex h-full items-center justify-center">
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   if (error) {
-    return <ErrorState message={error.message} />;
+    return (
+      <div className="p-4">
+        <ErrorState
+          title="Failed to load groups"
+          message={error.message}
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-3xl">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-dash-text">Guest Groups</h2>
-          <p className="mt-1 text-sm text-dash-muted">
-            Organize guests into groups for easier management and invitation assignment
-          </p>
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-3xl space-y-6 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-dash-text">Guest Groups</h2>
+            <p className="mt-1 text-sm text-dash-muted">
+              Organize guests into groups for easier management
+            </p>
+          </div>
+          <Button onClick={handleAdd}>
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Add Group
+          </Button>
         </div>
-        <Button onClick={handleAdd}>
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Group
-        </Button>
-      </div>
 
-      {groups && groups.length > 0 ? (
-        <div className="space-y-2">
-          {groups.map((group) => (
-            <Card key={group.id} className="flex items-center justify-between gap-4 py-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-dash-primary/10 text-dash-primary">
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-5.13a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-dash-text">{group.name}</h3>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <Badge>{groupCounts?.[group.id] ?? 0} guests</Badge>
-                    <span className="text-xs text-dash-muted">Order: {group.sort_order}</span>
+        {groups && groups.length > 0 ? (
+          <div className="space-y-3">
+            {groups.map((group) => (
+              <Card key={group.id} className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-dash-primary/10 text-dash-primary">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.059 2.772m0 0a3 3 0 00-4.682 2.72 8.986 8.986 0 003.74.479" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-dash-text">
+                      {group.name}
+                    </h3>
+                    <div className="mt-1 flex items-center gap-2">
+                      <Badge>
+                        {guestCounts?.[group.id] ?? 0} guests
+                      </Badge>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="flex gap-1 shrink-0">
-                <Button variant="ghost" size="sm" onClick={() => handleEdit(group)}>
-                  Edit
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  loading={deleteMutation.isPending}
-                  onClick={() => {
-                    if (confirm(`Delete group "${group.name}"? Guests in this group will not be deleted but will be ungrouped.`)) {
-                      deleteMutation.mutate(group.id);
-                    }
-                  }}
-                >
-                  Delete
-                </Button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <Card>
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleEdit(group)}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setDeleteId(group.id)}
+                  >
+                    <svg className="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.107 48.107 0 013.478-.397m7.5 0v-.916c0-1.616-1.314-2.9-2.94-2.9H10.5c-1.626 0-2.94 1.284-2.94 2.9v.916m7.5 0a48.108 48.108 0 00-3.478-.397" />
+                    </svg>
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : (
           <EmptyState
+            title="No groups yet"
+            description="Create groups to organize your guests (e.g. Family, Friends, Coworkers)."
             icon={
-              <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-5.13a4 4 0 11-8 0 4 4 0 018 0z" />
+              <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.059 2.772m0 0a3 3 0 00-4.682 2.72 8.986 8.986 0 003.74.479" />
               </svg>
             }
-            title="No guest groups"
-            description="Create groups to organize your guests and assign invitations."
-            action={<Button onClick={handleAdd}>Add Group</Button>}
+            action={<Button onClick={handleAdd}>Add First Group</Button>}
           />
-        </Card>
-      )}
+        )}
+      </div>
 
-      {/* Modal */}
+      {/* Add/Edit modal */}
       <Modal
-        open={showModal}
-        onClose={() => setShowModal(false)}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
         title={editingId ? "Edit Group" : "Add Group"}
-      >
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (editingId) {
-              updateMutation.mutate();
-            } else {
-              createMutation.mutate();
-            }
-          }}
-          className="space-y-4"
-        >
-          <Input
-            label="Group name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Bride's Family, Groom's Friends"
-            required
-            autoFocus
-          />
-          <Input
-            label="Sort order"
-            type="number"
-            value={String(sortOrder)}
-            onChange={(e) => setSortOrder(Number(e.target.value))}
-            placeholder="0"
-          />
-          {saveError && (
-            <div className="rounded-md border border-dash-danger/20 bg-dash-danger/5 px-4 py-3">
-              <p className="text-sm text-dash-danger">
-                {saveError instanceof Error ? saveError.message : "Failed to save"}
-              </p>
-            </div>
-          )}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setModalOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" loading={isSaving} disabled={isSaving}>
+            <Button
+              onClick={handleSave}
+              loading={createMutation.isPending || updateMutation.isPending}
+              disabled={!name.trim()}
+            >
               {editingId ? "Update" : "Create"}
             </Button>
-          </div>
-        </form>
+          </>
+        }
+      >
+        <Input
+          label="Group Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Family, Friends, Coworkers"
+        />
+      </Modal>
+
+      {/* Delete confirmation */}
+      <Modal
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        title="Delete Group"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => deleteMutation.mutate()}
+              loading={deleteMutation.isPending}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-dash-text">
+          Are you sure you want to delete this group? Guests in this group will
+          remain but will no longer be associated with a group.
+        </p>
       </Modal>
     </div>
   );

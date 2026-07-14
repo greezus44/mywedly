@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from "react";
-import { NavLink, Outlet, useParams, useNavigate, Link, useOutletContext } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Outlet, NavLink, useParams, useNavigate, Link, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage, type SubEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { jsonToTheme, type ThemeConfig } from "../../lib/theme";
 import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
-import { LoadingSpinner } from "../../components/ui";
+import { cn } from "../../lib/utils";
 
 export interface GuestOutletContext {
   event: UserEvent;
@@ -19,227 +19,228 @@ export function useGuestOutletContext(): GuestOutletContext {
   return useOutletContext<GuestOutletContext>();
 }
 
-export default function GuestLayout(): React.ReactElement {
+export default function GuestLayout() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { guestName, eventId, guestId, signOut } = useGuestAuth();
+  const { guestId, eventId } = useGuestAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const { data: event, isLoading, error } = useQuery({
-    queryKey: ["guest-event", slug],
-    enabled: !!slug,
+  // Fetch published event
+  const { data: event, isLoading } = useQuery({
+    queryKey: ["published-event", slug],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("slug", slug!)
+        .eq("slug", slug)
         .eq("is_published", true)
         .maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
+    enabled: !!slug,
   });
 
-  // Redirect to cover if not signed in for this event
+  // Redirect to signin if not signed in
   useEffect(() => {
-    if (!isLoading && event && eventId !== event.id) {
-      navigate(`/e/${slug}`, { replace: true });
+    if (!isLoading && event && (!guestId || eventId !== event.id)) {
+      navigate(`/e/${slug}/signin`, { replace: true });
     }
-  }, [isLoading, event, eventId, slug, navigate]);
+  }, [isLoading, event, guestId, eventId, slug, navigate]);
+
+  // Fetch invited sub-event IDs
+  const { data: invitedSubEventIds = [] } = useQuery({
+    queryKey: ["guest-invited-sub-events", event?.id, guestId],
+    queryFn: async () => {
+      if (!event || !guestId) return [];
+      const invitations = await resolveGuestInvitations(supabase, guestId, event.id);
+      return getInvitedSubEventIds(invitations);
+    },
+    enabled: !!event && !!guestId,
+  });
+
+  // Fetch sub-events (only invited ones)
+  const { data: subEvents = [] } = useQuery({
+    queryKey: ["guest-sub-events", event?.id, invitedSubEventIds],
+    queryFn: async () => {
+      if (!event || invitedSubEventIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("sub_events")
+        .select("*")
+        .eq("parent_event_id", event.id)
+        .in("id", invitedSubEventIds)
+        .order("display_order", { ascending: true });
+      if (error) throw error;
+      return data as SubEvent[];
+    },
+    enabled: !!event && invitedSubEventIds.length > 0,
+  });
 
   // Fetch custom pages for nav
-  const { data: pages } = useQuery({
+  const { data: customPages = [] } = useQuery({
     queryKey: ["guest-custom-pages", event?.id],
-    enabled: !!event?.id,
     queryFn: async () => {
+      if (!event) return [];
       const { data, error } = await supabase
         .from("custom_pages")
         .select("*")
-        .eq("event_id", event!.id)
+        .eq("event_id", event.id)
         .eq("is_published", true)
         .eq("show_in_nav", true)
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as CustomPage[];
+      return data as CustomPage[];
     },
+    enabled: !!event,
   });
 
   // Fetch footer pages
-  const { data: footerPages } = useQuery({
+  const { data: footerPages = [] } = useQuery({
     queryKey: ["guest-footer-pages", event?.id],
-    enabled: !!event?.id,
     queryFn: async () => {
+      if (!event) return [];
       const { data, error } = await supabase
         .from("custom_pages")
         .select("*")
-        .eq("event_id", event!.id)
+        .eq("event_id", event.id)
         .eq("is_published", true)
         .eq("is_footer", true)
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as CustomPage[];
+      return data as CustomPage[];
     },
+    enabled: !!event,
   });
-
-  // Resolve guest invitations
-  const { data: invitedSubEventIds } = useQuery({
-    queryKey: ["guest-invitations", event?.id, guestId],
-    enabled: !!event?.id && !!guestId,
-    queryFn: async () => {
-      const invitations = await resolveGuestInvitations(supabase, guestId!, event!.id);
-      return getInvitedSubEventIds(invitations);
-    },
-  });
-
-  const hasInvitedEvents = (invitedSubEventIds ?? []).length > 0;
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-900">
-        <LoadingSpinner className="h-8 w-8 text-white" />
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
       </div>
     );
   }
 
-  if (error || !event) {
+  if (!event) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-900 px-6 text-center">
-        <p className="text-lg text-white/80">
-          This invitation website could not be found or is no longer available.
-        </p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
 
   const theme = jsonToTheme(event.theme);
-  const navPages = pages ?? [];
-  const fPages = footerPages ?? [];
-  const invitedIds = invitedSubEventIds ?? [];
+  const hasInvitedEvents = subEvents.length > 0;
 
-  const baseLink = `/e/${slug}`;
-  const navItems: { label: string; to: string; end?: boolean; show: boolean }[] = [
-    { label: "Home", to: `${baseLink}/home`, end: false, show: true },
-    { label: "Events", to: `${baseLink}/events`, end: false, show: hasInvitedEvents },
-    { label: "RSVP", to: `${baseLink}/rsvp`, end: false, show: hasInvitedEvents },
-    { label: "Wishes", to: `${baseLink}/wishes`, end: false, show: true },
-    { label: "Contact", to: `${baseLink}/contact`, end: false, show: true },
-    ...navPages.map((p) => ({
-      label: p.nav_label ?? p.title,
-      to: `${baseLink}/p/${p.slug}`,
+  const navLinks = [
+    { label: "Home", to: `/e/${slug}/home`, end: true },
+    ...(hasInvitedEvents ? [{ label: "Events", to: `/e/${slug}/events`, end: false }] : []),
+    ...(hasInvitedEvents ? [{ label: "RSVP", to: `/e/${slug}/rsvp`, end: false }] : []),
+    { label: "Wishes", to: `/e/${slug}/wishes`, end: false },
+    { label: "Contact", to: `/e/${slug}/contact`, end: false },
+    ...customPages.map((p) => ({
+      label: p.nav_label || p.title,
+      to: `/e/${slug}/p/${p.slug}`,
       end: false,
-      show: true,
     })),
   ];
 
-  const ctx: GuestOutletContext = { event, slug: slug!, theme, invitedSubEventIds: invitedIds };
-
   return (
     <EventThemeProvider initialTheme={theme}>
-      <div className="event-themed min-h-screen">
-        {/* Header */}
-        <header className="sticky top-0 z-40 border-b border-event-border bg-event-bg/80 backdrop-blur-md">
-          <div className="mx-auto max-w-5xl px-4">
-            <div className="flex h-16 items-center justify-between">
-              <Link to={`${baseLink}/home`} className="text-lg font-semibold text-event-heading">
-                {event.name}
-              </Link>
+      {/* Sticky header with backdrop blur */}
+      <header
+        className="sticky top-0 z-50 border-b"
+        style={{
+          borderColor: "var(--event-border)",
+          backgroundColor: "color-mix(in srgb, var(--event-surface) 85%, transparent)",
+          backdropFilter: "blur(12px)",
+        }}
+      >
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
+          <Link to={`/e/${slug}/home`} className="text-lg font-bold" style={{ color: "var(--event-heading)" }}>
+            {event.name}
+          </Link>
 
-              {/* Desktop nav */}
-              <nav className="hidden items-center gap-1 md:flex">
-                {navItems.filter((n) => n.show).map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) =>
-                      `guest-nav-link${isActive ? " active" : ""}`
-                    }
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-                <button
-                  onClick={() => {
-                    signOut();
-                    navigate(`/e/${slug}`);
-                  }}
-                  className="guest-nav-link"
-                >
-                  Sign Out
-                </button>
-              </nav>
-
-              {/* Mobile hamburger */}
-              <button
-                className="md:hidden text-event-text"
-                onClick={() => setMobileOpen(!mobileOpen)}
-                aria-label="Menu"
+          {/* Desktop nav */}
+          <nav className="hidden md:flex md:items-center md:gap-1">
+            {navLinks.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                end={link.end}
+                className={({ isActive }) => cn("guest-nav-link", isActive && "active")}
               >
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            </div>
-          </div>
+                {link.label}
+              </NavLink>
+            ))}
+          </nav>
 
-          {/* Mobile menu */}
-          {mobileOpen && (
-            <nav className="border-t border-event-border px-4 py-3 md:hidden">
-              <div className="flex flex-col gap-1">
-                {navItems.filter((n) => n.show).map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.end}
-                    onClick={() => setMobileOpen(false)}
-                    className={({ isActive }) =>
-                      `guest-nav-link text-left${isActive ? " active" : ""}`
-                    }
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-                <button
-                  onClick={() => {
-                    signOut();
-                    navigate(`/e/${slug}`);
-                  }}
-                  className="guest-nav-link text-left"
+          {/* Mobile hamburger */}
+          <button
+            className="md:hidden"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label="Toggle menu"
+            style={{ color: "var(--event-text)" }}
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              {mobileOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+              )}
+            </svg>
+          </button>
+        </div>
+
+        {/* Mobile menu */}
+        {mobileOpen && (
+          <nav className="border-t md:hidden" style={{ borderColor: "var(--event-border)" }}>
+            <div className="space-y-1 px-4 py-3">
+              {navLinks.map((link) => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  end={link.end}
+                  onClick={() => setMobileOpen(false)}
+                  className={({ isActive }) =>
+                    cn("block rounded-lg px-3 py-2 text-sm font-medium", isActive && "font-semibold")
+                  }
+                  style={{ color: "var(--event-text)" }}
                 >
-                  Sign Out
-                </button>
-              </div>
-            </nav>
+                  {link.label}
+                </NavLink>
+              ))}
+            </div>
+          </nav>
+        )}
+      </header>
+
+      <main>
+        <Outlet context={{ event, slug: slug!, theme, invitedSubEventIds } satisfies GuestOutletContext} />
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
+        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+          {footerPages.length > 0 && (
+            <div className="mb-6 flex flex-wrap gap-x-6 gap-y-2">
+              {footerPages.map((p) => (
+                <Link
+                  key={p.id}
+                  to={`/e/${slug}/p/${p.slug}`}
+                  className="text-sm hover:underline"
+                  style={{ color: "var(--event-muted)" }}
+                >
+                  {p.nav_label || p.title}
+                </Link>
+              ))}
+            </div>
           )}
-        </header>
-
-        {/* Content */}
-        <main>
-          <Outlet context={ctx} />
-        </main>
-
-        {/* Footer */}
-        <footer className="border-t border-event-border px-4 py-12">
-          <div className="mx-auto max-w-5xl text-center">
-            {fPages.length > 0 && (
-              <nav className="mb-6 flex flex-wrap items-center justify-center gap-4">
-                {fPages.map((p) => (
-                  <Link
-                    key={p.id}
-                    to={`${baseLink}/p/${p.slug}`}
-                    className="text-sm text-event-muted hover:text-event-text transition"
-                  >
-                    {p.nav_label ?? p.title}
-                  </Link>
-                ))}
-              </nav>
-            )}
-            <p className="text-xs text-event-muted">
-              {event.name} • {event.event_date ? new Date(event.event_date).getFullYear() : ""} • Made with MyWedly
-            </p>
-          </div>
-        </footer>
-      </div>
+          <p className="text-sm" style={{ color: "var(--event-muted)" }}>
+            © {new Date().getFullYear()} {event.name}
+          </p>
+        </div>
+      </footer>
     </EventThemeProvider>
   );
 }

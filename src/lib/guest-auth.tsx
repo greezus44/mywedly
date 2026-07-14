@@ -1,4 +1,13 @@
-import React, { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+const STORAGE_KEY = "mywedly-guest-auth";
 
 interface GuestAuthState {
   guestName: string | null;
@@ -12,31 +21,31 @@ interface GuestAuthContextValue extends GuestAuthState {
   signOut: () => void;
 }
 
-const STORAGE_KEY = "mywedly-guest-auth";
+const GuestAuthContext = createContext<GuestAuthContextValue>({
+  guestName: null,
+  guestId: null,
+  eventId: null,
+  token: null,
+  signIn: () => {},
+  signOut: () => {},
+});
 
-const GuestAuthContext = createContext<GuestAuthContextValue | undefined>(undefined);
+interface GuestAuthProviderProps {
+  children: React.ReactNode;
+}
 
-function loadFromStorage(): GuestAuthState {
-  if (typeof localStorage === "undefined") {
-    return { guestName: null, guestId: null, eventId: null, token: null };
-  }
+function loadState(): GuestAuthState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { guestName: null, guestId: null, eventId: null, token: null };
     const parsed = JSON.parse(raw) as GuestAuthState;
-    return {
-      guestName: parsed.guestName ?? null,
-      guestId: parsed.guestId ?? null,
-      eventId: parsed.eventId ?? null,
-      token: parsed.token ?? null,
-    };
+    return parsed;
   } catch {
     return { guestName: null, guestId: null, eventId: null, token: null };
   }
 }
 
-function saveToStorage(state: GuestAuthState): void {
-  if (typeof localStorage === "undefined") return;
+function saveState(state: GuestAuthState) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
@@ -44,53 +53,58 @@ function saveToStorage(state: GuestAuthState): void {
   }
 }
 
-interface GuestAuthProviderProps {
-  children: ReactNode;
-}
+export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
+  const [state, setState] = useState<GuestAuthState>(() => loadState());
 
-export function GuestAuthProvider({ children }: GuestAuthProviderProps): React.ReactElement {
-  const [state, setState] = React.useState<GuestAuthState>(() => loadFromStorage());
+  useEffect(() => {
+    saveState(state);
+  }, [state]);
 
   const signIn = useCallback(
     (name: string, eventId: string, guestId?: string, token?: string) => {
-      const next: GuestAuthState = {
+      setState({
         guestName: name,
         guestId: guestId ?? null,
         eventId,
         token: token ?? null,
-      };
-      setState(next);
-      saveToStorage(next);
+      });
     },
-    [],
+    []
   );
 
   const signOut = useCallback(() => {
-    const empty: GuestAuthState = { guestName: null, guestId: null, eventId: null, token: null };
-    setState(empty);
-    saveToStorage(empty);
+    setState({ guestName: null, guestId: null, eventId: null, token: null });
   }, []);
 
   const value = useMemo<GuestAuthContextValue>(
-    () => ({ ...state, signIn, signOut }),
-    [state, signIn, signOut],
+    () => ({
+      guestName: state.guestName,
+      guestId: state.guestId,
+      eventId: state.eventId,
+      token: state.token,
+      signIn,
+      signOut,
+    }),
+    [state, signIn, signOut]
   );
 
-  return <GuestAuthContext.Provider value={value}>{children}</GuestAuthContext.Provider>;
+  return (
+    <GuestAuthContext.Provider value={value}>
+      {children}
+    </GuestAuthContext.Provider>
+  );
 }
 
 export function useGuestAuth(): GuestAuthContextValue {
-  const ctx = useContext(GuestAuthContext);
-  if (!ctx) {
-    throw new Error("useGuestAuth must be used within a GuestAuthProvider");
-  }
-  return ctx;
+  return useContext(GuestAuthContext);
 }
 
 export function useSignIn(): GuestAuthContextValue["signIn"] {
-  return useGuestAuth().signIn;
+  const { signIn } = useGuestAuth();
+  return signIn;
 }
 
 export function useGuestSignIn(): GuestAuthContextValue["signIn"] {
-  return useGuestAuth().signIn;
+  const { signIn } = useGuestAuth();
+  return signIn;
 }

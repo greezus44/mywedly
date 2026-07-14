@@ -1,36 +1,61 @@
 import QRCode from "qrcode";
 
-export async function generateQrDataUrl(text: string, size = 256): Promise<string> {
+export async function generateQrDataUrl(
+  text: string,
+  options: { width?: number; margin?: number; darkColor?: string; lightColor?: string } = {}
+): Promise<string> {
+  const {
+    width = 256,
+    margin = 2,
+    darkColor = "#000000",
+    lightColor = "#ffffff",
+  } = options;
+
   return QRCode.toDataURL(text, {
-    width: size,
-    margin: 1,
+    width,
+    margin,
+    color: { dark: darkColor, light: lightColor },
     errorCorrectionLevel: "M",
-    color: { dark: "#000000", light: "#ffffff" },
   });
 }
 
-export async function downloadQrCode(text: string, filename = "qr-code.png", size = 512): Promise<void> {
-  const dataUrl = await generateQrDataUrl(text, size);
+export async function downloadQrCode(
+  text: string,
+  fileName: string = "qr-code.png",
+  options: { width?: number; margin?: number; darkColor?: string; lightColor?: string } = {}
+): Promise<void> {
+  const dataUrl = await generateQrDataUrl(text, options);
   const link = document.createElement("a");
   link.href = dataUrl;
-  link.download = filename;
+  link.download = fileName;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 }
 
-export async function downloadQrSvg(text: string, filename = "qr-code.svg"): Promise<void> {
+export async function downloadQrSvg(
+  text: string,
+  fileName: string = "qr-code.svg",
+  options: { margin?: number; darkColor?: string; lightColor?: string } = {}
+): Promise<void> {
+  const {
+    margin = 2,
+    darkColor = "#000000",
+    lightColor = "#ffffff",
+  } = options;
+
   const svg = await QRCode.toString(text, {
     type: "svg",
-    margin: 1,
+    margin,
+    color: { dark: darkColor, light: lightColor },
     errorCorrectionLevel: "M",
-    color: { dark: "#000000", light: "#ffffff" },
   });
+
   const blob = new Blob([svg], { type: "image/svg+xml" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = filename;
+  link.download = fileName;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

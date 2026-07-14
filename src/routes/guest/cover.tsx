@@ -1,189 +1,144 @@
-import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { jsonToTheme } from "../../lib/theme";
-import { LoadingSpinner } from "../../components/ui";
+import { jsonToTheme, type ThemeConfig } from "../../lib/theme";
 
-export default function Cover(): React.ReactElement {
+interface CoverConfig {
+  title?: { text?: string; fontFamily?: string; fontSize?: number; fontWeight?: number; color?: string; letterSpacing?: number; lineHeight?: number; align?: string };
+  subtitle?: { text?: string; fontFamily?: string; fontSize?: number; fontWeight?: number; color?: string; letterSpacing?: number; lineHeight?: number; align?: string };
+  body?: { text?: string; fontFamily?: string; fontSize?: number; fontWeight?: number; color?: string; letterSpacing?: number; lineHeight?: number; align?: string };
+  dateLocation?: { text?: string; fontFamily?: string; fontSize?: number; fontWeight?: number; color?: string; letterSpacing?: number; lineHeight?: number; align?: string };
+  button?: { text?: string; fontSize?: number; color?: string };
+  logo?: { url?: string | null; size?: string; align?: string };
+  background?: { image?: string | null; color?: string; overlayOpacity?: number; position?: string; fit?: string };
+}
+
+export default function GuestCover() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { guestName, eventId, signIn } = useGuestAuth();
-  const [username, setUsername] = useState("");
-  const [signInError, setSignInError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const { guestId, eventId } = useGuestAuth();
 
-  const { data: event, isLoading, error } = useQuery({
-    queryKey: ["guest-event", slug],
-    enabled: !!slug,
+  const { data: event, isLoading } = useQuery({
+    queryKey: ["published-event", slug],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("slug", slug!)
+        .eq("slug", slug)
         .eq("is_published", true)
         .maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
+    enabled: !!slug,
   });
 
-  // Auto-redirect if already signed in for this event
   useEffect(() => {
-    if (event && eventId === event.id && guestName) {
+    if (event && guestId && eventId === event.id) {
       navigate(`/e/${slug}/home`, { replace: true });
     }
-  }, [event, eventId, guestName, slug, navigate]);
-
-  const handleSignIn = async (e: React.FormEvent): Promise<void> => {
-    e.preventDefault();
-    if (!event || !username.trim()) return;
-    setSubmitting(true);
-    setSignInError(null);
-    const trimmed = username.trim();
-    try {
-      const { data: guest, error: guestError } = await supabase
-        .from("event_guests")
-        .select("*")
-        .ilike("username", trimmed)
-        .eq("event_id", event.id)
-        .maybeSingle();
-      if (guestError) throw guestError;
-      if (!guest) {
-        setSignInError("We couldn't find that username. Please check and try again.");
-        return;
-      }
-      signIn(guest.name, event.id, guest.id, guest.token);
-      navigate(`/e/${slug}/home`, { replace: true });
-    } catch {
-      setSignInError("Something went wrong. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  }, [event, guestId, eventId, slug, navigate]);
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-900">
-        <LoadingSpinner className="h-8 w-8 text-white" />
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
       </div>
     );
   }
 
-  if (error || !event) {
+  if (!event) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-900 px-6 text-center">
-        <p className="text-lg text-white/80">
-          This invitation website could not be found or is no longer available.
-        </p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
+        <p className="text-dash-muted">This invitation website could not be found or is no longer available.</p>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
 
   const theme = jsonToTheme(event.theme);
-  const coverConfig = (event.cover_config as Record<string, unknown> | null) ?? {};
-  const overlay = typeof coverConfig.overlay === "number" ? coverConfig.overlay : 0.4;
+  const coverConfig = (event.cover_config ?? {}) as CoverConfig;
+  const logoConfig = (event.logo_config ?? {}) as { url?: string };
+  const bgConfig = coverConfig.background ?? {};
+  const overlay = bgConfig.overlayOpacity ?? 0.3;
+
+  const bgStyle: React.CSSProperties = {};
+  if (bgConfig.image) {
+    bgStyle.backgroundImage = `url(${bgConfig.image})`;
+    bgStyle.backgroundSize = bgConfig.fit === "fill" ? "100% 100%" : (bgConfig.fit as "cover" | "contain") || "cover";
+    bgStyle.backgroundPosition = bgConfig.position || "center";
+    bgStyle.backgroundRepeat = "no-repeat";
+  } else {
+    bgStyle.backgroundColor = bgConfig.color || theme.bg;
+  }
+
+  // FIX: Increased logo sizes — sm=80px, md=140px, lg=200px (was 40/60/80)
+  const logoHeight = coverConfig.logo?.size === "sm" ? 80 : coverConfig.logo?.size === "lg" ? 200 : 140;
+  const logoAlign = coverConfig.logo?.align || "center";
+
+  const textStyle = (ts: CoverConfig["title"]): React.CSSProperties => ts ? ({
+    fontFamily: ts.fontFamily,
+    fontSize: `${ts.fontSize}px`,
+    fontWeight: ts.fontWeight,
+    color: ts.color,
+    letterSpacing: `${ts.letterSpacing}em`,
+    lineHeight: ts.lineHeight,
+    textAlign: ts.align as "left" | "center" | "right",
+  }) : {};
+
+  const titleText = coverConfig.title?.text || event.name;
+  const subtitleText = coverConfig.subtitle?.text;
+  const bodyText = coverConfig.body?.text;
+  const buttonText = coverConfig.button?.text || "Open Invitation";
 
   return (
     <EventThemeProvider initialTheme={theme}>
-      <div className="event-themed relative min-h-screen overflow-hidden">
-        {/* Background */}
-        {event.cover_image ? (
-          <img
-            src={event.cover_image}
-            alt={event.name}
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-b from-black/60 to-black/80" />
+      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden" style={bgStyle}>
+        {bgConfig.image && (
+          <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />
         )}
-        <div
-          className="absolute inset-0"
-          style={{ background: `rgba(0,0,0,${overlay})` }}
-        />
 
-        {/* Content */}
-        <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-6 py-16 text-center">
-          {/* Logo */}
-          {(() => {
-            const logoConfig = (event.logo_config as Record<string, unknown> | null) ?? {};
-            if (logoConfig.url) {
-              return (
-                <img
-                  src={logoConfig.url as string}
-                  alt="Logo"
-                  className="mb-8 h-16 w-auto object-contain animate-fadeIn"
-                />
-              );
-            }
-            return null;
-          })()}
-
-          {/* Eyebrow */}
-          <p className="guest-eyebrow text-white/70 animate-fadeIn">
-            {event.event_type || "Invitation"}
-          </p>
-
-          {/* Title */}
-          <h1
-            className="mt-4 text-4xl font-bold text-white drop-shadow-lg animate-slideUp md:text-6xl"
-            style={{ fontFamily: theme.fontHeading }}
-          >
-            {event.name}
-          </h1>
-
-          {/* Date */}
-          {event.event_date && (
-            <p className="mt-6 text-lg text-white/90 drop-shadow animate-fadeIn">
-              {new Date(event.event_date).toLocaleDateString("en-US", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </p>
-          )}
-
-          {/* Subtitle */}
-          {event.venue && (
-            <p className="mt-2 text-sm text-white/70 animate-fadeIn">{event.venue}</p>
-          )}
-
-          {/* Sign-in card */}
-          <div className="mt-12 w-full max-w-sm animate-slideUp">
-            <div
-              className="rounded-2xl border border-white/20 p-8 shadow-2xl"
-              style={{
-                background: "rgba(255,255,255,0.1)",
-                backdropFilter: "blur(16px)",
-                WebkitBackdropFilter: "blur(16px)",
-              }}
-            >
-              <h2 className="text-xl font-semibold text-white">Welcome</h2>
-              <p className="mt-1 text-sm text-white/70">
-                Enter your username to view your invitation
-              </p>
-              <form onSubmit={handleSignIn} className="mt-6 space-y-4">
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Your username"
-                  className="w-full rounded-lg border border-white/20 bg-white/10 px-4 py-3 text-white placeholder-white/50 outline-none transition focus:border-white/40 focus:bg-white/15"
-                />
-                {signInError && <p className="text-sm text-red-200">{signInError}</p>}
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full rounded-lg bg-white px-4 py-3 text-sm font-semibold uppercase tracking-wider text-gray-900 transition hover:bg-white/90 disabled:opacity-60"
-                >
-                  {submitting ? "Loading…" : "View Invitation"}
-                </button>
-              </form>
+        <div className="relative z-10 flex w-full max-w-lg flex-col items-center px-6 py-16 text-center animate-fadeIn">
+          {logoConfig.url && (
+            <div className="mb-8 w-full flex" style={{ justifyContent: logoAlign === "left" ? "flex-start" : logoAlign === "right" ? "flex-end" : "center" }}>
+              {/* FIX: No background styling on logo — transparent PNGs/SVGs render correctly */}
+              <img
+                src={logoConfig.url}
+                alt="Logo"
+                style={{ height: logoHeight, width: "auto", maxHeight: "30vh" }}
+                className="object-contain"
+              />
             </div>
-          </div>
+          )}
+
+          {titleText && (
+            <h1 className="mb-3" style={textStyle(coverConfig.title)}>{titleText}</h1>
+          )}
+          {subtitleText && (
+            <p className="mb-3" style={textStyle(coverConfig.subtitle)}>{subtitleText}</p>
+          )}
+          {bodyText && (
+            <p className="mb-8 max-w-md" style={textStyle(coverConfig.body)}>{bodyText}</p>
+          )}
+
+          {/* FIX: Date and Location removed from Cover Page */}
+
+          <button
+            onClick={() => navigate(`/e/${slug}/signin`)}
+            className="rounded-lg px-6 py-3 font-semibold uppercase tracking-wide transition-all hover:opacity-90 hover:scale-105"
+            style={{
+              backgroundColor: theme.primary,
+              color: coverConfig.button?.color || theme.primaryFg,
+              fontSize: `${coverConfig.button?.fontSize || 14}px`,
+              borderRadius: theme.radius,
+            }}
+          >
+            {buttonText}
+          </button>
         </div>
       </div>
     </EventThemeProvider>

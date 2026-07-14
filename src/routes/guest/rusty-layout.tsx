@@ -1,170 +1,239 @@
-import React, { useState, useEffect } from "react";
-import { NavLink, Outlet, useParams, useNavigate, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Outlet, NavLink, useParams, useNavigate, Link, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage, type SubEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { RUSTY_THEME } from "../../lib/theme";
 import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
-import { LoadingSpinner } from "../../components/ui";
+import { cn } from "../../lib/utils";
 import type { GuestOutletContext } from "./guest-layout";
 
 export { useGuestOutletContext } from "./guest-layout";
 export type { GuestOutletContext } from "./guest-layout";
 
-export default function RustyLayout(): React.ReactElement {
+export default function RustyLayout() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { guestName, eventId, guestId, signOut } = useGuestAuth();
+  const { guestId, eventId } = useGuestAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const { data: event, isLoading, error } = useQuery({
-    queryKey: ["guest-event", slug],
-    enabled: !!slug,
+  // Fetch published event
+  const { data: event, isLoading } = useQuery({
+    queryKey: ["published-event", slug],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("slug", slug!)
+        .eq("slug", slug)
         .eq("is_published", true)
         .maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
+    enabled: !!slug,
   });
 
+  // Redirect to /r/${slug}/signin if not signed in
   useEffect(() => {
-    if (!isLoading && event && eventId !== event.id) {
-      navigate(`/r/${slug}`, { replace: true });
+    if (!isLoading && event && (!guestId || eventId !== event.id)) {
+      navigate(`/r/${slug}/signin`, { replace: true });
     }
-  }, [isLoading, event, eventId, slug, navigate]);
+  }, [isLoading, event, guestId, eventId, slug, navigate]);
 
-  const { data: pages } = useQuery({
-    queryKey: ["guest-custom-pages", event?.id],
-    enabled: !!event?.id,
+  // Fetch invited sub-event IDs
+  const { data: invitedSubEventIds = [] } = useQuery({
+    queryKey: ["guest-invited-sub-events", event?.id, guestId],
     queryFn: async () => {
+      if (!event || !guestId) return [];
+      const invitations = await resolveGuestInvitations(supabase, guestId, event.id);
+      return getInvitedSubEventIds(invitations);
+    },
+    enabled: !!event && !!guestId,
+  });
+
+  // Fetch sub-events (only invited ones)
+  const { data: subEvents = [] } = useQuery({
+    queryKey: ["guest-sub-events", event?.id, invitedSubEventIds],
+    queryFn: async () => {
+      if (!event || invitedSubEventIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from("sub_events")
+        .select("*")
+        .eq("parent_event_id", event.id)
+        .in("id", invitedSubEventIds)
+        .order("display_order", { ascending: true });
+      if (error) throw error;
+      return data as SubEvent[];
+    },
+    enabled: !!event && invitedSubEventIds.length > 0,
+  });
+
+  // Fetch custom pages for nav
+  const { data: customPages = [] } = useQuery({
+    queryKey: ["guest-custom-pages", event?.id],
+    queryFn: async () => {
+      if (!event) return [];
       const { data, error } = await supabase
         .from("custom_pages")
         .select("*")
-        .eq("event_id", event!.id)
+        .eq("event_id", event.id)
         .eq("is_published", true)
         .eq("show_in_nav", true)
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as CustomPage[];
+      return data as CustomPage[];
     },
+    enabled: !!event,
   });
 
-  const { data: footerPages } = useQuery({
+  // Fetch footer pages
+  const { data: footerPages = [] } = useQuery({
     queryKey: ["guest-footer-pages", event?.id],
-    enabled: !!event?.id,
     queryFn: async () => {
+      if (!event) return [];
       const { data, error } = await supabase
         .from("custom_pages")
         .select("*")
-        .eq("event_id", event!.id)
+        .eq("event_id", event.id)
         .eq("is_published", true)
         .eq("is_footer", true)
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as CustomPage[];
+      return data as CustomPage[];
     },
+    enabled: !!event,
   });
-
-  const { data: invitedSubEventIds } = useQuery({
-    queryKey: ["guest-invitations", event?.id, guestId],
-    enabled: !!event?.id && !!guestId,
-    queryFn: async () => {
-      const invitations = await resolveGuestInvitations(supabase, guestId!, event!.id);
-      return getInvitedSubEventIds(invitations);
-    },
-  });
-
-  const hasInvitedEvents = (invitedSubEventIds ?? []).length > 0;
 
   if (isLoading) {
-    return <div className="flex min-h-screen items-center justify-center bg-gray-900"><LoadingSpinner className="h-8 w-8 text-white" /></div>;
-  }
-
-  if (error || !event) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-900 px-6 text-center">
-        <p className="text-lg text-white/80">This invitation website could not be found or is no longer available.</p>
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
       </div>
     );
   }
 
-  const navPages = pages ?? [];
-  const fPages = footerPages ?? [];
-  const invitedIds = invitedSubEventIds ?? [];
-  const baseLink = `/r/${slug}`;
+  if (!event) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
+      </div>
+    );
+  }
 
-  const navItems: { label: string; to: string; show: boolean }[] = [
-    { label: "Home", to: `${baseLink}/home`, show: true },
-    { label: "Events", to: `${baseLink}/events`, show: hasInvitedEvents },
-    { label: "RSVP", to: `${baseLink}/rsvp`, show: hasInvitedEvents },
-    { label: "Wishes", to: `${baseLink}/wishes`, show: true },
-    { label: "Contact", to: `${baseLink}/contact`, show: true },
-    ...navPages.map((p) => ({ label: p.nav_label ?? p.title, to: `${baseLink}/p/${p.slug}`, show: true })),
+  const theme = RUSTY_THEME;
+  const hasInvitedEvents = subEvents.length > 0;
+
+  const navLinks = [
+    { label: "Home", to: `/r/${slug}/home`, end: true },
+    ...(hasInvitedEvents ? [{ label: "Events", to: `/r/${slug}/events`, end: false }] : []),
+    ...(hasInvitedEvents ? [{ label: "RSVP", to: `/r/${slug}/rsvp`, end: false }] : []),
+    { label: "Wishes", to: `/r/${slug}/wishes`, end: false },
+    { label: "Contact", to: `/r/${slug}/contact`, end: false },
+    ...customPages.map((p) => ({
+      label: p.nav_label || p.title,
+      to: `/r/${slug}/p/${p.slug}`,
+      end: false,
+    })),
   ];
 
-  const ctx: GuestOutletContext = { event, slug: slug!, theme: RUSTY_THEME, invitedSubEventIds: invitedIds };
-
   return (
-    <EventThemeProvider initialTheme={RUSTY_THEME}>
-      <div className="event-themed min-h-screen">
-        <header className="sticky top-0 z-40 border-b backdrop-blur-md" style={{ borderColor: RUSTY_THEME.border, background: "rgba(42,31,26,0.85)" }}>
-          <div className="mx-auto max-w-5xl px-4">
-            <div className="flex h-16 items-center justify-between">
-              <Link to={`${baseLink}/home`} className="text-lg font-semibold" style={{ color: RUSTY_THEME.heading, fontFamily: RUSTY_THEME.fontHeading }}>
-                {event.name}
-              </Link>
-              <nav className="hidden items-center gap-1 md:flex">
-                {navItems.filter((n) => n.show).map((item) => (
-                  <NavLink key={item.to} to={item.to} className={({ isActive }) => `guest-nav-link${isActive ? " active" : ""}`}>
-                    {item.label}
-                  </NavLink>
-                ))}
-                <button onClick={() => { signOut(); navigate(`/r/${slug}`); }} className="guest-nav-link">Sign Out</button>
-              </nav>
-              <button className="md:hidden" onClick={() => setMobileOpen(!mobileOpen)} aria-label="Menu" style={{ color: RUSTY_THEME.text }}>
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
-              </button>
+    <EventThemeProvider initialTheme={theme}>
+      {/* Sticky header with backdrop blur */}
+      <header
+        className="sticky top-0 z-50 border-b"
+        style={{
+          borderColor: "var(--event-border)",
+          backgroundColor: "color-mix(in srgb, var(--event-surface) 85%, transparent)",
+          backdropFilter: "blur(12px)",
+        }}
+      >
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
+          <Link to={`/r/${slug}/home`} className="text-lg font-bold" style={{ color: "var(--event-heading)" }}>
+            {event.name}
+          </Link>
+
+          {/* Desktop nav */}
+          <nav className="hidden md:flex md:items-center md:gap-1">
+            {navLinks.map((link) => (
+              <NavLink
+                key={link.to}
+                to={link.to}
+                end={link.end}
+                className={({ isActive }) => cn("guest-nav-link", isActive && "active")}
+              >
+                {link.label}
+              </NavLink>
+            ))}
+          </nav>
+
+          {/* Mobile hamburger */}
+          <button
+            className="md:hidden"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label="Toggle menu"
+            style={{ color: "var(--event-text)" }}
+          >
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              {mobileOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+              )}
+            </svg>
+          </button>
+        </div>
+
+        {/* Mobile menu */}
+        {mobileOpen && (
+          <nav className="border-t md:hidden" style={{ borderColor: "var(--event-border)" }}>
+            <div className="space-y-1 px-4 py-3">
+              {navLinks.map((link) => (
+                <NavLink
+                  key={link.to}
+                  to={link.to}
+                  end={link.end}
+                  onClick={() => setMobileOpen(false)}
+                  className={({ isActive }) =>
+                    cn("block rounded-lg px-3 py-2 text-sm font-medium", isActive && "font-semibold")
+                  }
+                  style={{ color: "var(--event-text)" }}
+                >
+                  {link.label}
+                </NavLink>
+              ))}
             </div>
-          </div>
-          {mobileOpen && (
-            <nav className="border-t px-4 py-3 md:hidden" style={{ borderColor: RUSTY_THEME.border }}>
-              <div className="flex flex-col gap-1">
-                {navItems.filter((n) => n.show).map((item) => (
-                  <NavLink key={item.to} to={item.to} onClick={() => setMobileOpen(false)} className={({ isActive }) => `guest-nav-link text-left${isActive ? " active" : ""}`}>
-                    {item.label}
-                  </NavLink>
-                ))}
-                <button onClick={() => { signOut(); navigate(`/r/${slug}`); }} className="guest-nav-link text-left">Sign Out</button>
-              </div>
-            </nav>
+          </nav>
+        )}
+      </header>
+
+      <main>
+        <Outlet context={{ event, slug: slug!, theme, invitedSubEventIds } satisfies GuestOutletContext} />
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
+        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+          {footerPages.length > 0 && (
+            <div className="mb-6 flex flex-wrap gap-x-6 gap-y-2">
+              {footerPages.map((p) => (
+                <Link
+                  key={p.id}
+                  to={`/r/${slug}/p/${p.slug}`}
+                  className="text-sm hover:underline"
+                  style={{ color: "var(--event-muted)" }}
+                >
+                  {p.nav_label || p.title}
+                </Link>
+              ))}
+            </div>
           )}
-        </header>
-
-        <main><Outlet context={ctx} /></main>
-
-        <footer className="border-t px-4 py-12" style={{ borderColor: RUSTY_THEME.border }}>
-          <div className="mx-auto max-w-5xl text-center">
-            {fPages.length > 0 && (
-              <nav className="mb-6 flex flex-wrap items-center justify-center gap-4">
-                {fPages.map((p) => (
-                  <Link key={p.id} to={`${baseLink}/p/${p.slug}`} className="text-sm transition" style={{ color: RUSTY_THEME.muted }}>
-                    {p.nav_label ?? p.title}
-                  </Link>
-                ))}
-              </nav>
-            )}
-            <p className="text-xs" style={{ color: RUSTY_THEME.muted }}>
-              {event.name} • {event.event_date ? new Date(event.event_date).getFullYear() : ""} • Made with MyWedly
-            </p>
-          </div>
-        </footer>
-      </div>
+          <p className="text-sm" style={{ color: "var(--event-muted)" }}>
+            © {new Date().getFullYear()} {event.name}
+          </p>
+        </div>
+      </footer>
     </EventThemeProvider>
   );
 }
