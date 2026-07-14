@@ -1,80 +1,109 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventGuest } from "../../lib/supabase";
-import { Button, Card, LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
-import { Input } from "../../components/ui";
-import { generateUsername } from "../../lib/utils";
+import { supabase, type UserEvent, type SubEvent, type GuestGroup, type GuestGroupMember } from "../../lib/supabase";
+import { Button } from "../../components/ui/Button";
+import { LoadingSpinner, ErrorState, EmptyState, Modal, Toggle } from "../../components/ui";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
 
 export function InvitationManager() {
   const { eventId } = useOutletContext<EventContextValue>();
   const queryClient = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [name, setName] = useState("");
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [showAssign, setShowAssign] = useState(false);
+  const [selectedSubEvent, setSelectedSubEvent] = useState<string | null>(null);
 
-  const { data: guests, isLoading, isError, error } = useQuery({
-    queryKey: ["event-guests", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId).order("created_at", { ascending: true }); if (error) throw error; return data as EventGuest[]; },
+  const { data: subEvents, isLoading, isError, error } = useQuery({
+    queryKey: ["sub-events", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("sub_events").select("*").eq("parent_event_id", eventId).order("display_order", { ascending: true });
+      if (error) throw error;
+      return data as SubEvent[];
+    },
   });
 
-  const createInvitation = async (e: FormEvent) => {
-    e.preventDefault(); setSubmitting(true); setFormError(null);
-    try {
-      const { error } = await supabase.from("event_guests").insert({
-        event_id: eventId, name: name.trim(), username: username.trim() || generateUsername(name), email: email || null,
-        token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0,
-      });
+  const { data: groups } = useQuery({
+    queryKey: ["guest-groups-im", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("guest_groups").select("*").eq("event_id", eventId).order("name", { ascending: true });
       if (error) throw error;
-      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }); setShowForm(false); setName(""); setUsername(""); setEmail("");
-    } catch (err) { setFormError(err instanceof Error ? err.message : "Failed to create invitation"); }
-    finally { setSubmitting(false); }
-  };
+      return data as GuestGroup[];
+    },
+  });
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => { const { error } = await supabase.from("event_guests").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }),
+  const { data: assignments } = useQuery({
+    queryKey: ["sub-event-assignments", selectedSubEvent],
+    queryFn: async () => {
+      if (!selectedSubEvent) return [];
+      const { data, error } = await supabase.from("sub_event_group_assignments").select("*").eq("sub_event_id", selectedSubEvent);
+      if (error) throw error;
+      return data as { id: string; sub_event_id: string; group_id: string }[];
+    },
+    enabled: !!selectedSubEvent,
+  });
+
+  const toggleAssignment = useMutation({
+    mutationFn: async ({ groupId, assign }: { groupId: string; assign: boolean }) => {
+      if (assign) {
+        const { error } = await supabase.from("sub_event_group_assignments").insert({ sub_event_id: selectedSubEvent!, group_id: groupId });
+        if (error && error.code !== "23505") throw error;
+      } else {
+        const { error } = await supabase.from("sub_event_group_assignments").delete().eq("sub_event_id", selectedSubEvent!).eq("group_id", groupId);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sub-event-assignments", selectedSubEvent] }),
   });
 
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
-  if (isError) return <ErrorState title="Failed to load invitations" message={error instanceof Error ? error.message : "Unknown error"} />;
+  if (isError) return <ErrorState title="Failed to load sub-events" message={error instanceof Error ? error.message : "Unknown error"} />;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between"><h2 className="text-lg font-semibold text-dash-text">Invitations</h2><Button size="sm" onClick={() => setShowForm(true)}>Add Invitation</Button></div>
-      {!guests || guests.length === 0 ? (
-        <EmptyState title="No invitations yet" description="Add guests to send them invitations." action={<Button size="sm" onClick={() => setShowForm(true)}>Add Invitation</Button>} />
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-dash-text">Invitations</h2>
+        <Button size="sm" onClick={() => setShowAssign(true)} disabled={!subEvents || subEvents.length === 0}>Manage Assignments</Button>
+      </div>
+      {!subEvents || subEvents.length === 0 ? (
+        <EmptyState title="No sub-events" description="Create sub-events (e.g. ceremony, reception) to manage invitations." />
       ) : (
-        <div className="overflow-hidden rounded-lg border border-dash-border">
-          <table className="w-full">
-            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Name</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Email</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">RSVP</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
-            <tbody className="divide-y divide-dash-border bg-dash-surface">
-              {guests.map((g) => (
-                <tr key={g.id}>
-                  <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
-                  <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "—"}</td>
-                  <td className="px-4 py-2 text-sm text-dash-muted">{g.email ?? "—"}</td>
-                  <td className="px-4 py-2 text-sm text-dash-muted">{g.rsvp_status}</td>
-                  <td className="px-4 py-2 text-right"><button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {subEvents.map((se) => (
+            <div key={se.id} className="rounded-lg border border-dash-border bg-dash-surface p-4">
+              <h3 className="font-semibold text-dash-text">{se.name}</h3>
+              <p className="text-sm text-dash-muted">{se.date ? new Date(se.date).toLocaleDateString() : "No date"} · {se.rsvp_enabled ? "RSVP enabled" : "RSVP disabled"}</p>
+            </div>
+          ))}
         </div>
       )}
-      <Modal open={showForm} onClose={() => { setShowForm(false); setFormError(null); }} title="Add Invitation">
-        <form onSubmit={createInvitation} className="space-y-4">
-          <Input label="Guest Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
-          <Input label="Username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Auto-generated if blank" />
-          <Input label="Email (optional)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          {formError && <p className="text-sm text-dash-danger">{formError}</p>}
-          <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => { setShowForm(false); setFormError(null); }}>Cancel</Button><Button type="submit" loading={submitting}>Create</Button></div>
-        </form>
+      <Modal open={showAssign} onClose={() => { setShowAssign(false); setSelectedSubEvent(null); }} title="Manage Group Assignments">
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-dash-muted">Sub-Event</label>
+            <select value={selectedSubEvent ?? ""} onChange={(e) => setSelectedSubEvent(e.target.value || null)} className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text">
+              <option value="">Select a sub-event</option>
+              {(subEvents ?? []).map((se) => <option key={se.id} value={se.id}>{se.name}</option>)}
+            </select>
+          </div>
+          {selectedSubEvent && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-dash-text">Assign Groups</h4>
+              {(!groups || groups.length === 0) ? (
+                <p className="text-sm text-dash-muted">No groups available. Create groups first.</p>
+              ) : (
+                groups.map((g) => {
+                  const assigned = (assignments ?? []).some((a) => a.group_id === g.id);
+                  return (
+                    <div key={g.id} className="flex items-center justify-between rounded-lg border border-dash-border p-3">
+                      <span className="text-sm text-dash-text">{g.name}</span>
+                      <Toggle checked={assigned} onChange={(v) => toggleAssignment.mutate({ groupId: g.id, assign: v })} />
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );

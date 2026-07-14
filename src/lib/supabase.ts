@@ -47,10 +47,35 @@ export interface SubEvent {
 
 export interface GuestGroup { id: string; wedding_id: string | null; event_id: string | null; name: string; sort_order: number; created_at: string; updated_at: string; }
 export interface GuestGroupMember { id: string; group_id: string; guest_id: string; created_at: string; }
-export interface EventRsvp { id: string; event_id: string; guest_id: string; guest_name: string | null; status: string; plus_ones: number; dietary: string | null; message: string | null; answers: Json; submitted_at: string | null; sub_event_id: string | null; plus_one_names: string[]; responded_at: string | null; }
-export interface EventSchedule { id: string; event_id: string; title: string; description: string | null; start_time: string; end_time: string | null; location: string | null; created_at: string; }
-export interface EventMessage { id: string; event_id: string; guest_id: string; message: string; created_at: string; }
-export interface CustomPage { id: string; event_id: string; title: string; slug: string; content: Json; blocks: Json; cover_image: string | null; is_published: boolean; show_in_nav: boolean; created_at: string; updated_at: string; }
+
+export interface EventRsvp {
+  id: string; event_id: string; guest_id: string; guest_name: string | null; status: string;
+  plus_ones: number; dietary: string | null; message: string | null; answers: Json;
+  submitted_at: string | null; sub_event_id: string | null; plus_one_names: string[];
+  responded_at: string | null;
+}
+
+// FIX #1: event_schedule uses `schedule_date` for the date, `start_time`/`end_time` for times
+export interface EventSchedule {
+  id: string; event_id: string; title: string; description: string | null;
+  schedule_date: string | null; start_time: string | null; end_time: string | null;
+  venue: string | null; address: string | null; dress_code: string | null;
+  category: string | null; cover_image: string | null; order_index: number;
+  created_at: string; sub_event_id: string | null;
+}
+
+// FIX #1: event_messages has `guest_name` (NOT NULL), NO `guest_id` column
+export interface EventMessage {
+  id: string; event_id: string; guest_name: string; message: string; created_at: string;
+}
+
+export interface CustomPage {
+  id: string; wedding_id: string | null; event_id: string | null; slug: string; title: string;
+  body: string; cover_image_url: string | null; inline_image_url: string | null;
+  sort_order: number; is_published: boolean; created_at: string; updated_at: string;
+  nav_label: string | null; icon: string | null; show_in_nav: boolean; blocks: Json; content: Json;
+}
+
 export interface SubEventGroupAssignment { id: string; sub_event_id: string; group_id: string; created_at: string; }
 export interface GuestInvitationOverride { id: string; sub_event_id: string; guest_id: string; is_invited: boolean; created_at: string; }
 export interface SharingEvent { id: string; event_id: string; type: string; metadata: Json; created_at: string; }

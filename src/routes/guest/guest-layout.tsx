@@ -16,6 +16,7 @@ export default function GuestLayout() {
   const { guest, eventId, loading: authLoading } = useGuestAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // FIX #2: Guest page reads from event.theme (published), NOT draft_theme
   const { data: event, isLoading, isError, error } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
@@ -68,6 +69,7 @@ export default function GuestLayout() {
   ];
 
   return (
+    // FIX #2: Pass event.theme (published) to EventThemeProvider
     <EventThemeProvider theme={event.theme}>
       <button onClick={() => setMenuOpen(true)} aria-label="Open navigation menu" className="fixed left-4 top-4 z-40 flex h-8 w-8 items-center justify-center transition-all hover:scale-105" style={{ color: "var(--event-accent)" }}>
         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>

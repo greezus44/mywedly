@@ -18,11 +18,7 @@ export default function GuestSignIn() {
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["published-event", slug],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle();
-      if (error) throw error;
-      return data as UserEvent | null;
-    },
+    queryFn: async () => { const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle(); if (error) throw error; return data as UserEvent | null; },
     enabled: !!slug,
   });
 

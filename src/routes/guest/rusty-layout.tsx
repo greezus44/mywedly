@@ -90,7 +90,7 @@ export default function RustyLayout() {
           </div>
         </div>
       )}
-      <Outlet context={{ event, slug: slug!, theme: event.theme, invitedSubEventIds } satisfies import("./guest-layout").GuestOutletContext} />
+      <Outlet context={{ event, slug: slug!, theme: RUSTY_THEME, invitedSubEventIds } satisfies { event: UserEvent; slug: string; theme: unknown; invitedSubEventIds: string[] }} />
     </EventThemeProvider>
   );
 }

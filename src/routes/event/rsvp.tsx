@@ -1,72 +1,88 @@
+import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventRsvp, type SubEvent } from "../../lib/supabase";
-import { Card, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
-import { formatDate, formatTime12 } from "../../lib/utils";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase, type UserEvent, type EventRsvp } from "../../lib/supabase";
+import { Button } from "../../components/ui/Button";
+import { LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
+import { formatDate, formatDateTime, isRsvpClosed } from "../../lib/utils";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
 
 export function RsvpPage() {
   const { event, eventId } = useOutletContext<EventContextValue>();
+  const queryClient = useQueryClient();
+  const [filter, setFilter] = useState<string>("all");
 
   const { data: rsvps, isLoading, isError, error } = useQuery({
-    queryKey: ["event-rsvps", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("event_rsvps").select("*").eq("event_id", eventId).order("submitted_at", { ascending: false }); if (error) throw error; return data as EventRsvp[]; },
+    queryKey: ["event-rsvps-admin", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("event_rsvps").select("*").eq("event_id", eventId).order("responded_at", { ascending: false });
+      if (error) throw error;
+      return data as EventRsvp[];
+    },
   });
 
-  const { data: subEvents } = useQuery({
-    queryKey: ["sub-events", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("sub_events").select("id, name, date, time").eq("parent_event_id", eventId).order("display_order", { ascending: true }); if (error) throw error; return data as SubEvent[]; },
+  const deadline = event.draft_rsvp_deadline ?? event.rsvp_deadline;
+  const closed = isRsvpClosed(deadline);
+
+  const filtered = (rsvps ?? []).filter((r) => filter === "all" || r.status === filter);
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase.from("event_rsvps").update({ status, responded_at: new Date().toISOString() }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event-rsvps-admin", eventId] }),
   });
-
-  const subEventMap = new Map<string, SubEvent>();
-  (subEvents ?? []).forEach((se) => subEventMap.set(se.id, se));
-
-  const attending = (rsvps ?? []).filter((r) => r.status === "attending");
-  const declined = (rsvps ?? []).filter((r) => r.status === "declined");
 
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
   if (isError) return <ErrorState title="Failed to load RSVPs" message={error instanceof Error ? error.message : "Unknown error"} />;
 
+  const counts = {
+    attending: (rsvps ?? []).filter((r) => r.status === "attending").length,
+    declined: (rsvps ?? []).filter((r) => r.status === "declined").length,
+    pending: (rsvps ?? []).filter((r) => r.status === "pending").length,
+  };
+
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-dash-text">RSVPs</h2>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card><p className="text-sm text-dash-muted">Total Responses</p><p className="mt-1 text-2xl font-bold text-dash-text">{rsvps?.length ?? 0}</p></Card>
-        <Card><p className="text-sm text-dash-muted">Attending</p><p className="mt-1 text-2xl font-bold text-green-600">{attending.length}</p></Card>
-        <Card><p className="text-sm text-dash-muted">Declined</p><p className="mt-1 text-2xl font-bold text-red-600">{declined.length}</p></Card>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-dash-text">RSVP</h2>
+        {deadline && <Badge variant={closed ? "danger" : "warning"}>{closed ? "Closed" : `Closes ${formatDate(deadline)}`}</Badge>}
       </div>
-      {event.rsvp_deadline && (
-        <Card><p className="text-sm text-dash-muted">RSVP Deadline: <span className="font-medium text-dash-text">{formatDate(event.rsvp_deadline)}</span></p></Card>
-      )}
-      {!rsvps || rsvps.length === 0 ? (
-        <EmptyState title="No RSVPs yet" description="RSVP responses from guests will appear here." />
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-green-600">{counts.attending}</p><p className="text-xs text-dash-muted">Attending</p></div>
+        <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-red-600">{counts.declined}</p><p className="text-xs text-dash-muted">Declined</p></div>
+        <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-gray-600">{counts.pending}</p><p className="text-xs text-dash-muted">Pending</p></div>
+      </div>
+      <div className="flex gap-2">
+        {["all", "attending", "declined", "pending"].map((f) => (
+          <button key={f} onClick={() => setFilter(f)} className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${filter === f ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted hover:text-dash-text"}`}>{f}</button>
+        ))}
+      </div>
+      {!filtered || filtered.length === 0 ? (
+        <EmptyState title="No RSVPs" description="No responses match this filter." />
       ) : (
-        <div className="space-y-3">
-          {rsvps.map((rsvp) => (
-            <Card key={rsvp.id}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-dash-text">{rsvp.guest_name ?? "Unknown"}</h3>
-                    <Badge variant={rsvp.status === "attending" ? "success" : rsvp.status === "declined" ? "danger" : "default"}>
-                      {rsvp.status.charAt(0).toUpperCase() + rsvp.status.slice(1)}
-                    </Badge>
-                  </div>
-                  {rsvp.sub_event_id && subEventMap.get(rsvp.sub_event_id) && (
-                    <p className="mt-1 text-sm text-dash-muted">{subEventMap.get(rsvp.sub_event_id)!.name}</p>
-                  )}
-                  {rsvp.plus_ones > 0 && <p className="mt-1 text-sm text-dash-muted">Plus ones: {rsvp.plus_ones}</p>}
-                  {rsvp.plus_one_names && rsvp.plus_one_names.length > 0 && (
-                    <p className="text-sm text-dash-muted">Plus one names: {rsvp.plus_one_names.join(", ")}</p>
-                  )}
-                  {rsvp.dietary && <p className="text-sm text-dash-muted">Dietary: {rsvp.dietary}</p>}
-                  {rsvp.message && <p className="mt-2 text-sm text-dash-text">{rsvp.message}</p>}
-                  {rsvp.submitted_at && <p className="mt-1 text-xs text-dash-muted">Submitted: {formatDate(rsvp.submitted_at)}</p>}
-                </div>
-              </div>
-            </Card>
-          ))}
+        <div className="overflow-hidden rounded-lg border border-dash-border">
+          <table className="w-full">
+            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Guest</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Status</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Plus Ones</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Message</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Responded</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
+            <tbody className="divide-y divide-dash-border bg-dash-surface">
+              {filtered.map((r) => (
+                <tr key={r.id}>
+                  <td className="px-4 py-2 text-sm text-dash-text">{r.guest_name ?? "—"}</td>
+                  <td className="px-4 py-2"><Badge variant={r.status === "attending" ? "success" : r.status === "declined" ? "danger" : "default"}>{r.status}</Badge></td>
+                  <td className="px-4 py-2 text-sm text-dash-muted">{r.plus_ones}</td>
+                  <td className="px-4 py-2 text-sm text-dash-muted max-w-xs truncate">{r.message ?? "—"}</td>
+                  <td className="px-4 py-2 text-xs text-dash-muted">{r.responded_at ? formatDateTime(r.responded_at) : "—"}</td>
+                  <td className="px-4 py-2 text-right">
+                    <select value={r.status} onChange={(e) => updateMutation.mutate({ id: r.id, status: e.target.value })} className="rounded border border-dash-border bg-dash-bg px-2 py-1 text-xs text-dash-text">
+                      <option value="pending">Pending</option><option value="attending">Attending</option><option value="declined">Declined</option>
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

@@ -41,8 +41,7 @@ export function GuestsPage() {
         const { error } = await supabase.from("event_guests").insert({ event_id: eventId, name: values.name, username: values.username || generateUsername(values.name), group_name: values.group_name, side: values.side, group_id: values.group_id, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0 });
         if (error) throw error;
       }
-      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
-      setShowForm(false); setEditGuest(null);
+      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }); setShowForm(false); setEditGuest(null);
     } catch (e) { setFormError(e instanceof Error ? e.message : "Failed to save guest"); }
     finally { setSubmitting(false); }
   };
@@ -60,15 +59,7 @@ export function GuestsPage() {
           <table className="w-full">
             <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Name</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Group</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">RSVP</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
             <tbody className="divide-y divide-dash-border bg-dash-surface">
-              {guests.map((g) => (
-                <tr key={g.id}>
-                  <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
-                  <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "—"}</td>
-                  <td className="px-4 py-2 text-sm text-dash-muted">{g.group_name ?? "—"}</td>
-                  <td className="px-4 py-2"><RsvpBadge status={g.rsvp_status} /></td>
-                  <td className="px-4 py-2 text-right"><button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button><button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button></td>
-                </tr>
-              ))}
+              {guests.map((g) => (<tr key={g.id}><td className="px-4 py-2 text-sm text-dash-text">{g.name}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "—"}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.group_name ?? "—"}</td><td className="px-4 py-2"><RsvpBadge status={g.rsvp_status} /></td><td className="px-4 py-2 text-right"><button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button><button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button></td></tr>))}
             </tbody>
           </table>
         </div>

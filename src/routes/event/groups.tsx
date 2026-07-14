@@ -81,14 +81,7 @@ export function GroupsPage() {
           {groups.map((g) => (
             <div key={g.id} className="rounded-lg border border-dash-border bg-dash-surface p-4">
               <div className="flex items-start justify-between"><div><h3 className="font-semibold text-dash-text">{g.name}</h3><p className="text-sm text-dash-muted">{guestCountByGroup.get(g.id) ?? 0} guest(s)</p></div><button onClick={() => deleteGroup.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button></div>
-              {(subEvents ?? []).length > 0 && (
-                <div className="mt-4"><p className="mb-2 text-xs font-medium text-dash-muted">Invited to Events:</p><div className="flex flex-wrap gap-2">
-                  {(subEvents ?? []).map((se) => {
-                    const key = `${g.id}:${se.id}`; const isAssigned = assignmentMap.has(key);
-                    return <button key={se.id} onClick={() => { if (isAssigned) unassignGroupFromEvent.mutate({ assignmentId: assignmentMap.get(key)! }); else assignGroupToEvent.mutate({ groupId: g.id, subEventId: se.id }); }} className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${isAssigned ? "bg-dash-primary text-dash-primary-fg" : "bg-dash-bg text-dash-muted hover:text-dash-text"}`}>{se.name}{isAssigned ? " ✓" : " +"}</button>;
-                  })}
-                </div></div>
-              )}
+              {(subEvents ?? []).length > 0 && (<div className="mt-4"><p className="mb-2 text-xs font-medium text-dash-muted">Invited to Events:</p><div className="flex flex-wrap gap-2">{(subEvents ?? []).map((se) => { const key = `${g.id}:${se.id}`; const isAssigned = assignmentMap.has(key); return <button key={se.id} onClick={() => { if (isAssigned) unassignGroupFromEvent.mutate({ assignmentId: assignmentMap.get(key)! }); else assignGroupToEvent.mutate({ groupId: g.id, subEventId: se.id }); }} className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${isAssigned ? "bg-dash-primary text-dash-primary-fg" : "bg-dash-bg text-dash-muted hover:text-dash-text"}`}>{se.name}{isAssigned ? " ✓" : " +"}</button>; })}</div></div>)}
             </div>
           ))}
         </div>

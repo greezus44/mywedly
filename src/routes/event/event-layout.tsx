@@ -28,13 +28,16 @@ export function EventLayout() {
     enabled: !!eventId,
   });
 
+  // FIX #2: Publish copies draft_theme → theme, draft_content → content, etc.
   const publishMutation = useMutation({
     mutationFn: async () => {
       if (!event) throw new Error("Event not loaded");
       const { error } = await supabase.from("user_events").update({
-        slug: event.draft_slug, name: event.draft_name, theme: event.draft_theme ?? event.theme,
+        slug: event.draft_slug, name: event.draft_name,
+        theme: event.draft_theme ?? event.theme,
         cover_config: event.draft_cover_config ?? event.cover_config, cover_image: event.draft_cover_image ?? event.cover_image,
-        logo_config: event.draft_logo_config ?? event.logo_config, content: event.draft_content ?? event.content,
+        logo_config: event.draft_logo_config ?? event.logo_config,
+        content: event.draft_content ?? event.content,
         login_config: event.draft_login_config ?? event.login_config, sharing_config: event.draft_sharing_config ?? event.sharing_config,
         event_date: event.draft_event_date ?? event.event_date, event_time: event.draft_event_time ?? event.event_time,
         venue: event.draft_venue ?? event.venue, address: event.draft_address ?? event.address,
