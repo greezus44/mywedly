@@ -1,111 +1,75 @@
-import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
+import { useState } from "react";
+import { useOutletContext } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase, type UserEvent, type SharingEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { generateQrUrl } from "../../lib/qr";
+import { Input } from "../../components/ui";
+import { generateQrDataUrl, downloadQrCode, downloadQrSvg } from "../../lib/qr";
+import { useEffect } from "react";
+
+interface EventContextValue { event: UserEvent; eventId: string; }
 
 export function SharingPage() {
-  const { eventId } = useParams<{ eventId: string }>();
-  const qc = useQueryClient();
-  const [shareTitle, setShareTitle] = useState("");
-  const [shareDescription, setShareDescription] = useState("");
-  const [saving, setSaving] = useState(false);
+  const { event, eventId } = useOutletContext<EventContextValue>();
+  const [qrUrl, setQrUrl] = useState<string>("");
+  const [copied, setCopied] = useState(false);
 
-  const { data: event } = useQuery({
-    queryKey: ["event", eventId],
+  const publicUrl = event.slug ? `${window.location.origin}/e/${event.slug}` : "";
+
+  const { data: shares } = useQuery({
+    queryKey: ["sharing-events", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
+      const { data, error } = await supabase.from("sharing_events").select("*").eq("event_id", eventId).order("created_at", { ascending: false });
       if (error) throw error;
-      return data as UserEvent;
+      return data as SharingEvent[];
     },
-    enabled: !!eventId,
   });
 
   useEffect(() => {
-    if (event) {
-      const sharingConfig = (event.draft_sharing_config ?? event.sharing_config ?? {}) as Record<string, unknown>;
-      setShareTitle((sharingConfig.title as string) || event.draft_name || event.name || "");
-      setShareDescription((sharingConfig.description as string) || "");
-    }
-  }, [event]);
-
-  const shareUrl = event ? `${window.location.origin}/e/${event.draft_slug ?? event.slug ?? event.id}` : "";
-  const qrUrl = shareUrl ? generateQrUrl(shareUrl) : "";
-
-  const save = async () => {
-    if (!event) return;
-    setSaving(true);
-    const sharingConfig = {
-      ...((event.draft_sharing_config ?? event.sharing_config ?? {}) as Record<string, unknown>),
-      title: shareTitle,
-      description: shareDescription,
-    };
-    const { error } = await supabase
-      .from("user_events")
-      .update({ draft_sharing_config: sharingConfig })
-      .eq("id", event.id);
-    setSaving(false);
-    if (!error) qc.invalidateQueries({ queryKey: ["event", eventId] });
-  };
+    if (publicUrl) generateQrDataUrl(publicUrl, { width: 256 }).then(setQrUrl).catch(() => {});
+  }, [publicUrl]);
 
   const copyLink = () => {
-    if (shareUrl) navigator.clipboard.writeText(shareUrl);
+    if (!publicUrl) return;
+    navigator.clipboard.writeText(publicUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
-
-  if (!event) return <div>Loading…</div>;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-800 mb-1">Sharing</h2>
-        <p className="text-sm text-gray-500">Share your event link and configure social previews.</p>
+      <h2 className="text-lg font-semibold text-dash-text">Share</h2>
+      {!event.is_published && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">Your event is not published yet. Publish it to share with guests.</div>
+      )}
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h3 className="mb-2 text-sm font-semibold text-dash-text">Public Link</h3>
+        <div className="flex gap-2">
+          <Input value={publicUrl || "Publish to get a link"} readOnly />
+          <Button variant="secondary" onClick={copyLink} disabled={!publicUrl}>{copied ? "Copied!" : "Copy"}</Button>
+        </div>
       </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Share URL</label>
-          <div className="flex items-center gap-2">
-            <input
-              readOnly
-              value={shareUrl}
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-gray-50"
-            />
-            <Button variant="outline" size="sm" onClick={copyLink}>Copy</Button>
+      {qrUrl && (
+        <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+          <h3 className="mb-3 text-sm font-semibold text-dash-text">QR Code</h3>
+          <div className="flex flex-col items-center gap-3">
+            <img src={qrUrl} alt="QR code" className="h-48 w-48 rounded-lg border border-dash-border" />
+            <div className="flex gap-2">
+              <Button size="sm" variant="secondary" onClick={() => downloadQrCode(publicUrl, `${event.slug || "event"}-qr.png`)}>Download PNG</Button>
+              <Button size="sm" variant="secondary" onClick={() => downloadQrSvg(publicUrl, `${event.slug || "event"}-qr.svg`)}>Download SVG</Button>
+            </div>
           </div>
         </div>
-
-        {qrUrl && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">QR Code</label>
-            <img src={qrUrl} alt="QR code" className="w-40 h-40 border border-gray-200 rounded-lg" />
-          </div>
+      )}
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h3 className="mb-3 text-sm font-semibold text-dash-text">Share History</h3>
+        {!shares || shares.length === 0 ? (
+          <p className="text-sm text-dash-muted">No shares recorded yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {shares.map((s) => <li key={s.id} className="text-sm text-dash-text">{s.type} — {new Date(s.created_at).toLocaleString()}</li>)}
+          </ul>
         )}
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-        <h3 className="text-sm font-medium text-gray-700">Social Sharing</h3>
-        <Input
-          label="Share Title"
-          value={shareTitle}
-          onChange={(e) => setShareTitle(e.target.value)}
-          placeholder="Title shown when sharing on social media"
-        />
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Share Description</label>
-          <textarea
-            value={shareDescription}
-            onChange={(e) => setShareDescription(e.target.value)}
-            placeholder="Description shown when sharing on social media"
-            rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--event-primary,#8B7355)]"
-          />
-        </div>
-
-        <Button onClick={save} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
-        </Button>
       </div>
     </div>
   );

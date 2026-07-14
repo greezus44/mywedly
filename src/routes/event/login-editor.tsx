@@ -1,94 +1,54 @@
-import React, { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
+import { useState, useEffect } from "react";
+import { useOutletContext } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
+import { Input } from "../../components/ui";
+import { TypographyControls } from "../../components/ui/TypographyControls";
+import { SplitEditor } from "../../components/preview/SplitEditor";
+import { LoginPreview, type LoginConfig } from "../../components/preview/PreviewRenderers";
+import type { TypographyStyle } from "../../lib/typography";
+
+interface EventContextValue { event: UserEvent; eventId: string; }
+
+const defaultConfig: LoginConfig = { placeholder: "Enter your username", buttonLabel: "Sign In" };
 
 export function LoginEditor() {
-  const { eventId } = useParams<{ eventId: string }>();
-  const qc = useQueryClient();
-  const [title, setTitle] = useState("");
-  const [subtitle, setSubtitle] = useState("");
-  const [saving, setSaving] = useState(false);
+  const { event, eventId } = useOutletContext<EventContextValue>();
+  const queryClient = useQueryClient();
+  const [config, setConfig] = useState<LoginConfig>(() => ((event.draft_login_config ?? event.login_config) as LoginConfig) ?? defaultConfig);
 
-  const { data: event } = useQuery({
-    queryKey: ["event", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
+  useEffect(() => { setConfig(((event.draft_login_config ?? event.login_config) as LoginConfig) ?? defaultConfig); }, [event.draft_login_config, event.login_config]);
+
+  const update = (patch: Partial<LoginConfig>) => setConfig((p) => ({ ...p, ...patch }));
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("user_events").update({ draft_login_config: config as unknown as Json }).eq("id", eventId);
       if (error) throw error;
-      return data as UserEvent;
     },
-    enabled: !!eventId,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", eventId] }),
   });
 
-  useEffect(() => {
-    if (event) {
-      const loginConfig = (event.draft_login_config ?? event.login_config ?? {}) as Record<string, unknown>;
-      setTitle((loginConfig.title as string) || "");
-      setSubtitle((loginConfig.subtitle as string) || "");
-    }
-  }, [event]);
-
-  const save = async () => {
-    if (!event) return;
-    setSaving(true);
-    const loginConfig = {
-      ...((event.draft_login_config ?? event.login_config ?? {}) as Record<string, unknown>),
-      title,
-      subtitle,
-    };
-    const { error } = await supabase
-      .from("user_events")
-      .update({ draft_login_config: loginConfig })
-      .eq("id", event.id);
-    setSaving(false);
-    if (!error) qc.invalidateQueries({ queryKey: ["event", eventId] });
-  };
-
-  if (!event) return <div>Loading…</div>;
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-800 mb-1">Login Page</h2>
-        <p className="text-sm text-gray-500">Guests see this page when they sign in to view your event.</p>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-dash-text">Login</h2>
+        <Button size="sm" onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>Save</Button>
       </div>
-
-      <div className="space-y-4 bg-white p-5 border border-gray-200 rounded-xl">
-        <Input
-          label="Title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="e.g. Welcome to our wedding"
-        />
-        <Input
-          label="Subtitle"
-          value={subtitle}
-          onChange={(e) => setSubtitle(e.target.value)}
-          placeholder="e.g. Please sign in to continue"
-        />
-
-        <Button onClick={save} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <p className="text-sm font-medium text-gray-700 mb-3">Preview</p>
-        <div className="text-center space-y-2 py-6">
-          {title ? (
-            <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
-          ) : (
-            <h3 className="text-xl font-semibold text-gray-300">Login title appears here</h3>
-          )}
-          {subtitle ? (
-            <p className="text-sm text-gray-500">{subtitle}</p>
-          ) : (
-            <p className="text-sm text-gray-300">Login subtitle appears here</p>
-          )}
-        </div>
-      </div>
+      {saveMutation.isError && <p className="text-sm text-dash-danger">{saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}</p>}
+      {saveMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
+      <SplitEditor
+        editor={
+          <div className="space-y-4 rounded-lg border border-dash-border bg-dash-surface p-4">
+            <TypographyControls label="Heading" value={(config.heading as TypographyStyle) ?? {}} onChange={(v) => update({ heading: v })} showText />
+            <TypographyControls label="Subheading" value={(config.subheading as TypographyStyle) ?? {}} onChange={(v) => update({ subheading: v })} showText />
+            <Input label="Placeholder" value={config.placeholder ?? ""} onChange={(e) => update({ placeholder: e.target.value })} placeholder="Enter your username" />
+            <Input label="Button Label" value={config.buttonLabel ?? ""} onChange={(e) => update({ buttonLabel: e.target.value })} placeholder="Sign In" />
+          </div>
+        }
+        preview={<LoginPreview config={config} theme={event.draft_theme ?? event.theme} eventName={event.draft_name ?? event.name ?? undefined} />}
+      />
     </div>
   );
 }

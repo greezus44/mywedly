@@ -1,99 +1,89 @@
-import React, { useState } from "react";
-import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { supabase, type EventGuest } from "../../lib/supabase";
-import { Input } from "../../components/ui/Input";
+import { useState, useEffect } from "react";
+import { useOutletContext } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase, type UserEvent, type EventRsvp } from "../../lib/supabase";
+import { Button } from "../../components/ui/Button";
+import { LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
+import { formatDate, formatDateTime, isRsvpClosed } from "../../lib/utils";
 
-const STATUS_STYLES: Record<string, string> = {
-  attending: "bg-green-100 text-green-700",
-  declined: "bg-red-100 text-red-700",
-  pending: "bg-gray-100 text-gray-600",
-  maybe: "bg-yellow-100 text-yellow-700",
-};
+interface EventContextValue { event: UserEvent; eventId: string; }
 
 export function RsvpPage() {
-  const { eventId } = useParams<{ eventId: string }>();
-  const [search, setSearch] = useState("");
+  const { event, eventId } = useOutletContext<EventContextValue>();
+  const queryClient = useQueryClient();
+  const [filter, setFilter] = useState<string>("all");
 
-  const { data: guests, isLoading } = useQuery({
-    queryKey: ["guests", eventId],
+  const { data: rsvps, isLoading, isError, error } = useQuery({
+    queryKey: ["event-rsvps-admin", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_guests")
-        .select("*")
-        .eq("event_id", eventId!)
-        .order("name", { ascending: true });
+      const { data, error } = await supabase.from("event_rsvps").select("*").eq("event_id", eventId).order("responded_at", { ascending: false });
       if (error) throw error;
-      return data as EventGuest[];
+      return data as EventRsvp[];
     },
-    enabled: !!eventId,
   });
 
-  const filtered = guests?.filter((g) => g.name.toLowerCase().includes(search.toLowerCase())) ?? [];
+  const deadline = event.draft_rsvp_deadline ?? event.rsvp_deadline;
+  const closed = isRsvpClosed(deadline);
+
+  const filtered = (rsvps ?? []).filter((r) => filter === "all" || r.status === filter);
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase.from("event_rsvps").update({ status, responded_at: new Date().toISOString() }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event-rsvps-admin", eventId] }),
+  });
+
+  if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
+  if (isError) return <ErrorState title="Failed to load RSVPs" message={error instanceof Error ? error.message : "Unknown error"} />;
 
   const counts = {
-    attending: guests?.filter((g) => g.rsvp_status === "attending").length ?? 0,
-    declined: guests?.filter((g) => g.rsvp_status === "declined").length ?? 0,
-    pending: guests?.filter((g) => g.rsvp_status === "pending").length ?? 0,
+    attending: (rsvps ?? []).filter((r) => r.status === "attending").length,
+    declined: (rsvps ?? []).filter((r) => r.status === "declined").length,
+    pending: (rsvps ?? []).filter((r) => r.status === "pending").length,
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-800 mb-1">RSVPs</h2>
-        <p className="text-sm text-gray-500">Track your guests' responses.</p>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-dash-text">RSVP</h2>
+        {deadline && <Badge variant={closed ? "danger" : "warning"}>{closed ? "Closed" : `Closes ${formatDate(deadline)}`}</Badge>}
       </div>
-
       <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-          <p className="text-2xl font-semibold text-green-600">{counts.attending}</p>
-          <p className="text-xs text-gray-500 mt-1">Attending</p>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-          <p className="text-2xl font-semibold text-red-600">{counts.declined}</p>
-          <p className="text-xs text-gray-500 mt-1">Declined</p>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-          <p className="text-2xl font-semibold text-gray-500">{counts.pending}</p>
-          <p className="text-xs text-gray-500 mt-1">Pending</p>
-        </div>
+        <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-green-600">{counts.attending}</p><p className="text-xs text-dash-muted">Attending</p></div>
+        <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-red-600">{counts.declined}</p><p className="text-xs text-dash-muted">Declined</p></div>
+        <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-gray-600">{counts.pending}</p><p className="text-xs text-dash-muted">Pending</p></div>
       </div>
-
-      <Input placeholder="Search guests…" value={search} onChange={(e) => setSearch(e.target.value)} />
-
-      {isLoading ? (
-        <p className="text-sm text-gray-500">Loading RSVPs…</p>
-      ) : filtered.length > 0 ? (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Name</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">RSVP</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Plus Ones</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Dietary</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Message</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((g) => (
-                <tr key={g.id} className="border-b border-gray-100 last:border-0">
-                  <td className="px-4 py-2 text-gray-800">{g.name}</td>
-                  <td className="px-4 py-2">
-                    <span className={`px-2 py-0.5 rounded text-xs ${STATUS_STYLES[g.rsvp_status] ?? STATUS_STYLES.pending}`}>
-                      {g.rsvp_status}
-                    </span>
+      <div className="flex gap-2">
+        {["all", "attending", "declined", "pending"].map((f) => (
+          <button key={f} onClick={() => setFilter(f)} className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${filter === f ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted hover:text-dash-text"}`}>{f}</button>
+        ))}
+      </div>
+      {!filtered || filtered.length === 0 ? (
+        <EmptyState title="No RSVPs" description="No responses match this filter." />
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-dash-border">
+          <table className="w-full">
+            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Guest</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Status</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Plus Ones</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Message</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Responded</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
+            <tbody className="divide-y divide-dash-border bg-dash-surface">
+              {filtered.map((r) => (
+                <tr key={r.id}>
+                  <td className="px-4 py-2 text-sm text-dash-text">{r.guest_name ?? "—"}</td>
+                  <td className="px-4 py-2"><Badge variant={r.status === "attending" ? "success" : r.status === "declined" ? "danger" : "default"}>{r.status}</Badge></td>
+                  <td className="px-4 py-2 text-sm text-dash-muted">{r.plus_ones}</td>
+                  <td className="px-4 py-2 text-sm text-dash-muted max-w-xs truncate">{r.message ?? "—"}</td>
+                  <td className="px-4 py-2 text-xs text-dash-muted">{r.responded_at ? formatDateTime(r.responded_at) : "—"}</td>
+                  <td className="px-4 py-2 text-right">
+                    <select value={r.status} onChange={(e) => updateMutation.mutate({ id: r.id, status: e.target.value })} className="rounded border border-dash-border bg-dash-bg px-2 py-1 text-xs text-dash-text">
+                      <option value="pending">Pending</option><option value="attending">Attending</option><option value="declined">Declined</option>
+                    </select>
                   </td>
-                  <td className="px-4 py-2 text-gray-600">{g.plus_ones}</td>
-                  <td className="px-4 py-2 text-gray-600">{g.dietary || "—"}</td>
-                  <td className="px-4 py-2 text-gray-600 max-w-xs truncate">{g.message || "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      ) : (
-        <p className="text-sm text-gray-500">No guests found.</p>
       )}
     </div>
   );

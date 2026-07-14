@@ -1,128 +1,107 @@
-import React, { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
+import { useState } from "react";
+import { useOutletContext, Link } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { slugify } from "../../lib/utils";
+import { Input, Toggle } from "../../components/ui";
+import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
+import { slugify, formatDate } from "../../lib/utils";
 
-interface CustomPage {
-  id: string;
-  title: string;
-  slug: string;
-  blocks: unknown[];
-}
+interface EventContextValue { event: UserEvent; eventId: string; }
 
 export function PagesPage() {
-  const { eventId } = useParams<{ eventId: string }>();
-  const qc = useQueryClient();
-  const [pages, setPages] = useState<CustomPage[]>([]);
+  const { eventId } = useOutletContext<EventContextValue>();
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
+  const [title, setTitle] = useState("");
+  const [slug, setSlug] = useState("");
+  const [showInNav, setShowInNav] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const { data: event } = useQuery({
-    queryKey: ["event", eventId],
+  const { data: pages, isLoading, isError, error } = useQuery({
+    queryKey: ["custom-pages", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("id", eventId!).single();
+      const { data, error } = await supabase.from("custom_pages").select("*").eq("event_id", eventId).order("sort_order", { ascending: true });
       if (error) throw error;
-      return data as UserEvent;
+      return data as CustomPage[];
     },
-    enabled: !!eventId,
   });
 
-  useEffect(() => {
-    if (event) {
-      const content = (event.draft_content ?? event.content ?? {}) as Record<string, unknown>;
-      setPages((content.pages as unknown as CustomPage[]) || []);
-    }
-  }, [event]);
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      if (!title.trim()) throw new Error("Title is required");
+      const finalSlug = slug || slugify(title);
+      const { error } = await supabase.from("custom_pages").insert({
+        event_id: eventId, title: title.trim(), slug: finalSlug,
+        body: "", blocks: [], content: {}, is_published: false,
+        show_in_nav: showInNav, sort_order: (pages?.length ?? 0),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] });
+      setShowForm(false); setTitle(""); setSlug(""); setShowInNav(true); setFormError(null);
+    },
+    onError: (e) => setFormError(e instanceof Error ? e.message : "Failed to create page"),
+  });
 
-  const persist = async (next: CustomPage[]) => {
-    if (!event) return;
-    setSaving(true);
-    const content = {
-      ...((event.draft_content ?? event.content ?? {}) as Record<string, unknown>),
-      pages: next,
-    };
-    const { error } = await supabase
-      .from("user_events")
-      .update({ draft_content: content })
-      .eq("id", event.id);
-    setSaving(false);
-    if (!error) {
-      setPages(next);
-      qc.invalidateQueries({ queryKey: ["event", eventId] });
-    }
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => { const { error } = await supabase.from("custom_pages").delete().eq("id", id); if (error) throw error; },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] }),
+  });
+
+  const togglePublish = async (page: CustomPage) => {
+    await supabase.from("custom_pages").update({ is_published: !page.is_published }).eq("id", page.id);
+    queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] });
   };
 
-  const addPage = () => {
-    const id = `page-${Date.now()}`;
-    const page: CustomPage = { id, title: newTitle, slug: slugify(newTitle) || id, blocks: [] };
-    void persist([...pages, page]);
-    setNewTitle("");
-    setShowForm(false);
+  const handleCreate = async () => {
+    setSaving(true); setFormError(null);
+    try { await createMutation.mutateAsync(); } catch { /* handled in onError */ }
+    finally { setSaving(false); }
   };
 
-  const deletePage = (id: string) => {
-    void persist(pages.filter((p) => p.id !== id));
-  };
-
-  if (!event) return <div>Loading…</div>;
+  if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
+  if (isError) return <ErrorState title="Failed to load pages" message={error instanceof Error ? error.message : "Unknown error"} />;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800 mb-1">Pages</h2>
-          <p className="text-sm text-gray-500">Create custom pages for your event.</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => setShowForm(!showForm)}>
-          {showForm ? "Cancel" : "Add Page"}
-        </Button>
+        <h2 className="text-lg font-semibold text-dash-text">Pages</h2>
+        <Button size="sm" onClick={() => setShowForm(true)}>Add Page</Button>
       </div>
-
-      {showForm && (
-        <div className="bg-white border border-gray-200 rounded-xl p-4 flex items-end gap-3">
-          <div className="flex-1">
-            <Input
-              label="Page Title"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="e.g. Travel & Accommodation"
-            />
-          </div>
-          <Button onClick={addPage} disabled={!newTitle.trim() || saving}>Add</Button>
-        </div>
-      )}
-
-      {pages.length > 0 ? (
+      {!pages || pages.length === 0 ? (
+        <EmptyState title="No custom pages" description="Create custom pages for your event website." action={<Button size="sm" onClick={() => setShowForm(true)}>Add Page</Button>} />
+      ) : (
         <div className="space-y-2">
           {pages.map((page) => (
-            <div key={page.id} className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+            <div key={page.id} className="flex items-center justify-between rounded-lg border border-dash-border bg-dash-surface p-4">
               <div>
-                <p className="font-medium text-gray-800">{page.title}</p>
-                <p className="text-xs text-gray-400">/{page.slug}</p>
+                <h3 className="font-semibold text-dash-text">{page.title}</h3>
+                <p className="text-sm text-dash-muted">/{page.slug} · {page.is_published ? "Published" : "Draft"} · Updated {formatDate(page.updated_at)}</p>
               </div>
-              <div className="flex items-center gap-2">
-                <Link to={`pages/${page.id}`}>
-                  <Button variant="outline" size="sm">Edit</Button>
-                </Link>
-                <button
-                  onClick={() => { if (confirm("Delete this page?")) deletePage(page.id); }}
-                  className="text-xs text-red-500 hover:underline"
-                >
-                  Delete
-                </button>
+              <div className="flex items-center gap-3">
+                <Toggle checked={page.is_published} onChange={() => togglePublish(page)} label="Published" />
+                <Link to={`/event/${eventId}/pages/${page.id}`}><Button size="sm" variant="secondary">Edit</Button></Link>
+                <button onClick={() => deleteMutation.mutate(page.id)} className="text-xs text-dash-danger hover:underline">Delete</button>
               </div>
             </div>
           ))}
         </div>
-      ) : (
-        <p className="text-sm text-gray-500">No custom pages yet. Add one to get started.</p>
       )}
-
-      {saving && <p className="text-xs text-gray-400">Saving…</p>}
+      <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Page">
+        <div className="space-y-4">
+          <Input label="Page Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Travel & Accommodation" autoFocus />
+          <Input label="Slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="auto-generated from title" />
+          <Toggle checked={showInNav} onChange={setShowInNav} label="Show in navigation" />
+          {formError && <p className="text-sm text-dash-danger">{formError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setShowForm(false)}>Cancel</Button>
+            <Button onClick={handleCreate} loading={saving}>Create</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

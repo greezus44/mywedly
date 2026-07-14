@@ -1,103 +1,73 @@
-import React, { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type EventGuest, type GuestGroup } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventGuest, type GuestGroup } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { GuestForm } from "./guest-form";
+import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
+import { GuestForm, RsvpBadge, type GuestFormValues } from "./guest-form";
+import { generateUsername } from "../../lib/utils";
+
+interface EventContextValue { event: UserEvent; eventId: string; }
 
 export function GuestsPage() {
-  const { eventId } = useParams<{ eventId: string }>();
-  const qc = useQueryClient();
+  const { eventId } = useOutletContext<EventContextValue>();
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [editingGuest, setEditingGuest] = useState<EventGuest | null>(null);
-  const [search, setSearch] = useState("");
+  const [editGuest, setEditGuest] = useState<EventGuest | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const { data: guests, isLoading } = useQuery({
-    queryKey: ["guests", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId!).order("name", { ascending: true });
-      if (error) throw error;
-      return data as EventGuest[];
-    },
-    enabled: !!eventId,
+  const { data: guests, isLoading, isError, error } = useQuery({
+    queryKey: ["event-guests", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId).order("created_at", { ascending: true }); if (error) throw error; return data as EventGuest[]; },
+  });
+  const { data: groups } = useQuery({
+    queryKey: ["guest-groups", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("guest_groups").select("*").eq("event_id", eventId).order("name", { ascending: true }); if (error) throw error; return data as GuestGroup[]; },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("event_guests").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["guests", eventId] }),
+    mutationFn: async (id: string) => { const { error } = await supabase.from("event_guests").delete().eq("id", id); if (error) throw error; },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }),
   });
 
-  const filtered = guests?.filter((g) => g.name.toLowerCase().includes(search.toLowerCase())) ?? [];
+  const handleAddOrUpdate = async (values: GuestFormValues) => {
+    setSubmitting(true); setFormError(null);
+    try {
+      if (editGuest) {
+        const { error } = await supabase.from("event_guests").update({ name: values.name, username: values.username, group_name: values.group_name, side: values.side, group_id: values.group_id }).eq("id", editGuest.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("event_guests").insert({ event_id: eventId, name: values.name, username: values.username || generateUsername(values.name), group_name: values.group_name, side: values.side, group_id: values.group_id, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0 });
+        if (error) throw error;
+      }
+      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }); setShowForm(false); setEditGuest(null);
+    } catch (e) { setFormError(e instanceof Error ? e.message : "Failed to save guest"); }
+    finally { setSubmitting(false); }
+  };
+
+  if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
+  if (isError) return <ErrorState title="Failed to load guests" message={error instanceof Error ? error.message : "Unknown error"} />;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800">Guests</h2>
-          <p className="text-sm text-gray-500">{guests?.length ?? 0} total guests</p>
-        </div>
-        <Button onClick={() => { setEditingGuest(null); setShowForm(!showForm); }}>
-          {showForm ? "Cancel" : "Add Guest"}
-        </Button>
-      </div>
-
-      {showForm && (
-        <GuestForm
-          guest={editingGuest}
-          onSave={() => { setShowForm(false); setEditingGuest(null); qc.invalidateQueries({ queryKey: ["guests", eventId] }); }}
-          onCancel={() => { setShowForm(false); setEditingGuest(null); }}
-        />
-      )}
-
-      <Input placeholder="Search guests…" value={search} onChange={(e) => setSearch(e.target.value)} />
-
-      {isLoading ? (
-        <p className="text-sm text-gray-500">Loading guests…</p>
-      ) : filtered.length > 0 ? (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Name</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Username</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Group</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">Side</th>
-                <th className="text-left px-4 py-2 font-medium text-gray-600">RSVP</th>
-                <th className="text-right px-4 py-2 font-medium text-gray-600">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((g) => (
-                <tr key={g.id} className="border-b border-gray-100 last:border-0">
-                  <td className="px-4 py-2 text-gray-800">{g.name}</td>
-                  <td className="px-4 py-2 text-gray-600">{g.username || "—"}</td>
-                  <td className="px-4 py-2 text-gray-600">{g.group_name || "—"}</td>
-                  <td className="px-4 py-2 text-gray-600">{g.side || "—"}</td>
-                  <td className="px-4 py-2">
-                    <span className={`px-2 py-0.5 rounded text-xs ${
-                      g.rsvp_status === "attending" ? "bg-green-100 text-green-700" :
-                      g.rsvp_status === "declined" ? "bg-red-100 text-red-700" :
-                      "bg-gray-100 text-gray-600"
-                    }`}>
-                      {g.rsvp_status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <button onClick={() => { setEditingGuest(g); setShowForm(true); }} className="text-xs text-[var(--event-primary,#8B7355)] hover:underline mr-2">Edit</button>
-                    <button onClick={() => { if (confirm("Delete this guest?")) deleteMutation.mutate(g.id); }} className="text-xs text-red-500 hover:underline">Delete</button>
-                  </td>
-                </tr>
-              ))}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between"><h2 className="text-lg font-semibold text-dash-text">Guests</h2><Button size="sm" onClick={() => { setEditGuest(null); setShowForm(true); }}>Add Guest</Button></div>
+      {!guests || guests.length === 0 ? (
+        <EmptyState title="No guests yet" description="Add guests to invite them to your event." action={<Button size="sm" onClick={() => { setEditGuest(null); setShowForm(true); }}>Add Guest</Button>} />
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-dash-border">
+          <table className="w-full">
+            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Name</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Group</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">RSVP</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
+            <tbody className="divide-y divide-dash-border bg-dash-surface">
+              {guests.map((g) => (<tr key={g.id}><td className="px-4 py-2 text-sm text-dash-text">{g.name}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "—"}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.group_name ?? "—"}</td><td className="px-4 py-2"><RsvpBadge status={g.rsvp_status} /></td><td className="px-4 py-2 text-right"><button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button><button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button></td></tr>))}
             </tbody>
           </table>
         </div>
-      ) : (
-        <p className="text-sm text-gray-500">No guests yet. Add your first guest to get started.</p>
       )}
+      <Modal open={showForm} onClose={() => { setShowForm(false); setEditGuest(null); setFormError(null); }} title={editGuest ? "Edit Guest" : "Add Guest"}>
+        {formError && <p className="mb-3 text-sm text-dash-danger">{formError}</p>}
+        <GuestForm eventId={eventId} guest={editGuest} groups={groups ?? []} onSubmit={handleAddOrUpdate} onCancel={() => { setShowForm(false); setEditGuest(null); setFormError(null); }} submitting={submitting} />
+      </Modal>
     </div>
   );
 }

@@ -1,44 +1,54 @@
-import React from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
-import { BlockRenderer, type Block } from "./block-renderer";
+import { supabase, type CustomPage } from "../../lib/supabase";
+import { useGuestOutletContext } from "./guest-layout";
+import { BlockRenderer } from "./block-renderer";
+import { jsonToBlocks } from "../event/block-types";
+import { LoadingSpinner } from "../../components/ui";
 
 export default function GuestCustomPage() {
   const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
+  const { event } = useGuestOutletContext();
 
-  const { data: event } = useQuery({
-    queryKey: ["event_by_slug", slug],
+  const { data: page, isLoading } = useQuery({
+    queryKey: ["custom-page-public", event.id, pageSlug],
     queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug!).single();
+      const { data, error } = await supabase
+        .from("custom_pages")
+        .select("*")
+        .eq("event_id", event.id)
+        .eq("slug", pageSlug)
+        .eq("is_published", true)
+        .maybeSingle();
       if (error) throw error;
-      return data as UserEvent;
+      return data as CustomPage | null;
     },
-    enabled: !!slug,
+    enabled: !!pageSlug && !!event.id,
   });
 
-  if (!event) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
+  if (isLoading) return <div className="flex min-h-[50vh] items-center justify-center"><LoadingSpinner /></div>;
+  if (!page) return (
+    <div className="guest-section text-center">
+      <h1 className="guest-title mb-2">Page Not Found</h1>
+      <p className="guest-subtitle mb-4">This page could not be found or is not published.</p>
+      <Link to={`/e/${slug}/home`} className="event-btn-primary inline-block">Back to Home</Link>
+    </div>
+  );
 
-  const content = (event.content ?? {}) as Record<string, unknown>;
-  const pages = (content.pages ?? []) as unknown as Block[][];
-  const page = pages.find((_, i) => {
-    const p = pages[i] as unknown as { slug?: string };
-    return p?.slug === pageSlug;
-  });
-
-  if (!page) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-8">
-        <p className="text-[var(--event-text-muted)]">Page not found.</p>
-      </div>
-    );
-  }
-
-  const blocks = (page as unknown as { blocks?: unknown }).blocks as unknown as Block[];
+  const blocks = jsonToBlocks(page.blocks);
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      {Array.isArray(blocks) && blocks.map((block, i) => <BlockRenderer key={i} block={block} />)}
+    <div className="guest-section">
+      <div className="mx-auto max-w-3xl">
+        <h1 className="guest-title mb-6 text-center">{page.title}</h1>
+        {blocks.length > 0 ? (
+          <div className="space-y-6">
+            {blocks.map((block) => <BlockRenderer key={block.id} block={block} eventId={event.id} />)}
+          </div>
+        ) : (
+          page.body ? <div className="rich-content" dangerouslySetInnerHTML={{ __html: page.body }} /> : <p className="text-center text-dash-muted">No content yet.</p>
+        )}
+      </div>
     </div>
   );
 }

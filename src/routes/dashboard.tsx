@@ -1,131 +1,125 @@
-import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../lib/supabase";
+import { supabase, type UserEvent, type Json } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui";
+import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../components/ui";
+import { SiteHeader } from "../components/site/SiteHeader";
+import { DEFAULT_THEME } from "../lib/theme";
 import { slugify } from "../lib/utils";
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
+  const [session, setSession] = useState<{ user: { id: string } } | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newSlug, setNewSlug] = useState("");
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
-  const userQuery = useQuery({
-    queryKey: ["currentUser"],
-    queryFn: async () => {
-      const { data, error } = await supabase.auth.getUser();
-      if (error) throw error;
-      return data.user;
-    },
-  });
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session as { user: { id: string } } | null);
+      setAuthLoading(false);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s as { user: { id: string } } | null));
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
-  const { data: events, isLoading } = useQuery({
-    queryKey: ["user_events", userQuery.data?.id],
+  const { data: events, isLoading, isError, error } = useQuery({
+    queryKey: ["events", session?.user.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("user_events")
-        .select("*")
-        .eq("creator_id", userQuery.data!.id)
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("user_events").select("*").eq("creator_id", session!.user.id).order("created_at", { ascending: false });
       if (error) throw error;
       return data as UserEvent[];
     },
-    enabled: !!userQuery.data?.id,
+    enabled: !!session?.user.id,
   });
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const user = userQuery.data;
-      if (!user) throw new Error("Not signed in");
-      const name = "Untitled Event";
-      const slug = slugify(name);
-      const { data, error } = await supabase
-        .from("user_events")
-        .insert({
-          creator_id: user.id,
-          name,
-          draft_name: name,
-          slug,
-          draft_slug: slug,
-          template_id: "default",
-        })
-        .select("id")
-        .single();
+      if (!session) throw new Error("Not authenticated");
+      const slug = newSlug || slugify(newName);
+      const { data, error } = await supabase.from("user_events").insert({
+        creator_id: session.user.id,
+        name: newName,
+        draft_name: newName,
+        slug,
+        draft_slug: slug,
+        theme: DEFAULT_THEME as unknown as Json,
+        draft_theme: DEFAULT_THEME as unknown as Json,
+        is_published: false,
+        is_archived: false,
+      }).select("*").single();
       if (error) throw error;
-      return data.id as string;
+      return data as UserEvent;
     },
-    onMutate: () => setCreating(true),
-    onSuccess: (id) => {
-      qc.invalidateQueries({ queryKey: ["user_events", userQuery.data?.id] });
-      navigate(`/event/${id}`);
+    onSuccess: (ev) => {
+      queryClient.invalidateQueries({ queryKey: ["events", session?.user.id] });
+      setShowCreate(false);
+      setNewName("");
+      setNewSlug("");
+      navigate(`/event/${ev.id}`);
     },
-    onSettled: () => setCreating(false),
   });
 
-  if (userQuery.isLoading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading…</div>;
-  }
-  if (!userQuery.data) {
+  const handleCreate = async () => {
+    if (!newName.trim()) { setCreateError("Event name is required"); return; }
+    setCreating(true);
+    setCreateError(null);
+    try { await createMutation.mutateAsync(); }
+    catch (e) { setCreateError(e instanceof Error ? e.message : "Failed to create event"); }
+    finally { setCreating(false); }
+  };
+
+  if (authLoading) return <div className="flex min-h-screen items-center justify-center"><LoadingSpinner /></div>;
+  if (!session) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <p className="text-gray-600">Please sign in to view your dashboard.</p>
-        <Link to="/auth"><Button>Sign in</Button></Link>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Please sign in</h1>
+        <Link to="/auth"><Button>Sign In</Button></Link>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between max-w-6xl mx-auto">
-        <h1 className="text-xl font-semibold text-gray-800">MyWedly</h1>
-        <Button onClick={() => createMutation.mutate()} disabled={creating}>
-          {creating ? "Creating…" : "Create New Event"}
-        </Button>
-      </header>
-
-      <main className="max-w-6xl mx-auto px-6 py-8">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Your Events</h2>
-
-        {isLoading ? (
-          <p className="text-sm text-gray-500">Loading events…</p>
-        ) : events && events.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {events.map((event) => (
-              <Link
-                key={event.id}
-                to={`/event/${event.id}`}
-                className="block p-5 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-shadow"
-              >
-                {event.draft_cover_image || event.cover_image ? (
-                  <img
-                    src={event.draft_cover_image ?? event.cover_image ?? ""}
-                    alt={event.draft_name ?? event.name}
-                    className="w-full h-32 object-cover rounded-lg mb-3"
-                  />
-                ) : (
-                  <div className="w-full h-32 bg-gray-100 rounded-lg mb-3 flex items-center justify-center text-gray-400 text-sm">
-                    No cover image
-                  </div>
-                )}
-                <h3 className="font-medium text-gray-800">{event.draft_name ?? event.name}</h3>
-                <p className="text-sm text-gray-500">
-                  {event.draft_event_type ?? event.event_type ?? "Event"}
-                </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {event.is_published ? "Published" : "Draft"}
-                </p>
+    <div className="min-h-screen bg-dash-bg">
+      <SiteHeader />
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-dash-text">Your Events</h1>
+          <Button onClick={() => setShowCreate(true)}>Create Event</Button>
+        </div>
+        {isLoading ? <div className="flex justify-center py-12"><LoadingSpinner /></div>
+        : isError ? <ErrorState title="Failed to load events" message={error instanceof Error ? error.message : "Unknown error"} />
+        : !events || events.length === 0 ? (
+          <EmptyState title="No events yet" description="Create your first wedding event to get started." action={<Button onClick={() => setShowCreate(true)}>Create Event</Button>} />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {events.map((ev) => (
+              <Link key={ev.id} to={`/event/${ev.id}`} className="rounded-lg border border-dash-border bg-dash-surface p-4 transition-shadow hover:shadow-md">
+                <h3 className="mb-1 font-semibold text-dash-text">{ev.draft_name || ev.name || "Untitled Event"}</h3>
+                <p className="text-sm text-dash-muted">{ev.draft_event_date || ev.event_date || "No date set"}</p>
+                <p className="mt-2 text-xs text-dash-muted">{ev.is_published ? "Published" : "Draft"}</p>
               </Link>
             ))}
           </div>
-        ) : (
-          <div className="text-center py-16 bg-white border border-dashed border-gray-300 rounded-xl">
-            <p className="text-gray-500 mb-4">You don't have any events yet.</p>
-            <Button onClick={() => createMutation.mutate()} disabled={creating}>
-              {creating ? "Creating…" : "Create your first event"}
-            </Button>
-          </div>
         )}
       </main>
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create New Event">
+        <div className="space-y-4">
+          <Input label="Event Name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. John & Jane's Wedding" autoFocus />
+          <Input label="Slug (optional)" value={newSlug} onChange={(e) => setNewSlug(e.target.value)} placeholder="auto-generated from name" />
+          {createError && <p className="text-sm text-dash-danger">{createError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button onClick={handleCreate} loading={creating}>Create</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

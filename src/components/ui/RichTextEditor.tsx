@@ -1,4 +1,6 @@
-import React, { useRef, useEffect } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { RICH_FONT_OPTIONS } from "../../lib/theme";
+import { cn } from "../../lib/utils";
 
 interface RichTextEditorProps {
   value: string;
@@ -7,59 +9,116 @@ interface RichTextEditorProps {
   className?: string;
 }
 
+const FONT_SIZES = [
+  { label: "Small", value: "2" },
+  { label: "Normal", value: "3" },
+  { label: "Large", value: "5" },
+  { label: "Huge", value: "7" },
+];
+
 export function RichTextEditor({ value, onChange, placeholder, className }: RichTextEditorProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (ref.current && ref.current.innerHTML !== value) {
       ref.current.innerHTML = value || "";
     }
-  }, []);
-
-  const handleInput = () => {
-    if (ref.current) onChange(ref.current.innerHTML);
-  };
+  }, [value]);
 
   const exec = (cmd: string, val?: string) => {
     document.execCommand(cmd, false, val);
-    handleInput();
+    ref.current?.focus();
+    updateActive();
+    if (ref.current) onChange(ref.current.innerHTML);
   };
 
+  const updateActive = () => {
+    setActive({
+      bold: document.queryCommandState("bold"),
+      italic: document.queryCommandState("italic"),
+      underline: document.queryCommandState("underline"),
+      insertUnorderedList: document.queryCommandState("insertUnorderedList"),
+      insertOrderedList: document.queryCommandState("insertOrderedList"),
+    });
+  };
+
+  const handleInput = () => {
+    if (ref.current) onChange(ref.current.innerHTML);
+    updateActive();
+  };
+
+  const handleKey = (e: KeyboardEvent) => {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      exec("insertHTML", "&nbsp;&nbsp;&nbsp;&nbsp;");
+    }
+  };
+
+  const btn = (onClick: () => void, label: string, isActive = false) => (
+    <button
+      type="button"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      className={cn("rounded px-2 py-1 text-sm transition-colors hover:bg-dash-bg", isActive && "bg-dash-primary/10 text-dash-primary")}
+    >
+      {label}
+    </button>
+  );
+
   return (
-    <div className={className}>
-      <div className="flex flex-wrap gap-1 mb-2 border-b pb-2">
-        <button type="button" onMouseDown={(e) => { e.preventDefault(); exec("bold"); }} className="px-2 py-1 text-sm rounded hover:bg-gray-100 font-bold">B</button>
-        <button type="button" onMouseDown={(e) => { e.preventDefault(); exec("italic"); }} className="px-2 py-1 text-sm rounded hover:bg-gray-100 italic">I</button>
-        <button type="button" onMouseDown={(e) => { e.preventDefault(); exec("underline"); }} className="px-2 py-1 text-sm rounded hover:bg-gray-100 underline">U</button>
-        <button type="button" onMouseDown={(e) => { e.preventDefault(); exec("strikeThrough"); }} className="px-2 py-1 text-sm rounded hover:bg-gray-100 line-through">S</button>
-        <span className="w-px bg-gray-300 mx-1" />
-        <button type="button" onMouseDown={(e) => { e.preventDefault(); exec("justifyLeft"); }} className="px-2 py-1 text-sm rounded hover:bg-gray-100">Left</button>
-        <button type="button" onMouseDown={(e) => { e.preventDefault(); exec("justifyCenter"); }} className="px-2 py-1 text-sm rounded hover:bg-gray-100">Center</button>
-        <button type="button" onMouseDown={(e) => { e.preventDefault(); exec("justifyRight"); }} className="px-2 py-1 text-sm rounded hover:bg-gray-100">Right</button>
-        <span className="w-px bg-gray-300 mx-1" />
-        <input type="color" onChange={(e) => exec("foreColor", e.target.value)} className="w-7 h-7 rounded cursor-pointer" title="Text colour" />
-        <input type="color" onChange={(e) => exec("fontName", e.target.value)} className="hidden" />
-        <select onChange={(e) => exec("fontName", e.target.value)} className="px-1 py-1 text-sm border rounded" defaultValue="">
-          <option value="" disabled>Font</option>
-          <option value="Inter, sans-serif">Inter</option>
-          <option value="'Playfair Display', serif">Playfair</option>
-          <option value="'Lora', serif">Lora</option>
-          <option value="'Cormorant Garamond', serif">Cormorant</option>
+    <div className={cn("rounded-lg border border-dash-border bg-dash-surface", className)}>
+      <div className="flex flex-wrap items-center gap-1 border-b border-dash-border p-2">
+        {btn(() => exec("bold"), "B", active.bold)}
+        {btn(() => exec("italic"), "I", active.italic)}
+        {btn(() => exec("underline"), "U", active.underline)}
+        <div className="mx-1 h-5 w-px bg-dash-border" />
+        <select
+          onMouseDown={(e) => e.preventDefault()}
+          onChange={(e) => exec("fontSize", e.target.value)}
+          className="rounded border border-dash-border bg-dash-surface px-1.5 py-1 text-xs text-dash-text"
+          defaultValue="3"
+        >
+          {FONT_SIZES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
-        <select onChange={(e) => exec("fontSize", e.target.value)} className="px-1 py-1 text-sm border rounded" defaultValue="3">
-          <option value="2">Small</option>
-          <option value="3">Normal</option>
-          <option value="5">Large</option>
-          <option value="7">Huge</option>
+        <select
+          onMouseDown={(e) => e.preventDefault()}
+          onChange={(e) => exec("fontName", e.target.value)}
+          className="rounded border border-dash-border bg-dash-surface px-1.5 py-1 text-xs text-dash-text"
+          defaultValue=""
+        >
+          <option value="">Font</option>
+          {RICH_FONT_OPTIONS.map((f) => <option key={f.value} value={f.stack} style={{ fontFamily: f.stack }}>{f.label}</option>)}
         </select>
+        <label className="flex cursor-pointer items-center gap-1 rounded px-1.5 py-1 text-sm hover:bg-dash-bg">
+          <span className="text-dash-muted">A</span>
+          <input
+            type="color"
+            onMouseDown={(e) => e.preventDefault()}
+            onChange={(e) => exec("foreColor", e.target.value)}
+            className="h-5 w-5 cursor-pointer border-0 p-0"
+          />
+        </label>
+        <div className="mx-1 h-5 w-px bg-dash-border" />
+        {btn(() => { const url = prompt("Enter URL:"); if (url) exec("createLink", url); }, "Link")}
+        {btn(() => exec("insertUnorderedList"), "• List", active.insertUnorderedList)}
+        {btn(() => exec("insertOrderedList"), "1. List", active.insertOrderedList)}
+        <div className="mx-1 h-5 w-px bg-dash-border" />
+        {btn(() => exec("justifyLeft"), "L")}
+        {btn(() => exec("justifyCenter"), "C")}
+        {btn(() => exec("justifyRight"), "R")}
       </div>
       <div
         ref={ref}
         contentEditable
+        suppressContentEditableWarning
         onInput={handleInput}
+        onKeyUp={updateActive}
+        onMouseUp={updateActive}
+        onKeyDown={handleKey}
+        onBlur={handleInput}
         data-placeholder={placeholder}
-        className="min-h-[120px] p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--event-primary,#8B7355)] prose prose-sm max-w-none"
-        style={{ ["--tw-prose" as string]: "inherit" } as React.CSSProperties}
+        className="rich-editor min-h-[150px] p-3 text-sm text-dash-text focus:outline-none [&[data-placeholder]:empty]:before:content-[attr(data-placeholder)] [&[data-placeholder]:empty]:before:text-dash-muted/50"
       />
     </div>
   );

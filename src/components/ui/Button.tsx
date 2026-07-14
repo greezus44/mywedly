@@ -1,23 +1,51 @@
-import React from "react";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "../../lib/utils";
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary" | "outline" | "ghost" | "danger";
-  size?: "sm" | "md" | "lg";
+type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Size = "sm" | "md" | "lg";
+
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: Variant;
+  size?: Size;
+  loading?: boolean;
 }
 
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "primary", size = "md", ...props }, ref) => {
-    const base = "inline-flex items-center justify-center font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2";
-    const variants = {
-      primary: "bg-[var(--event-primary,#8B7355)] text-white hover:bg-[var(--event-primary-hover,#75604A)]",
-      secondary: "bg-[var(--event-secondary,#D4C5B0)] text-[var(--event-text,#2D2D2D)] hover:bg-[var(--event-secondary-hover,#C4B5A0)]",
-      outline: "border border-[var(--event-border,#E5E0D8)] text-[var(--event-text,#2D2D2D)] hover:bg-gray-50",
-      ghost: "text-[var(--event-text,#2D2D2D)] hover:bg-gray-100",
-      danger: "bg-red-600 text-white hover:bg-red-700",
-    };
-    const sizes = { sm: "px-3 py-1.5 text-sm", md: "px-4 py-2 text-sm", lg: "px-6 py-3 text-base" };
-    return <button ref={ref} className={cn(base, variants[variant], sizes[size], className)} {...props} />;
+const variants: Record<Variant, string> = {
+  primary: "bg-dash-primary text-dash-primary-fg hover:bg-dash-primary-hover border border-transparent",
+  secondary: "bg-dash-surface text-dash-text border border-dash-border hover:bg-dash-bg",
+  ghost: "bg-transparent text-dash-text hover:bg-dash-bg border border-transparent",
+  danger: "bg-dash-danger text-dash-danger-fg hover:bg-dash-danger-hover border border-transparent",
+};
+
+const sizes: Record<Size, string> = {
+  sm: "px-3 py-1.5 text-sm",
+  md: "px-4 py-2 text-sm",
+  lg: "px-6 py-3 text-base",
+};
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant = "primary", size = "md", loading = false, disabled, children, ...props }, ref) => {
+    return (
+      <button
+        ref={ref}
+        disabled={disabled || loading}
+        className={cn(
+          "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-dash-primary/40 disabled:cursor-not-allowed disabled:opacity-60",
+          variants[variant],
+          sizes[size],
+          className,
+        )}
+        {...props}
+      >
+        {loading && (
+          <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+        )}
+        {children}
+      </button>
+    );
   },
 );
 Button.displayName = "Button";

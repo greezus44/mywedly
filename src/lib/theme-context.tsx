@@ -1,42 +1,28 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { type ThemeConfig, jsonToTheme, themeToCssVars } from "./theme";
+import { createContext, useContext, useMemo, type CSSProperties, type ReactNode } from "react";
+import { jsonToTheme, themeToEventCssVars } from "./theme";
 
-interface ThemeContextValue {
-  theme: ThemeConfig | null;
-  setThemeElement: (el: HTMLElement | null) => void;
+interface EventThemeContextValue {
+  cssVars: Record<string, string>;
 }
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+const EventThemeContext = createContext<EventThemeContextValue>({ cssVars: {} });
 
-export function EventThemeProvider({
-  themeJson,
-  children,
-}: {
-  themeJson: Record<string, unknown> | null;
-  children: React.ReactNode;
-}) {
-  const [el, setEl] = useState<HTMLElement | null>(null);
-  const theme = jsonToTheme(themeJson);
+interface EventThemeProviderProps {
+  theme: unknown;
+  children: ReactNode;
+}
 
-  useEffect(() => {
-    if (!el) return;
-    const vars = themeToCssVars(theme);
-    Object.entries(vars).forEach(([k, v]) => {
-      el.style.setProperty(k, v);
-    });
-  }, [el, theme]);
-
+export function EventThemeProvider({ theme, children }: EventThemeProviderProps) {
+  const cssVars = useMemo(() => themeToEventCssVars(jsonToTheme(theme)), [theme]);
   return (
-    <ThemeContext.Provider value={{ theme, setThemeElement: setEl }}>
-      <div ref={(node) => { if (node && node !== el) setEl(node); }} style={{ fontFamily: theme.bodyFont }}>
+    <EventThemeContext.Provider value={{ cssVars }}>
+      <div className="event-themed" style={cssVars as CSSProperties}>
         {children}
       </div>
-    </ThemeContext.Provider>
+    </EventThemeContext.Provider>
   );
 }
 
-export function useEventTheme() {
-  const ctx = useContext(ThemeContext);
-  if (!ctx) throw new Error("useEventTheme must be used within EventThemeProvider");
-  return ctx;
+export function useEventTheme(): EventThemeContextValue {
+  return useContext(EventThemeContext);
 }
