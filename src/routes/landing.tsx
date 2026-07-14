@@ -3,98 +3,160 @@ import { SiteHeader } from "../components/site/SiteHeader";
 import { SiteFooter } from "../components/site/SiteFooter";
 import { Button } from "../components/ui/Button";
 
-const features = [
+const FEATURES = [
   {
-    title: "Beautiful Templates",
-    description: "Choose from stunning, professionally designed templates that you can customise to match your style.",
+    title: "Beautiful Cover Pages",
+    description: "Stunning cover designs with custom typography, images, and logos.",
     icon: "🎨",
   },
   {
     title: "Guest Management",
-    description: "Easily manage your guest list, track RSVPs, and organise guests into groups for every Event.",
+    description: "Track RSVPs, manage guest groups, and send invitations with ease.",
     icon: "👥",
   },
   {
     title: "Custom Pages",
-    description: "Build custom pages with a drag-and-drop block editor — no coding required.",
+    description: "Build custom pages with a drag-and-drop block editor.",
     icon: "📄",
   },
   {
-    title: "RSVP & Forms",
-    description: "Collect RSVPs with custom questions, dietary requirements, and plus-one details.",
-    icon: "✉️",
+    title: "Theme Customization",
+    description: "Choose from presets or customize colors, fonts, and buttons.",
+    icon: "🎭",
   },
   {
-    title: "Sharing & QR Codes",
-    description: "Share your invitation website with a link or QR code. Track views and engagement.",
-    icon: "🔗",
+    title: "RSVP Tracking",
+    description: "Real-time RSVP updates with dietary preferences and plus-ones.",
+    icon: "✅",
   },
   {
     title: "Analytics",
-    description: "See who visited, who responded, and get insights into your invitation performance.",
+    description: "Track visits, shares, and engagement on your invitation site.",
     icon: "📊",
+  },
+];
+
+const TESTIMONIALS = [
+  {
+    quote: "MyWedly made our wedding invitations effortless. Our guests loved the beautiful design!",
+    author: "Sarah & James",
+  },
+  {
+    quote: "The RSVP tracking saved us hours. Everything was organized in one place.",
+    author: "Priya & Arjun",
+  },
+  {
+    quote: "So easy to customize. Our invitation matched our wedding theme perfectly.",
+    author: "Emily & Michael",
   },
 ];
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-dash-bg">
+    <div className="flex min-h-screen flex-col bg-dash-bg">
       <SiteHeader />
-      <main className="flex-1">
-        {/* Hero */}
-        <section className="mx-auto max-w-6xl px-4 py-20 text-center">
-          <h1 className="text-4xl md:text-6xl font-bold text-dash-text tracking-tight">
-            Create beautiful event websites
+
+      {/* Hero Section */}
+      <section className="relative overflow-hidden">
+        <div className="mx-auto max-w-6xl px-4 py-20 text-center">
+          <h1 className="text-4xl font-bold tracking-tight text-dash-text sm:text-5xl md:text-6xl">
+            Beautiful Invitation Websites
+            <br />
+            <span className="text-dash-primary">for Your Special Day</span>
           </h1>
-          <p className="mt-6 text-lg md:text-xl text-dash-muted max-w-2xl mx-auto">
-            MyWedly helps you build a stunning invitation website for your special day —
-            manage guests, collect RSVPs, and share with ease.
+          <p className="mx-auto mt-6 max-w-2xl text-lg text-dash-muted">
+            Create a stunning invitation website for your wedding. Manage guests,
+            track RSVPs, and share your love story — all in one place.
           </p>
           <div className="mt-8 flex items-center justify-center gap-4">
-            <Link to="/auth">
-              <Button size="lg">Get started — it's free</Button>
+            <Link to="/dashboard">
+              <Button size="lg">Get Started Free</Button>
             </Link>
-            <a href="#features">
-              <Button variant="secondary" size="lg">Learn more</Button>
-            </a>
+            <Link to="/features">
+              <Button variant="secondary" size="lg">
+                Learn More
+              </Button>
+            </Link>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* Features */}
-        <section id="features" className="mx-auto max-w-6xl px-4 py-16">
-          <h2 className="text-3xl font-bold text-dash-text text-center mb-12">
-            Everything you need
+      {/* Features Section */}
+      <section className="border-t border-dash-border bg-dash-surface py-16">
+        <div className="mx-auto max-w-6xl px-4">
+          <h2 className="text-center text-3xl font-bold text-dash-text">
+            Everything You Need
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {features.map((f) => (
+          <p className="mt-2 text-center text-dash-muted">
+            All the tools to create and manage your invitation website.
+          </p>
+          <div className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+            {FEATURES.map((feature) => (
               <div
-                key={f.title}
-                className="rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm"
+                key={feature.title}
+                className="rounded-lg border border-dash-border bg-dash-bg p-6 transition-shadow hover:shadow-md"
               >
-                <div className="text-3xl mb-4">{f.icon}</div>
-                <h3 className="text-lg font-semibold text-dash-text mb-2">{f.title}</h3>
-                <p className="text-sm text-dash-muted">{f.description}</p>
+                <div className="text-3xl">{feature.icon}</div>
+                <h3 className="mt-4 text-lg font-semibold text-dash-text">
+                  {feature.title}
+                </h3>
+                <p className="mt-2 text-sm text-dash-muted">
+                  {feature.description}
+                </p>
               </div>
             ))}
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* CTA */}
-        <section className="mx-auto max-w-6xl px-4 py-20 text-center">
-          <div className="rounded-lg border border-dash-border bg-dash-surface p-12">
-            <h2 className="text-3xl font-bold text-dash-text mb-4">
-              Ready to build your event website?
-            </h2>
-            <p className="text-lg text-dash-muted mb-8">
-              Join MyWedly today and create a memorable online experience for your guests.
-            </p>
-            <Link to="/auth">
-              <Button size="lg">Start building</Button>
-            </Link>
+      {/* Testimonials Section */}
+      <section className="py-16">
+        <div className="mx-auto max-w-6xl px-4">
+          <h2 className="text-center text-3xl font-bold text-dash-text">
+            Loved by Couples
+          </h2>
+          <div className="mt-12 grid grid-cols-1 gap-8 md:grid-cols-3">
+            {TESTIMONIALS.map((testimonial) => (
+              <div
+                key={testimonial.author}
+                className="rounded-lg border border-dash-border bg-dash-surface p-6"
+              >
+                <p className="text-sm italic text-dash-text">
+                  "{testimonial.quote}"
+                </p>
+                <p className="mt-4 text-sm font-semibold text-dash-primary">
+                  — {testimonial.author}
+                </p>
+              </div>
+            ))}
           </div>
-        </section>
-      </main>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="border-t border-dash-border bg-dash-primary py-16">
+        <div className="mx-auto max-w-6xl px-4 text-center">
+          <h2 className="text-3xl font-bold text-white">
+            Ready to Create Your Invitation?
+          </h2>
+          <p className="mt-2 text-white/90">
+            Start building your beautiful invitation website today.
+          </p>
+          <Link to="/dashboard" className="mt-6 inline-block">
+            <Button
+              variant="secondary"
+              size="lg"
+              className="bg-white text-dash-primary hover:bg-white/90"
+            >
+              Get Started Now
+            </Button>
+          </Link>
+        </div>
+      </section>
+
       <SiteFooter />
     </div>
   );
 }
+
+export default LandingPage;

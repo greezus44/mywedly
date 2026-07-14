@@ -1,31 +1,21 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type EventGuest, type GuestGroup, type SubEvent } from "../../lib/supabase";
-import { useEventContext } from "./event-layout";
+import { supabase, type EventGuest } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { Select } from "../../components/ui/Input";
-import {
-  Card,
-  Modal,
-  LoadingSpinner,
-  ErrorState,
-  EmptyState,
-  Badge,
-} from "../../components/ui";
-import { GuestForm, guestToForm, type GuestFormFields, RsvpBadge } from "./guest-form";
-import { generateUsername } from "../../lib/utils";
+import { Card, Input, Badge, LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
+import { GuestForm, guestToForm, RsvpBadge, type GuestFormValues } from "./guest-form";
+import type { EventContextValue } from "./event-layout";
 
 export function GuestsPage() {
-  const { eventId } = useEventContext();
+  const { eventId } = useOutletContext<EventContextValue>();
   const queryClient = useQueryClient();
-  const [showEdit, setShowEdit] = useState(false);
-  const [editing, setEditing] = useState<EventGuest | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingGuest, setEditingGuest] = useState<EventGuest | null>(null);
   const [search, setSearch] = useState("");
-  const [filterGroup, setFilterGroup] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
+  const [filterGroup, setFilterGroup] = useState<string>("");
 
-  const { data: guests, isLoading, isError, error } = useQuery({
+  const { data: guests, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["guests", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -34,7 +24,7 @@ export function GuestsPage() {
         .eq("event_id", eventId)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as EventGuest[];
+      return data as EventGuest[];
     },
   });
 
@@ -47,46 +37,46 @@ export function GuestsPage() {
         .eq("event_id", eventId)
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as GuestGroup[];
+      return data;
     },
   });
 
-  const { data: subEvents } = useQuery({
-    queryKey: ["sub-events", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sub_events")
-        .select("*")
-        .eq("parent_event_id", eventId)
-        .order("display_order", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as SubEvent[];
-    },
-  });
-
-  const groupMap = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const g of groups ?? []) m.set(g.id, g.name);
-    return m;
-  }, [groups]);
-
-  const filtered = useMemo(() => {
-    if (!guests) return [];
-    return guests.filter((g) => {
-      if (search) {
-        const q = search.toLowerCase();
-        const match =
-          g.name?.toLowerCase().includes(q) ||
-          g.email?.toLowerCase().includes(q) ||
-          g.username?.toLowerCase().includes(q) ||
-          g.phone?.toLowerCase().includes(q);
-        if (!match) return false;
+  const saveMutation = useMutation({
+    mutationFn: async (values: GuestFormValues) => {
+      const payload = {
+        event_id: eventId,
+        name: values.name,
+        username: values.username || null,
+        email: values.email || null,
+        phone: values.phone || null,
+        group_name: values.group_name || null,
+        side: values.side || null,
+        group_id: values.group_id || null,
+        plus_ones: values.plus_ones ?? 0,
+        dietary: values.dietary || null,
+        message: values.message || null,
+        table_number: values.table_number || null,
+        rsvp_status: values.rsvp_status || "pending",
+      };
+      if (editingGuest) {
+        const { error } = await supabase
+          .from("event_guests")
+          .update(payload)
+          .eq("id", editingGuest.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("event_guests")
+          .insert({ ...payload, token: crypto.randomUUID() });
+        if (error) throw error;
       }
-      if (filterGroup && g.group_id !== filterGroup) return false;
-      if (filterStatus && g.rsvp_status !== filterStatus) return false;
-      return true;
-    });
-  }, [guests, search, filterGroup, filterStatus]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
+      setShowForm(false);
+      setEditingGuest(null);
+    },
+  });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -101,96 +91,104 @@ export function GuestsPage() {
     },
   });
 
-  const handleAdd = () => {
-    setEditing(null);
-    setShowEdit(true);
-  };
+  function handleEdit(guest: EventGuest) {
+    setEditingGuest(guest);
+    setShowForm(true);
+  }
 
-  const handleEdit = (guest: EventGuest) => {
-    setEditing(guest);
-    setShowEdit(true);
-  };
+  function handleAdd() {
+    setEditingGuest(null);
+    setShowForm(true);
+  }
+
+  const filtered = guests?.filter((g) => {
+    const matchesSearch = !search ||
+      g.name.toLowerCase().includes(search.toLowerCase()) ||
+      (g.username ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (g.email ?? "").toLowerCase().includes(search.toLowerCase());
+    const matchesGroup = !filterGroup || g.group_id === filterGroup;
+    return matchesSearch && matchesGroup;
+  });
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <LoadingSpinner className="h-8 w-8" />
+      <div className="flex justify-center py-20">
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   if (isError) {
-    return <ErrorState title="Failed to load guests" description={error instanceof Error ? error.message : undefined} />;
+    return (
+      <ErrorState message={error?.message ?? "Failed to load guests"} onRetry={refetch} />
+    );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-dash-text">Guests</h2>
+        <div>
+          <h2 className="text-lg font-semibold text-dash-text">Guests</h2>
+          <p className="text-sm text-dash-muted">
+            {guests?.length ?? 0} total guest{(guests?.length ?? 0) !== 1 ? "s" : ""}
+          </p>
+        </div>
         <Button onClick={handleAdd}>Add Guest</Button>
       </div>
 
       {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <Input
-          placeholder="Search by name, email, username..."
+          placeholder="Search guests..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          className="flex-1"
         />
-        <Select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)}>
-          <option value="">All groups</option>
+        <select
+          value={filterGroup}
+          onChange={(e) => setFilterGroup(e.target.value)}
+          className="rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
+        >
+          <option value="">All Groups</option>
           {groups?.map((g) => (
             <option key={g.id} value={g.id}>{g.name}</option>
           ))}
-        </Select>
-        <Select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-          <option value="">All statuses</option>
-          <option value="pending">Pending</option>
-          <option value="confirmed">Confirmed</option>
-          <option value="declined">Declined</option>
-          <option value="maybe">Maybe</option>
-        </Select>
+        </select>
       </div>
 
-      {guests && guests.length === 0 ? (
+      {/* Guest List */}
+      {!filtered || filtered.length === 0 ? (
         <EmptyState
-          title="No guests yet"
-          description="Add guests to your event and assign them to groups."
-          action={<Button onClick={handleAdd}>Add Guest</Button>}
+          title={search || filterGroup ? "No matching guests" : "No guests yet"}
+          description={search || filterGroup ? "Try adjusting your search or filter." : "Add guests to your event to track RSVPs."}
+          icon={<span className="text-4xl">👥</span>}
+          action={!search && !filterGroup ? <Button onClick={handleAdd}>Add First Guest</Button> : undefined}
         />
-      ) : filtered.length === 0 ? (
-        <Card className="p-8 text-center">
-          <p className="text-sm text-dash-muted">No guests match your filters.</p>
-        </Card>
       ) : (
         <div className="space-y-2">
           {filtered.map((guest) => (
             <Card key={guest.id} className="p-3">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div>
                     <h3 className="text-sm font-semibold text-dash-text">{guest.name}</h3>
-                    <RsvpBadge status={guest.rsvp_status} />
-                  </div>
-                  <div className="flex flex-wrap gap-3 text-xs text-dash-muted">
-                    {guest.username && <span>@{guest.username}</span>}
-                    {guest.email && <span>✉️ {guest.email}</span>}
-                    {guest.phone && <span>📞 {guest.phone}</span>}
-                    {guest.group_id && groupMap.has(guest.group_id) && (
-                      <span className="inline-flex items-center gap-1">
-                        <Badge>{groupMap.get(guest.group_id)}</Badge>
-                      </span>
-                    )}
-                    {guest.plus_ones > 0 && <span>+{guest.plus_ones} plus ones</span>}
-                    {guest.table_number && <span>Table {guest.table_number}</span>}
+                    <div className="flex flex-wrap gap-2 text-xs text-dash-muted">
+                      {guest.username && <span>@{guest.username}</span>}
+                      {guest.email && <span>✉️ {guest.email}</span>}
+                      {guest.phone && <span>📞 {guest.phone}</span>}
+                      {guest.table_number && <span>🪑 Table {guest.table_number}</span>}
+                      {guest.plus_ones > 0 && <span>+{guest.plus_ones}</span>}
+                    </div>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" onClick={() => handleEdit(guest)}>Edit</Button>
+                <div className="flex items-center gap-2">
+                  <RsvpBadge status={guest.rsvp_status} />
+                  <Button variant="ghost" size="sm" onClick={() => handleEdit(guest)}>
+                    Edit
+                  </Button>
                   <Button
-                    size="sm"
                     variant="ghost"
-                    className="text-dash-danger"
+                    size="sm"
                     loading={deleteMutation.isPending}
                     onClick={() => {
                       if (confirm(`Delete guest "${guest.name}"?`)) {
@@ -207,92 +205,24 @@ export function GuestsPage() {
         </div>
       )}
 
-      {showEdit && (
-        <GuestEditor
+      {/* Guest Form Modal */}
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title={editingGuest ? "Edit Guest" : "Add Guest"}
+        size="lg"
+      >
+        <GuestForm
           eventId={eventId}
-          guest={editing}
-          groups={groups ?? []}
-          onClose={() => setShowEdit(false)}
+          initial={editingGuest ? guestToForm(editingGuest) : undefined}
+          onSubmit={(values) => saveMutation.mutate(values)}
+          onCancel={() => setShowForm(false)}
+          loading={saveMutation.isPending}
+          error={saveMutation.isError ? (saveMutation.error?.message ?? "Failed to save") : null}
         />
-      )}
+      </Modal>
     </div>
   );
 }
 
-function GuestEditor({
-  eventId,
-  guest,
-  groups,
-  onClose,
-}: {
-  eventId: string;
-  guest: EventGuest | null;
-  groups: GuestGroup[];
-  onClose: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const [fields, setFields] = useState<GuestFormFields>(guestToForm(guest));
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const payload = {
-        event_id: eventId,
-        name: fields.name,
-        username: fields.username || generateUsername(fields.name),
-        email: fields.email || null,
-        phone: fields.phone || null,
-        group_name: fields.group_name || null,
-        side: fields.side || null,
-        group_id: fields.group_id || null,
-        rsvp_status: fields.rsvp_status,
-        plus_ones: fields.plus_ones,
-        dietary: fields.dietary || null,
-        message: fields.message || null,
-        table_number: fields.table_number || null,
-      };
-      if (guest) {
-        const { error } = await supabase
-          .from("event_guests")
-          .update(payload)
-          .eq("id", guest.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("event_guests")
-          .insert({ ...payload, token: crypto.randomUUID() });
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
-      onClose();
-    },
-  });
-
-  return (
-    <Modal open onClose={onClose} title={guest ? "Edit Guest" : "Add Guest"} size="lg">
-      <div className="space-y-4">
-        <GuestForm
-          fields={fields}
-          onChange={setFields}
-          groups={groups}
-        />
-        {saveMutation.isError && (
-          <p className="text-sm text-dash-danger">
-            {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
-          </p>
-        )}
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button
-            onClick={() => saveMutation.mutate()}
-            loading={saveMutation.isPending}
-            disabled={!fields.name.trim()}
-          >
-            {guest ? "Update" : "Add"}
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
+export default GuestsPage;

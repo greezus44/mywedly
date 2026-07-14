@@ -1,9 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+});
 
 export type Json =
   | string
@@ -15,20 +20,19 @@ export type Json =
 
 export interface Profile {
   id: string;
-  email: string;
-  full_name?: string | null;
-  avatar_url?: string | null;
-  created_at?: string;
-  updated_at?: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface UserEvent {
   id: string;
   creator_id: string;
   name: string;
-  draft_name: string;
+  draft_name: string | null;
   event_type: string;
-  draft_event_type: string;
+  draft_event_type: string | null;
   event_date: string | null;
   draft_event_date: string | null;
   event_time: string | null;
@@ -56,8 +60,8 @@ export interface UserEvent {
   published_at: string | null;
   created_at: string;
   updated_at: string;
-  slug: string;
-  draft_slug: string;
+  slug: string | null;
+  draft_slug: string | null;
   rsvp_deadline: string | null;
   draft_rsvp_deadline: string | null;
 }
@@ -120,7 +124,7 @@ export interface GuestGroupMember {
 export interface EventRsvp {
   id: string;
   event_id: string;
-  guest_id: string;
+  guest_id: string | null;
   guest_name: string;
   status: string;
   plus_ones: number;
@@ -199,7 +203,7 @@ export interface SharingEvent {
   event_id: string;
   event_type: string;
   guest_id: string | null;
-  source: string;
+  source: string | null;
   device_type: string | null;
   metadata: Json;
   created_at: string;

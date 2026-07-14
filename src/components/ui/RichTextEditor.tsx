@@ -1,126 +1,144 @@
-import React, { useRef, useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 
 interface RichTextEditorProps {
   value: string;
   onChange: (html: string) => void;
-  label?: string;
+  className?: string;
   placeholder?: string;
 }
 
 const FONT_SIZES = [
-  { label: "S", value: "2", title: "Small" },
-  { label: "N", value: "3", title: "Normal" },
-  { label: "L", value: "5", title: "Large" },
-  { label: "XL", value: "7", title: "X-Large" },
+  { label: "Small", value: "2" },
+  { label: "Normal", value: "3" },
+  { label: "Large", value: "5" },
+  { label: "Huge", value: "7" },
 ];
 
 const FONT_FAMILIES = [
-  { label: "Sans", value: "Arial, sans-serif" },
-  { label: "Serif", value: "Georgia, serif" },
-  { label: "Mono", value: "'Courier New', monospace" },
+  { label: "EB Garamond", value: "'EB Garamond', serif" },
+  { label: "Cardo", value: "'Cardo', serif" },
+  { label: "Cormorant", value: "'Cormorant Garamond', serif" },
+  { label: "Lora", value: "'Lora', serif" },
+  { label: "Playfair", value: "'Playfair Display', serif" },
+  { label: "Georgia", value: "Georgia, serif" },
+  { label: "Inter", value: "'Inter', sans-serif" },
+  { label: "Montserrat", value: "'Montserrat', sans-serif" },
 ];
 
-const COLORS = ["#000000", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#6b7280"];
-
-export function RichTextEditor({ value, onChange, label, placeholder }: RichTextEditorProps) {
+export function RichTextEditor({
+  value,
+  onChange,
+  className,
+  placeholder = "Start typing…",
+}: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
-  const isInternalChange = useRef(false);
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
-    if (editorRef.current && isInternalChange.current === false) {
-      if (editorRef.current.innerHTML !== value) {
-        editorRef.current.innerHTML = value || "";
-      }
+    if (editorRef.current && editorRef.current.innerHTML !== value && !focused) {
+      editorRef.current.innerHTML = value || "";
     }
-    isInternalChange.current = false;
-  }, [value]);
+  }, [value, focused]);
 
-  const handleInput = useCallback(() => {
+  const exec = useCallback((command: string, val?: string) => {
+    document.execCommand(command, false, val);
     if (editorRef.current) {
-      isInternalChange.current = true;
       onChange(editorRef.current.innerHTML);
     }
   }, [onChange]);
 
-  const exec = useCallback((command: string, val?: string) => {
-    document.execCommand(command, false, val);
-    editorRef.current?.focus();
-    handleInput();
-  }, [handleInput]);
-
-  const handleLink = useCallback(() => {
-    const url = window.prompt("Enter URL:");
-    if (url) {
-      exec("createLink", url);
+  function handleInput() {
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
     }
-  }, [exec]);
+  }
 
-  const toolbarBtn = (onClick: () => void, children: React.ReactNode, title: string) => (
-    <button
-      type="button"
-      title={title}
-      onMouseDown={(e) => {
-        e.preventDefault();
-        onClick();
-      }}
-      className="h-8 min-w-8 px-2 rounded border border-dash-border bg-dash-surface text-sm font-medium text-dash-text hover:bg-dash-bg transition-colors flex items-center justify-center"
-    >
-      {children}
-    </button>
-  );
+  const btnClass =
+    "rounded p-1.5 text-dash-text hover:bg-dash-bg transition-colors";
+  const dividerClass = "w-px h-6 bg-dash-border mx-0.5";
 
   return (
-    <div className="w-full">
-      {label && <label className="block text-sm font-medium text-dash-text mb-1.5">{label}</label>}
-      <div className="rounded-md border border-dash-border bg-dash-surface overflow-hidden">
-        <div className="flex flex-wrap items-center gap-1 p-2 border-b border-dash-border bg-dash-bg">
-          {toolbarBtn(() => exec("bold"), <b>B</b>, "Bold")}
-          {toolbarBtn(() => exec("italic"), <i>I</i>, "Italic")}
-          {toolbarBtn(() => exec("underline"), <u>U</u>, "Underline")}
-          <div className="w-px h-6 bg-dash-border mx-1" />
-          {FONT_SIZES.map((s) =>
-            toolbarBtn(() => exec("fontSize", s.value), <span style={{ fontSize: `${10 + parseInt(s.value) * 2}px` }}>{s.label}</span>, s.title)
-          )}
-          <div className="w-px h-6 bg-dash-border mx-1" />
-          {FONT_FAMILIES.map((f) =>
-            toolbarBtn(() => exec("fontName", f.value), <span style={{ fontFamily: f.value }}>{f.label}</span>, f.label)
-          )}
-          <div className="w-px h-6 bg-dash-border mx-1" />
-          <div className="relative inline-flex">
-            <label
-              title="Text Colour"
-              className="h-8 w-8 rounded border border-dash-border cursor-pointer flex items-center justify-center overflow-hidden relative"
-              style={{ background: "linear-gradient(180deg, transparent 50%, #333 50%)" }}
-            >
-              <span className="text-[10px] font-bold text-dash-text" style={{ textShadow: "0 0 2px white" }}>A</span>
-              <input
-                type="color"
-                className="absolute inset-0 opacity-0 cursor-pointer"
-                onChange={(e) => exec("foreColor", e.target.value)}
-                tabIndex={-1}
-              />
-            </label>
-          </div>
-          {toolbarBtn(handleLink, "🔗", "Insert link")}
-          <div className="w-px h-6 bg-dash-border mx-1" />
-          {toolbarBtn(() => exec("insertUnorderedList"), "• ☰", "Bullet list")}
-          {toolbarBtn(() => exec("insertOrderedList"), "1. ☰", "Numbered list")}
-        </div>
-        <div
-          ref={editorRef}
-          contentEditable
-          suppressContentEditableWarning
-          onInput={handleInput}
-          onBlur={handleInput}
-          data-placeholder={placeholder}
-          className={cn(
-            "min-h-[120px] p-3 text-sm text-dash-text outline-none",
-            "prose prose-sm max-w-none",
-            "[&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-dash-muted"
-          )}
+    <div className={cn("rounded-lg border border-dash-border bg-dash-surface", className)}>
+      <div className="flex flex-wrap items-center gap-0.5 border-b border-dash-border p-2">
+        <button type="button" className={btnClass} onClick={() => exec("bold")} title="Bold">
+          <span className="font-bold">B</span>
+        </button>
+        <button type="button" className={btnClass} onClick={() => exec("italic")} title="Italic">
+          <span className="italic">I</span>
+        </button>
+        <button type="button" className={btnClass} onClick={() => exec("underline")} title="Underline">
+          <span className="underline">U</span>
+        </button>
+        <div className={dividerClass} />
+        <select
+          onChange={(e) => exec("fontSize", e.target.value)}
+          className="rounded border border-dash-border bg-dash-surface px-1.5 py-1 text-xs text-dash-text"
+          title="Font size"
+          defaultValue="3"
+        >
+          {FONT_SIZES.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
+        </select>
+        <select
+          onChange={(e) => exec("fontName", e.target.value)}
+          className="rounded border border-dash-border bg-dash-surface px-1.5 py-1 text-xs text-dash-text"
+          title="Font family"
+          defaultValue="'EB Garamond', serif"
+        >
+          {FONT_FAMILIES.map((f) => (
+            <option key={f.value} value={f.value}>{f.label}</option>
+          ))}
+        </select>
+        <div className={dividerClass} />
+        <input
+          type="color"
+          onChange={(e) => exec("foreColor", e.target.value)}
+          className="h-7 w-7 cursor-pointer rounded border border-dash-border"
+          title="Text color"
         />
+        <div className={dividerClass} />
+        <button
+          type="button"
+          className={btnClass}
+          onClick={() => {
+            const url = window.prompt("Enter URL:");
+            if (url) exec("createLink", url);
+          }}
+          title="Insert link"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+          </svg>
+        </button>
+        <div className={dividerClass} />
+        <button type="button" className={btnClass} onClick={() => exec("insertUnorderedList")} title="Bullet list">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h.01M4 12h.01M4 18h.01M7 6h13M7 12h13M7 18h13" />
+          </svg>
+        </button>
+        <button type="button" className={btnClass} onClick={() => exec("insertOrderedList")} title="Numbered list">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 6h13M7 12h13M7 18h13M3 6h.01M3 12h.01M3 18h.01" />
+          </svg>
+        </button>
       </div>
+      <div
+        ref={editorRef}
+        contentEditable
+        suppressContentEditableWarning
+        onInput={handleInput}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          handleInput();
+        }}
+        data-placeholder={placeholder}
+        className="rich-content min-h-[120px] px-4 py-3 outline-none [&[data-placeholder]:empty]:before:content-[attr(data-placeholder)] [&[data-placeholder]:empty]:before:text-dash-muted"
+      />
     </div>
   );
 }
+
+export default RichTextEditor;

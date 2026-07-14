@@ -2,18 +2,12 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME } from "../../lib/theme";
-import { resolveTypography } from "../../lib/typography";
+import { themeToEventCssVars, RUSTY_THEME } from "../../lib/theme";
 
-interface LogoConfig { url?: string | null; size?: number; align?: string; }
-interface CoverConfig {
-  background?: { image?: string | null; color?: string; position?: string; fit?: string };
-  overlayOpacity?: number;
-  ctaText?: string;
-  eyebrow?: unknown;
-  heading?: unknown;
-  subheading?: unknown;
-  bodyHtml?: string;
+interface LogoConfig {
+  url?: string | null;
+  size?: number;
+  align?: string;
 }
 
 export default function RustyCover() {
@@ -53,43 +47,39 @@ export default function RustyCover() {
     );
   }
 
-  const rawCoverConfig = (event.cover_config ?? {}) as CoverConfig;
   const logoConfig = (event.logo_config ?? {}) as LogoConfig;
-  const bgConfig = rawCoverConfig.background ?? {};
-  const overlay = (typeof rawCoverConfig.overlayOpacity === "number" ? rawCoverConfig.overlayOpacity : 30) / 100;
-  const bgStyle: React.CSSProperties = {};
-  if (bgConfig.image) {
-    bgStyle.backgroundImage = `url(${bgConfig.image})`;
-    bgStyle.backgroundSize = bgConfig.fit === "fill" ? "100% 100%" : (bgConfig.fit as "cover" | "contain") || "cover";
-    bgStyle.backgroundPosition = bgConfig.position || "center";
-    bgStyle.backgroundRepeat = "no-repeat";
-  } else if (bgConfig.color) {
-    bgStyle.backgroundColor = bgConfig.color;
-  }
-  const logoSize = typeof logoConfig.size === "number" ? logoConfig.size : 120;
+  const logoSize = typeof logoConfig.size === "number" ? logoConfig.size : 140;
   const logoAlign = logoConfig.align || "center";
-  const buttonText = rawCoverConfig.ctaText || "Enter";
-  const eyebrow = resolveTypography(rawCoverConfig.eyebrow, "");
-  const heading = resolveTypography(rawCoverConfig.heading, event.name);
-  const subheading = resolveTypography(rawCoverConfig.subheading, "");
+  const buttonText = "Enter";
+
+  // RUSTY_THEME is applied via EventThemeProvider by passing the theme as raw JSON.
+  const themeJson = RUSTY_THEME as unknown as Json;
 
   return (
-    <EventThemeProvider theme={RUSTY_THEME as unknown as Json}>
-      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden" style={bgStyle}>
-        {bgConfig.image && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />}
+    <EventThemeProvider theme={themeJson}>
+      <div
+        className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden"
+        style={themeToEventCssVars(RUSTY_THEME) as React.CSSProperties}
+      >
         <div className="relative z-10 flex w-full max-w-lg flex-col items-center px-6 py-16 text-center animate-fadeIn">
           {logoConfig.url && (
-            <div className="mb-8 w-full flex" style={{ justifyContent: logoAlign === "left" ? "flex-start" : logoAlign === "right" ? "flex-end" : "center" }}>
-              <img src={logoConfig.url} alt="Logo" style={{ height: `${logoSize}px`, width: "auto", maxHeight: "40vh", background: "transparent" }} className="object-contain" />
+            <div
+              className="mb-10 w-full flex"
+              style={{ justifyContent: logoAlign === "left" ? "flex-start" : logoAlign === "right" ? "flex-end" : "center" }}
+            >
+              <img
+                src={logoConfig.url}
+                alt="Logo"
+                style={{ height: `${logoSize}px`, width: "auto", maxHeight: "40vh", background: "transparent" }}
+                className="object-contain"
+              />
             </div>
           )}
-          {eyebrow.text && <p className="guest-eyebrow mb-2" style={eyebrow.style}>{eyebrow.text}</p>}
-          {heading.text && <h1 className="guest-title mb-3" style={heading.style}>{heading.text}</h1>}
-          {subheading.text && <p className="guest-subtitle mb-3" style={subheading.style}>{subheading.text}</p>}
-          {typeof rawCoverConfig.bodyHtml === "string" && rawCoverConfig.bodyHtml && (
-            <div className="rich-content mb-8 max-w-md" dangerouslySetInnerHTML={{ __html: rawCoverConfig.bodyHtml }} />
-          )}
-          <button onClick={() => navigate(`/r/${slug}/signin`)} className="event-btn-primary">{buttonText}</button>
+          <h1 className="guest-title mb-2">{event.name}</h1>
+          <p className="guest-subtitle mb-10 mx-auto">You are cordially invited</p>
+          <button onClick={() => navigate(`/r/${slug}/signin`)} className="event-btn-primary">
+            {buttonText}
+          </button>
         </div>
       </div>
     </EventThemeProvider>

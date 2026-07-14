@@ -12,6 +12,13 @@
   --event-primary: #b45309; --event-primary-hover: #92400e; --event-primary-fg: #ffffff;
   --event-accent: #d97706; --event-font-heading: Georgia, serif; --event-font-body: Georgia, serif;
   --event-font-rich: Georgia, serif; --event-radius: 0.5rem; --event-font-scale: 1;
+  /* Button customization variables — default to theme values */
+  --event-btn-bg: var(--event-primary);
+  --event-btn-bg-hover: var(--event-primary-hover);
+  --event-btn-color: var(--event-primary-fg);
+  --event-btn-font-family: var(--event-font-heading);
+  --event-btn-font-size: 0.875rem;
+  --event-btn-font-weight: 600;
 }
 
 body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
@@ -26,12 +33,15 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
   font-size: calc(1em * var(--event-font-scale, 1)); line-height: 1.2;
 }
 .event-themed .event-btn-primary {
-  background-color: var(--event-primary); color: var(--event-primary-fg);
-  padding: 0.75rem 2rem; border-radius: var(--event-radius); font-weight: 600;
+  background-color: var(--event-btn-bg); color: var(--event-btn-color);
+  padding: 0.75rem 2rem; border-radius: var(--event-radius);
+  font-weight: var(--event-btn-font-weight);
+  font-family: var(--event-btn-font-family);
+  font-size: var(--event-btn-font-size);
   transition: all 0.25s ease; cursor: pointer; border: none;
-  letter-spacing: 0.05em; font-size: 0.875rem; text-transform: uppercase;
+  letter-spacing: 0.05em; text-transform: uppercase;
 }
-.event-themed .event-btn-primary:hover { background-color: var(--event-primary-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.event-themed .event-btn-primary:hover { background-color: var(--event-btn-bg-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
 .event-themed .event-btn-secondary {
   background-color: transparent; color: var(--event-primary);
   padding: 0.75rem 2rem; border-radius: var(--event-radius); font-weight: 600;
@@ -45,7 +55,7 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
   width: 100%; outline: none; transition: border-color 0.2s; font-family: var(--event-font-body); font-size: 1rem;
 }
 .event-themed .event-input:focus { border-color: var(--event-primary); box-shadow: 0 0 0 3px rgba(0,0,0,0.03); }
-.event-themed .event-input::placeholder { color: var(--event-muted); opacity: 0.6; }
+.event-themed .event-input::placeholder { color: var(--event-muted); opacity: 0.6; text-align: center; }
 .event-themed .event-card {
   background-color: var(--event-surface); border: 1px solid var(--event-border);
   border-radius: var(--event-radius); padding: 2rem; transition: box-shadow 0.3s ease, transform 0.3s ease;

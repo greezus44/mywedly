@@ -1,110 +1,117 @@
 import { supabase } from "./supabase";
 
-const BUCKET = "event-assets";
+const BUCKET = "event-images";
 
-function getExtension(filename: string): string {
-  const parts = filename.split(".");
-  return parts.length > 1 ? parts.pop()!.toLowerCase() : "";
-}
-
-function isSvg(filename: string): boolean {
-  return getExtension(filename) === "svg";
-}
-
-function isPng(filename: string): boolean {
-  return getExtension(filename) === "png";
-}
-
-function loadImage(file: File): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = reject;
-      img.src = reader.result as string;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error("Canvas toBlob failed"));
-      },
-      type,
-      quality
-    );
-  });
+export function extractPathFromUrl(url: string): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split("/");
+    const bucketIdx = parts.indexOf(BUCKET);
+    if (bucketIdx === -1 || bucketIdx === parts.length - 1) return null;
+    return parts.slice(bucketIdx + 1).join("/");
+  } catch {
+    return null;
+  }
 }
 
 export async function compressImage(
   file: File,
-  maxSize = 1600,
-  quality = 0.82
+  maxWidth = 1920,
+  quality = 0.85,
 ): Promise<File> {
-  if (isSvg(file.name)) {
+  // Bypass SVG entirely — return as-is
+  if (file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg")) {
     return file;
   }
-  const img = await loadImage(file);
-  let { width, height } = img;
-  if (width > maxSize || height > maxSize) {
-    if (width >= height) {
-      height = Math.round((height * maxSize) / width);
-      width = maxSize;
-    } else {
-      width = Math.round((width * maxSize) / height);
-      height = maxSize;
-    }
-  }
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return file;
-  ctx.drawImage(img, 0, 0, width, height);
 
-  const png = isPng(file.name);
-  const type = png ? "image/png" : "image/jpeg";
-  const blob = await canvasToBlob(canvas, type, png ? 1 : quality);
-  const outName = file.name.replace(/\.(png|jpe?g|webp)$/i, png ? ".png" : ".jpg");
-  return new File([blob], outName, { type });
+  // Non-image files pass through
+  if (!file.type.startsWith("image/")) {
+    return file;
+  }
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => reject(new Error("Failed to read image file."));
+
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Preserve alpha for PNGs — use PNG format for transparent images, JPEG for opaque
+      const isPng = file.type === "image/png" || file.name.toLowerCase().endsWith(".png");
+      const mimeType = isPng ? "image/png" : "image/jpeg";
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          const compressed = new File([blob], file.name, {
+            type: mimeType,
+            lastModified: Date.now(),
+          });
+          resolve(compressed);
+        },
+        mimeType,
+        isPng ? undefined : quality,
+      );
+    };
+
+    img.onerror = () => reject(new Error("Failed to load image for compression."));
+    reader.readAsDataURL(file);
+  });
 }
 
-export async function uploadImage(
-  file: File,
-  path: string
-): Promise<{ url: string; path: string } | { error: string }> {
+export async function uploadImage(file: File, userId: string): Promise<string> {
   try {
     const compressed = await compressImage(file);
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .upload(path, compressed, { upsert: true });
-    if (error) return { error: error.message };
-    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(data.path);
-    return { url: urlData.publicUrl, path: data.path };
+    const timestamp = Date.now();
+    const safeName = compressed.name.replace(/[^a-zA-Z0-9.\-_]/g, "-");
+    const path = `${userId}/${timestamp}-${safeName}`;
+
+    const { error } = await supabase.storage.from(BUCKET).upload(path, compressed);
+    if (error) {
+      console.error("Upload error:", error);
+      throw new Error("Failed to upload image. Please try again.");
+    }
+
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+    return data.publicUrl;
   } catch (err) {
-    return { error: err instanceof Error ? err.message : "Upload failed" };
+    if (err instanceof Error && err.message.includes("Failed to upload image")) {
+      throw err;
+    }
+    console.error("Upload error:", err);
+    throw new Error("Failed to upload image. Please try again.");
   }
 }
 
-export async function removeImage(path: string): Promise<{ error: string | null }> {
+export async function removeImage(url: string): Promise<void> {
+  const path = extractPathFromUrl(url);
+  if (!path) return;
   const { error } = await supabase.storage.from(BUCKET).remove([path]);
-  return { error: error?.message ?? null };
-}
-
-export function extractPathFromUrl(url: string): string | null {
-  try {
-    const u = new URL(url);
-    const parts = u.pathname.split("/");
-    const idx = parts.indexOf("object");
-    if (idx === -1) return null;
-    return decodeURIComponent(parts.slice(idx + 1).join("/"));
-  } catch {
-    return null;
+  if (error) {
+    console.error("Remove image error:", error);
+    throw new Error("Failed to remove image. Please try again.");
   }
 }

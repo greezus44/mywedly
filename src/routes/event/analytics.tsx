@@ -1,186 +1,185 @@
+import { useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type SharingEvent, type EventRsvp, type SubEvent } from "../../lib/supabase";
-import { useEventContext } from "./event-layout";
-import { Card, LoadingSpinner, ErrorState } from "../../components/ui";
+import { supabase } from "../../lib/supabase";
+import { Card, LoadingSpinner, ErrorState, Badge } from "../../components/ui";
 import { formatDate, formatDateTime } from "../../lib/utils";
+import type { EventContextValue } from "./event-layout";
+
+interface AnalyticsSummary {
+  totalShares: number;
+  totalGuests: number;
+  totalRsvps: number;
+  attending: number;
+  declined: number;
+  pending: number;
+}
 
 export function AnalyticsPage() {
-  const { eventId } = useEventContext();
+  const { eventId } = useOutletContext<EventContextValue>();
 
-  const { data: sharingEvents, isLoading: sLoading, isError: sError } = useQuery({
-    queryKey: ["analytics-sharing", eventId],
+  const { data: summary, isLoading, isError, error, refetch } = useQuery<AnalyticsSummary>({
+    queryKey: ["analytics", eventId],
+    queryFn: async () => {
+      const [sharesResult, guestsResult, rsvpsResult] = await Promise.all([
+        supabase.from("sharing_events").select("*", { count: "exact", head: true }).eq("event_id", eventId),
+        supabase.from("event_guests").select("*", { count: "exact", head: true }).eq("event_id", eventId),
+        supabase.from("event_rsvps").select("status").eq("event_id", eventId),
+      ]);
+
+      if (sharesResult.error) throw sharesResult.error;
+      if (guestsResult.error) throw guestsResult.error;
+      if (rsvpsResult.error) throw rsvpsResult.error;
+
+      const rsvps = rsvpsResult.data ?? [];
+      const attending = rsvps.filter((r) => r.status === "attending").length;
+      const declined = rsvps.filter((r) => r.status === "declined").length;
+      const pending = rsvps.filter((r) => r.status === "pending" || r.status === "no_response").length;
+
+      return {
+        totalShares: sharesResult.count ?? 0,
+        totalGuests: guestsResult.count ?? 0,
+        totalRsvps: rsvps.length,
+        attending,
+        declined,
+        pending,
+      };
+    },
+  });
+
+  const { data: recentShares } = useQuery({
+    queryKey: ["recent-shares", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sharing_events")
         .select("*")
         .eq("event_id", eventId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(10);
       if (error) throw error;
-      return (data ?? []) as SharingEvent[];
+      return data;
     },
   });
 
-  const { data: rsvps, isLoading: rLoading, isError: rError } = useQuery({
-    queryKey: ["analytics-rsvps", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("event_rsvps")
-        .select("*")
-        .eq("event_id", eventId)
-        .order("submitted_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as EventRsvp[];
-    },
-  });
-
-  const { data: subEvents } = useQuery({
-    queryKey: ["analytics-sub-events", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sub_events")
-        .select("*")
-        .eq("parent_event_id", eventId)
-        .order("display_order", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as SubEvent[];
-    },
-  });
-
-  if (sLoading || rLoading) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <LoadingSpinner className="h-8 w-8" />
+      <div className="flex justify-center py-20">
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
 
-  if (sError || rError) {
-    return <ErrorState title="Failed to load analytics" />;
+  if (isError) {
+    return (
+      <ErrorState message={error?.message ?? "Failed to load analytics"} onRetry={refetch} />
+    );
   }
 
-  const totalViews = sharingEvents?.length ?? 0;
-  const uniqueGuests = new Set(sharingEvents?.map((e) => e.guest_id).filter(Boolean)).size;
-  const totalRsvps = rsvps?.length ?? 0;
-  const confirmedRsvps = rsvps?.filter((r) => r.status === "confirmed" || r.status === "yes").length ?? 0;
-  const declinedRsvps = rsvps?.filter((r) => r.status === "declined" || r.status === "no").length ?? 0;
-  const pendingRsvps = rsvps?.filter((r) => r.status === "pending").length ?? 0;
+  const rsvpRate = summary && summary.totalGuests > 0
+    ? Math.round((summary.totalRsvps / summary.totalGuests) * 100)
+    : 0;
 
-  // Per-Event RSVP breakdown
-  const rsvpsBySubEvent = new Map<string, EventRsvp[]>();
-  for (const rsvp of rsvps ?? []) {
-    const key = rsvp.sub_event_id ?? "main";
-    if (!rsvpsBySubEvent.has(key)) rsvpsBySubEvent.set(key, []);
-    rsvpsBySubEvent.get(key)!.push(rsvp);
-  }
-
-  // Source breakdown
-  const sourceCounts = new Map<string, number>();
-  for (const ev of sharingEvents ?? []) {
-    const src = ev.source || "unknown";
-    sourceCounts.set(src, (sourceCounts.get(src) ?? 0) + 1);
-  }
+  const attendanceRate = summary && summary.totalRsvps > 0
+    ? Math.round((summary.attending / summary.totalRsvps) * 100)
+    : 0;
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-bold text-dash-text">Analytics</h2>
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-dash-text">Analytics</h2>
+        <p className="text-sm text-dash-muted">Track engagement and RSVPs for your event.</p>
+      </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Card className="p-4">
-          <p className="text-sm text-dash-muted">Page Views</p>
-          <p className="text-2xl font-bold text-dash-text mt-1">{totalViews}</p>
+          <p className="text-xs text-dash-muted">Total Guests</p>
+          <p className="mt-1 text-2xl font-bold text-dash-text">{summary?.totalGuests ?? 0}</p>
         </Card>
         <Card className="p-4">
-          <p className="text-sm text-dash-muted">Unique Guests</p>
-          <p className="text-2xl font-bold text-dash-text mt-1">{uniqueGuests}</p>
+          <p className="text-xs text-dash-muted">Total RSVPs</p>
+          <p className="mt-1 text-2xl font-bold text-dash-text">{summary?.totalRsvps ?? 0}</p>
+          <p className="mt-1 text-xs text-dash-muted">{rsvpRate}% response rate</p>
         </Card>
         <Card className="p-4">
-          <p className="text-sm text-dash-muted">Total RSVPs</p>
-          <p className="text-2xl font-bold text-dash-text mt-1">{totalRsvps}</p>
+          <p className="text-xs text-dash-muted">Attending</p>
+          <p className="mt-1 text-2xl font-bold text-green-600">{summary?.attending ?? 0}</p>
+          <p className="mt-1 text-xs text-dash-muted">{attendanceRate}% of responses</p>
         </Card>
         <Card className="p-4">
-          <p className="text-sm text-dash-muted">Confirmed</p>
-          <p className="text-2xl font-bold text-green-600 mt-1">{confirmedRsvps}</p>
+          <p className="text-xs text-dash-muted">Shares</p>
+          <p className="mt-1 text-2xl font-bold text-dash-primary">{summary?.totalShares ?? 0}</p>
         </Card>
       </div>
 
-      {/* RSVP breakdown */}
+      {/* RSVP Breakdown */}
       <Card className="p-4">
-        <h3 className="text-sm font-semibold text-dash-text mb-3">RSVP Summary</h3>
-        <div className="grid grid-cols-3 gap-4">
+        <h3 className="mb-3 text-sm font-semibold text-dash-text">RSVP Breakdown</h3>
+        <div className="space-y-3">
           <div>
-            <p className="text-sm text-dash-muted">Confirmed</p>
-            <p className="text-xl font-semibold text-green-600">{confirmedRsvps}</p>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-dash-text">Attending</span>
+              <span className="font-medium text-green-600">{summary?.attending ?? 0}</span>
+            </div>
+            <div className="mt-1 h-2 rounded-full bg-dash-border">
+              <div
+                className="h-2 rounded-full bg-green-500"
+                style={{ width: `${attendanceRate}%` }}
+              />
+            </div>
           </div>
           <div>
-            <p className="text-sm text-dash-muted">Declined</p>
-            <p className="text-xl font-semibold text-dash-danger">{declinedRsvps}</p>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-dash-text">Declined</span>
+              <span className="font-medium text-red-600">{summary?.declined ?? 0}</span>
+            </div>
+            <div className="mt-1 h-2 rounded-full bg-dash-border">
+              <div
+                className="h-2 rounded-full bg-red-500"
+                style={{ width: `${summary && summary.totalRsvps > 0 ? (summary.declined / summary.totalRsvps) * 100 : 0}%` }}
+              />
+            </div>
           </div>
           <div>
-            <p className="text-sm text-dash-muted">Pending</p>
-            <p className="text-xl font-semibold text-dash-muted">{pendingRsvps}</p>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-dash-text">Pending</span>
+              <span className="font-medium text-amber-600">{summary?.pending ?? 0}</span>
+            </div>
+            <div className="mt-1 h-2 rounded-full bg-dash-border">
+              <div
+                className="h-2 rounded-full bg-amber-500"
+                style={{ width: `${summary && summary.totalRsvps > 0 ? (summary.pending / summary.totalRsvps) * 100 : 0}%` }}
+              />
+            </div>
           </div>
         </div>
       </Card>
 
-      {/* Per-Event RSVPs */}
-      {subEvents && subEvents.length > 0 && (
-        <Card className="p-4">
-          <h3 className="text-sm font-semibold text-dash-text mb-3">RSVPs by Event</h3>
+      {/* Recent Shares */}
+      <Card className="p-4">
+        <h3 className="mb-3 text-sm font-semibold text-dash-text">Recent Shares</h3>
+        {!recentShares || recentShares.length === 0 ? (
+          <p className="text-sm text-dash-muted">No shares yet.</p>
+        ) : (
           <div className="space-y-2">
-            <div className="flex justify-between text-sm border-b border-dash-border pb-2">
-              <span className="font-medium text-dash-text">Main Event</span>
-              <span className="text-dash-muted">{rsvpsBySubEvent.get("main")?.length ?? 0}</span>
-            </div>
-            {subEvents.map((se) => (
-              <div key={se.id} className="flex justify-between text-sm border-b border-dash-border pb-2 last:border-0">
-                <span className="font-medium text-dash-text">{se.name}</span>
-                <span className="text-dash-muted">{rsvpsBySubEvent.get(se.id)?.length ?? 0}</span>
+            {recentShares.map((share) => (
+              <div
+                key={share.id}
+                className="flex items-center justify-between rounded-md border border-dash-border bg-dash-bg px-3 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <Badge variant="default">{share.source ?? "direct"}</Badge>
+                  {share.device_type && (
+                    <span className="text-xs text-dash-muted">{share.device_type}</span>
+                  )}
+                </div>
+                <span className="text-xs text-dash-muted">{formatDateTime(share.created_at)}</span>
               </div>
             ))}
           </div>
-        </Card>
-      )}
-
-      {/* Source breakdown */}
-      {sourceCounts.size > 0 && (
-        <Card className="p-4">
-          <h3 className="text-sm font-semibold text-dash-text mb-3">Views by Source</h3>
-          <div className="space-y-2">
-            {Array.from(sourceCounts.entries()).map(([source, count]) => (
-              <div key={source} className="flex justify-between text-sm">
-                <span className="font-medium text-dash-text capitalize">{source}</span>
-                <span className="text-dash-muted">{count}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Recent views */}
-      {sharingEvents && sharingEvents.length > 0 && (
-        <Card className="p-4">
-          <h3 className="text-sm font-semibold text-dash-text mb-3">Recent Views</h3>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {sharingEvents.slice(0, 20).map((ev) => (
-              <div key={ev.id} className="flex justify-between text-sm border-b border-dash-border pb-2 last:border-0">
-                <span className="text-dash-text">
-                  {ev.source} {ev.device_type ? `· ${ev.device_type}` : ""}
-                </span>
-                <span className="text-dash-muted">{formatDateTime(ev.created_at)}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {totalViews === 0 && totalRsvps === 0 && (
-        <Card className="p-8 text-center">
-          <p className="text-sm text-dash-muted">
-            No analytics data yet. Publish your website and share it with guests to start collecting data.
-          </p>
-        </Card>
-      )}
+        )}
+      </Card>
     </div>
   );
 }
+
+export default AnalyticsPage;

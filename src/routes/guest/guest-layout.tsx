@@ -1,26 +1,25 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate, NavLink, Outlet, useOutletContext } from "react-router-dom";
+import { Outlet, useParams, useNavigate, NavLink, Link, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { jsonToTheme, type ThemeConfig } from "../../lib/theme";
+import { jsonToTheme } from "../../lib/theme";
 import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
 
 export interface GuestOutletContext {
   event: UserEvent;
   slug: string;
-  theme: ThemeConfig;
+  theme: ReturnType<typeof jsonToTheme>;
   invitedSubEventIds: string[];
 }
 
 export function useGuestOutletContext(): GuestOutletContext {
-  return useOutletContext<GuestOutletContext>();
-}
-
-interface NavItem {
-  label: string;
-  to: string;
+  const ctx = (useOutletContext() as GuestOutletContext | null) ?? null;
+  if (!ctx) {
+    throw new Error("useGuestOutletContext must be used within a GuestLayout");
+  }
+  return ctx;
 }
 
 export default function GuestLayout() {
@@ -29,7 +28,7 @@ export default function GuestLayout() {
   const { guest, eventId, loading: authLoading } = useGuestAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const { data: event, isLoading: eventLoading } = useQuery({
+  const { data: event, isLoading, isError, error } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -44,8 +43,20 @@ export default function GuestLayout() {
     enabled: !!slug,
   });
 
-  const { data: customPages } = useQuery({
-    queryKey: ["guest-custom-pages", event?.id],
+  // Resolve invitations for the signed-in guest
+  const { data: invitedSubEventIds } = useQuery({
+    queryKey: ["guest-invitations", event?.id, guest?.id],
+    queryFn: async () => {
+      if (!event || !guest) return [] as string[];
+      const { invitations } = await resolveGuestInvitations(supabase, guest.id, event.id);
+      return getInvitedSubEventIds(invitations);
+    },
+    enabled: !!event && !!guest,
+  });
+
+  // Fetch custom pages that should appear in the nav
+  const { data: navPages } = useQuery({
+    queryKey: ["guest-nav-pages", event?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
@@ -57,38 +68,36 @@ export default function GuestLayout() {
       if (error) throw error;
       return (data ?? []) as CustomPage[];
     },
-    enabled: !!event?.id,
+    enabled: !!event,
   });
 
-  const { data: invitationData } = useQuery({
-    queryKey: ["guest-invitations", event?.id, guest?.id],
-    queryFn: async () => {
-      return resolveGuestInvitations(supabase, guest!.id, event!.id);
-    },
-    enabled: !!event?.id && !!guest?.id,
-  });
+  const isAuthed = !!guest && !!event && eventId === event.id;
 
-  const invitedSubEventIds = useMemo(
-    () => (invitationData ? getInvitedSubEventIds(invitationData.invitations) : []),
-    [invitationData],
-  );
-
-  // Redirect to sign-in if not authenticated
+  // Redirect to sign-in if not authenticated (once auth + event have loaded)
   useEffect(() => {
-    if (!authLoading && !guest && event) {
+    if (!authLoading && !isLoading && event && !isAuthed) {
       navigate(`/e/${slug}/signin`, { replace: true });
     }
-  }, [authLoading, guest, event, slug, navigate]);
+  }, [authLoading, isLoading, event, isAuthed, slug, navigate]);
 
-  // Close menu on navigation (slug change)
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [slug]);
+  const theme = useMemo(() => jsonToTheme(event?.theme), [event?.theme]);
 
-  if (eventLoading || authLoading) {
+  // Loading
+  if (authLoading || isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-dash-bg">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  // Error / not found
+  if (isError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Something went wrong</h1>
+        <p className="text-dash-muted">{error?.message ?? "Failed to load invitation."}</p>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
@@ -98,71 +107,45 @@ export default function GuestLayout() {
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
         <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
         <p className="text-dash-muted">This invitation website could not be found or is no longer available.</p>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
 
-  if (!guest || eventId !== event.id) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
-      </div>
-    );
+  // Not authenticated — render nothing (redirect is in flight)
+  if (!isAuthed) {
+    return null;
   }
 
-  const theme = jsonToTheme(event.theme);
-
-  const navItems: NavItem[] = [
+  const subEventIds = invitedSubEventIds ?? [];
+  const navLinks = [
     { label: "Home", to: `/e/${slug}/home` },
-    { label: "RSVP", to: `/e/${slug}/rsvp` },
+    ...(subEventIds.length > 0 ? [{ label: "RSVP", to: `/e/${slug}/rsvp` }] : []),
     { label: "Wishes", to: `/e/${slug}/wishes` },
     { label: "Contact", to: `/e/${slug}/contact` },
-    ...(customPages ?? []).map((p) => ({
+    ...(navPages ?? []).map((p) => ({
       label: p.nav_label || p.title,
       to: `/e/${slug}/p/${p.slug}`,
     })),
   ];
 
-  const logoConfig = (event.logo_config ?? {}) as { url?: string | null; size?: number };
-
   return (
-    <EventThemeProvider theme={event.theme as Json}>
+    <EventThemeProvider theme={event.theme}>
       <div className="min-h-screen">
-        {/* Header with hamburger menu */}
-        <header className="sticky top-0 z-40 border-b" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
+        {/* Hamburger header */}
+        <header className="sticky top-0 z-40" style={{ backgroundColor: "var(--event-bg)", borderBottom: "1px solid var(--event-border)" }}>
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-            <NavLink to={`/e/${slug}/home`} className="flex items-center gap-2">
-              {logoConfig.url ? (
-                <img src={logoConfig.url} alt="Logo" style={{ height: "32px", width: "auto", background: "transparent" }} className="object-contain" />
-              ) : (
-                <span className="text-lg font-bold" style={{ color: "var(--event-heading)" }}>{event.name}</span>
-              )}
-            </NavLink>
-
-            {/* Desktop nav */}
-            <nav className="hidden md:flex items-center gap-1">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    `guest-nav-link${isActive ? " active" : ""}`
-                  }
-                >
-                  {item.label}
-                </NavLink>
-              ))}
-            </nav>
-
-            {/* Hamburger button */}
+            <Link to={`/e/${slug}/home`} className="text-sm font-semibold" style={{ color: "var(--event-heading)" }}>
+              {event.name}
+            </Link>
             <button
-              className="md:hidden p-2 rounded-md"
-              style={{ color: "var(--event-text)" }}
-              onClick={() => setMenuOpen((o) => !o)}
+              type="button"
               aria-label="Toggle menu"
-              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
+              className="flex h-10 w-10 items-center justify-center rounded-md"
+              style={{ color: "var(--event-text)" }}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 {menuOpen ? (
                   <>
                     <line x1="18" y1="6" x2="6" y2="18" />
@@ -179,27 +162,27 @@ export default function GuestLayout() {
             </button>
           </div>
 
-          {/* Mobile menu */}
+          {/* Slide-down menu */}
           {menuOpen && (
-            <nav className="md:hidden border-t px-4 py-2" style={{ borderColor: "var(--event-border)" }}>
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    `guest-nav-link block w-full text-left${isActive ? " active" : ""}`
-                  }
-                >
-                  {item.label}
-                </NavLink>
-              ))}
+            <nav className="border-t" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-bg)" }}>
+              <div className="mx-auto max-w-5xl px-4 py-2">
+                {navLinks.map((link) => (
+                  <NavLink
+                    key={link.to}
+                    to={link.to}
+                    onClick={() => setMenuOpen(false)}
+                    className="guest-nav-link block"
+                  >
+                    {link.label}
+                  </NavLink>
+                ))}
+              </div>
             </nav>
           )}
         </header>
 
-        {/* Page content */}
         <main>
-          <Outlet context={{ event, slug: slug!, theme, invitedSubEventIds } satisfies GuestOutletContext} />
+          <Outlet context={{ event, slug: slug!, theme, invitedSubEventIds: subEventIds } satisfies GuestOutletContext} />
         </main>
       </div>
     </EventThemeProvider>

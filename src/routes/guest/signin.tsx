@@ -63,10 +63,10 @@ export default function GuestSignIn() {
           </div>
           <form onSubmit={handleSubmit} className="event-card space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>{placeholder}</label>
-              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus />
+              <label className="mb-1.5 block text-center text-sm font-medium" style={{ color: "var(--event-text)" }}>{placeholder}</label>
+              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus style={{ textAlign: "center" }} />
             </div>
-            {error && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
+            {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
             <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1 }}>{submitting ? "Signing in..." : buttonLabel}</button>
           </form>
           <div className="mt-6 text-center"><Link to={`/e/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>Back to cover</Link></div>

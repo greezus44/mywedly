@@ -1,8 +1,9 @@
-import { NavLink, Outlet, useNavigate, useParams, useOutletContext } from "react-router-dom";
+import { Outlet, NavLink, useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
+import { createContext, useContext, type ReactNode } from "react";
+import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { LoadingSpinner, ErrorState } from "../../components/ui";
+import { LoadingSpinner, ErrorState, Badge } from "../../components/ui";
 import { cn } from "../../lib/utils";
 
 interface EventContextValue {
@@ -10,8 +11,14 @@ interface EventContextValue {
   eventId: string;
 }
 
+const EventContext = createContext<EventContextValue | null>(null);
+
 export function useEventContext(): EventContextValue {
-  return useOutletContext<EventContextValue>();
+  const ctx = useContext(EventContext);
+  if (!ctx) {
+    throw new Error("useEventContext must be used within an EventLayout");
+  }
+  return ctx;
 }
 
 const navTabs = [
@@ -30,32 +37,30 @@ const navTabs = [
   { label: "Settings", to: "settings" },
 ];
 
-async function fetchEvent(eventId: string): Promise<UserEvent> {
-  const { data, error } = await supabase
-    .from("user_events")
-    .select("*")
-    .eq("id", eventId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error("Event not found");
-  return data as UserEvent;
-}
-
 export function EventLayout() {
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: event, isLoading, isError, error } = useQuery({
+  const { data: event, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["event", eventId],
-    queryFn: () => fetchEvent(eventId!),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("id", eventId!)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("Event not found");
+      return data as UserEvent;
+    },
     enabled: !!eventId,
   });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      if (!event) throw new Error("Event not loaded");
-      const { data, error: updateError } = await supabase
+      if (!event) throw new Error("No event to publish");
+      const { error } = await supabase
         .from("user_events")
         .update({
           slug: event.draft_slug,
@@ -76,11 +81,8 @@ export function EventLayout() {
           is_published: true,
           published_at: new Date().toISOString(),
         })
-        .eq("id", event.id)
-        .select()
-        .maybeSingle();
-      if (updateError) throw updateError;
-      return data;
+        .eq("id", event.id);
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
@@ -90,8 +92,8 @@ export function EventLayout() {
   // CRITICAL: While loading, render spinner and DO NOT render <Outlet>
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-dash-bg">
-        <LoadingSpinner className="h-8 w-8" />
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
@@ -99,50 +101,49 @@ export function EventLayout() {
   // CRITICAL: On error, render error message and DO NOT render <Outlet>
   if (isError || !event) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-dash-bg px-4">
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
         <ErrorState
-          title="Failed to load event"
-          description={error instanceof Error ? error.message : "Please try again."}
-          onRetry={() => queryClient.invalidateQueries({ queryKey: ["event", eventId] })}
+          message={error?.message ?? "Failed to load event"}
+          onRetry={refetch}
         />
       </div>
     );
   }
 
-  // CRITICAL: Only render <Outlet> when event is successfully loaded, with non-null context
+  // CRITICAL: Only render <Outlet> when event is successfully loaded
   return (
     <div className="min-h-screen bg-dash-bg">
-      <header className="border-b border-dash-border bg-dash-surface sticky top-0 z-40">
+      <header className="sticky top-0 z-40 border-b border-dash-border bg-dash-surface/95 backdrop-blur">
         <div className="mx-auto max-w-7xl px-4">
-          <div className="h-14 flex items-center justify-between">
+          <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={() => navigate("/dashboard")}
-                className="text-sm text-dash-muted hover:text-dash-text transition-colors"
+                className="text-sm text-dash-muted hover:text-dash-text"
               >
                 ← Dashboard
               </button>
               <span className="text-dash-border">/</span>
-              <span className="text-sm font-semibold text-dash-text truncate max-w-[200px]">
-                {event.draft_name || event.name || "Untitled"}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
+              <h1 className="truncate text-base font-semibold text-dash-text">
+                {event.draft_name || event.name}
+              </h1>
               {event.is_published ? (
-                <Badge>Published</Badge>
+                <Badge variant="success">Published</Badge>
               ) : (
-                <Badge>Draft</Badge>
+                <Badge variant="warning">Draft</Badge>
               )}
-              <Button
-                size="sm"
-                loading={publishMutation.isPending}
-                onClick={() => publishMutation.mutate()}
-              >
-                {event.is_published ? "Update" : "Publish"}
-              </Button>
             </div>
+            <Button
+              size="sm"
+              loading={publishMutation.isPending}
+              disabled={publishMutation.isPending}
+              onClick={() => publishMutation.mutate()}
+            >
+              {event.is_published ? "Update Published" : "Publish"}
+            </Button>
           </div>
-          <nav className="flex gap-1 overflow-x-auto pb-2 -mb-px">
+          <nav className="flex gap-1 overflow-x-auto pb-2 scrollbar-thin">
             {navTabs.map((tab) => (
               <NavLink
                 key={tab.label}
@@ -150,10 +151,10 @@ export function EventLayout() {
                 end={tab.to === ""}
                 className={({ isActive }) =>
                   cn(
-                    "px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
+                    "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                     isActive
                       ? "bg-dash-primary text-dash-primary-fg"
-                      : "text-dash-muted hover:text-dash-text hover:bg-dash-bg"
+                      : "text-dash-muted hover:bg-dash-bg hover:text-dash-text",
                   )
                 }
               >
@@ -166,13 +167,13 @@ export function EventLayout() {
 
       <main className="mx-auto max-w-7xl px-4 py-6">
         {publishMutation.isError && (
-          <div className="mb-4 rounded-md bg-dash-danger/10 border border-dash-danger/20 p-3 text-sm text-dash-danger">
-            Failed to publish: {publishMutation.error instanceof Error ? publishMutation.error.message : "Unknown error"}
+          <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-dash-danger">
+            {publishMutation.error?.message ?? "Failed to publish event"}
           </div>
         )}
         {publishMutation.isSuccess && (
-          <div className="mb-4 rounded-md bg-green-50 border border-green-200 p-3 text-sm text-green-700">
-            {event.is_published ? "Website updated successfully!" : "Website published successfully!"}
+          <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            Event published successfully!
           </div>
         )}
         <Outlet context={{ event, eventId: eventId! }} />
@@ -181,10 +182,6 @@ export function EventLayout() {
   );
 }
 
-function Badge({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-dash-bg text-dash-muted border border-dash-border">
-      {children}
-    </span>
-  );
-}
+export default EventLayout;
+
+export type { EventContextValue };

@@ -4,15 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME } from "../../lib/theme";
-import { resolveTypography } from "../../lib/typography";
-
-interface LoginConfig {
-  heading?: unknown;
-  subheading?: unknown;
-  placeholder?: string;
-  buttonLabel?: string;
-}
+import { themeToEventCssVars, RUSTY_THEME } from "../../lib/theme";
 
 export default function RustySignIn() {
   const { slug } = useParams<{ slug: string }>();
@@ -59,6 +51,7 @@ export default function RustySignIn() {
       </div>
     );
   }
+
   if (!event) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
@@ -68,30 +61,53 @@ export default function RustySignIn() {
     );
   }
 
-  const loginConfig = (event.login_config ?? {}) as LoginConfig;
-  const heading = resolveTypography(loginConfig.heading, event.name || "Welcome");
-  const subheading = resolveTypography(loginConfig.subheading, "Please sign in to view your invitation");
-  const placeholder = loginConfig.placeholder || "Enter your username";
-  const buttonLabel = loginConfig.buttonLabel || "Sign In";
+  const placeholder = "Enter your username";
+  const buttonLabel = "Sign In";
+  const themeJson = RUSTY_THEME as unknown as Json;
 
   return (
-    <EventThemeProvider theme={RUSTY_THEME as unknown as Json}>
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
+    <EventThemeProvider theme={themeJson}>
+      <div
+        className="flex min-h-screen flex-col items-center justify-center px-6 py-16"
+        style={themeToEventCssVars(RUSTY_THEME) as React.CSSProperties}
+      >
         <div className="w-full max-w-md">
           <div className="mb-8 text-center">
-            <h1 className="guest-title mb-2" style={heading.style}>{heading.text}</h1>
-            <p className="guest-subtitle" style={subheading.style}>{subheading.text}</p>
+            <h1 className="guest-title mb-2">{event.name || "Welcome"}</h1>
+            <p className="guest-subtitle mx-auto">Please sign in to view your invitation</p>
           </div>
           <form onSubmit={handleSubmit} className="event-card space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>{placeholder}</label>
-              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus />
+              <label className="mb-1.5 block text-center text-sm font-medium" style={{ color: "var(--event-text)" }}>
+                {placeholder}
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="event-input"
+                placeholder={placeholder}
+                required
+                autoFocus
+                style={{ textAlign: "center" }}
+              />
             </div>
-            {error && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
-            <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1 }}>{submitting ? "Signing in..." : buttonLabel}</button>
+            {error && (
+              <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>
+            )}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="event-btn-primary w-full"
+              style={{ opacity: submitting ? 0.6 : 1 }}
+            >
+              {submitting ? "Signing in..." : buttonLabel}
+            </button>
           </form>
           <div className="mt-6 text-center">
-            <Link to={`/r/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>Back to cover</Link>
+            <Link to={`/r/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>
+              Back to cover
+            </Link>
           </div>
         </div>
       </div>

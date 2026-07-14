@@ -1,261 +1,241 @@
-import React, { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import type { Json } from "../../lib/supabase";
 import { resolveTypography } from "../../lib/typography";
 import { RichTextContent } from "../../lib/sanitize";
-import { getCountdown } from "../../lib/utils";
+import { getCountdown, formatDate, formatTime12 } from "../../lib/utils";
 
-export interface Block {
-  id: string;
+interface Block {
+  id?: string;
   type: string;
   content: Record<string, unknown>;
-  order_index: number;
+  order_index?: number;
 }
 
 interface BlockRendererProps {
-  blocks: Block[];
+  blocks: Json | null | undefined;
+  /** slug of the parent event, used for rsvp-form navigation */
+  slug?: string;
 }
 
-export function BlockRenderer({ blocks }: BlockRendererProps) {
-  if (!Array.isArray(blocks)) return null;
-  return (
-    <>
-      {blocks.map((block) => (
-        <BlockView key={block.id ?? block.order_index} block={block} />
-      ))}
-    </>
-  );
+function readBlocks(json: Json | null | undefined): Block[] {
+  if (!json || !Array.isArray(json)) return [];
+  return (json as Array<Record<string, unknown>>).map((item) => ({
+    id: (item.id as string) ?? undefined,
+    type: (item.type as string) ?? "paragraph",
+    content: (item.content as Record<string, unknown>) ?? {},
+    order_index: (item.order_index as number) ?? 0,
+  }));
 }
 
-function BlockView({ block }: { block: Block }) {
-  const c = block.content ?? {};
-  switch (block.type) {
-    case "heading": return <HeadingBlock c={c} />;
-    case "paragraph":
-    case "text": return <ParagraphBlock c={c} />;
-    case "image": return <ImageBlock c={c} />;
-    case "spacer": return <SpacerBlock c={c} />;
-    case "divider": return <DividerBlock />;
-    case "gallery": return <GalleryBlock c={c} />;
-    case "video": return <VideoBlock c={c} />;
-    case "button": return <ButtonBlock c={c} />;
-    case "columns": return <ColumnsBlock c={c} />;
-    case "list": return <ListBlock c={c} />;
-    case "quote": return <QuoteBlock c={c} />;
-    case "countdown": return <CountdownBlock c={c} />;
-    case "map": return <MapBlock c={c} />;
-    case "rsvp-form": return <PlaceholderBlock label="RSVP Form" />;
-    case "guest-list": return <PlaceholderBlock label="Guest List" />;
-    case "schedule": return <PlaceholderBlock label="Schedule" />;
-    case "venue": return <PlaceholderBlock label="Venue" />;
-    case "faq": return <FaqBlock c={c} />;
-    default: return null;
-  }
-}
-
-function HeadingBlock({ c }: { c: Record<string, unknown> }) {
-  const resolved = resolveTypography(c, "");
-  const level = (c.level as number) ?? 2;
-  const align = (c.align as string) ?? "left";
-  const style = { ...resolved.style, textAlign: align as React.CSSProperties["textAlign"] };
-  const Tag = (`h${Math.min(Math.max(level, 1), 6)}`) as keyof React.JSX.IntrinsicElements;
-  return (
-    <div className="guest-section-tight">
-      <div className="mx-auto max-w-3xl">
-        <Tag className="guest-title" style={style}>{resolved.text}</Tag>
-      </div>
-    </div>
-  );
-}
-
-function ParagraphBlock({ c }: { c: Record<string, unknown> }) {
-  const text = (c.text as string) ?? "";
-  const align = (c.align as string) ?? "left";
-  return (
-    <div className="guest-section-tight">
-      <div className="mx-auto max-w-3xl" style={{ textAlign: align as React.CSSProperties["textAlign"] }}>
-        <RichTextContent html={text} />
-      </div>
-    </div>
-  );
-}
-
-function ImageBlock({ c }: { c: Record<string, unknown> }) {
-  const url = c.url as string | null | undefined;
-  const alt = (c.alt as string) ?? "";
-  const align = (c.align as string) ?? "center";
-  if (!url) return null;
-  const justify = align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center";
-  return (
-    <div className="guest-section-tight">
-      <div className="mx-auto max-w-3xl flex" style={{ justifyContent: justify }}>
-        <img src={url} alt={alt} className="max-w-full" style={{ borderRadius: "var(--event-radius)" }} />
-      </div>
-    </div>
-  );
-}
-
-function SpacerBlock({ c }: { c: Record<string, unknown> }) {
-  const height = (c.height as number) ?? 40;
-  return <div style={{ height: `${height}px` }} />;
-}
-
-function DividerBlock() {
-  return (
-    <div className="mx-auto max-w-3xl py-2">
-      <hr style={{ borderColor: "var(--event-border)", borderWidth: 0, borderTopWidth: "1px" }} />
-    </div>
-  );
-}
-
-function GalleryBlock({ c }: { c: Record<string, unknown> }) {
-  const images = (c.images as string[]) ?? [];
-  if (images.length === 0) return null;
-  return (
-    <div className="guest-section-tight">
-      <div className="mx-auto max-w-4xl grid grid-cols-2 md:grid-cols-3 gap-3">
-        {images.map((src, i) => (
-          <img key={i} src={src} alt="" className="w-full h-48 object-cover" style={{ borderRadius: "var(--event-radius)" }} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function VideoBlock({ c }: { c: Record<string, unknown> }) {
-  const embedUrl = c.embedUrl as string | undefined;
-  if (!embedUrl) return null;
-  return (
-    <div className="guest-section-tight">
-      <div className="mx-auto max-w-3xl" style={{ aspectRatio: "16 / 9" }}>
-        <iframe src={embedUrl} className="w-full h-full" style={{ borderRadius: "var(--event-radius)", border: "none" }} allowFullScreen />
-      </div>
-    </div>
-  );
-}
-
-function ButtonBlock({ c }: { c: Record<string, unknown> }) {
-  const label = (c.label as string) ?? "";
-  const href = (c.href as string) ?? "";
-  const align = (c.align as string) ?? "center";
-  if (!label) return null;
-  const justify = align === "left" ? "flex-start" : align === "right" ? "flex-end" : "center";
-  return (
-    <div className="guest-section-tight">
-      <div className="mx-auto max-w-3xl flex" style={{ justifyContent: justify }}>
-        <button type="button" className="event-btn-primary" onClick={() => { if (href) window.open(href, "_blank", "noopener,noreferrer"); }}>
-          {label}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ColumnsBlock({ c }: { c: Record<string, unknown> }) {
-  const columns = (c.columns as Array<{ blocks?: Block[] }>) ?? [];
-  if (columns.length === 0) return null;
-  return (
-    <div className="guest-section-tight">
-      <div className="mx-auto max-w-4xl grid gap-4" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))` }}>
-        {columns.map((col, i) => (
-          <div key={i}>{col.blocks && <BlockRenderer blocks={col.blocks} />}</div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ListBlock({ c }: { c: Record<string, unknown> }) {
-  const items = (c.items as string[]) ?? [];
-  const ordered = (c.ordered as boolean) ?? false;
-  if (items.length === 0) return null;
-  const Tag = ordered ? "ol" : "ul";
-  return (
-    <div className="guest-section-tight">
-      <div className="mx-auto max-w-3xl">
-        <Tag className="rich-content" style={{ paddingLeft: "1.5em" }}>
-          {items.map((item, i) => <li key={i}>{item}</li>)}
-        </Tag>
-      </div>
-    </div>
-  );
-}
-
-function QuoteBlock({ c }: { c: Record<string, unknown> }) {
-  const text = (c.text as string) ?? "";
-  const caption = (c.caption as string) ?? "";
-  if (!text) return null;
-  return (
-    <div className="guest-section-tight">
-      <div className="mx-auto max-w-3xl">
-        <blockquote className="rich-content" style={{ borderLeft: "3px solid var(--event-border)", paddingLeft: "1em", fontStyle: "italic", color: "var(--event-muted)" }}>
-          {text}
-          {caption && <footer className="mt-2 text-sm" style={{ color: "var(--event-muted)" }}>— {caption}</footer>}
-        </blockquote>
-      </div>
-    </div>
-  );
-}
-
-function CountdownBlock({ c }: { c: Record<string, unknown> }) {
-  const target = c.targetDate as string | undefined;
-  const [count, setCount] = useState(getCountdown(target));
+function CountdownBlock({ targetDate }: { targetDate: string | null | undefined }) {
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => setCount(getCountdown(target)), 1000);
+    const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [target]);
-  if (count.isPast) return <PlaceholderBlock label="The event has begun!" />;
-  const items = [
-    { label: "Days", value: count.days },
-    { label: "Hours", value: count.hours },
-    { label: "Minutes", value: count.minutes },
-    { label: "Seconds", value: count.seconds },
+  }, []);
+  void now;
+  const c = getCountdown(targetDate);
+  if (c.isPast) {
+    return <p className="text-center text-sm" style={{ color: "var(--event-muted)" }}>The day has arrived!</p>;
+  }
+  const cells = [
+    { label: "Days", value: c.days },
+    { label: "Hours", value: c.hours },
+    { label: "Min", value: c.minutes },
+    { label: "Sec", value: c.seconds },
   ];
   return (
-    <div className="guest-section-tight">
-      <div className="mx-auto max-w-3xl flex justify-center gap-4 md:gap-8">
-        {items.map((it) => (
-          <div key={it.label} className="text-center">
-            <div className="text-3xl md:text-5xl font-bold" style={{ color: "var(--event-heading)" }}>{String(it.value).padStart(2, "0")}</div>
-            <div className="text-xs uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>{it.label}</div>
+    <div className="grid grid-cols-4 gap-3 text-center">
+      {cells.map((cell) => (
+        <div key={cell.label} className="event-info-card">
+          <div className="text-2xl font-bold" style={{ color: "var(--event-heading)" }}>
+            {String(cell.value).padStart(2, "0")}
           </div>
-        ))}
-      </div>
+          <div className="text-xs uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>{cell.label}</div>
+        </div>
+      ))}
     </div>
   );
 }
 
-function MapBlock({ c }: { c: Record<string, unknown> }) {
-  const address = (c.address as string) ?? "";
-  const query = encodeURIComponent(address || "venue");
+export function BlockRenderer({ blocks, slug }: BlockRendererProps) {
+  const navigate = useNavigate();
+  const list = readBlocks(blocks);
+
+  if (list.length === 0) return null;
+
   return (
-    <div className="guest-section-tight">
-      <div className="mx-auto max-w-3xl" style={{ aspectRatio: "16 / 9" }}>
-        <iframe title="Map" src={`https://www.google.com/maps?q=${query}&output=embed`} className="w-full h-full" style={{ borderRadius: "var(--event-radius)", border: "none" }} />
-      </div>
+    <div className="space-y-6">
+      {list.map((block, i) => {
+        const c = block.content;
+        const key = block.id ?? i;
+        switch (block.type) {
+          case "heading": {
+            const t = resolveTypography(c, "");
+            return <h2 key={key} className="guest-title" style={t.style}>{t.text}</h2>;
+          }
+          case "paragraph": {
+            const html = (c.html as string) ?? (c.text as string) ?? "";
+            return <RichTextContent key={key} html={html} />;
+          }
+          case "image": {
+            const url = c.url as string | undefined;
+            if (!url) return null;
+            return (
+              <div key={key} style={{ textAlign: ((c.align as string) ?? "center") as React.CSSProperties["textAlign"] }}>
+                <img src={url} alt={(c.alt as string) ?? ""} style={{ maxWidth: c.width ? `${c.width}px` : "100%", borderRadius: "var(--event-radius)", margin: "0 auto" }} />
+              </div>
+            );
+          }
+          case "spacer":
+            return <div key={key} style={{ height: `${(c.heightPx as number) ?? 40}px` }} />;
+          case "divider":
+            return <hr key={key} style={{ border: "none", borderTop: `1px solid var(--event-border)` }} />;
+          case "gallery": {
+            const images = (c.images as string[]) ?? [];
+            if (images.length === 0) return null;
+            return (
+              <div key={key} className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {images.map((url, idx) => (
+                  <img key={idx} src={url} alt="" className="w-full rounded-md object-cover" style={{ aspectRatio: "1" }} />
+                ))}
+              </div>
+            );
+          }
+          case "video": {
+            const url = (c.url as string) ?? "";
+            if (!url) return null;
+            const isYoutube = /youtube\.com|youtu\.be/.test(url);
+            const embed = isYoutube
+              ? `https://www.youtube.com/embed/${(url.split(/v=|youtu\.be\//)[1] ?? "").split(/[&?]/)[0]}`
+              : url;
+            return (
+              <div key={key} className="overflow-hidden rounded-md" style={{ border: "1px solid var(--event-border)" }}>
+                <iframe src={embed} title="Video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen style={{ width: "100%", aspectRatio: "16 / 9", border: "none" }} />
+              </div>
+            );
+          }
+          case "button": {
+            const href = (c.href as string) ?? "#";
+            return (
+              <div key={key} style={{ textAlign: ((c.align as string) ?? "center") as React.CSSProperties["textAlign"] }}>
+                <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noopener noreferrer" className="event-btn-primary inline-block">
+                  {(c.buttonText as string) ?? "Click Here"}
+                </a>
+              </div>
+            );
+          }
+          case "columns": {
+            const cols = (c.columns as Array<Record<string, unknown>>) ?? [];
+            return (
+              <div key={key} className="grid gap-4 sm:grid-cols-2">
+                {cols.map((col, idx) => (
+                  <div key={idx} className="event-info-card">
+                    <BlockRenderer blocks={(col.blocks as Json) ?? null} slug={slug} />
+                  </div>
+                ))}
+              </div>
+            );
+          }
+          case "list": {
+            const items = (c.items as string[]) ?? [];
+            if (items.length === 0) return null;
+            const ordered = c.ordered === true;
+            const Tag = ordered ? "ol" : "ul";
+            return (
+              <Tag key={key} className="rich-content" style={{ paddingLeft: "1.5em" }}>
+                {items.map((item, idx) => <li key={idx}>{item}</li>)}
+              </Tag>
+            );
+          }
+          case "quote": {
+            const text = (c.text as string) ?? "";
+            const author = (c.author as string) ?? "";
+            return (
+              <blockquote key={key} style={{ borderLeft: `3px solid var(--event-border)`, paddingLeft: "1em", fontStyle: "italic", color: "var(--event-muted)" }}>
+                {text}
+                {author && <footer className="mt-2 text-sm">— {author}</footer>}
+              </blockquote>
+            );
+          }
+          case "countdown":
+            return <CountdownBlock key={key} targetDate={(c.date as string) ?? (c.targetDate as string)} />;
+          case "map": {
+            const address = (c.address as string) ?? (c.location as string) ?? "";
+            const src = `https://maps.google.com/maps?q=${encodeURIComponent(address)}&output=embed`;
+            return (
+              <div key={key} className="overflow-hidden rounded-md" style={{ border: "1px solid var(--event-border)" }}>
+                <iframe title="Map" src={src} style={{ width: "100%", height: "300px", border: "none" }} loading="lazy" />
+              </div>
+            );
+          }
+          case "rsvp-form": {
+            return (
+              <div key={key} className="text-center">
+                <button type="button" onClick={() => slug && navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">
+                  {(c.buttonText as string) ?? "RSVP Now"}
+                </button>
+              </div>
+            );
+          }
+          case "guest-list": {
+            const names = (c.names as string[]) ?? [];
+            if (names.length === 0) return null;
+            return (
+              <div key={key} className="grid gap-2 sm:grid-cols-2">
+                {names.map((n, idx) => (
+                  <div key={idx} className="event-info-card text-sm" style={{ color: "var(--event-text)" }}>{n}</div>
+                ))}
+              </div>
+            );
+          }
+          case "schedule": {
+            const items = (c.items as Array<Record<string, unknown>>) ?? [];
+            if (items.length === 0) return null;
+            return (
+              <div key={key} className="space-y-3">
+                {items.map((item, idx) => (
+                  <div key={idx} className="event-info-card">
+                    <div className="font-semibold" style={{ color: "var(--event-heading)" }}>{(item.title as string) ?? ""}</div>
+                    {item.date ? <div className="text-sm" style={{ color: "var(--event-muted)" }}>{formatDate(item.date as string)}{item.time ? ` · ${formatTime12(item.time as string)}` : ""}</div> : null}
+                    {item.venue ? <div className="text-sm" style={{ color: "var(--event-muted)" }}>{item.venue as string}</div> : null}
+                    {item.description ? <div className="mt-1 text-sm" style={{ color: "var(--event-text)" }}>{item.description as string}</div> : null}
+                  </div>
+                ))}
+              </div>
+            );
+          }
+          case "venue": {
+            const name = (c.name as string) ?? "";
+            const address = (c.address as string) ?? "";
+            return (
+              <div key={key} className="event-info-card text-center">
+                {name && <div className="text-lg font-bold" style={{ color: "var(--event-heading)" }}>{name}</div>}
+                {address && <div className="text-sm" style={{ color: "var(--event-muted)" }}>{address}</div>}
+              </div>
+            );
+          }
+          case "faq": {
+            const items = (c.items as Array<Record<string, unknown>>) ?? [];
+            if (items.length === 0) return null;
+            return (
+              <div key={key} className="space-y-3">
+                {items.map((item, idx) => (
+                  <div key={idx} className="event-info-card">
+                    <div className="font-semibold" style={{ color: "var(--event-heading)" }}>{(item.question as string) ?? ""}</div>
+                    <div className="mt-1 text-sm" style={{ color: "var(--event-text)" }}>{(item.answer as string) ?? ""}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          }
+          default:
+            return null;
+        }
+      })}
     </div>
   );
 }
 
-function PlaceholderBlock({ label }: { label: string }) {
-  return (
-    <div className="guest-section-tight text-center">
-      <p className="guest-subtitle mx-auto">{label}</p>
-    </div>
-  );
-}
-
-function FaqBlock({ c }: { c: Record<string, unknown> }) {
-  const items = (c.items as Array<{ question?: string; answer?: string }>) ?? [];
-  if (items.length === 0) return null;
-  return (
-    <div className="guest-section-tight">
-      <div className="mx-auto max-w-3xl space-y-4">
-        {items.map((item, i) => (
-          <details key={i} className="event-card" style={{ padding: "1rem 1.5rem" }}>
-            <summary className="cursor-pointer font-semibold" style={{ color: "var(--event-heading)" }}>{item.question ?? ""}</summary>
-            <p className="mt-2 rich-content">{item.answer ?? ""}</p>
-          </details>
-        ))}
-      </div>
-    </div>
-  );
-}
+export default BlockRenderer;

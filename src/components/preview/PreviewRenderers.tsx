@@ -1,40 +1,58 @@
-import React from "react";
-import type { UserEvent, Json } from "../../lib/supabase";
 import { resolveTypography } from "../../lib/typography";
-import { jsonToTheme } from "../../lib/theme";
+import { jsonToTheme, themeToEventCssVars } from "../../lib/theme";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { RichTextContent } from "../../lib/sanitize";
-import { cn } from "../../lib/utils";
-import type { TypographyStyle } from "../../lib/typography";
+import type { UserEvent, Json } from "../../lib/supabase";
+
+// ---- Config Interfaces ----
 
 export interface CoverConfig {
-  eyebrow?: TypographyStyle | string;
-  heading?: TypographyStyle | string;
-  subheading?: TypographyStyle | string;
-  body?: TypographyStyle | string;
-  ctaLabel?: string;
-  overlay?: number;
+  eyebrow?: TypographyValue;
+  heading?: TypographyValue;
+  subheading?: TypographyValue;
   layout?: string;
+  overlay?: number;
+  overlayColor?: string;
 }
 
 export interface LogoConfig {
-  imageUrl?: string | null;
-  shape?: string;
-  size?: number;
+  image?: string | null;
+  width?: number;
+  height?: number;
+  borderRadius?: string;
   position?: string;
+  background?: string;
 }
 
 export interface LoginConfig {
-  heading?: TypographyStyle | string;
-  subheading?: TypographyStyle | string;
+  heading?: TypographyValue;
+  subheading?: TypographyValue;
+  buttonText?: string;
   placeholder?: string;
-  buttonLabel?: string;
 }
 
-interface EventContent {
-  heading?: string;
-  body?: string;
-  sections?: Array<{ heading?: string; headingFont?: string; headingColor?: string; body?: string }>;
+export interface EventContent {
+  home?: {
+    heading?: TypographyValue;
+    body?: string;
+  };
+  story?: {
+    heading?: TypographyValue;
+    body?: string;
+  };
+  [key: string]: unknown;
+}
+
+type TypographyValue = Parameters<typeof resolveTypography>[0];
+
+// ---- CoverPreview ----
+
+interface CoverPreviewProps {
+  event: UserEvent;
+  theme?: Json | null;
+  coverConfig?: CoverConfig;
+  logoConfig?: LogoConfig;
+  coverImage?: string | null;
 }
 
 export function CoverPreview({
@@ -43,67 +61,77 @@ export function CoverPreview({
   coverConfig,
   logoConfig,
   coverImage,
-}: {
-  event: UserEvent;
-  theme?: Json | null;
-  coverConfig?: CoverConfig;
-  logoConfig?: LogoConfig;
-  coverImage?: string | null;
-}) {
+}: CoverPreviewProps) {
+  const fullTheme = jsonToTheme(theme ?? event.theme);
+  const cssVars = themeToEventCssVars(fullTheme) as React.CSSProperties;
   const cfg = coverConfig ?? (event.cover_config as CoverConfig | undefined);
   const logo = logoConfig ?? (event.logo_config as LogoConfig | undefined);
-  const img = coverImage ?? event.cover_image;
-  const overlayOpacity = cfg?.overlay ?? 0.3;
+  const image = coverImage ?? event.cover_image;
 
-  const eyebrow = resolveTypography(cfg?.eyebrow, "");
-  const heading = resolveTypography(cfg?.heading, event.name);
+  const eyebrow = resolveTypography(cfg?.eyebrow, event.event_type || "");
+  const heading = resolveTypography(cfg?.heading, event.name || "");
   const subheading = resolveTypography(cfg?.subheading, "");
-  const body = resolveTypography(cfg?.body, "");
 
   return (
     <EventThemeProvider theme={theme ?? event.theme}>
-      <div className="relative w-full min-h-[400px] overflow-hidden rounded-lg">
-        {img ? (
-          <img src={img} alt="" className="absolute inset-0 w-full h-full object-cover" />
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-amber-100 to-amber-200" />
-        )}
-        <div className="absolute inset-0" style={{ background: `rgba(0,0,0,${overlayOpacity})` }} />
-        <div className="relative flex flex-col items-center justify-center text-center px-6 py-16 min-h-[400px]">
-          {logo?.imageUrl && (
+      <div
+        className="event-themed relative flex min-h-[400px] flex-col items-center justify-center overflow-hidden rounded-lg"
+        style={cssVars}
+      >
+        {image && (
+          <>
             <img
-              src={logo.imageUrl}
+              src={image}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundColor: cfg?.overlayColor ?? "rgba(0,0,0,0.4)",
+                opacity: cfg?.overlay ?? 0.5,
+              }}
+            />
+          </>
+        )}
+        <div className="relative z-10 flex flex-col items-center px-6 py-12 text-center">
+          {logo?.image && (
+            <img
+              src={logo.image}
               alt="Logo"
               style={{
+                width: logo.width ? `${logo.width}px` : "80px",
+                height: logo.height ? `${logo.height}px` : "80px",
+                borderRadius: logo.borderRadius ?? "0",
                 background: "transparent",
-                maxWidth: `${logo.size ?? 80}px`,
-                maxHeight: `${logo.size ?? 80}px`,
+                marginBottom: "1.5rem",
+                objectFit: "contain",
               }}
-              className="mb-4 object-contain"
             />
           )}
           {eyebrow.text && (
-            <p className="text-xs font-semibold tracking-widest uppercase mb-2" style={{ ...eyebrow.style, color: "#ffffff" }}>
+            <p
+              className="guest-eyebrow"
+              style={eyebrow.style}
+            >
               {eyebrow.text}
             </p>
           )}
-          <h1 className="text-3xl md:text-4xl font-bold mb-2" style={{ ...heading.style, color: "#ffffff" }}>
-            {heading.text}
-          </h1>
+          {heading.text && (
+            <h1
+              className="guest-title"
+              style={heading.style}
+            >
+              {heading.text}
+            </h1>
+          )}
           {subheading.text && (
-            <p className="text-lg mb-4" style={{ ...subheading.style, color: "rgba(255,255,255,0.9)" }}>
+            <p
+              className="guest-subtitle"
+              style={subheading.style}
+            >
               {subheading.text}
             </p>
-          )}
-          {body.text && (
-            <div className="max-w-md">
-              <RichTextContent html={body.text} />
-            </div>
-          )}
-          {cfg?.ctaLabel && (
-            <button className="event-btn-primary mt-6" type="button">
-              {cfg.ctaLabel}
-            </button>
           )}
         </div>
       </div>
@@ -111,106 +139,125 @@ export function CoverPreview({
   );
 }
 
-export function LoginPreview({
-  event,
-  theme,
-  loginConfig,
-}: {
+// ---- LoginPreview ----
+
+interface LoginPreviewProps {
   event: UserEvent;
   theme?: Json | null;
   loginConfig?: LoginConfig;
-}) {
+}
+
+export function LoginPreview({ event, theme, loginConfig }: LoginPreviewProps) {
+  const fullTheme = jsonToTheme(theme ?? event.theme);
+  const cssVars = themeToEventCssVars(fullTheme) as React.CSSProperties;
+  // Use loginConfig prop or fall back to event.login_config (PUBLISHED, NOT draft)
   const cfg = loginConfig ?? (event.login_config as LoginConfig | undefined);
+
   const heading = resolveTypography(cfg?.heading, "Welcome");
-  const subheading = resolveTypography(cfg?.subheading, "Please sign in to continue.");
+  const subheading = resolveTypography(cfg?.subheading, "Please sign in to continue");
+  const buttonText = cfg?.buttonText ?? "Sign In";
   const placeholder = cfg?.placeholder ?? "Enter your username";
 
   return (
     <EventThemeProvider theme={theme ?? event.theme}>
-      <div className="guest-section-tight flex flex-col items-center justify-center text-center max-w-md mx-auto">
-        <h2 className="guest-title" style={heading.style}>
-          {heading.text}
-        </h2>
-        <p className="guest-subtitle mb-6" style={subheading.style}>
-          {subheading.text}
-        </p>
-        <input
-          type="text"
-          className="event-input mb-4"
-          placeholder={placeholder}
-          readOnly
-        />
-        <button className="event-btn-primary" type="button">
-          {cfg?.buttonLabel ?? "Sign In"}
-        </button>
+      <div
+        className="event-themed flex min-h-[400px] flex-col items-center justify-center rounded-lg guest-section-tight"
+        style={cssVars}
+      >
+        <div className="w-full max-w-sm text-center">
+          {heading.text && (
+            <h2 className="guest-title" style={heading.style}>
+              {heading.text}
+            </h2>
+          )}
+          {subheading.text && (
+            <p className="guest-subtitle mb-6" style={subheading.style}>
+              {subheading.text}
+            </p>
+          )}
+          <input
+            type="text"
+            placeholder={placeholder}
+            className="event-input mb-4"
+            style={{ textAlign: "center" }}
+            readOnly
+          />
+          <button type="button" className="event-btn-primary w-full">
+            {buttonText}
+          </button>
+        </div>
       </div>
     </EventThemeProvider>
   );
 }
 
-export function HomePreview({
-  event,
-  theme,
-  content,
-}: {
+// ---- HomePreview ----
+
+interface HomePreviewProps {
   event: UserEvent;
   theme?: Json | null;
   content?: EventContent;
-}) {
-  const cnt = content ?? (event.content as EventContent | undefined);
-  const sections = cnt?.sections ?? (cnt?.heading || cnt?.body ? [{ heading: cnt.heading, body: cnt.body }] : []);
+}
+
+export function HomePreview({ event, theme, content }: HomePreviewProps) {
+  const fullTheme = jsonToTheme(theme ?? event.theme);
+  const cssVars = themeToEventCssVars(fullTheme) as React.CSSProperties;
+  const cfg = content ?? (event.content as EventContent | undefined);
+  const home = cfg?.home;
+
+  const heading = resolveTypography(home?.heading, event.name || "Welcome");
 
   return (
     <EventThemeProvider theme={theme ?? event.theme}>
-      <div className="guest-section">
-        {sections.length === 0 && (
-          <div className="text-center text-dash-muted">
-            <p>No content yet.</p>
-          </div>
-        )}
-        {sections.map((section, i) => {
-          const heading = resolveTypography(section.heading, "");
-          return (
-            <div key={i} className="max-w-3xl mx-auto mb-12 last:mb-0">
-              {heading.text && (
-                <h2 className="guest-title" style={heading.style}>
-                  {heading.text}
-                </h2>
-              )}
-              {section.body && <RichTextContent html={section.body} />}
-            </div>
-          );
-        })}
+      <div
+        className="event-themed flex min-h-[400px] flex-col items-center justify-center rounded-lg guest-section-tight"
+        style={cssVars}
+      >
+        <div className="w-full max-w-2xl text-center">
+          {heading.text && (
+            <h2 className="guest-title mb-4" style={heading.style}>
+              {heading.text}
+            </h2>
+          )}
+          {home?.body && (
+            <RichTextContent html={home.body} className="guest-subtitle" />
+          )}
+        </div>
       </div>
     </EventThemeProvider>
   );
 }
 
-export function RsvpPreview({
-  event,
-  theme,
-}: {
+// ---- RsvpPreview ----
+
+interface RsvpPreviewProps {
   event: UserEvent;
   theme?: Json | null;
-}) {
+}
+
+export function RsvpPreview({ event, theme }: RsvpPreviewProps) {
+  const fullTheme = jsonToTheme(theme ?? event.theme);
+  const cssVars = themeToEventCssVars(fullTheme) as React.CSSProperties;
+
   return (
     <EventThemeProvider theme={theme ?? event.theme}>
-      <div className="guest-section-tight max-w-2xl mx-auto">
-        <h2 className="guest-title text-center">RSVP</h2>
-        <p className="guest-subtitle text-center mb-6">Let us know if you'll be joining us.</p>
-        <div className="event-card space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Will you attend?</label>
-            <div className="flex gap-2">
-              <button className="event-btn-primary flex-1" type="button">Yes</button>
-              <button className="event-btn-secondary flex-1" type="button">No</button>
-            </div>
+      <div
+        className="event-themed flex min-h-[400px] flex-col items-center justify-center rounded-lg guest-section-tight"
+        style={cssVars}
+      >
+        <div className="w-full max-w-sm text-center">
+          <h2 className="guest-title mb-2">RSVP</h2>
+          <p className="guest-subtitle mb-6">
+            Will you be joining us to celebrate?
+          </p>
+          <div className="flex flex-col gap-3">
+            <button type="button" className="event-btn-primary">
+              Joyfully Accepts
+            </button>
+            <button type="button" className="event-btn-secondary">
+              Regretfully Declines
+            </button>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Plus ones</label>
-            <input className="event-input" type="number" defaultValue={0} readOnly />
-          </div>
-          <button className="event-btn-primary w-full" type="button">Submit RSVP</button>
         </div>
       </div>
     </EventThemeProvider>

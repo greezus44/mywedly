@@ -1,47 +1,52 @@
 import { useState, useEffect } from "react";
+import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type Json } from "../../lib/supabase";
-import { useEventContext } from "./event-layout";
+import { supabase, type Json } from "../../lib/supabase";
 import { SplitEditor } from "../../components/preview/SplitEditor";
-import { HomePreview } from "../../components/preview/PreviewRenderers";
-import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { Select } from "../../components/ui/Input";
-import { Card, ColorInput } from "../../components/ui";
+import { HomePreview, type EventContent } from "../../components/preview/PreviewRenderers";
+import { TypographyControls } from "../../components/ui/TypographyControls";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
+import { Button } from "../../components/ui/Button";
+import { Card, Select, LoadingSpinner } from "../../components/ui";
 import { HEADING_FONT_OPTIONS } from "../../lib/theme";
+import type { TypographyStyle } from "../../lib/typography";
+import type { EventContextValue } from "./event-layout";
 
-interface ContentSection {
-  heading?: string;
-  headingFont?: string;
-  headingColor?: string;
-  body?: string;
-}
-
-interface EventContent {
-  sections?: ContentSection[];
-}
+const DEFAULT_CONTENT: EventContent = {
+  home: {
+    heading: { text: "Welcome", fontFamily: "'Playfair Display', serif", fontSize: 36, fontWeight: 700, align: "center", color: "#78350f" },
+    body: "",
+  },
+};
 
 export function HomeEditor() {
-  const { event, eventId } = useEventContext();
+  const { event, eventId } = useOutletContext<EventContextValue>();
   const queryClient = useQueryClient();
 
-  const initial = (event.draft_content ?? event.content) as EventContent | null;
-  const [sections, setSections] = useState<ContentSection[]>(initial?.sections ?? []);
+  const [content, setContent] = useState<EventContent>(DEFAULT_CONTENT);
+  const [headingFont, setHeadingFont] = useState<string>("'Playfair Display', serif");
+  const [headingColor, setHeadingColor] = useState<string>("#78350f");
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const cnt = (event.draft_content ?? event.content) as EventContent | null;
-    setSections(cnt?.sections ?? []);
-  }, [event]);
-
-  const liveContent: EventContent = { sections };
+    if (!loaded) {
+      const draft = (event.draft_content ?? event.content) as EventContent | null;
+      if (draft) {
+        setContent({ ...DEFAULT_CONTENT, ...draft });
+        const home = draft.home as { heading?: TypographyStyle; body?: string } | undefined;
+        if (home?.heading?.fontFamily) setHeadingFont(home.heading.fontFamily);
+        if (home?.heading?.color) setHeadingColor(home.heading.color);
+      }
+      setLoaded(true);
+    }
+  }, [event, loaded]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("user_events")
         .update({
-          draft_content: liveContent as unknown as Json,
+          draft_content: content as unknown as Json,
         })
         .eq("id", eventId);
       if (error) throw error;
@@ -51,142 +56,129 @@ export function HomeEditor() {
     },
   });
 
-  const updateSection = (index: number, patch: Partial<ContentSection>) => {
-    setSections((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
-  };
+  function updateHeading(v: TypographyStyle) {
+    setContent((prev) => ({
+      ...prev,
+      home: { ...prev.home, heading: v },
+    }));
+    if (v.fontFamily) setHeadingFont(v.fontFamily);
+    if (v.color) setHeadingColor(v.color);
+  }
 
-  const addSection = () => {
-    setSections((prev) => [...prev, { heading: "", body: "" }]);
-  };
+  function updateBody(body: string) {
+    setContent((prev) => ({
+      ...prev,
+      home: { ...prev.home, body },
+    }));
+  }
 
-  const removeSection = (index: number) => {
-    setSections((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const moveSection = (index: number, dir: -1 | 1) => {
-    setSections((prev) => {
-      const next = [...prev];
-      const target = index + dir;
-      if (target < 0 || target >= next.length) return prev;
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  };
+  if (!loaded) {
+    return (
+      <div className="flex justify-center py-20">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-dash-text">Home Editor</h2>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={addSection}>
-            Add Section
-          </Button>
-          <Button
-            onClick={() => saveMutation.mutate()}
-            loading={saveMutation.isPending}
-          >
-            Save
-          </Button>
-        </div>
+        <h2 className="text-lg font-semibold text-dash-text">Home Page Editor</h2>
+        <Button
+          onClick={() => saveMutation.mutate()}
+          loading={saveMutation.isPending}
+          disabled={saveMutation.isPending}
+        >
+          Save Changes
+        </Button>
       </div>
 
       {saveMutation.isError && (
-        <p className="text-sm text-dash-danger">
-          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
-        </p>
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-dash-danger">
+          {saveMutation.error?.message ?? "Failed to save"}
+        </div>
       )}
       {saveMutation.isSuccess && (
-        <p className="text-sm text-green-600">Saved successfully!</p>
+        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          Saved successfully!
+        </div>
       )}
 
-      <SplitEditor
-        editor={
-          <div className="space-y-6">
-            {sections.length === 0 && (
-              <Card className="p-8 text-center">
-                <p className="text-sm text-dash-muted mb-4">No sections yet.</p>
-                <Button variant="secondary" onClick={addSection}>Add a section</Button>
-              </Card>
-            )}
-
-            {sections.map((section, i) => (
-              <Card key={i} className="p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-dash-text">Section {i + 1}</h3>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => moveSection(i, -1)}
-                      disabled={i === 0}
-                      className="text-dash-muted hover:text-dash-text disabled:opacity-30 px-2 py-1 text-sm"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveSection(i, 1)}
-                      disabled={i === sections.length - 1}
-                      className="text-dash-muted hover:text-dash-text disabled:opacity-30 px-2 py-1 text-sm"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeSection(i)}
-                      className="text-dash-danger hover:text-dash-danger-hover px-2 py-1 text-sm"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-
-                <Input
-                  label="Section heading"
-                  value={section.heading ?? ""}
-                  onChange={(e) => updateSection(i, { heading: e.target.value })}
-                  placeholder="e.g. Our Story"
+      <div className="h-[calc(100vh-280px)] min-h-[500px]">
+        <SplitEditor
+          editorRatio={0.5}
+          editor={
+            <div className="space-y-6">
+              <Card className="p-4">
+                <TypographyControls
+                  label="Home Heading"
+                  value={(content.home?.heading ?? {}) as TypographyStyle}
+                  onChange={updateHeading}
                 />
+              </Card>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <Select
-                    label="Heading font"
-                    value={section.headingFont ?? ""}
-                    onChange={(e) => updateSection(i, { headingFont: e.target.value })}
-                  >
-                    <option value="">Default</option>
-                    {HEADING_FONT_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </Select>
-                  <div>
-                    <span className="block text-sm font-medium text-dash-text mb-1.5">Heading colour</span>
-                    <ColorInput
-                      value={section.headingColor ?? "#000000"}
-                      onChange={(v) => updateSection(i, { headingColor: v })}
+              <Card className="p-4">
+                <h3 className="mb-3 text-sm font-semibold text-dash-text">Home Body Content</h3>
+                <RichTextEditor
+                  value={content.home?.body ?? ""}
+                  onChange={updateBody}
+                  placeholder="Write your welcome message here..."
+                />
+              </Card>
+
+              <Card className="p-4 space-y-3">
+                <h3 className="text-sm font-semibold text-dash-text">Heading Style</h3>
+                <Select
+                  label="Heading Font Family"
+                  value={headingFont}
+                  onChange={(e) => {
+                    setHeadingFont(e.target.value);
+                    updateHeading({ ...(content.home?.heading ?? {}), fontFamily: e.target.value } as TypographyStyle);
+                  }}
+                >
+                  {HEADING_FONT_OPTIONS.map((f) => (
+                    <option key={f.value} value={f.value}>{f.label}</option>
+                  ))}
+                </Select>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-dash-text">Heading Colour</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="color"
+                      value={headingColor}
+                      onChange={(e) => {
+                        setHeadingColor(e.target.value);
+                        updateHeading({ ...(content.home?.heading ?? {}), color: e.target.value } as TypographyStyle);
+                      }}
+                      className="h-9 w-12 cursor-pointer rounded border border-dash-border bg-dash-surface"
+                    />
+                    <input
+                      type="text"
+                      value={headingColor}
+                      onChange={(e) => {
+                        setHeadingColor(e.target.value);
+                        updateHeading({ ...(content.home?.heading ?? {}), color: e.target.value } as TypographyStyle);
+                      }}
+                      className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
                     />
                   </div>
                 </div>
-
-                <RichTextEditor
-                  label="Body content"
-                  value={section.body ?? ""}
-                  onChange={(html) => updateSection(i, { body: html })}
-                  placeholder="Write your section content here..."
-                />
               </Card>
-            ))}
-          </div>
-        }
-        preview={
-          <div className="rounded-lg border border-dash-border bg-dash-surface p-4 overflow-hidden">
-            <HomePreview
-              event={event}
-              theme={event.draft_theme ?? event.theme}
-              content={liveContent}
-            />
-          </div>
-        }
-      />
+            </div>
+          }
+          preview={
+            <div className="p-4">
+              <HomePreview
+                event={event}
+                theme={event.draft_theme ?? event.theme}
+                content={content}
+              />
+            </div>
+          }
+        />
+      </div>
     </div>
   );
 }
+
+export default HomeEditor;
