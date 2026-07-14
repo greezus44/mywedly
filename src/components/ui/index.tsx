@@ -1,19 +1,31 @@
-import React, { forwardRef } from "react";
+import {
+  forwardRef,
+  type HTMLAttributes,
+  type ReactNode,
+  type InputHTMLAttributes,
+  useEffect,
+} from "react";
 import { cn } from "../../lib/utils";
 import { Input, Textarea, Select } from "./Input";
 import { TimePicker } from "./TimePicker";
 import { DatePicker } from "./DatePicker";
 import { DateTimePicker } from "./DateTimePicker";
 
+// Re-export Input, Textarea, Select, TimePicker, DatePicker, DateTimePicker
 export { Input, Textarea, Select, TimePicker, DatePicker, DateTimePicker };
+export { Button } from "./Button";
 
-// ---------- Card ----------
-export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {}
-export function Card({ className, children, ...props }: CardProps) {
+// Card
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
+  hover?: boolean;
+}
+
+export function Card({ className, hover, children, ...props }: CardProps) {
   return (
     <div
       className={cn(
         "rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm",
+        hover && "transition-shadow hover:shadow-md",
         className
       )}
       {...props}
@@ -23,23 +35,27 @@ export function Card({ className, children, ...props }: CardProps) {
   );
 }
 
-// ---------- Badge ----------
-export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
-  variant?: "default" | "success" | "warning" | "danger" | "primary";
+// Badge
+type BadgeVariant = "default" | "primary" | "success" | "warning" | "danger";
+
+interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
+  variant?: BadgeVariant;
 }
+
+const badgeVariants: Record<BadgeVariant, string> = {
+  default: "bg-dash-bg text-dash-muted border-dash-border",
+  primary: "bg-dash-primary/10 text-dash-primary border-dash-primary/20",
+  success: "bg-green-50 text-green-700 border-green-200",
+  warning: "bg-amber-50 text-amber-700 border-amber-200",
+  danger: "bg-red-50 text-red-700 border-red-200",
+};
+
 export function Badge({ className, variant = "default", children, ...props }: BadgeProps) {
-  const variants: Record<string, string> = {
-    default: "bg-dash-bg text-dash-muted border-dash-border",
-    success: "bg-green-50 text-green-700 border-green-200",
-    warning: "bg-amber-50 text-amber-700 border-amber-200",
-    danger: "bg-red-50 text-red-700 border-red-200",
-    primary: "bg-dash-primary/10 text-dash-primary border-dash-primary/20",
-  };
   return (
     <span
       className={cn(
         "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
-        variants[variant],
+        badgeVariants[variant],
         className
       )}
       {...props}
@@ -49,218 +65,176 @@ export function Badge({ className, variant = "default", children, ...props }: Ba
   );
 }
 
-// ---------- EmptyState ----------
-export interface EmptyStateProps {
+// EmptyState
+interface EmptyStateProps {
   title: string;
   description?: string;
-  icon?: React.ReactNode;
-  action?: React.ReactNode;
-  className?: string;
+  icon?: ReactNode;
+  action?: ReactNode;
 }
-export function EmptyState({ title, description, icon, action, className }: EmptyStateProps) {
+
+export function EmptyState({ title, description, icon, action }: EmptyStateProps) {
   return (
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center rounded-lg border border-dashed border-dash-border bg-dash-surface/50 p-12 text-center",
-        className
-      )}
-    >
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dash-border border-dashed bg-dash-bg/50 p-12 text-center">
       {icon && <div className="mb-4 text-dash-muted">{icon}</div>}
-      <h3 className="text-base font-semibold text-dash-text">{title}</h3>
-      {description && (
-        <p className="mt-1 text-sm text-dash-muted max-w-sm">{description}</p>
-      )}
+      <h3 className="text-lg font-semibold text-dash-text">{title}</h3>
+      {description && <p className="mt-1 max-w-sm text-sm text-dash-muted">{description}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
 
-// ---------- Toggle ----------
-export interface ToggleProps {
+// Toggle
+interface ToggleProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label?: string;
   disabled?: boolean;
-  className?: string;
 }
-export function Toggle({ checked, onChange, label, disabled, className }: ToggleProps) {
-  return (
-    <label
-      className={cn(
-        "inline-flex items-center gap-2 cursor-pointer",
-        disabled && "opacity-50 cursor-not-allowed",
-        className
-      )}
-    >
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        disabled={disabled}
-        onClick={() => onChange(!checked)}
-        className={cn(
-          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-          checked ? "bg-dash-primary" : "bg-dash-border"
-        )}
-      >
-        <span
+
+export const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(
+  ({ checked, onChange, label, disabled }, ref) => {
+    return (
+      <label className="inline-flex items-center gap-2 cursor-pointer disabled:opacity-50">
+        <button
+          ref={ref}
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          disabled={disabled}
+          onClick={() => onChange(!checked)}
           className={cn(
-            "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-            checked ? "translate-x-4" : "translate-x-0.5"
+            "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-dash-primary/30",
+            checked ? "bg-dash-primary" : "bg-dash-border"
           )}
-        />
-      </button>
-      {label && <span className="text-sm text-dash-text">{label}</span>}
-    </label>
-  );
+        >
+          <span
+            className={cn(
+              "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+              checked ? "translate-x-6" : "translate-x-1"
+            )}
+          />
+        </button>
+        {label && <span className="text-sm text-dash-text">{label}</span>}
+      </label>
+    );
+  }
+);
+Toggle.displayName = "Toggle";
+
+// ColorInput
+interface ColorInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "onChange"> {
+  label?: string;
+  onChange?: (value: string) => void;
 }
 
-// ---------- ColorInput ----------
-export interface ColorInputProps {
-  label?: string;
-  value: string;
-  onChange: (value: string) => void;
-  className?: string;
-}
-export function ColorInput({ label, value, onChange, className }: ColorInputProps) {
-  return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
-      {label && (
-        <span className="text-sm font-medium text-dash-text">{label}</span>
-      )}
-      <div className="flex items-center gap-2">
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="h-9 w-12 cursor-pointer rounded border border-dash-border bg-dash-surface p-1"
-        />
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
-        />
+export const ColorInput = forwardRef<HTMLInputElement, ColorInputProps>(
+  ({ label, className, onChange, value, ...props }, ref) => {
+    return (
+      <div className="w-full">
+        {label && <label className="block text-sm font-medium text-dash-text mb-1">{label}</label>}
+        <div className="flex items-center gap-2">
+          <input
+            ref={ref}
+            type="color"
+            value={value as string}
+            onChange={(e) => onChange?.(e.target.value)}
+            className="h-9 w-12 cursor-pointer rounded border border-dash-border bg-dash-surface p-1"
+            {...props}
+          />
+          <input
+            type="text"
+            value={value as string}
+            onChange={(e) => onChange?.(e.target.value)}
+            className={cn(
+              "flex-1 rounded-md border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30",
+              className
+            )}
+          />
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
+);
+ColorInput.displayName = "ColorInput";
 
-// ---------- RangeInput ----------
-export interface RangeInputProps {
+// RangeInput
+interface RangeInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "onChange"> {
   label?: string;
-  value: number;
-  onChange: (value: number) => void;
   min?: number;
   max?: number;
   step?: number;
-  className?: string;
-}
-export function RangeInput({
-  label,
-  value,
-  onChange,
-  min = 0,
-  max = 100,
-  step = 1,
-  className,
-}: RangeInputProps) {
-  return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
-      {label && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-dash-text">{label}</span>
-          <span className="text-sm text-dash-muted">{value}</span>
-        </div>
-      )}
-      <input
-        type="range"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        min={min}
-        max={max}
-        step={step}
-        className="w-full cursor-pointer accent-dash-primary"
-      />
-    </div>
-  );
+  onChange?: (value: number) => void;
 }
 
-// ---------- FormField ----------
-export interface FormFieldProps {
+export const RangeInput = forwardRef<HTMLInputElement, RangeInputProps>(
+  ({ label, min = 0, max = 100, step = 1, onChange, value, className, ...props }, ref) => {
+    return (
+      <div className="w-full">
+        {label && (
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-sm font-medium text-dash-text">{label}</label>
+            <span className="text-xs text-dash-muted">{value}</span>
+          </div>
+        )}
+        <input
+          ref={ref}
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value as number}
+          onChange={(e) => onChange?.(Number(e.target.value))}
+          className={cn("w-full cursor-pointer accent-dash-primary", className)}
+          {...props}
+        />
+      </div>
+    );
+  }
+);
+RangeInput.displayName = "RangeInput";
+
+// FormField
+interface FormFieldProps {
   label?: string;
   error?: string;
-  children: React.ReactNode;
-  className?: string;
+  children: ReactNode;
 }
-export function FormField({ label, error, children, className }: FormFieldProps) {
+
+export function FormField({ label, error, children }: FormFieldProps) {
   return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
-      {label && (
-        <label className="block text-sm font-medium text-dash-text">
-          {label}
-        </label>
-      )}
+    <div className="w-full">
+      {label && <label className="block text-sm font-medium text-dash-text mb-1">{label}</label>}
       {children}
-      {error && <span className="block text-xs text-dash-danger">{error}</span>}
+      {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
     </div>
   );
 }
 
-// ---------- Skeleton ----------
-export interface SkeletonProps {
-  className?: string;
-}
-export function Skeleton({ className }: SkeletonProps) {
-  return (
-    <div
-      className={cn(
-        "animate-pulse rounded-md bg-dash-border/50",
-        className
-      )}
-    />
-  );
+// Skeleton
+interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {}
+
+export function Skeleton({ className, ...props }: SkeletonProps) {
+  return <div className={cn("animate-pulse rounded-md bg-dash-border/50", className)} {...props} />;
 }
 
-// ---------- ErrorState ----------
-export interface ErrorStateProps {
+// ErrorState
+interface ErrorStateProps {
   title?: string;
-  message?: string;
+  description?: string;
   onRetry?: () => void;
-  className?: string;
 }
-export function ErrorState({
-  title = "Something went wrong",
-  message,
-  onRetry,
-  className,
-}: ErrorStateProps) {
+
+export function ErrorState({ title = "Something went wrong", description, onRetry }: ErrorStateProps) {
   return (
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center rounded-lg border border-red-200 bg-red-50 p-8 text-center",
-        className
-      )}
-    >
-      <svg
-        className="mb-3 h-8 w-8 text-red-500"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-        strokeWidth={1.5}
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-        />
-      </svg>
-      <h3 className="text-base font-semibold text-red-800">{title}</h3>
-      {message && <p className="mt-1 text-sm text-red-600">{message}</p>}
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dash-border bg-dash-bg/50 p-12 text-center">
+      <div className="mb-4 text-4xl">⚠️</div>
+      <h3 className="text-lg font-semibold text-dash-text">{title}</h3>
+      {description && <p className="mt-1 max-w-sm text-sm text-dash-muted">{description}</p>}
       {onRetry && (
         <button
           onClick={onRetry}
-          className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+          className="mt-4 rounded-md bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg hover:bg-dash-primary-hover"
         >
           Try again
         </button>
@@ -269,104 +243,72 @@ export function ErrorState({
   );
 }
 
-// ---------- LoadingSpinner ----------
-export interface LoadingSpinnerProps {
-  className?: string;
+// LoadingSpinner
+interface LoadingSpinnerProps {
   size?: "sm" | "md" | "lg";
+  className?: string;
 }
-export function LoadingSpinner({ className, size = "md" }: LoadingSpinnerProps) {
-  const sizes: Record<string, string> = {
-    sm: "h-4 w-4",
-    md: "h-6 w-6",
-    lg: "h-8 w-8",
-  };
+
+export function LoadingSpinner({ size = "md", className }: LoadingSpinnerProps) {
+  const sizes = { sm: "h-4 w-4", md: "h-6 w-6", lg: "h-10 w-10" };
   return (
-    <svg
-      className={cn("animate-spin text-dash-primary", sizes[size], className)}
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      aria-label="Loading"
-    >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-      />
-    </svg>
+    <div className={cn("flex items-center justify-center", className)}>
+      <svg className={cn("animate-spin text-dash-primary", sizes[size])} viewBox="0 0 24 24" fill="none">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+    </div>
   );
 }
 
-// ---------- Modal ----------
-export interface ModalProps {
+// Modal
+interface ModalProps {
   open: boolean;
   onClose: () => void;
   title?: string;
-  children: React.ReactNode;
-  size?: "sm" | "md" | "lg" | "xl";
-  footer?: React.ReactNode;
+  children: ReactNode;
   className?: string;
 }
-export function Modal({
-  open,
-  onClose,
-  title,
-  children,
-  size = "md",
-  footer,
-  className,
-}: ModalProps) {
-  if (!open) return null;
 
-  const sizes: Record<string, string> = {
-    sm: "max-w-sm",
-    md: "max-w-md",
-    lg: "max-w-lg",
-    xl: "max-w-2xl",
-  };
+export function Modal({ open, onClose, title, children, className }: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleEsc);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handleEsc);
+      document.body.style.overflow = "";
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+      <div className="fixed inset-0 bg-black/40 animate-fadeIn" onClick={onClose} />
       <div
         className={cn(
-          "relative z-10 w-full rounded-lg bg-dash-surface shadow-xl",
-          sizes[size],
+          "relative z-10 w-full max-w-lg rounded-lg border border-dash-border bg-dash-surface p-6 shadow-xl animate-scaleIn",
           className
         )}
       >
         {title && (
-          <div className="flex items-center justify-between border-b border-dash-border px-5 py-3">
-            <h2 className="text-base font-semibold text-dash-text">{title}</h2>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-dash-text">{title}</h2>
             <button
               onClick={onClose}
-              className="rounded p-1 text-dash-muted hover:bg-dash-bg hover:text-dash-text"
-              aria-label="Close"
+              className="rounded-md p-1 text-dash-muted hover:bg-dash-bg hover:text-dash-text"
             >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" />
               </svg>
             </button>
           </div>
         )}
-        <div className="px-5 py-4">{children}</div>
-        {footer && (
-          <div className="flex items-center justify-end gap-2 border-t border-dash-border px-5 py-3">
-            {footer}
-          </div>
-        )}
+        {children}
       </div>
     </div>
   );

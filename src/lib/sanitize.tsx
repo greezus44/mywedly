@@ -1,114 +1,107 @@
-import React, { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 
 const ALLOWED_TAGS = new Set([
-  "p", "br", "strong", "b", "em", "i", "u", "s", "span",
-  "h1", "h2", "h3", "h4", "h5", "h6",
-  "ul", "ol", "li",
-  "a", "img",
-  "blockquote", "pre", "code",
-  "div",
+  "P", "BR", "STRONG", "EM", "U", "S", "OL", "UL", "LI",
+  "A", "SPAN", "H1", "H2", "H3", "H4", "H5", "H6",
+  "BLOCKQUOTE", "IMG", "DIV",
 ]);
 
 const ALLOWED_ATTRS: Record<string, string[]> = {
-  a: ["href", "target", "rel"],
-  img: ["src", "alt", "width", "height"],
-  span: ["style", "class"],
-  div: ["style", "class"],
-  p: ["style", "class"],
-  h1: ["style", "class"],
-  h2: ["style", "class"],
-  h3: ["style", "class"],
-  h4: ["style", "class"],
-  h5: ["style", "class"],
-  h6: ["style", "class"],
+  A: ["href", "target", "rel"],
+  IMG: ["src", "alt", "width", "height"],
+  SPAN: ["style"],
+  DIV: ["style"],
+  P: ["style"],
+  H1: ["style"], H2: ["style"], H3: ["style"],
+  H4: ["style"], H5: ["style"], H6: ["style"],
+  BLOCKQUOTE: ["style"],
 };
 
-const ALLOWED_STYLES = new Set([
+const ALLOWED_STYLE_PROPS = new Set([
   "color", "background-color", "font-weight", "font-style",
   "text-decoration", "text-align", "font-size",
-  "line-height", "margin", "padding",
 ]);
 
-export function sanitizeHtml(html: string): string {
+export function sanitizeHtml(dirty: string): string {
   if (typeof window === "undefined" || typeof DOMParser === "undefined") {
-    return html;
+    return dirty;
   }
   const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
+  const doc = parser.parseFromString(dirty, "text/html");
 
-  function cleanNode(node: Node) {
-    if (node.nodeType === Node.TEXT_NODE) return;
-    if (node.nodeType === Node.ELEMENT_NODE) {
-      const el = node as Element;
-      const tag = el.tagName.toLowerCase();
-      if (!ALLOWED_TAGS.has(tag)) {
-        // Replace disallowed element with its children
-        const parent = el.parentNode;
-        if (parent) {
-          while (el.firstChild) {
-            parent.insertBefore(el.firstChild, el);
-          }
-          parent.removeChild(el);
+  function cleanNode(node: Element): void {
+    const tag = node.tagName;
+    if (!ALLOWED_TAGS.has(tag)) {
+      const parent = node.parentNode;
+      if (parent) {
+        while (node.firstChild) {
+          parent.insertBefore(node.firstChild, node);
         }
+        parent.removeChild(node);
         return;
       }
-      // Clean attributes
-      const allowed = ALLOWED_ATTRS[tag] ?? [];
-      const attrs = Array.from(el.attributes);
-      for (const attr of attrs) {
-        if (!allowed.includes(attr.name)) {
-          el.removeAttribute(attr.name);
-        } else if (attr.name === "href" || attr.name === "src") {
-          const val = attr.value;
-          if (/^\s*javascript:/i.test(val) || /^\s*data:/i.test(val)) {
-            el.removeAttribute(attr.name);
-          }
-        }
-        if (attr.name === "style") {
-          const styleEl = el as HTMLElement;
-          const props = styleEl.style;
-          const toRemove: string[] = [];
-          for (let i = 0; i < props.length; i++) {
-            const prop = props[i];
-            if (!ALLOWED_STYLES.has(prop)) {
-              toRemove.push(prop);
-            }
-          }
-          toRemove.forEach((p) => props.removeProperty(p));
+    }
+    const allowed = ALLOWED_ATTRS[tag] ?? [];
+    for (const attr of Array.from(node.attributes)) {
+      if (!allowed.includes(attr.name)) {
+        node.removeAttribute(attr.name);
+      }
+      if (attr.name === "href") {
+        const val = attr.value;
+        if (!/^(https?:|mailto:|tel:|#)/i.test(val)) {
+          node.removeAttribute(attr.name);
         }
       }
-      // Force safe rel on anchors
-      if (tag === "a") {
-        el.setAttribute("rel", "noopener noreferrer");
-        el.setAttribute("target", "_blank");
+      if (attr.name === "target" && attr.value === "_blank") {
+        node.setAttribute("rel", "noopener noreferrer");
+      }
+      if (attr.name === "style") {
+        const cleaned = attr.value
+          .split(";")
+          .filter((decl) => {
+            const prop = decl.split(":")[0]?.trim();
+            return prop ? ALLOWED_STYLE_PROPS.has(prop) : false;
+          })
+          .join(";");
+        if (cleaned) {
+          node.setAttribute("style", cleaned);
+        } else {
+          node.removeAttribute("style");
+        }
       }
     }
-    // Recurse
-    const children = Array.from(node.childNodes);
-    for (const child of children) {
+    for (const child of Array.from(node.children)) {
       cleanNode(child);
     }
   }
 
-  cleanNode(doc.body);
+  for (const child of Array.from(doc.body.children)) {
+    cleanNode(child);
+  }
+
   return doc.body.innerHTML;
 }
 
 interface RichTextContentProps {
   html: string;
   className?: string;
+  fallback?: ReactNode;
 }
 
-export function RichTextContent({ html, className }: RichTextContentProps) {
-  const sanitized = useMemo(() => sanitizeHtml(html), [html]);
+export function RichTextContent({ html, className, fallback }: RichTextContentProps) {
+  const sanitized = useMemo(() => {
+    if (!html) return "";
+    return sanitizeHtml(html);
+  }, [html]);
+
+  if (!sanitized && fallback) {
+    return <>{fallback}</>;
+  }
+
   return (
     <div
-      className={cn("rich-content", className)}
+      className={`rich-content ${className ?? ""}`}
       dangerouslySetInnerHTML={{ __html: sanitized }}
     />
   );
-}
-
-function cn(...inputs: (string | undefined | false | null)[]): string {
-  return inputs.filter(Boolean).join(" ");
 }

@@ -1,128 +1,110 @@
-import React, { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../lib/supabase";
-import { slugify } from "../lib/theme";
-import { formatDate, cn } from "../lib/utils";
+import { slugify, isValidSlug } from "../lib/theme";
 import { Button } from "../components/ui/Button";
+import { Input, Textarea } from "../components/ui";
 import {
-  Input,
-  Select,
   Card,
   Badge,
+  Modal,
   LoadingSpinner,
   ErrorState,
   EmptyState,
-  Modal,
 } from "../components/ui";
+import { formatDateShort } from "../lib/utils";
 
-const EVENT_TYPES = [
-  "Wedding",
-  "Birthday",
-  "Anniversary",
-  "Engagement",
-  "Bridal Shower",
-  "Baby Shower",
-  "Other",
-];
-
-export default function Dashboard() {
+export default function DashboardPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newType, setNewType] = useState("Wedding");
+  const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [slugError, setSlugError] = useState<string | null>(null);
 
   const { data: session } = useQuery({
     queryKey: ["session"],
     queryFn: async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) throw error;
+      const { data } = await supabase.auth.getSession();
       return data.session;
     },
   });
 
-  const { data: events, isLoading, error, refetch } = useQuery({
-    queryKey: ["user-events"],
+  const userId = session?.user?.id;
+
+  const { data: events, isLoading, isError, refetch } = useQuery({
+    queryKey: ["user-events", userId],
     queryFn: async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData.session?.user.id;
-      if (!userId) throw new Error("Not authenticated");
+      if (!userId) return [];
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("creator_id", userId)
+        .eq("owner_id", userId)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as UserEvent[];
     },
-    enabled: !!session,
+    enabled: !!userId,
   });
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const userId = sessionData.session?.user.id;
       if (!userId) throw new Error("Not authenticated");
-      const slug = slugify(newName) || `event-${Date.now()}`;
+      const slug = slugify(newTitle);
       const { data, error } = await supabase
         .from("user_events")
         .insert({
-          creator_id: userId,
-          name: newName,
-          event_type: newType,
-          draft_name: newName,
-          draft_event_type: newType,
-          draft_slug: slug,
+          owner_id: userId,
+          title: newTitle,
           slug,
+          draft_title: newTitle,
+          description: newDescription,
+          draft_description: newDescription,
+          status: "draft",
           cover_config: {},
-          login_config: {},
           theme: {},
-          logo_config: {},
           content: {},
+          login_config: {},
           sharing_config: {},
-          is_published: false,
         })
         .select()
         .single();
       if (error) throw error;
-      return data as UserEvent;
+      return data;
     },
-    onSuccess: (event) => {
-      queryClient.invalidateQueries({ queryKey: ["user-events"] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-events", userId] });
       setCreateOpen(false);
-      setNewName("");
-      setNewType("Wedding");
-      navigate(`/event/${event.id}`);
+      setNewTitle("");
+      setNewDescription("");
+      setSlugError(null);
     },
   });
 
-  const handleCreate = () => {
-    if (!newName.trim()) return;
+  function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    const slug = slugify(newTitle);
+    if (!isValidSlug(slug)) {
+      setSlugError("Please enter a valid title (at least 2 characters)");
+      return;
+    }
+    setSlugError(null);
     createMutation.mutate();
-  };
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate("/");
-  };
+  }
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+      <div className="min-h-screen flex items-center justify-center bg-dash-bg">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
-  if (error) {
+  if (isError) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg p-4">
-        <ErrorState
-          title="Failed to load your websites"
-          message={error.message}
-          onRetry={() => refetch()}
-        />
+      <div className="min-h-screen flex items-center justify-center bg-dash-bg">
+        <ErrorState onRetry={() => refetch()} />
       </div>
     );
   }
@@ -130,151 +112,108 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-dash-bg">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-dash-border bg-dash-surface/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <Link to="/" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-dash-primary text-dash-primary-fg">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 15.5c-1.874 0-3.625.554-5 1.5m-9-1.5c1.874 0 3.625.554 5 1.5m4-1.5c-1.874 0-3.625.554-5 1.5m0 0V12m0 5.5v3.5m0-9V4m0 0C9.5 4 8 5.5 8 7.5S9.5 11 11 11s3-1.5 3-3.5S12.5 4 11 4z" />
-              </svg>
-            </span>
-            <span className="text-lg font-bold text-dash-text">
-              My<span className="text-dash-primary">Wedly</span>
-            </span>
+      <header className="border-b border-dash-border bg-dash-surface">
+        <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
+          <Link to="/" className="text-xl font-bold text-dash-primary">
+            MyWedly
           </Link>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
-              Sign out
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                await supabase.auth.signOut();
+                navigate("/");
+              }}
+            >
+              Sign Out
             </Button>
           </div>
         </div>
       </header>
 
-      {/* Content */}
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        <div className="flex items-center justify-between">
+      <main className="mx-auto max-w-6xl px-4 py-8">
+        <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-dash-text">Your Websites</h1>
             <p className="mt-1 text-sm text-dash-muted">
-              Manage and edit your invitation websites
+              Manage your invitation websites and create new ones.
             </p>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            Create Website
-          </Button>
+          <Button onClick={() => setCreateOpen(true)}>Create Website</Button>
         </div>
 
-        {events && events.length === 0 ? (
-          <div className="mt-12">
-            <EmptyState
-              title="No websites yet"
-              description="Create your first invitation website to get started."
-              icon={
-                <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-              }
-              action={
-                <Button onClick={() => setCreateOpen(true)}>
-                  Create Website
-                </Button>
-              }
-            />
+        {createMutation.isError && (
+          <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            Error creating website: {createMutation.error?.message}
           </div>
+        )}
+        {createMutation.isSuccess && (
+          <div className="mb-4 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            Website created successfully!
+          </div>
+        )}
+
+        {events && events.length === 0 ? (
+          <EmptyState
+            title="No websites yet"
+            description="Create your first invitation website to get started."
+            icon={<span className="text-5xl">💌</span>}
+            action={<Button onClick={() => setCreateOpen(true)}>Create Website</Button>}
+          />
         ) : (
-          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {events?.map((event) => (
-              <Link key={event.id} to={`/event/${event.id}`}>
-                <Card className="group cursor-pointer p-0 transition-shadow hover:shadow-md">
-                  {/* Cover */}
-                  <div className="relative h-40 overflow-hidden rounded-t-lg bg-dash-bg">
-                    {event.cover_image ? (
-                      <img
-                        src={event.cover_image}
-                        alt={event.name}
-                        className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center bg-gradient-to-br from-dash-primary/20 to-dash-primary/5">
-                        <span className="text-3xl font-bold text-dash-primary/40">
-                          {event.name.charAt(0)}
-                        </span>
-                      </div>
-                    )}
-                    <div className="absolute top-2 right-2">
-                      {event.is_published ? (
-                        <Badge variant="success">Published</Badge>
-                      ) : (
-                        <Badge variant="warning">Draft</Badge>
-                      )}
-                    </div>
-                  </div>
-                  {/* Info */}
-                  <div className="p-4">
-                    <h3 className="font-semibold text-dash-text">{event.name}</h3>
-                    <p className="mt-1 text-sm text-dash-muted">
-                      {event.event_type}
-                    </p>
-                    {event.event_date && (
-                      <p className="mt-1 text-xs text-dash-muted">
-                        {formatDate(event.event_date)}
-                      </p>
-                    )}
-                  </div>
-                </Card>
-              </Link>
+              <Card key={event.id} hover className="cursor-pointer" onClick={() => navigate(`/event/${event.id}`)}>
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="text-lg font-semibold text-dash-text">
+                    {event.draft_title || event.title || "Untitled"}
+                  </h3>
+                  <Badge variant={event.status === "published" ? "success" : "default"}>
+                    {event.status}
+                  </Badge>
+                </div>
+                <p className="text-sm text-dash-muted line-clamp-2">
+                  {event.draft_description || event.description || "No description"}
+                </p>
+                <div className="mt-4 flex items-center gap-3 text-xs text-dash-muted">
+                  <span>📅 {formatDateShort(event.draft_event_date || event.event_date)}</span>
+                  <span>🔗 /e/{event.slug}</span>
+                </div>
+              </Card>
             ))}
           </div>
         )}
       </main>
 
-      {/* Create modal */}
-      <Modal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Create Website"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setCreateOpen(false)}>
+      {/* Create Modal */}
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create Website">
+        <form onSubmit={handleCreate} className="space-y-4">
+          <Input
+            label="Title"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder="My Wedding Day"
+            required
+            autoFocus
+          />
+          <Textarea
+            label="Description"
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+            placeholder="A brief description of your event..."
+            rows={3}
+          />
+          {slugError && <p className="text-xs text-dash-danger">{slugError}</p>}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button
-              onClick={handleCreate}
-              loading={createMutation.isPending}
-              disabled={!newName.trim()}
-            >
+            <Button type="submit" loading={createMutation.isPending}>
               Create
             </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <Input
-            label="Website name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="e.g. John & Jane's Wedding"
-          />
-          <Select
-            label="Event type"
-            value={newType}
-            onChange={(e) => setNewType(e.target.value)}
-          >
-            {EVENT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </Select>
-          {newName.trim() && (
-            <div className="rounded-lg bg-dash-bg px-3 py-2 text-sm text-dash-muted">
-              URL: /e/{slugify(newName) || "event"}
-            </div>
-          )}
-        </div>
+          </div>
+        </form>
       </Modal>
     </div>
   );

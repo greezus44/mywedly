@@ -1,16 +1,16 @@
 import { useState, useEffect } from "react";
-import { Outlet, NavLink, useParams, useNavigate, Link, useOutletContext } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useParams, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage, type SubEvent } from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { RUSTY_THEME } from "../../lib/theme";
-import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
-import { cn } from "../../lib/utils";
-import type { GuestOutletContext } from "./guest-layout";
+import { resolveGuestInvitations } from "../../lib/invitations";
+import { type GuestOutletContext } from "./guest-layout";
 
-export { useGuestOutletContext } from "./guest-layout";
-export type { GuestOutletContext } from "./guest-layout";
+export function useRustyOutletContext(): GuestOutletContext {
+  return useOutletContext<GuestOutletContext>();
+}
 
 export default function RustyLayout() {
   const { slug } = useParams<{ slug: string }>();
@@ -18,7 +18,6 @@ export default function RustyLayout() {
   const { guestId, eventId } = useGuestAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Fetch published event
   const { data: event, isLoading } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
@@ -34,43 +33,17 @@ export default function RustyLayout() {
     enabled: !!slug,
   });
 
-  // Redirect to /r/${slug}/signin if not signed in
-  useEffect(() => {
-    if (!isLoading && event && (!guestId || eventId !== event.id)) {
-      navigate(`/r/${slug}/signin`, { replace: true });
-    }
-  }, [isLoading, event, guestId, eventId, slug, navigate]);
-
-  // Fetch invited sub-event IDs
   const { data: invitedSubEventIds = [] } = useQuery({
-    queryKey: ["guest-invited-sub-events", event?.id, guestId],
+    queryKey: ["invited-sub-events", event?.id, guestId],
     queryFn: async () => {
       if (!event || !guestId) return [];
-      const invitations = await resolveGuestInvitations(supabase, guestId, event.id);
-      return getInvitedSubEventIds(invitations);
+      const resolved = await resolveGuestInvitations(event.id, guestId);
+      return resolved?.invitedSubEventIds ?? [];
     },
     enabled: !!event && !!guestId,
   });
 
-  // Fetch sub-events (only invited ones)
-  const { data: subEvents = [] } = useQuery({
-    queryKey: ["guest-sub-events", event?.id, invitedSubEventIds],
-    queryFn: async () => {
-      if (!event || invitedSubEventIds.length === 0) return [];
-      const { data, error } = await supabase
-        .from("sub_events")
-        .select("*")
-        .eq("parent_event_id", event.id)
-        .in("id", invitedSubEventIds)
-        .order("display_order", { ascending: true });
-      if (error) throw error;
-      return data as SubEvent[];
-    },
-    enabled: !!event && invitedSubEventIds.length > 0,
-  });
-
-  // Fetch custom pages for nav
-  const { data: customPages = [] } = useQuery({
+  const { data: pages = [] } = useQuery({
     queryKey: ["guest-custom-pages", event?.id],
     queryFn: async () => {
       if (!event) return [];
@@ -79,91 +52,75 @@ export default function RustyLayout() {
         .select("*")
         .eq("event_id", event.id)
         .eq("is_published", true)
-        .eq("show_in_nav", true)
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return data as CustomPage[];
+      return (data ?? []) as CustomPage[];
     },
     enabled: !!event,
   });
 
-  // Fetch footer pages
-  const { data: footerPages = [] } = useQuery({
-    queryKey: ["guest-footer-pages", event?.id],
-    queryFn: async () => {
-      if (!event) return [];
-      const { data, error } = await supabase
-        .from("custom_pages")
-        .select("*")
-        .eq("event_id", event.id)
-        .eq("is_published", true)
-        .eq("is_footer", true)
-        .order("sort_order", { ascending: true });
-      if (error) throw error;
-      return data as CustomPage[];
-    },
-    enabled: !!event,
-  });
+  // Redirect to rustic sign-in if not authenticated
+  useEffect(() => {
+    if (!isLoading && event && (!guestId || eventId !== event.id)) {
+      navigate(`/r/${slug}/signin`, { replace: true });
+    }
+  }, [isLoading, event, guestId, eventId, slug, navigate]);
 
-  if (isLoading) {
+  if (isLoading || !event || !guestId || eventId !== event.id) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: RUSTY_THEME.bg }}>
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: RUSTY_THEME.primary }} />
       </div>
     );
   }
 
-  if (!event) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
-        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
-        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
-      </div>
-    );
-  }
+  const navPages = pages.filter((p) => p.show_in_nav && !p.is_footer);
+  const footerPages = pages.filter((p) => p.is_footer);
+  const hasInvites = invitedSubEventIds.length > 0;
 
-  const theme = RUSTY_THEME;
-  const hasInvitedEvents = subEvents.length > 0;
-
-  const navLinks = [
-    { label: "Home", to: `/r/${slug}/home`, end: true },
-    ...(hasInvitedEvents ? [{ label: "Events", to: `/r/${slug}/events`, end: false }] : []),
-    ...(hasInvitedEvents ? [{ label: "RSVP", to: `/r/${slug}/rsvp`, end: false }] : []),
-    { label: "Wishes", to: `/r/${slug}/wishes`, end: false },
-    { label: "Contact", to: `/r/${slug}/contact`, end: false },
-    ...customPages.map((p) => ({
+  const navItems = [
+    { label: "Home", to: `/r/${slug}/home`, end: true, show: true },
+    { label: "Events", to: `/r/${slug}/events`, end: false, show: hasInvites },
+    { label: "RSVP", to: `/r/${slug}/rsvp`, end: false, show: hasInvites },
+    { label: "Wishes", to: `/r/${slug}/wishes`, end: false, show: true },
+    { label: "Contact", to: `/r/${slug}/contact`, end: false, show: true },
+    ...navPages.map((p) => ({
       label: p.nav_label || p.title,
       to: `/r/${slug}/p/${p.slug}`,
-      end: false,
+      end: true,
+      show: true,
     })),
-  ];
+  ].filter((n) => n.show);
+
+  const ctx: GuestOutletContext = { event, slug: slug!, theme: RUSTY_THEME, invitedSubEventIds };
 
   return (
-    <EventThemeProvider initialTheme={theme}>
+    <EventThemeProvider theme={event.theme}>
       {/* Sticky header with backdrop blur */}
       <header
-        className="sticky top-0 z-50 border-b"
+        className="sticky top-0 z-40 border-b"
         style={{
-          borderColor: "var(--event-border)",
-          backgroundColor: "color-mix(in srgb, var(--event-surface) 85%, transparent)",
-          backdropFilter: "blur(12px)",
+          backgroundColor: `color-mix(in srgb, ${RUSTY_THEME.surface} 88%, transparent)`,
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+          borderColor: RUSTY_THEME.border,
         }}
       >
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
-          <Link to={`/r/${slug}/home`} className="text-lg font-bold" style={{ color: "var(--event-heading)" }}>
-            {event.name}
-          </Link>
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+          <NavLink to={`/r/${slug}/home`} className="font-semibold" style={{ color: RUSTY_THEME.heading, fontFamily: RUSTY_THEME.fontHeading }}>
+            {event.title || "MyWedly"}
+          </NavLink>
 
           {/* Desktop nav */}
-          <nav className="hidden md:flex md:items-center md:gap-1">
-            {navLinks.map((link) => (
+          <nav className="hidden items-center md:flex">
+            {navItems.map((item) => (
               <NavLink
-                key={link.to}
-                to={link.to}
-                end={link.end}
-                className={({ isActive }) => cn("guest-nav-link", isActive && "active")}
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => `guest-nav-link${isActive ? " active" : ""}`}
               >
-                {link.label}
+                {item.label}
               </NavLink>
             ))}
           </nav>
@@ -173,13 +130,13 @@ export default function RustyLayout() {
             className="md:hidden"
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="Toggle menu"
-            style={{ color: "var(--event-text)" }}
+            style={{ color: RUSTY_THEME.text }}
           >
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               {mobileOpen ? (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" />
               ) : (
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+                <path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" />
               )}
             </svg>
           </button>
@@ -187,20 +144,17 @@ export default function RustyLayout() {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <nav className="border-t md:hidden" style={{ borderColor: "var(--event-border)" }}>
-            <div className="space-y-1 px-4 py-3">
-              {navLinks.map((link) => (
+          <nav className="border-t md:hidden" style={{ borderColor: RUSTY_THEME.border, backgroundColor: RUSTY_THEME.surface }}>
+            <div className="flex flex-col px-4 py-2">
+              {navItems.map((item) => (
                 <NavLink
-                  key={link.to}
-                  to={link.to}
-                  end={link.end}
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
                   onClick={() => setMobileOpen(false)}
-                  className={({ isActive }) =>
-                    cn("block rounded-lg px-3 py-2 text-sm font-medium", isActive && "font-semibold")
-                  }
-                  style={{ color: "var(--event-text)" }}
+                  className={({ isActive }) => `guest-nav-link${isActive ? " active" : ""}`}
                 >
-                  {link.label}
+                  {item.label}
                 </NavLink>
               ))}
             </div>
@@ -208,30 +162,32 @@ export default function RustyLayout() {
         )}
       </header>
 
-      <main>
-        <Outlet context={{ event, slug: slug!, theme, invitedSubEventIds } satisfies GuestOutletContext} />
+      {/* Page content */}
+      <main className="animate-fadeIn">
+        <Outlet context={ctx} />
       </main>
 
       {/* Footer */}
-      <footer className="border-t" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
-        <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+      <footer className="border-t" style={{ borderColor: RUSTY_THEME.border, backgroundColor: RUSTY_THEME.surface }}>
+        <div className="mx-auto max-w-5xl px-4 py-10">
+          <p className="mb-4 text-sm font-semibold" style={{ color: RUSTY_THEME.heading, fontFamily: RUSTY_THEME.fontHeading }}>
+            {event.title || "MyWedly"}
+          </p>
           {footerPages.length > 0 && (
-            <div className="mb-6 flex flex-wrap gap-x-6 gap-y-2">
+            <nav className="flex flex-wrap gap-x-6 gap-y-2">
               {footerPages.map((p) => (
-                <Link
+                <NavLink
                   key={p.id}
                   to={`/r/${slug}/p/${p.slug}`}
                   className="text-sm hover:underline"
-                  style={{ color: "var(--event-muted)" }}
+                  style={{ color: RUSTY_THEME.muted }}
                 >
                   {p.nav_label || p.title}
-                </Link>
+                </NavLink>
               ))}
-            </div>
+            </nav>
           )}
-          <p className="text-sm" style={{ color: "var(--event-muted)" }}>
-            © {new Date().getFullYear()} {event.name}
-          </p>
+          <p className="mt-6 text-xs" style={{ color: RUSTY_THEME.muted }}>Made with MyWedly</p>
         </div>
       </footer>
     </EventThemeProvider>

@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui";
+import { Input } from "../components/ui/Input";
 import { LoadingSpinner } from "../components/ui";
 
-export default function Auth() {
+export default function AuthPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -13,19 +13,17 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
+
     try {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       }
       navigate("/dashboard");
@@ -34,62 +32,53 @@ export default function Auth() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
+    <div className="min-h-screen flex items-center justify-center bg-dash-bg px-4">
       <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="mb-8 text-center">
-          <Link to="/" className="inline-flex items-center gap-2">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-dash-primary text-dash-primary-fg">
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 15.5c-1.874 0-3.625.554-5 1.5m-9-1.5c1.874 0 3.625.554 5 1.5m4-1.5c-1.874 0-3.625.554-5 1.5m0 0V12m0 5.5v3.5m0-9V4m0 0C9.5 4 8 5.5 8 7.5S9.5 11 11 11s3-1.5 3-3.5S12.5 4 11 4z" />
-              </svg>
-            </span>
-            <span className="text-2xl font-bold text-dash-text">
-              My<span className="text-dash-primary">Wedly</span>
-            </span>
+        <div className="text-center mb-8">
+          <Link to="/" className="text-2xl font-bold text-dash-primary">
+            MyWedly
           </Link>
-        </div>
-
-        <div className="rounded-xl border border-dash-border bg-dash-surface p-8 shadow-sm">
-          <h1 className="text-2xl font-bold text-dash-text">
+          <h1 className="mt-4 text-2xl font-semibold text-dash-text">
             {mode === "signin" ? "Welcome back" : "Create your account"}
           </h1>
           <p className="mt-1 text-sm text-dash-muted">
             {mode === "signin"
               ? "Sign in to manage your invitation websites"
-              : "Sign up to start creating your invitation website"}
+              : "Sign up to start creating beautiful invitation websites"}
           </p>
+        </div>
 
+        <div className="rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm">
           {/* Mode toggle */}
-          <div className="mt-6 flex rounded-lg border border-dash-border p-1">
+          <div className="flex gap-1 mb-6 rounded-md bg-dash-bg p-1">
             <button
               type="button"
               onClick={() => setMode("signin")}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+              className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
                 mode === "signin"
-                  ? "bg-dash-primary text-dash-primary-fg"
+                  ? "bg-dash-surface text-dash-text shadow-sm"
                   : "text-dash-muted hover:text-dash-text"
               }`}
             >
-              Sign in
+              Sign In
             </button>
             <button
               type="button"
               onClick={() => setMode("signup")}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+              className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
                 mode === "signup"
-                  ? "bg-dash-primary text-dash-primary-fg"
+                  ? "bg-dash-surface text-dash-text shadow-sm"
                   : "text-dash-muted hover:text-dash-text"
               }`}
             >
-              Sign up
+              Sign Up
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <Input
               label="Email"
               type="email"
@@ -97,6 +86,7 @@ export default function Auth() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               required
+              autoComplete="email"
             />
             <Input
               label="Password"
@@ -105,43 +95,33 @@ export default function Auth() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
               minLength={6}
             />
 
             {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {error}
               </div>
             )}
 
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading && <LoadingSpinner size="sm" />}
-              {mode === "signin" ? "Sign in" : "Sign up"}
+              {loading ? <LoadingSpinner size="sm" /> : mode === "signin" ? "Sign In" : "Sign Up"}
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-dash-muted">
-            {mode === "signin" ? (
-              <>
-                Don't have an account?{" "}
-                <button
-                  onClick={() => setMode("signup")}
-                  className="font-medium text-dash-primary hover:underline"
-                >
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-                <button
-                  onClick={() => setMode("signin")}
-                  className="font-medium text-dash-primary hover:underline"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
+          <p className="mt-4 text-center text-sm text-dash-muted">
+            {mode === "signin" ? "Don't have an account? " : "Already have an account? "}
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === "signin" ? "signup" : "signin");
+                setError(null);
+              }}
+              className="text-dash-primary font-medium hover:underline"
+            >
+              {mode === "signin" ? "Sign up" : "Sign in"}
+            </button>
           </p>
         </div>
 

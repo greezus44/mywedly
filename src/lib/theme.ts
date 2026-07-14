@@ -17,33 +17,17 @@ export interface ThemeConfig {
   fontRich: string;
   radius: string;
   fontScale: number;
-  buttonStyle: "rounded" | "soft" | "square";
-  buttonSize: "sm" | "md" | "lg";
-  bgType: "solid" | "gradient" | "image";
-  bgGradient?: string;
-  bgImage?: string;
-  bgImagePosition?: string;
-  bgOverlayOpacity?: number;
 }
 
 export interface SimplifiedThemeConfig {
-  primaryColor: string;
-  secondaryColor: string;
-  backgroundColor: string;
-  surfaceColor: string;
-  primaryTextColor: string;
-  secondaryTextColor: string;
+  primary: string;
+  accent: string;
+  background: string;
+  surface: string;
+  text: string;
   headingFont: string;
   bodyFont: string;
-  fontScale: "sm" | "md" | "lg";
-  buttonStyle: "rounded" | "soft" | "square";
-  buttonSize: "sm" | "md" | "lg";
-  cornerRadius: number;
-  bgType: "solid" | "gradient" | "image";
-  bgGradient?: string;
-  bgImage?: string;
-  bgImagePosition?: string;
-  bgOverlayOpacity?: number;
+  radius: string;
 }
 
 export const DEFAULT_THEME: ThemeConfig = {
@@ -63,323 +47,321 @@ export const DEFAULT_THEME: ThemeConfig = {
   fontRich: "Georgia, serif",
   radius: "0.5rem",
   fontScale: 1,
-  buttonStyle: "rounded",
-  buttonSize: "md",
-  bgType: "solid",
 };
 
 export const RUSTY_THEME: ThemeConfig = {
-  bg: "#1a0f0a",
-  surface: "#2a1a10",
+  bg: "#1a1410",
+  surface: "#2a1f18",
   surfaceAlt: "rgba(255,255,255,0.05)",
-  border: "#4a3020",
-  text: "#e8d5c4",
+  border: "#5a3a20",
+  text: "#e8d5c0",
   heading: "#f5e6d3",
-  muted: "#c4a890",
-  primary: "#c2410c",
-  primaryHover: "#9a3412",
-  primaryFg: "#fff8f0",
-  accent: "#d97706",
-  fontHeading: "Georgia, serif",
-  fontBody: "Georgia, serif",
-  fontRich: "Georgia, serif",
+  muted: "#c0a080",
+  primary: "#d97706",
+  primaryHover: "#b45309",
+  primaryFg: "#ffffff",
+  accent: "#f59e0b",
+  fontHeading: "'Playfair Display', serif",
+  fontBody: "'Lora', serif",
+  fontRich: "'Lora', serif",
   radius: "0.25rem",
   fontScale: 1,
-  buttonStyle: "square",
-  buttonSize: "md",
-  bgType: "solid",
 };
 
-export function simplifiedToFullTheme(s: SimplifiedThemeConfig): ThemeConfig {
-  const fontScaleMap: Record<string, number> = { sm: 0.9, md: 1, lg: 1.1 };
-  const radiusMap: Record<string, string> = {
-    rounded: `${s.cornerRadius}px`,
-    soft: `${s.cornerRadius * 1.5}px`,
-    square: "0px",
-  };
+export interface ThemePreset {
+  name: string;
+  label: string;
+  theme: ThemeConfig;
+}
+
+export const THEME_PRESETS: ThemePreset[] = [
+  {
+    name: "default",
+    label: "Warm Amber",
+    theme: DEFAULT_THEME,
+  },
+  {
+    name: "rusty",
+    label: "Rusty Dark",
+    theme: RUSTY_THEME,
+  },
+  {
+    name: "blush",
+    label: "Blush Rose",
+    theme: {
+      bg: "#fdf2f8",
+      surface: "#ffffff",
+      surfaceAlt: "rgba(255,255,255,0.08)",
+      border: "#fbcfe8",
+      text: "#831843",
+      heading: "#9d174d",
+      muted: "#be185d",
+      primary: "#ec4899",
+      primaryHover: "#db2777",
+      primaryFg: "#ffffff",
+      accent: "#f472b6",
+      fontHeading: "'Playfair Display', serif",
+      fontBody: "'Lora', serif",
+      fontRich: "'Lora', serif",
+      radius: "0.5rem",
+      fontScale: 1,
+    },
+  },
+  {
+    name: "sage",
+    label: "Sage Garden",
+    theme: {
+      bg: "#f0fdf4",
+      surface: "#ffffff",
+      surfaceAlt: "rgba(255,255,255,0.08)",
+      border: "#bbf7d0",
+      text: "#14532d",
+      heading: "#166534",
+      muted: "#15803d",
+      primary: "#16a34a",
+      primaryHover: "#15803d",
+      primaryFg: "#ffffff",
+      accent: "#22c55e",
+      fontHeading: "'Cormorant Garamond', serif",
+      fontBody: "'EB Garamond', serif",
+      fontRich: "'EB Garamond', serif",
+      radius: "0.375rem",
+      fontScale: 1,
+    },
+  },
+  {
+    name: "navy",
+    label: "Midnight Navy",
+    theme: {
+      bg: "#0f172a",
+      surface: "#1e293b",
+      surfaceAlt: "rgba(255,255,255,0.05)",
+      border: "#334155",
+      text: "#cbd5e1",
+      heading: "#f1f5f9",
+      muted: "#94a3b8",
+      primary: "#3b82f6",
+      primaryHover: "#2563eb",
+      primaryFg: "#ffffff",
+      accent: "#60a5fa",
+      fontHeading: "'Montserrat', sans-serif",
+      fontBody: "'Montserrat', sans-serif",
+      fontRich: "'Cardo', serif",
+      radius: "0.25rem",
+      fontScale: 1,
+    },
+  },
+  {
+    name: "lavender",
+    label: "Lavender Dream",
+    theme: {
+      bg: "#faf5ff",
+      surface: "#ffffff",
+      surfaceAlt: "rgba(255,255,255,0.08)",
+      border: "#ddd6fe",
+      text: "#581c87",
+      heading: "#6b21a8",
+      muted: "#7e22ce",
+      primary: "#9333ea",
+      primaryHover: "#7e22ce",
+      primaryFg: "#ffffff",
+      accent: "#a855f7",
+      fontHeading: "'Playfair Display', serif",
+      fontBody: "'Cormorant Garamond', serif",
+      fontRich: "'Cormorant Garamond', serif",
+      radius: "0.5rem",
+      fontScale: 1,
+    },
+  },
+  {
+    name: "terracotta",
+    label: "Terracotta",
+    theme: {
+      bg: "#fef3e2",
+      surface: "#fffaf5",
+      surfaceAlt: "rgba(255,255,255,0.08)",
+      border: "#fed7aa",
+      text: "#7c2d12",
+      heading: "#9a3412",
+      muted: "#c2410c",
+      primary: "#ea580c",
+      primaryHover: "#c2410c",
+      primaryFg: "#ffffff",
+      accent: "#f97316",
+      fontHeading: "'Bodoni Moda', serif",
+      fontBody: "'Lora', serif",
+      fontRich: "'Lora', serif",
+      radius: "0.25rem",
+      fontScale: 1,
+    },
+  },
+  {
+    name: "ivory",
+    label: "Ivory Classic",
+    theme: {
+      bg: "#fffef9",
+      surface: "#ffffff",
+      surfaceAlt: "rgba(0,0,0,0.02)",
+      border: "#e7e5e4",
+      text: "#44403c",
+      heading: "#292524",
+      muted: "#78716c",
+      primary: "#78716c",
+      primaryHover: "#57534e",
+      primaryFg: "#ffffff",
+      accent: "#a8a29e",
+      fontHeading: "'EB Garamond', serif",
+      fontBody: "'EB Garamond', serif",
+      fontRich: "'EB Garamond', serif",
+      radius: "0.125rem",
+      fontScale: 1,
+    },
+  },
+  {
+    name: "ocean",
+    label: "Ocean Breeze",
+    theme: {
+      bg: "#ecfeff",
+      surface: "#ffffff",
+      surfaceAlt: "rgba(255,255,255,0.08)",
+      border: "#a5f3fc",
+      text: "#164e63",
+      heading: "#155e75",
+      muted: "#0e7490",
+      primary: "#0891b2",
+      primaryHover: "#0e7490",
+      primaryFg: "#ffffff",
+      accent: "#06b6d4",
+      fontHeading: "'Montserrat', sans-serif",
+      fontBody: "'Lora', serif",
+      fontRich: "'Lora', serif",
+      radius: "0.375rem",
+      fontScale: 1,
+    },
+  },
+  {
+    name: "burgundy",
+    label: "Burgundy Wine",
+    theme: {
+      bg: "#fef2f2",
+      surface: "#ffffff",
+      surfaceAlt: "rgba(255,255,255,0.08)",
+      border: "#fecaca",
+      text: "#7f1d1d",
+      heading: "#991b1b",
+      muted: "#b91c1c",
+      primary: "#dc2626",
+      primaryHover: "#b91c1c",
+      primaryFg: "#ffffff",
+      accent: "#ef4444",
+      fontHeading: "'Playfair Display', serif",
+      fontBody: "'Lora', serif",
+      fontRich: "'Lora', serif",
+      radius: "0.25rem",
+      fontScale: 1,
+    },
+  },
+  {
+    name: "forest",
+    label: "Deep Forest",
+    theme: {
+      bg: "#1a2e1a",
+      surface: "#243824",
+      surfaceAlt: "rgba(255,255,255,0.05)",
+      border: "#3a5a3a",
+      text: "#d4e8d4",
+      heading: "#e8f5e8",
+      muted: "#a0c0a0",
+      primary: "#65a30d",
+      primaryHover: "#4d7c0f",
+      primaryFg: "#ffffff",
+      accent: "#84cc16",
+      fontHeading: "'Cormorant Garamond', serif",
+      fontBody: "'EB Garamond', serif",
+      fontRich: "'EB Garamond', serif",
+      radius: "0.375rem",
+      fontScale: 1,
+    },
+  },
+];
+
+export interface FontOption {
+  value: string;
+  label: string;
+  category: string;
+}
+
+export const RICH_FONT_OPTIONS: FontOption[] = [
+  { value: "Georgia, serif", label: "Georgia", category: "Serif" },
+  { value: "'Playfair Display', serif", label: "Playfair Display", category: "Serif" },
+  { value: "'Cormorant Garamond', serif", label: "Cormorant Garamond", category: "Serif" },
+  { value: "'Lora', serif", label: "Lora", category: "Serif" },
+  { value: "'EB Garamond', serif", label: "EB Garamond", category: "Serif" },
+  { value: "'Cardo', serif", label: "Cardo", category: "Serif" },
+  { value: "'Bodoni Moda', serif", label: "Bodoni Moda", category: "Serif" },
+  { value: "'Montserrat', sans-serif", label: "Montserrat", category: "Sans" },
+  { value: "Inter, sans-serif", label: "Inter", category: "Sans" },
+  { value: "'Dancing Script', cursive", label: "Dancing Script", category: "Script" },
+  { value: "'Great Vibes', cursive", label: "Great Vibes", category: "Script" },
+  { value: "'Caveat', cursive", label: "Caveat", category: "Script" },
+];
+
+export const HEADING_FONT_OPTIONS: FontOption[] = [
+  { value: "Georgia, serif", label: "Georgia", category: "Serif" },
+  { value: "'Playfair Display', serif", label: "Playfair Display", category: "Serif" },
+  { value: "'Cormorant Garamond', serif", label: "Cormorant Garamond", category: "Serif" },
+  { value: "'Lora', serif", label: "Lora", category: "Serif" },
+  { value: "'EB Garamond', serif", label: "EB Garamond", category: "Serif" },
+  { value: "'Cardo', serif", label: "Cardo", category: "Serif" },
+  { value: "'Bodoni Moda', serif", label: "Bodoni Moda", category: "Serif" },
+  { value: "'Montserrat', sans-serif", label: "Montserrat", category: "Sans" },
+  { value: "Inter, sans-serif", label: "Inter", category: "Sans" },
+  { value: "'Dancing Script', cursive", label: "Dancing Script", category: "Script" },
+  { value: "'Great Vibes', cursive", label: "Great Vibes", category: "Script" },
+  { value: "'Caveat', cursive", label: "Caveat", category: "Script" },
+];
+
+export function simplifiedToFullTheme(s: Partial<SimplifiedThemeConfig>): ThemeConfig {
   return {
-    bg: s.backgroundColor,
-    surface: s.surfaceColor,
-    surfaceAlt: `rgba(255,255,255,0.08)`,
-    border: s.secondaryColor,
-    text: s.primaryTextColor,
-    heading: s.primaryTextColor,
-    muted: s.secondaryTextColor,
-    primary: s.primaryColor,
-    primaryHover: s.primaryColor,
-    primaryFg: "#ffffff",
-    accent: s.secondaryColor,
-    fontHeading: s.headingFont,
-    fontBody: s.bodyFont,
-    fontRich: s.bodyFont,
-    radius: radiusMap[s.buttonStyle] ?? `${s.cornerRadius}px`,
-    fontScale: fontScaleMap[s.fontScale] ?? 1,
-    buttonStyle: s.buttonStyle,
-    buttonSize: s.buttonSize,
-    bgType: s.bgType,
-    bgGradient: s.bgGradient,
-    bgImage: s.bgImage,
-    bgImagePosition: s.bgImagePosition,
-    bgOverlayOpacity: s.bgOverlayOpacity,
+    ...DEFAULT_THEME,
+    primary: s.primary ?? DEFAULT_THEME.primary,
+    primaryHover: s.primary ? shadeColor(s.primary, -15) : DEFAULT_THEME.primaryHover,
+    accent: s.accent ?? DEFAULT_THEME.accent,
+    bg: s.background ?? DEFAULT_THEME.bg,
+    surface: s.surface ?? DEFAULT_THEME.surface,
+    text: s.text ?? DEFAULT_THEME.text,
+    heading: s.text ? shadeColor(s.text, -10) : DEFAULT_THEME.heading,
+    fontHeading: s.headingFont ?? DEFAULT_THEME.fontHeading,
+    fontBody: s.bodyFont ?? DEFAULT_THEME.fontBody,
+    fontRich: s.bodyFont ?? DEFAULT_THEME.fontRich,
+    radius: s.radius ?? DEFAULT_THEME.radius,
   };
 }
 
 export function fullToSimplifiedTheme(t: ThemeConfig): SimplifiedThemeConfig {
-  const fontScaleReverse: Record<number, "sm" | "md" | "lg"> = {
-    0.9: "sm",
-    1: "md",
-    1.1: "lg",
-  };
   return {
-    primaryColor: t.primary,
-    secondaryColor: t.accent,
-    backgroundColor: t.bg,
-    surfaceColor: t.surface,
-    primaryTextColor: t.heading,
-    secondaryTextColor: t.muted,
+    primary: t.primary,
+    accent: t.accent,
+    background: t.bg,
+    surface: t.surface,
+    text: t.text,
     headingFont: t.fontHeading,
     bodyFont: t.fontBody,
-    fontScale: fontScaleReverse[t.fontScale] ?? "md",
-    buttonStyle: t.buttonStyle,
-    buttonSize: t.buttonSize,
-    cornerRadius: parseFloat(t.radius) || 8,
-    bgType: t.bgType,
-    bgGradient: t.bgGradient,
-    bgImage: t.bgImage,
-    bgImagePosition: t.bgImagePosition,
-    bgOverlayOpacity: t.bgOverlayOpacity,
+    radius: t.radius,
   };
 }
 
-export const RICH_FONT_OPTIONS: string[] = [
-  "Georgia, serif",
-  "'Times New Roman', serif",
-  "Garamond, serif",
-  "'Playfair Display', serif",
-  "'Cormorant Garamond', serif",
-  "'EB Garamond', serif",
-  "Inter, sans-serif",
-  "'Helvetica Neue', sans-serif",
-  "Poppins, sans-serif",
-  "'Montserrat', sans-serif",
-  "'Lora', serif",
-  "'Crimson Text', serif",
-];
-
-export const HEADING_FONT_OPTIONS: string[] = [
-  "Georgia, serif",
-  "'Times New Roman', serif",
-  "Garamond, serif",
-  "'Playfair Display', serif",
-  "'Cormorant Garamond', serif",
-  "'EB Garamond', serif",
-  "Inter, sans-serif",
-  "'Helvetica Neue', sans-serif",
-  "Poppins, sans-serif",
-  "'Montserrat', sans-serif",
-  "'Lora', serif",
-  "'Crimson Text', serif",
-];
-
-export const THEME_PRESETS: {
-  id: string;
-  name: string;
-  config: SimplifiedThemeConfig;
-}[] = [
-  {
-    id: "minimal",
-    name: "Minimal",
-    config: {
-      primaryColor: "#1a1a1a",
-      secondaryColor: "#e5e5e5",
-      backgroundColor: "#ffffff",
-      surfaceColor: "#fafafa",
-      primaryTextColor: "#1a1a1a",
-      secondaryTextColor: "#737373",
-      headingFont: "Inter, sans-serif",
-      bodyFont: "Inter, sans-serif",
-      fontScale: "md",
-      buttonStyle: "square",
-      buttonSize: "md",
-      cornerRadius: 0,
-      bgType: "solid",
-    },
-  },
-  {
-    id: "elegant",
-    name: "Elegant",
-    config: {
-      primaryColor: "#8b7355",
-      secondaryColor: "#d4c4b0",
-      backgroundColor: "#faf8f5",
-      surfaceColor: "#ffffff",
-      primaryTextColor: "#3d3528",
-      secondaryTextColor: "#8b7355",
-      headingFont: "'Playfair Display', serif",
-      bodyFont: "Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "soft",
-      buttonSize: "md",
-      cornerRadius: 4,
-      bgType: "solid",
-    },
-  },
-  {
-    id: "classic",
-    name: "Classic",
-    config: {
-      primaryColor: "#b45309",
-      secondaryColor: "#fde68a",
-      backgroundColor: "#fffbeb",
-      surfaceColor: "#ffffff",
-      primaryTextColor: "#78350f",
-      secondaryTextColor: "#92400e",
-      headingFont: "Georgia, serif",
-      bodyFont: "Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "rounded",
-      buttonSize: "md",
-      cornerRadius: 8,
-      bgType: "solid",
-    },
-  },
-  {
-    id: "modern",
-    name: "Modern",
-    config: {
-      primaryColor: "#0ea5e9",
-      secondaryColor: "#e0f2fe",
-      backgroundColor: "#f8fafc",
-      surfaceColor: "#ffffff",
-      primaryTextColor: "#0f172a",
-      secondaryTextColor: "#64748b",
-      headingFont: "Poppins, sans-serif",
-      bodyFont: "Inter, sans-serif",
-      fontScale: "md",
-      buttonStyle: "rounded",
-      buttonSize: "md",
-      cornerRadius: 12,
-      bgType: "solid",
-    },
-  },
-  {
-    id: "romantic",
-    name: "Romantic",
-    config: {
-      primaryColor: "#be185d",
-      secondaryColor: "#fce7f3",
-      backgroundColor: "#fff1f2",
-      surfaceColor: "#ffffff",
-      primaryTextColor: "#831843",
-      secondaryTextColor: "#be185d",
-      headingFont: "'Cormorant Garamond', serif",
-      bodyFont: "Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "soft",
-      buttonSize: "md",
-      cornerRadius: 16,
-      bgType: "solid",
-    },
-  },
-  {
-    id: "luxury",
-    name: "Luxury",
-    config: {
-      primaryColor: "#a16207",
-      secondaryColor: "#fef3c7",
-      backgroundColor: "#1c1917",
-      surfaceColor: "#292524",
-      primaryTextColor: "#fef3c7",
-      secondaryTextColor: "#d6d3d1",
-      headingFont: "'Playfair Display', serif",
-      bodyFont: "Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "soft",
-      buttonSize: "lg",
-      cornerRadius: 4,
-      bgType: "solid",
-    },
-  },
-  {
-    id: "botanical",
-    name: "Botanical",
-    config: {
-      primaryColor: "#15803d",
-      secondaryColor: "#dcfce7",
-      backgroundColor: "#f7fee7",
-      surfaceColor: "#ffffff",
-      primaryTextColor: "#14532d",
-      secondaryTextColor: "#16a34a",
-      headingFont: "'Lora', serif",
-      bodyFont: "Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "rounded",
-      buttonSize: "md",
-      cornerRadius: 8,
-      bgType: "solid",
-    },
-  },
-  {
-    id: "neutral",
-    name: "Neutral",
-    config: {
-      primaryColor: "#78716c",
-      secondaryColor: "#e7e5e4",
-      backgroundColor: "#fafaf9",
-      surfaceColor: "#ffffff",
-      primaryTextColor: "#292524",
-      secondaryTextColor: "#78716c",
-      headingFont: "Inter, sans-serif",
-      bodyFont: "Inter, sans-serif",
-      fontScale: "md",
-      buttonStyle: "rounded",
-      buttonSize: "md",
-      cornerRadius: 8,
-      bgType: "solid",
-    },
-  },
-  {
-    id: "dark",
-    name: "Dark",
-    config: {
-      primaryColor: "#c2410c",
-      secondaryColor: "#4a3020",
-      backgroundColor: "#1a0f0a",
-      surfaceColor: "#2a1a10",
-      primaryTextColor: "#f5e6d3",
-      secondaryTextColor: "#c4a890",
-      headingFont: "Georgia, serif",
-      bodyFont: "Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "square",
-      buttonSize: "md",
-      cornerRadius: 0,
-      bgType: "solid",
-    },
-  },
-  {
-    id: "editorial",
-    name: "Editorial",
-    config: {
-      primaryColor: "#18181b",
-      secondaryColor: "#a1a1aa",
-      backgroundColor: "#ffffff",
-      surfaceColor: "#f4f4f5",
-      primaryTextColor: "#18181b",
-      secondaryTextColor: "#71717a",
-      headingFont: "'EB Garamond', serif",
-      bodyFont: "Georgia, serif",
-      fontScale: "lg",
-      buttonStyle: "square",
-      buttonSize: "md",
-      cornerRadius: 0,
-      bgType: "solid",
-    },
-  },
-];
+function shadeColor(hex: string, percent: number): string {
+  const num = parseInt(hex.replace("#", ""), 16);
+  if (isNaN(num)) return hex;
+  const r = Math.max(0, Math.min(255, (num >> 16) + Math.round((num >> 16) * (percent / 100))));
+  const g = Math.max(0, Math.min(255, ((num >> 8) & 0xff) + Math.round(((num >> 8) & 0xff) * (percent / 100))));
+  const b = Math.max(0, Math.min(255, (num & 0xff) + Math.round((num & 0xff) * (percent / 100))));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
 
 export function themeToEventCssVars(theme: ThemeConfig): Record<string, string> {
-  const vars: Record<string, string> = {
+  return {
     "--event-bg": theme.bg,
     "--event-surface": theme.surface,
     "--event-surface-alt": theme.surfaceAlt,
@@ -395,30 +377,31 @@ export function themeToEventCssVars(theme: ThemeConfig): Record<string, string> 
     "--event-font-body": theme.fontBody,
     "--event-font-rich": theme.fontRich,
     "--event-radius": theme.radius,
-    "--event-font-scale": String(theme.fontScale),
+    "--event-font-scale": String(theme.fontScale ?? 1),
   };
-  return vars;
 }
 
-export function slugify(text: string): string {
-  return text
+export function slugify(str: string): string {
+  return str
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9\s-]/g, "")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replace(/^-+|-+$/g, "");
 }
 
 export function isValidSlug(slug: string): boolean {
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
+  return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) && slug.length >= 2 && slug.length <= 50;
 }
 
 export function jsonToTheme(json: Json | null | undefined): ThemeConfig {
-  if (!json || typeof json !== "object") return DEFAULT_THEME;
+  if (!json || typeof json !== "object" || Array.isArray(json)) return { ...DEFAULT_THEME };
   const obj = json as Record<string, unknown>;
   return {
     ...DEFAULT_THEME,
-    ...obj,
-  } as unknown as ThemeConfig;
+    ...Object.fromEntries(
+      Object.entries(obj).filter(([, v]) => v !== null && v !== undefined)
+    ),
+  } as ThemeConfig;
 }

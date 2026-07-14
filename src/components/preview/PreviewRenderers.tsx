@@ -1,291 +1,154 @@
-import React from "react";
-import { cn, formatDate, formatTime12 } from "../../lib/utils";
+import { useEffect, useState } from "react";
+import { resolveTypography } from "../../lib/typography";
 import { RichTextContent } from "../../lib/sanitize";
-import type { UserEvent } from "../../lib/supabase";
+import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
+import type { UserEvent, Json } from "../../lib/supabase";
 
-// ---------------------------------------------------------------------------
-// Shared config helpers
-// ---------------------------------------------------------------------------
+// ─── Cover Preview ───────────────────────────────────────────────────────────
 
-/** Cover configuration stored in UserEvent.cover_config (Json). */
-interface CoverConfig {
-  title?: string;
-  subtitle?: string;
-  dateText?: string;
-  overlayOpacity?: number;
-  showDate?: boolean;
-  showVenue?: boolean;
-  textPosition?: "center" | "bottom" | "top";
+interface CoverPreviewProps {
+  event: UserEvent;
 }
 
-/** Login configuration stored in UserEvent.login_config (Json). */
-interface LoginConfig {
-  heading?: string;
-  subtitle?: string;
-  placeholder?: string;
-  buttonText?: string;
-  requireGuestName?: boolean;
-  backgroundImage?: string;
-}
+export function CoverPreview({ event }: CoverPreviewProps) {
+  const coverConfig = (event.cover_config ?? {}) as Record<string, unknown>;
+  const titleTypo = coverConfig.title as unknown;
+  const subtitleTypo = coverConfig.subtitle as unknown;
+  const dateTypo = coverConfig.date as unknown;
+  const bgImage = coverConfig.backgroundImage as string | undefined;
+  const bgColor = coverConfig.backgroundColor as string | undefined;
 
-/** Content configuration stored in UserEvent.content (Json). */
-interface ContentConfig {
-  welcomeText?: string;
-  storyTitle?: string;
-  storyBody?: string;
-  rsvpTitle?: string;
-  rsvpBody?: string;
-  rsvpButtonText?: string;
-  scheduleText?: string;
-}
-
-function parseConfig<T>(json: unknown, fallback: T): T {
-  if (!json || typeof json !== "object") return fallback;
-  return { ...fallback, ...(json as Record<string, unknown>) } as T;
-}
-
-const DEFAULT_COVER: CoverConfig = {
-  title: "Our Wedding",
-  subtitle: "",
-  overlayOpacity: 0.4,
-  showDate: true,
-  showVenue: true,
-  textPosition: "center",
-};
-
-const DEFAULT_LOGIN: LoginConfig = {
-  heading: "Welcome",
-  subtitle: "Enter your name to view the invitation",
-  placeholder: "Your full name",
-  buttonText: "View Invitation",
-  requireGuestName: true,
-};
-
-const DEFAULT_CONTENT: ContentConfig = {
-  welcomeText: "We invite you to celebrate our special day with us.",
-  storyTitle: "Our Story",
-  storyBody: "<p>Share the story of how you met and fell in love.</p>",
-  rsvpTitle: "RSVP",
-  rsvpBody: "<p>Let us know if you can make it!</p>",
-  rsvpButtonText: "Respond Now",
-  scheduleText: "Here's what the day looks like.",
-};
-
-// ---------------------------------------------------------------------------
-// CoverPreview
-// ---------------------------------------------------------------------------
-
-export interface CoverPreviewProps {
-  event: Pick<
-    UserEvent,
-    "name" | "event_date" | "event_time" | "venue" | "cover_image" | "cover_config"
-  >;
-  className?: string;
-}
-
-export function CoverPreview({ event, className }: CoverPreviewProps) {
-  const config = parseConfig<CoverConfig>(event.cover_config, DEFAULT_COVER);
-  const title = config.title || event.name;
-  const subtitle = config.subtitle || "";
-  const dateText =
-    config.dateText ||
-    (event.event_date ? formatDate(event.event_date) : "");
-  const timeText = event.event_time ? formatTime12(event.event_time) : "";
-
-  const positionClasses: Record<string, string> = {
-    center: "items-center justify-center",
-    bottom: "items-end justify-center pb-12",
-    top: "items-start justify-center pt-12",
-  };
+  const title = resolveTypography(titleTypo, event.draft_title || event.title || "Our Wedding");
+  const subtitle = resolveTypography(subtitleTypo, "We invite you to celebrate with us");
+  const date = resolveTypography(dateTypo, formatDate(event.draft_event_date || event.event_date));
 
   return (
     <div
-      className={cn(
-        "event-themed relative flex min-h-[420px] w-full overflow-hidden",
-        positionClasses[config.textPosition ?? "center"],
-        className
-      )}
+      className="relative flex min-h-[400px] flex-col items-center justify-center px-6 py-16 text-center overflow-hidden"
+      style={{
+        backgroundImage: bgImage ? `url(${bgImage})` : undefined,
+        backgroundColor: bgColor ?? "var(--event-bg)",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
     >
-      {/* Background image */}
-      {event.cover_image ? (
-        <img
-          src={event.cover_image}
-          alt={title}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      ) : (
-        <div className="absolute inset-0 bg-gradient-to-br from-event-primary/30 to-event-accent/30" />
-      )}
-
-      {/* Overlay */}
-      <div
-        className="absolute inset-0 bg-black"
-        style={{ opacity: config.overlayOpacity ?? 0.4 }}
-      />
-
-      {/* Content */}
-      <div className="relative z-10 px-6 text-center text-white">
-        {subtitle && (
-          <p className="guest-eyebrow text-white/80">{subtitle}</p>
-        )}
-        <h1 className="guest-title text-white drop-shadow-md">
-          {title}
-        </h1>
-        {config.showDate && (dateText || timeText) && (
-          <p className="mt-2 text-lg font-medium text-white/90">
-            {dateText}
-            {dateText && timeText && " · "}
-            {timeText}
-          </p>
-        )}
-        {config.showVenue && event.venue && (
-          <p className="mt-1 text-sm text-white/80">{event.venue}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// LoginPreview
-// ---------------------------------------------------------------------------
-
-export interface LoginPreviewProps {
-  event: Pick<UserEvent, "name" | "login_config">;
-  className?: string;
-}
-
-export function LoginPreview({ event, className }: LoginPreviewProps) {
-  const config = parseConfig<LoginConfig>(event.login_config, DEFAULT_LOGIN);
-
-  return (
-    <div
-      className={cn(
-        "event-themed flex min-h-[420px] w-full items-center justify-center px-6",
-        className
-      )}
-    >
-      <div className="event-card event-card-hover w-full max-w-md text-center">
-        <p className="guest-eyebrow">{event.name || "Wedding Invitation"}</p>
-        <h2 className="guest-title text-2xl">
-          {config.heading || "Welcome"}
-        </h2>
-        <p className="guest-subtitle mt-2">
-          {config.subtitle || "Enter your name to view the invitation"}
+      {bgImage && <div className="absolute inset-0 bg-black/30" />}
+      <div className="relative z-10">
+        <p className="guest-eyebrow" style={subtitle.style}>
+          {subtitle.text}
         </p>
-
-        <div className="mt-6 space-y-3 text-left">
-          {config.requireGuestName !== false && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-event-muted">
-                {config.placeholder || "Your full name"}
-              </label>
-              <input
-                type="text"
-                disabled
-                placeholder={config.placeholder || "Your full name"}
-                className="event-input"
-              />
-            </div>
-          )}
-          <button
-            type="button"
-            disabled
-            className="event-btn-primary w-full"
-          >
-            {config.buttonText || "View Invitation"}
-          </button>
-        </div>
+        <h1 className="guest-title" style={title.style}>
+          {title.text}
+        </h1>
+        <p className="guest-subtitle mt-4" style={date.style}>
+          {date.text}
+        </p>
       </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// HomePreview
-// ---------------------------------------------------------------------------
+// ─── Login Preview ────────────────────────────────────────────────────────────
 
-export interface HomePreviewProps {
-  event: Pick<
-    UserEvent,
-    | "name"
-    | "event_date"
-    | "event_time"
-    | "venue"
-    | "address"
-    | "content"
-  >;
-  className?: string;
+interface LoginPreviewProps {
+  event: UserEvent;
 }
 
-export function HomePreview({ event, className }: HomePreviewProps) {
-  const config = parseConfig<ContentConfig>(event.content, DEFAULT_CONTENT);
-  const dateText = event.event_date ? formatDate(event.event_date) : "";
-  const timeText = event.event_time ? formatTime12(event.event_time) : "";
+export function LoginPreview({ event }: LoginPreviewProps) {
+  const loginConfig = (event.login_config ?? {}) as Record<string, unknown>;
+  const headingTypo = loginConfig.heading as unknown;
+  const descriptionTypo = loginConfig.description as unknown;
+  const buttonTypo = loginConfig.buttonText as unknown;
+
+  const heading = resolveTypography(headingTypo, "Welcome");
+  const description = resolveTypography(descriptionTypo, "Enter your name to find your invitation");
+  const buttonText = resolveTypography(buttonTypo, "Find My Invitation");
 
   return (
-    <div className={cn("event-themed w-full", className)}>
-      {/* Welcome / Hero */}
+    <div className="guest-section-tight flex flex-col items-center justify-center text-center">
+      <h2 className="guest-title" style={heading.style}>
+        {heading.text}
+      </h2>
+      <p className="guest-subtitle mt-2" style={description.style}>
+        {description.text}
+      </p>
+      <div className="mt-6 w-full max-w-sm space-y-3">
+        <input
+          type="text"
+          placeholder="Your full name"
+          className="event-input"
+          disabled
+        />
+        <button type="button" className="event-btn-primary w-full" style={buttonText.style}>
+          {buttonText.text}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Home Preview ─────────────────────────────────────────────────────────────
+
+interface HomePreviewProps {
+  event: UserEvent;
+}
+
+export function HomePreview({ event }: HomePreviewProps) {
+  const content = (event.content ?? {}) as Record<string, unknown>;
+  const welcomeTypo = content.welcomeHeading as unknown;
+  const welcomeBody = content.welcomeBody as unknown;
+  const storyTypo = content.storyHeading as unknown;
+  const storyBody = content.storyBody as unknown;
+
+  const welcomeHeading = resolveTypography(welcomeTypo, "Welcome");
+  const welcomeText = resolveTypography(welcomeBody, "We can't wait to share our special day with you.");
+  const storyHeading = resolveTypography(storyTypo, "Our Story");
+  const storyText = resolveTypography(storyBody, "");
+
+  return (
+    <div>
       <section className="guest-section text-center">
-        <p className="guest-eyebrow">{event.name}</p>
-        <h1 className="guest-title">
-          {config.welcomeText || "We invite you to celebrate our special day."}
-        </h1>
-        {(dateText || event.venue) && (
-          <div className="mt-4 flex flex-col items-center gap-1 text-event-muted">
-            {dateText && (
-              <p className="text-base font-medium">
-                {dateText}
-                {timeText && ` · ${timeText}`}
-              </p>
-            )}
-            {event.venue && <p className="text-sm">{event.venue}</p>}
-            {event.address && (
-              <p className="text-sm text-event-muted/80">{event.address}</p>
-            )}
-          </div>
-        )}
+        <h2 className="guest-title" style={welcomeHeading.style}>
+          {welcomeHeading.text}
+        </h2>
+        <p className="guest-subtitle mx-auto mt-2" style={welcomeText.style}>
+          {welcomeText.text}
+        </p>
       </section>
 
-      {/* Story */}
-      <section className="guest-section-tight border-t border-event-border">
-        <div className="mx-auto max-w-2xl">
-          <h2 className="guest-title text-2xl">
-            {config.storyTitle || "Our Story"}
+      {storyText.text && (
+        <section className="guest-section-tight">
+          <h2 className="guest-title text-center" style={storyHeading.style}>
+            {storyHeading.text}
           </h2>
-          <div className="mt-4">
-            <RichTextContent
-              html={config.storyBody || "<p>Share your story here.</p>"}
-            />
+          <div className="mt-4 max-w-2xl mx-auto">
+            <RichTextContent html={typeof storyText.text === "string" ? storyText.text : ""} />
           </div>
-        </div>
+        </section>
+      )}
+
+      <section className="guest-section-tight text-center">
+        <CountdownDisplay date={event.draft_event_date || event.event_date} />
       </section>
 
-      {/* Schedule */}
-      <section className="guest-section-tight border-t border-event-border">
-        <div className="mx-auto max-w-2xl">
-          <h2 className="guest-title text-2xl">Schedule</h2>
-          <p className="guest-subtitle mt-2">
-            {config.scheduleText || "Here's what the day looks like."}
-          </p>
-          {/* Placeholder schedule items */}
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            {[
-              { label: "Ceremony", time: timeText || "4:00 PM" },
-              { label: "Reception", time: "6:00 PM" },
-              { label: "Dinner", time: "7:00 PM" },
-              { label: "Dancing", time: "9:00 PM" },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="event-info-card flex items-center justify-between"
-              >
-                <span className="text-sm font-medium text-event-text">
-                  {item.label}
-                </span>
-                <span className="text-sm text-event-muted">{item.time}</span>
-              </div>
-            ))}
+      <section className="guest-section-tight">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="event-info-card">
+            <h3 className="text-lg font-semibold mb-2">Ceremony</h3>
+            <p className="text-sm" style={{ color: "var(--event-muted)" }}>
+              {formatDate(event.draft_event_date || event.event_date)}
+            </p>
+            <p className="text-sm" style={{ color: "var(--event-muted)" }}>
+              {formatTime12(event.draft_event_date ? "16:00" : null)}
+            </p>
+            <p className="text-sm mt-1">{event.draft_venue_name || event.venue_name || "Venue TBD"}</p>
+          </div>
+          <div className="event-info-card">
+            <h3 className="text-lg font-semibold mb-2">Reception</h3>
+            <p className="text-sm" style={{ color: "var(--event-muted)" }}>
+              {formatDate(event.draft_event_date || event.event_date)}
+            </p>
+            <p className="text-sm mt-1">{event.draft_venue_address || event.venue_address || "Address TBD"}</p>
           </div>
         </div>
       </section>
@@ -293,111 +156,78 @@ export function HomePreview({ event, className }: HomePreviewProps) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// RsvpPreview
-// ---------------------------------------------------------------------------
+function CountdownDisplay({ date }: { date: string | null | undefined }) {
+  const [countdown, setCountdown] = useState(() => getCountdown(date));
 
-export interface RsvpPreviewProps {
-  event: Pick<UserEvent, "name" | "content" | "rsvp_deadline">;
-  className?: string;
-}
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCountdown(getCountdown(date));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [date]);
 
-export function RsvpPreview({ event, className }: RsvpPreviewProps) {
-  const config = parseConfig<ContentConfig>(event.content, DEFAULT_CONTENT);
-  const deadlinePassed = event.rsvp_deadline
-    ? new Date(event.rsvp_deadline).getTime() < Date.now()
-    : false;
+  if (countdown.isPast) {
+    return <p className="guest-subtitle">The event has passed. Thank you for celebrating with us!</p>;
+  }
 
   return (
-    <div className={cn("event-themed w-full", className)}>
-      <section className="guest-section text-center">
-        <p className="guest-eyebrow">{event.name}</p>
-        <h1 className="guest-title">
-          {config.rsvpTitle || "RSVP"}
-        </h1>
-        <div className="mx-auto mt-4 max-w-xl">
-          <RichTextContent
-            html={config.rsvpBody || "<p>Let us know if you can make it!</p>"}
-          />
+    <div className="flex justify-center gap-4 md:gap-8">
+      {[
+        { label: "Days", value: countdown.days },
+        { label: "Hours", value: countdown.hours },
+        { label: "Minutes", value: countdown.minutes },
+        { label: "Seconds", value: countdown.seconds },
+      ].map((item) => (
+        <div key={item.label} className="text-center">
+          <div className="text-3xl md:text-5xl font-bold" style={{ color: "var(--event-primary)" }}>
+            {String(item.value).padStart(2, "0")}
+          </div>
+          <div className="text-xs uppercase tracking-wider mt-1" style={{ color: "var(--event-muted)" }}>
+            {item.label}
+          </div>
         </div>
-
-        {deadlinePassed ? (
-          <div className="mx-auto mt-6 max-w-md rounded-lg border border-event-border bg-event-surface-alt px-4 py-3">
-            <p className="text-sm font-medium text-event-muted">
-              RSVP for this event has closed.
-            </p>
-          </div>
-        ) : (
-          <div className="event-card mx-auto mt-8 max-w-md text-left">
-            {/* Status options */}
-            <div className="space-y-3">
-              <p className="text-sm font-medium text-event-text">
-                Will you be attending?
-              </p>
-              <div className="flex gap-2">
-                {["Yes", "No", "Maybe"].map((status) => (
-                  <button
-                    key={status}
-                    type="button"
-                    disabled
-                    className="event-btn-secondary flex-1"
-                  >
-                    {status}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Plus ones */}
-            <div className="mt-5">
-              <label className="mb-1.5 block text-sm font-medium text-event-text">
-                Number of guests
-              </label>
-              <input
-                type="number"
-                disabled
-                defaultValue={1}
-                min={1}
-                className="event-input"
-              />
-            </div>
-
-            {/* Dietary */}
-            <div className="mt-5">
-              <label className="mb-1.5 block text-sm font-medium text-event-text">
-                Dietary restrictions
-              </label>
-              <textarea
-                disabled
-                rows={2}
-                placeholder="Any allergies or dietary needs?"
-                className="event-input resize-y"
-              />
-            </div>
-
-            {/* Message */}
-            <div className="mt-5">
-              <label className="mb-1.5 block text-sm font-medium text-event-text">
-                Message to the couple
-              </label>
-              <textarea
-                disabled
-                rows={3}
-                placeholder="Leave a note for the happy couple..."
-                className="event-input resize-y"
-              />
-            </div>
-
-            <button
-              type="button"
-              disabled
-              className="event-btn-primary mt-6 w-full"
-            >
-              {config.rsvpButtonText || "Respond Now"}
-            </button>
-          </div>
-        )}
-      </section>
+      ))}
     </div>
   );
+}
+
+// ─── RSVP Preview ─────────────────────────────────────────────────────────────
+
+interface RsvpPreviewProps {
+  event: UserEvent;
+}
+
+export function RsvpPreview({ event }: RsvpPreviewProps) {
+  const content = (event.content ?? {}) as Record<string, unknown>;
+  const rsvpHeadingTypo = content.rsvpHeading as unknown;
+  const rsvpBodyTypo = content.rsvpBody as unknown;
+
+  const heading = resolveTypography(rsvpHeadingTypo, "RSVP");
+  const body = resolveTypography(rsvpBodyTypo, "Will you be joining us?");
+
+  return (
+    <div className="guest-section text-center">
+      <h2 className="guest-title" style={heading.style}>
+        {heading.text}
+      </h2>
+      <p className="guest-subtitle mx-auto mt-2" style={body.style}>
+        {body.text}
+      </p>
+      <div className="mt-8 flex flex-col items-center gap-3">
+        <button type="button" className="event-btn-primary">
+          ✓ Joyfully Accepts
+        </button>
+        <button type="button" className="event-btn-secondary">
+          ✗ Regretfully Declines
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Helper to safely resolve Json to string for rendering
+export function jsonToString(value: Json | null | undefined, fallback = ""): string {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "string") return value;
+  return fallback;
 }

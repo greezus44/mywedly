@@ -1,12 +1,7 @@
-import React from "react";
-import { Input, Textarea } from "../../components/ui";
-import { RichTextContent } from "../../lib/sanitize";
-import { cn } from "../../lib/utils";
-import type { Json } from "../../lib/supabase";
+import { type ReactNode } from "react";
+import { cn, formatDate, getCountdown } from "../../lib/utils";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// ─── Block type definitions ───────────────────────────────────────────────
 
 export type BlockType =
   | "heading"
@@ -28,812 +23,765 @@ export type BlockType =
   | "venue"
   | "faq";
 
-export interface Block {
+export interface BlockBase {
   id: string;
   type: BlockType;
-  content: Record<string, unknown>;
 }
+
+export interface HeadingBlock extends BlockBase {
+  type: "heading";
+  text: string;
+  level: 1 | 2 | 3;
+  align: "left" | "center" | "right";
+}
+export interface ParagraphBlock extends BlockBase {
+  type: "paragraph";
+  text: string;
+  align: "left" | "center" | "right";
+}
+export interface ImageBlock extends BlockBase {
+  type: "image";
+  src: string;
+  alt: string;
+  width: "small" | "medium" | "full";
+  rounded: boolean;
+}
+export interface SpacerBlock extends BlockBase {
+  type: "spacer";
+  height: "sm" | "md" | "lg" | "xl";
+}
+export interface DividerBlock extends BlockBase {
+  type: "divider";
+  style: "solid" | "dashed" | "dotted";
+}
+export interface GalleryBlock extends BlockBase {
+  type: "gallery";
+  images: { src: string; alt: string }[];
+  columns: 2 | 3 | 4;
+}
+export interface VideoBlock extends BlockBase {
+  type: "video";
+  url: string;
+  autoplay: boolean;
+}
+export interface ButtonBlock extends BlockBase {
+  type: "button";
+  label: string;
+  url: string;
+  variant: "primary" | "outline";
+  align: "left" | "center" | "right";
+}
+export interface ColumnsBlock extends BlockBase {
+  type: "columns";
+  count: 2 | 3;
+  items: string[];
+}
+export interface ListBlock extends BlockBase {
+  type: "list";
+  items: string[];
+  ordered: boolean;
+}
+export interface QuoteBlock extends BlockBase {
+  type: "quote";
+  text: string;
+  author: string;
+  align: "left" | "center" | "right";
+}
+export interface CountdownBlock extends BlockBase {
+  type: "countdown";
+  targetDate: string;
+  label: string;
+}
+export interface MapBlock extends BlockBase {
+  type: "map";
+  embedUrl: string;
+  height: number;
+}
+export interface RsvpFormBlock extends BlockBase {
+  type: "rsvp-form";
+  heading: string;
+  body: string;
+}
+export interface GuestListBlock extends BlockBase {
+  type: "guest-list";
+  heading: string;
+  columns: 2 | 3 | 4;
+}
+export interface ScheduleBlock extends BlockBase {
+  type: "schedule";
+  heading: string;
+  showTime: boolean;
+}
+export interface VenueBlock extends BlockBase {
+  type: "venue";
+  name: string;
+  address: string;
+  mapUrl: string;
+}
+export interface FaqBlock extends BlockBase {
+  type: "faq";
+  items: { question: string; answer: string }[];
+}
+
+export type Block =
+  | HeadingBlock
+  | ParagraphBlock
+  | ImageBlock
+  | SpacerBlock
+  | DividerBlock
+  | GalleryBlock
+  | VideoBlock
+  | ButtonBlock
+  | ColumnsBlock
+  | ListBlock
+  | QuoteBlock
+  | CountdownBlock
+  | MapBlock
+  | RsvpFormBlock
+  | GuestListBlock
+  | ScheduleBlock
+  | VenueBlock
+  | FaqBlock;
+
+// ─── Block type registry ──────────────────────────────────────────────────
 
 export interface BlockTypeDef {
   type: BlockType;
   label: string;
-  icon: React.ReactNode;
-  defaultContent: Record<string, unknown>;
+  icon: string;
+  description: string;
 }
-
-// ---------------------------------------------------------------------------
-// Block type definitions
-// ---------------------------------------------------------------------------
 
 export const BLOCK_TYPES: BlockTypeDef[] = [
-  {
-    type: "heading",
-    label: "Heading",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3.75h9m-9 3.75h9M4.5 4.5v15" /></svg>,
-    defaultContent: { text: "Section Heading", level: "h2", align: "left" },
-  },
-  {
-    type: "paragraph",
-    label: "Paragraph",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>,
-    defaultContent: { html: "<p>Write your text here...</p>" },
-  },
-  {
-    type: "image",
-    label: "Image",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>,
-    defaultContent: { src: "", alt: "", width: "full" },
-  },
-  {
-    type: "spacer",
-    label: "Spacer",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.5 0h15" /></svg>,
-    defaultContent: { height: 40 },
-  },
-  {
-    type: "divider",
-    label: "Divider",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5" /></svg>,
-    defaultContent: { style: "solid" },
-  },
-  {
-    type: "gallery",
-    label: "Gallery",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m3.75 7.5 4.5 4.5m0 0 4.5-4.5m-4.5 4.5V3m-4.5 13.5h9" /></svg>,
-    defaultContent: { images: [], columns: 3 },
-  },
-  {
-    type: "video",
-    label: "Video",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>,
-    defaultContent: { url: "", autoplay: false },
-  },
-  {
-    type: "button",
-    label: "Button",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m0-13.5c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v13.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0 1 15.75 18.75ZM4.5 12.75h6m0 0-2.25-2.25M10.5 12.75l-2.25 2.25" /></svg>,
-    defaultContent: { text: "Click Here", url: "#", style: "primary" },
-  },
-  {
-    type: "columns",
-    label: "Columns",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15M3.75 4.5h16.5" /></svg>,
-    defaultContent: { columns: 2, items: [] },
-  },
-  {
-    type: "list",
-    label: "List",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>,
-    defaultContent: { items: ["Item 1", "Item 2"], ordered: false },
-  },
-  {
-    type: "quote",
-    label: "Quote",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8.25c0-1.386 1.114-2.5 2.5-2.5h2.5v6H5.5c-1.386 0-2.5-1.114-2.5-2.5Zm0 0c0 4.142 2.25 6.75 5.25 7.5m8.25-7.5c0-1.386 1.114-2.5 2.5-2.5h2.5v6h-2.5c-1.386 0-2.5-1.114-2.5-2.5Zm0 0c0 4.142 2.25 6.75 5.25 7.5" /></svg>,
-    defaultContent: { text: "A beautiful quote...", author: "" },
-  },
-  {
-    type: "countdown",
-    label: "Countdown",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 2.25H3v-6.75a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 11.25v6.75z" /></svg>,
-    defaultContent: { targetDate: "", label: "Counting down to..." },
-  },
-  {
-    type: "map",
-    label: "Map",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m6.75-1.5v-9a1.5 1.5 0 0 0-1.5-1.5H2.25a1.5 1.5 0 0 0-1.5 1.5v9a1.5 1.5 0 0 0 1.5 1.5h18a1.5 1.5 0 0 0 1.5-1.5Zm-13.5-1.5 3.75-1.5L15 15l5.25-1.5" /></svg>,
-    defaultContent: { address: "", embedUrl: "" },
-  },
-  {
-    type: "rsvp-form",
-    label: "RSVP Form",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>,
-    defaultContent: { title: "RSVP", buttonText: "Submit RSVP" },
-  },
-  {
-    type: "guest-list",
-    label: "Guest List",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.353 9.327 9.327 0 0 0-1.213 2.933zM3.75 18a4.5 4.5 0 0 1 .702-2.395 4.5 4.5 0 0 1 4.5-2.105 4.5 4.5 0 0 1 4.5 2.105A4.5 4.5 0 0 1 13.5 18a4.5 4.5 0 0 1-4.5 4.5A4.5 4.5 0 0 1 3.75 18z" /></svg>,
-    defaultContent: { title: "Guest List" },
-  },
-  {
-    type: "schedule",
-    label: "Schedule",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 2.25H3v-6.75a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 11.25v6.75z" /></svg>,
-    defaultContent: { title: "Schedule" },
-  },
-  {
-    type: "venue",
-    label: "Venue",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>,
-    defaultContent: { name: "", address: "", mapUrl: "" },
-  },
-  {
-    type: "faq",
-    label: "FAQ",
-    icon: <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 5.25h.008v.008H12v-.008Z" /></svg>,
-    defaultContent: { items: [{ question: "Question?", answer: "Answer." }] },
-  },
+  { type: "heading", label: "Heading", icon: "H", description: "A section heading" },
+  { type: "paragraph", label: "Paragraph", icon: "¶", description: "Body text" },
+  { type: "image", label: "Image", icon: "🖼", description: "A single image" },
+  { type: "spacer", label: "Spacer", icon: "↕", description: "Vertical spacing" },
+  { type: "divider", label: "Divider", icon: "—", description: "A horizontal line" },
+  { type: "gallery", label: "Gallery", icon: "▦", description: "Image grid" },
+  { type: "video", label: "Video", icon: "▶", description: "Embedded video" },
+  { type: "button", label: "Button", icon: "⬚", description: "Call-to-action button" },
+  { type: "columns", label: "Columns", icon: "▥", description: "Multi-column text" },
+  { type: "list", label: "List", icon: "☰", description: "Bullet or numbered list" },
+  { type: "quote", label: "Quote", icon: "❝", description: "A blockquote" },
+  { type: "countdown", label: "Countdown", icon: "⏰", description: "Event countdown timer" },
+  { type: "map", label: "Map", icon: "📍", description: "Embedded map" },
+  { type: "rsvp-form", label: "RSVP Form", icon: "✓", description: "Guest RSVP form" },
+  { type: "guest-list", label: "Guest List", icon: "👥", description: "Display attending guests" },
+  { type: "schedule", label: "Schedule", icon: "📅", description: "Event schedule" },
+  { type: "venue", label: "Venue", icon: "🏛", description: "Venue information" },
+  { type: "faq", label: "FAQ", icon: "?", description: "Frequently asked questions" },
 ];
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ─── Block factory ────────────────────────────────────────────────────────
 
-let blockIdCounter = 0;
+let blockCounter = 0;
+function genId(): string {
+  blockCounter += 1;
+  return `block-${Date.now()}-${blockCounter}`;
+}
 
 export function createBlock(type: BlockType): Block {
-  const def = BLOCK_TYPES.find((b) => b.type === type);
-  return {
-    id: `block-${Date.now()}-${blockIdCounter++}`,
-    type,
-    content: def ? { ...def.defaultContent } : {},
-  };
+  const id = genId();
+  switch (type) {
+    case "heading":
+      return { id, type, text: "New Heading", level: 2, align: "center" };
+    case "paragraph":
+      return { id, type, text: "Write your text here...", align: "left" };
+    case "image":
+      return { id, type, src: "", alt: "", width: "medium", rounded: true };
+    case "spacer":
+      return { id, type, height: "md" };
+    case "divider":
+      return { id, type, style: "solid" };
+    case "gallery":
+      return { id, type, images: [], columns: 3 };
+    case "video":
+      return { id, type, url: "", autoplay: false };
+    case "button":
+      return { id, type, label: "Click Here", url: "#", variant: "primary", align: "center" };
+    case "columns":
+      return { id, type, count: 2, items: ["Column 1", "Column 2"] };
+    case "list":
+      return { id, type, items: ["First item", "Second item"], ordered: false };
+    case "quote":
+      return { id, type, text: "A memorable quote", author: "", align: "center" };
+    case "countdown":
+      return { id, type, targetDate: "", label: "Counting down to..." };
+    case "map":
+      return { id, type, embedUrl: "", height: 300 };
+    case "rsvp-form":
+      return { id, type, heading: "RSVP", body: "Will you be joining us?" };
+    case "guest-list":
+      return { id, type, heading: "Our Guests", columns: 3 };
+    case "schedule":
+      return { id, type, heading: "Schedule", showTime: true };
+    case "venue":
+      return { id, type, name: "", address: "", mapUrl: "" };
+    case "faq":
+      return { id, type, items: [{ question: "Question?", answer: "Answer." }] };
+  }
 }
 
-// ---------------------------------------------------------------------------
-// BlockContent — renders a block for preview
-// ---------------------------------------------------------------------------
+// ─── Block content renderer ───────────────────────────────────────────────
 
-export interface BlockContentProps {
+const alignClass: Record<string, string> = {
+  left: "text-left",
+  center: "text-center",
+  right: "text-right",
+};
+
+const spacerHeight: Record<string, string> = {
+  sm: "h-4",
+  md: "h-8",
+  lg: "h-16",
+  xl: "h-24",
+};
+
+const imageWidth: Record<string, string> = {
+  small: "max-w-xs",
+  medium: "max-w-md",
+  full: "max-w-full",
+};
+
+export function BlockContent({
+  block,
+  theme,
+}: {
   block: Block;
-}
-
-export function BlockContent({ block }: BlockContentProps) {
-  const c = block.content;
+  theme?: { primary?: string; heading?: string };
+}): ReactNode {
+  const primaryColor = theme?.primary ?? "var(--event-primary, #b45309)";
+  const headingColor = theme?.heading ?? "var(--event-heading, #78350f)";
 
   switch (block.type) {
     case "heading": {
-      const text = (c.text as string) || "";
-      const level = (c.level as string) || "h2";
-      const align = (c.align as string) || "left";
-      const Tag = (level === "h1" ? "h1" : level === "h3" ? "h3" : "h2") as keyof React.JSX.IntrinsicElements;
-      return (
-        <Tag
-          className={cn(
-            "font-bold text-dash-text",
-            level === "h1" && "text-3xl",
-            level === "h2" && "text-2xl",
-            level === "h3" && "text-xl",
-            align === "center" && "text-center",
-            align === "right" && "text-right"
-          )}
-        >
-          {text}
-        </Tag>
-      );
+      const cls = cn("font-bold", alignClass[block.align]);
+      const style = { color: headingColor };
+      if (block.level === 1) return <h1 className={cn(cls, "text-4xl")} style={style}>{block.text}</h1>;
+      if (block.level === 2) return <h2 className={cn(cls, "text-3xl")} style={style}>{block.text}</h2>;
+      return <h3 className={cn(cls, "text-2xl")} style={style}>{block.text}</h3>;
     }
-
     case "paragraph":
-      return <RichTextContent html={(c.html as string) || "<p></p>"} />;
-
+      return (
+        <p className={cn("text-base leading-relaxed", alignClass[block.align])} style={{ color: "var(--event-text, #78350f)" }}>
+          {block.text}
+        </p>
+      );
     case "image":
-      return c.src ? (
-        <img
-          src={c.src as string}
-          alt={(c.alt as string) || ""}
-          className="w-full rounded-lg"
-        />
-      ) : (
-        <div className="flex h-40 items-center justify-center rounded-lg border-2 border-dashed border-dash-border bg-dash-bg text-sm text-dash-muted">
-          No image selected
-        </div>
-      );
-
-    case "spacer":
-      return <div style={{ height: `${c.height ?? 40}px` }} />;
-
-    case "divider":
-      return <hr className="border-dash-border" />;
-
-    case "gallery": {
-      const images = (c.images as string[]) || [];
-      const cols = (c.columns as number) || 3;
-      return images.length > 0 ? (
-        <div
-          className="grid gap-2"
-          style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-        >
-          {images.map((src, i) => (
-            <img key={i} src={src} alt="" className="aspect-square w-full rounded-lg object-cover" />
-          ))}
-        </div>
-      ) : (
-        <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-dash-border bg-dash-bg text-sm text-dash-muted">
-          No images in gallery
-        </div>
-      );
-    }
-
-    case "video":
-      return c.url ? (
-        <div className="aspect-video w-full overflow-hidden rounded-lg">
-          <iframe
-            src={c.url as string}
-            className="h-full w-full"
-            title="Video"
-            allowFullScreen
+      if (!block.src) {
+        return (
+          <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-dash-border bg-dash-bg p-12 text-dash-muted">
+            <span className="text-sm">No image selected</span>
+          </div>
+        );
+      }
+      return (
+        <div className={cn("mx-auto", imageWidth[block.width])}>
+          <img
+            src={block.src}
+            alt={block.alt}
+            className={cn("w-full h-auto", block.rounded && "rounded-lg")}
           />
         </div>
-      ) : (
-        <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-dash-border bg-dash-bg text-sm text-dash-muted">
-          No video URL
+      );
+    case "spacer":
+      return <div className={spacerHeight[block.height]} />;
+    case "divider":
+      return (
+        <hr
+          className={cn("border-t border-dash-border my-2", block.style === "dashed" && "border-dashed", block.style === "dotted" && "border-dotted")}
+        />
+      );
+    case "gallery": {
+      if (block.images.length === 0) {
+        return (
+          <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-dash-border bg-dash-bg p-12 text-dash-muted">
+            <span className="text-sm">No images in gallery</span>
+          </div>
+        );
+      }
+      const cols = { 2: "grid-cols-2", 3: "grid-cols-3", 4: "grid-cols-4" }[block.columns];
+      return (
+        <div className={cn("grid gap-3", cols)}>
+          {block.images.map((img, i) => (
+            <img key={i} src={img.src} alt={img.alt} className="w-full h-40 object-cover rounded-lg" />
+          ))}
         </div>
       );
-
+    }
+    case "video": {
+      if (!block.url) {
+        return (
+          <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-dash-border bg-dash-bg p-12 text-dash-muted">
+            <span className="text-sm">No video URL</span>
+          </div>
+        );
+      }
+      const isYoutube = block.url.includes("youtube.com") || block.url.includes("youtu.be");
+      const isVimeo = block.url.includes("vimeo.com");
+      if (isYoutube || isVimeo) {
+        let embedUrl = block.url;
+        if (isYoutube) {
+          const m = block.url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/);
+          if (m) embedUrl = `https://www.youtube.com/embed/${m[1]}`;
+        }
+        return (
+          <div className="aspect-video w-full">
+            <iframe
+              src={embedUrl}
+              className="w-full h-full rounded-lg"
+              allowFullScreen
+              title="Embedded video"
+            />
+          </div>
+        );
+      }
+      return (
+        <video src={block.url} controls autoPlay={block.autoplay} className="w-full rounded-lg" />
+      );
+    }
     case "button":
       return (
-        <a
-          href={(c.url as string) || "#"}
-          className="inline-flex items-center justify-center rounded-lg bg-dash-primary px-6 py-2 text-sm font-medium text-dash-primary-fg hover:bg-dash-primary-hover"
-        >
-          {(c.text as string) || "Button"}
-        </a>
+        <div className={alignClass[block.align]}>
+          <a
+            href={block.url}
+            className={cn(
+              "inline-block rounded-md px-6 py-3 text-sm font-medium transition-colors",
+              block.variant === "primary" ? "text-white" : "border-2"
+            )}
+            style={
+              block.variant === "primary"
+                ? { backgroundColor: primaryColor }
+                : { borderColor: primaryColor, color: primaryColor }
+            }
+          >
+            {block.label}
+          </a>
+        </div>
       );
-
     case "columns": {
-      const items = (c.items as string[]) || [];
-      const cols = (c.columns as number) || 2;
+      const cols = { 2: "grid-cols-2", 3: "grid-cols-3" }[block.count];
       return (
-        <div
-          className="grid gap-4"
-          style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-        >
-          {items.map((item, i) => (
-            <div key={i} className="text-sm text-dash-text">
+        <div className={cn("grid gap-6", cols)}>
+          {block.items.map((item, i) => (
+            <div key={i} className="text-sm leading-relaxed" style={{ color: "var(--event-text, #78350f)" }}>
               {item}
             </div>
           ))}
         </div>
       );
     }
-
     case "list": {
-      const items = (c.items as string[]) || [];
-      const ordered = c.ordered as boolean;
-      return ordered ? (
-        <ol className="list-inside list-decimal space-y-1 text-sm text-dash-text">
-          {items.map((item, i) => (
-            <li key={i}>{item}</li>
+      const ListTag = block.ordered ? "ol" : "ul";
+      return (
+        <ListTag className={cn("space-y-2 pl-6", block.ordered ? "list-decimal" : "list-disc")}>
+          {block.items.map((item, i) => (
+            <li key={i} className="text-sm leading-relaxed" style={{ color: "var(--event-text, #78350f)" }}>
+              {item}
+            </li>
           ))}
-        </ol>
-      ) : (
-        <ul className="list-inside list-disc space-y-1 text-sm text-dash-text">
-          {items.map((item, i) => (
-            <li key={i}>{item}</li>
-          ))}
-        </ul>
+        </ListTag>
       );
     }
-
     case "quote":
       return (
-        <blockquote className="border-l-4 border-dash-primary pl-4 italic text-dash-text">
-          <p>{(c.text as string) || ""}</p>
-          {(c.author as string) && (
-            <footer className="mt-1 text-sm text-dash-muted">
-              — {c.author as string}
+        <blockquote className={cn("border-l-4 pl-4 italic", alignClass[block.align])} style={{ borderColor: primaryColor }}>
+          <p className="text-lg" style={{ color: "var(--event-text, #78350f)" }}>{block.text}</p>
+          {block.author && (
+            <footer className="mt-2 text-sm" style={{ color: "var(--event-muted, #92400e)" }}>
+              — {block.author}
             </footer>
           )}
         </blockquote>
       );
-
-    case "countdown":
+    case "countdown": {
+      const cd = getCountdown(block.targetDate);
+      const items = [
+        { label: "Days", value: cd.days },
+        { label: "Hours", value: cd.hours },
+        { label: "Minutes", value: cd.minutes },
+        { label: "Seconds", value: cd.seconds },
+      ];
       return (
-        <div className="rounded-lg bg-dash-bg p-4 text-center">
-          <p className="text-sm text-dash-muted">
-            {(c.label as string) || "Counting down to..."}
-          </p>
-          <p className="mt-1 text-lg font-semibold text-dash-text">
-            {(c.targetDate as string) || "No date set"}
-          </p>
+        <div className="text-center">
+          {block.label && (
+            <p className="mb-4 text-lg font-medium" style={{ color: headingColor }}>{block.label}</p>
+          )}
+          <div className="flex justify-center gap-4">
+            {items.map((it) => (
+              <div key={it.label} className="rounded-lg p-4" style={{ backgroundColor: "var(--event-surface, #fff)" }}>
+                <div className="text-3xl font-bold" style={{ color: primaryColor }}>
+                  {String(it.value).padStart(2, "0")}
+                </div>
+                <div className="text-xs uppercase tracking-wide" style={{ color: "var(--event-muted, #92400e)" }}>
+                  {it.label}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       );
-
+    }
     case "map":
-      return c.embedUrl ? (
-        <div className="aspect-video w-full overflow-hidden rounded-lg">
-          <iframe
-            src={c.embedUrl as string}
-            className="h-full w-full"
-            title="Map"
-          />
-        </div>
-      ) : (
-        <div className="flex h-32 items-center justify-center rounded-lg border-2 border-dashed border-dash-border bg-dash-bg text-sm text-dash-muted">
-          No map configured
-        </div>
+      if (!block.embedUrl) {
+        return (
+          <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-dash-border bg-dash-bg p-12 text-dash-muted">
+            <span className="text-sm">No map URL</span>
+          </div>
+        );
+      }
+      return (
+        <iframe
+          src={block.embedUrl}
+          className="w-full rounded-lg"
+          style={{ height: `${block.height}px` }}
+          loading="lazy"
+          title="Map"
+        />
       );
-
     case "rsvp-form":
       return (
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-6 text-center">
-          <h3 className="text-lg font-semibold text-dash-text">
-            {(c.title as string) || "RSVP"}
-          </h3>
-          <button
-            type="button"
-            disabled
-            className="mt-4 rounded-lg bg-dash-primary px-6 py-2 text-sm font-medium text-dash-primary-fg"
-          >
-            {(c.buttonText as string) || "Submit RSVP"}
-          </button>
+        <div className="text-center">
+          <h3 className="text-2xl font-bold mb-2" style={{ color: headingColor }}>{block.heading}</h3>
+          <p className="mb-6 text-sm" style={{ color: "var(--event-muted, #92400e)" }}>{block.body}</p>
+          <div className="mx-auto max-w-sm space-y-3">
+            <div className="rounded-md border p-3 text-sm" style={{ borderColor: "var(--event-border, #fde68a)", color: "var(--event-text, #78350f)" }}>
+              RSVP form will appear here for guests.
+            </div>
+          </div>
         </div>
       );
-
     case "guest-list":
       return (
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
-          <h3 className="text-lg font-semibold text-dash-text">
-            {(c.title as string) || "Guest List"}
-          </h3>
-          <p className="mt-1 text-sm text-dash-muted">
-            Guest list will appear here on the live page.
-          </p>
+        <div>
+          <h3 className="mb-4 text-2xl font-bold text-center" style={{ color: headingColor }}>{block.heading}</h3>
+          <div className={cn("grid gap-3", { 2: "grid-cols-2", 3: "grid-cols-3", 4: "grid-cols-4" }[block.columns])}>
+            <div className="rounded-md border p-3 text-sm text-center" style={{ borderColor: "var(--event-border, #fde68a)", color: "var(--event-muted, #92400e)" }}>
+              Guest list will appear here.
+            </div>
+          </div>
         </div>
       );
-
     case "schedule":
       return (
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
-          <h3 className="text-lg font-semibold text-dash-text">
-            {(c.title as string) || "Schedule"}
-          </h3>
-          <p className="mt-1 text-sm text-dash-muted">
-            Schedule items will appear here on the live page.
-          </p>
+        <div>
+          <h3 className="mb-4 text-2xl font-bold text-center" style={{ color: headingColor }}>{block.heading}</h3>
+          <div className="mx-auto max-w-md space-y-2">
+            <div className="flex justify-between rounded-md border p-3 text-sm" style={{ borderColor: "var(--event-border, #fde68a)", color: "var(--event-text, #78350f)" }}>
+              <span>Schedule items will appear here.</span>
+            </div>
+          </div>
         </div>
       );
-
     case "venue":
       return (
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
-          {(c.name as string) && (
-            <h3 className="text-lg font-semibold text-dash-text">
-              {c.name as string}
-            </h3>
-          )}
-          {(c.address as string) && (
-            <p className="mt-1 text-sm text-dash-muted">
-              {c.address as string}
-            </p>
+        <div className="text-center">
+          {block.name && <h3 className="text-2xl font-bold mb-1" style={{ color: headingColor }}>{block.name}</h3>}
+          {block.address && <p className="text-sm" style={{ color: "var(--event-muted, #92400e)" }}>{block.address}</p>}
+          {block.mapUrl && (
+            <iframe src={block.mapUrl} className="mt-4 w-full rounded-lg" style={{ height: 250 }} loading="lazy" title="Venue map" />
           )}
         </div>
       );
-
-    case "faq": {
-      const items = (c.items as { question: string; answer: string }[]) || [];
+    case "faq":
       return (
-        <div className="space-y-3">
-          {items.map((item, i) => (
-            <div key={i} className="rounded-lg border border-dash-border bg-dash-surface p-4">
-              <h4 className="font-semibold text-dash-text">{item.question}</h4>
-              <p className="mt-1 text-sm text-dash-muted">{item.answer}</p>
+        <div className="space-y-4">
+          {block.items.map((item, i) => (
+            <div key={i} className="rounded-lg border p-4" style={{ borderColor: "var(--event-border, #fde68a)" }}>
+              <h4 className="font-semibold mb-1" style={{ color: headingColor }}>{item.question}</h4>
+              <p className="text-sm" style={{ color: "var(--event-text, #78350f)" }}>{item.answer}</p>
             </div>
           ))}
         </div>
       );
-    }
-
-    default:
-      return null;
   }
 }
 
-// ---------------------------------------------------------------------------
-// BlockEditor — edits a block's content
-// ---------------------------------------------------------------------------
+// ─── Block editor ─────────────────────────────────────────────────────────
 
-export interface BlockEditorProps {
+export function BlockEditor({
+  block,
+  onChange,
+  onRemove,
+}: {
   block: Block;
-  onChange: (content: Record<string, unknown>) => void;
-}
+  onChange: (block: Block) => void;
+  onRemove: () => void;
+}): ReactNode {
+  const update = (patch: Partial<Block>) => onChange({ ...block, ...patch } as Block);
+  const inputCls =
+    "w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30";
 
-export function BlockEditor({ block, onChange }: BlockEditorProps) {
-  const c = block.content;
-
-  switch (block.type) {
-    case "heading":
-      return (
-        <div className="space-y-3">
-          <Input
-            label="Text"
-            value={(c.text as string) || ""}
-            onChange={(e) => onChange({ ...c, text: e.target.value })}
-          />
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-dash-text">
-              Level
-            </label>
-            <select
-              value={(c.level as string) || "h2"}
-              onChange={(e) => onChange({ ...c, level: e.target.value })}
-              className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-            >
-              <option value="h1">Heading 1</option>
-              <option value="h2">Heading 2</option>
-              <option value="h3">Heading 3</option>
-            </select>
+  const renderEditor = (): ReactNode => {
+    switch (block.type) {
+      case "heading":
+        return (
+          <div className="space-y-3">
+            <input className={inputCls} value={block.text} onChange={(e) => update({ text: e.target.value })} placeholder="Heading text" />
+            <div className="flex gap-2">
+              <select className={inputCls} value={block.level} onChange={(e) => update({ level: Number(e.target.value) as 1 | 2 | 3 })}>
+                <option value={1}>H1</option>
+                <option value={2}>H2</option>
+                <option value={3}>H3</option>
+              </select>
+              <select className={inputCls} value={block.align} onChange={(e) => update({ align: e.target.value as "left" | "center" | "right" })}>
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-dash-text">
-              Alignment
-            </label>
-            <select
-              value={(c.align as string) || "left"}
-              onChange={(e) => onChange({ ...c, align: e.target.value })}
-              className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-            >
+        );
+      case "paragraph":
+        return (
+          <div className="space-y-3">
+            <textarea className={cn(inputCls, "min-h-[100px]")} value={block.text} onChange={(e) => update({ text: e.target.value })} placeholder="Paragraph text" />
+            <select className={inputCls} value={block.align} onChange={(e) => update({ align: e.target.value as "left" | "center" | "right" })}>
               <option value="left">Left</option>
               <option value="center">Center</option>
               <option value="right">Right</option>
             </select>
           </div>
-        </div>
-      );
-
-    case "paragraph":
-      return (
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-dash-text">
-            Content
-          </label>
-          <Textarea
-            value={(c.html as string) || ""}
-            onChange={(e) => onChange({ ...c, html: e.target.value })}
-            rows={5}
-            placeholder="Write your paragraph..."
-          />
-        </div>
-      );
-
-    case "image":
-      return (
-        <div className="space-y-3">
-          <Input
-            label="Image URL"
-            value={(c.src as string) || ""}
-            onChange={(e) => onChange({ ...c, src: e.target.value })}
-            placeholder="https://..."
-          />
-          <Input
-            label="Alt Text"
-            value={(c.alt as string) || ""}
-            onChange={(e) => onChange({ ...c, alt: e.target.value })}
-          />
-        </div>
-      );
-
-    case "spacer":
-      return (
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-dash-text">
-            Height (px)
-          </label>
-          <Input
-            type="number"
-            value={(c.height as number) || 40}
-            onChange={(e) => onChange({ ...c, height: parseInt(e.target.value) || 40 })}
-          />
-        </div>
-      );
-
-    case "divider":
-      return (
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-dash-text">
-            Style
-          </label>
-          <select
-            value={(c.style as string) || "solid"}
-            onChange={(e) => onChange({ ...c, style: e.target.value })}
-            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-          >
+        );
+      case "image":
+        return (
+          <div className="space-y-3">
+            <input className={inputCls} value={block.src} onChange={(e) => update({ src: e.target.value })} placeholder="Image URL" />
+            <input className={inputCls} value={block.alt} onChange={(e) => update({ alt: e.target.value })} placeholder="Alt text" />
+            <div className="flex gap-2">
+              <select className={inputCls} value={block.width} onChange={(e) => update({ width: e.target.value as "small" | "medium" | "full" })}>
+                <option value="small">Small</option>
+                <option value="medium">Medium</option>
+                <option value="full">Full Width</option>
+              </select>
+              <label className="flex items-center gap-2 text-sm text-dash-text">
+                <input type="checkbox" checked={block.rounded} onChange={(e) => update({ rounded: e.target.checked })} />
+                Rounded
+              </label>
+            </div>
+          </div>
+        );
+      case "spacer":
+        return (
+          <select className={inputCls} value={block.height} onChange={(e) => update({ height: e.target.value as "sm" | "md" | "lg" | "xl" })}>
+            <option value="sm">Small</option>
+            <option value="md">Medium</option>
+            <option value="lg">Large</option>
+            <option value="xl">Extra Large</option>
+          </select>
+        );
+      case "divider":
+        return (
+          <select className={inputCls} value={block.style} onChange={(e) => update({ style: e.target.value as "solid" | "dashed" | "dotted" })}>
             <option value="solid">Solid</option>
             <option value="dashed">Dashed</option>
             <option value="dotted">Dotted</option>
           </select>
-        </div>
-      );
-
-    case "gallery":
-      return (
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-dash-text">
-              Columns
-            </label>
-            <Input
-              type="number"
-              min={1}
-              max={6}
-              value={(c.columns as number) || 3}
-              onChange={(e) => onChange({ ...c, columns: parseInt(e.target.value) || 3 })}
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-dash-text">
-              Image URLs (one per line)
-            </label>
-            <Textarea
-              value={((c.images as string[]) || []).join("\n")}
-              onChange={(e) =>
-                onChange({
-                  ...c,
-                  images: e.target.value.split("\n").filter(Boolean),
-                })
-              }
-              rows={4}
-              placeholder="https://..."
-            />
-          </div>
-        </div>
-      );
-
-    case "video":
-      return (
-        <Input
-          label="Video Embed URL"
-          value={(c.url as string) || ""}
-          onChange={(e) => onChange({ ...c, url: e.target.value })}
-          placeholder="https://www.youtube.com/embed/..."
-        />
-      );
-
-    case "button":
-      return (
-        <div className="space-y-3">
-          <Input
-            label="Button Text"
-            value={(c.text as string) || ""}
-            onChange={(e) => onChange({ ...c, text: e.target.value })}
-          />
-          <Input
-            label="URL"
-            value={(c.url as string) || ""}
-            onChange={(e) => onChange({ ...c, url: e.target.value })}
-          />
-        </div>
-      );
-
-    case "columns":
-      return (
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-dash-text">
-              Number of Columns
-            </label>
-            <Input
-              type="number"
-              min={1}
-              max={4}
-              value={(c.columns as number) || 2}
-              onChange={(e) => onChange({ ...c, columns: parseInt(e.target.value) || 2 })}
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-dash-text">
-              Column Content (one per line)
-            </label>
-            <Textarea
-              value={((c.items as string[]) || []).join("\n")}
-              onChange={(e) =>
-                onChange({
-                  ...c,
-                  items: e.target.value.split("\n").filter(Boolean),
-                })
-              }
-              rows={4}
-            />
-          </div>
-        </div>
-      );
-
-    case "list":
-      return (
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-dash-text">
-              Items (one per line)
-            </label>
-            <Textarea
-              value={((c.items as string[]) || []).join("\n")}
-              onChange={(e) =>
-                onChange({
-                  ...c,
-                  items: e.target.value.split("\n").filter(Boolean),
-                })
-              }
-              rows={4}
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm text-dash-text">
-            <input
-              type="checkbox"
-              checked={c.ordered as boolean}
-              onChange={(e) => onChange({ ...c, ordered: e.target.checked })}
-              className="accent-dash-primary"
-            />
-            Ordered list (numbers)
-          </label>
-        </div>
-      );
-
-    case "quote":
-      return (
-        <div className="space-y-3">
-          <Textarea
-            label="Quote Text"
-            value={(c.text as string) || ""}
-            onChange={(e) => onChange({ ...c, text: e.target.value })}
-            rows={3}
-          />
-          <Input
-            label="Author"
-            value={(c.author as string) || ""}
-            onChange={(e) => onChange({ ...c, author: e.target.value })}
-          />
-        </div>
-      );
-
-    case "countdown":
-      return (
-        <div className="space-y-3">
-          <Input
-            label="Label"
-            value={(c.label as string) || ""}
-            onChange={(e) => onChange({ ...c, label: e.target.value })}
-          />
-          <Input
-            label="Target Date"
-            type="datetime-local"
-            value={(c.targetDate as string) || ""}
-            onChange={(e) => onChange({ ...c, targetDate: e.target.value })}
-          />
-        </div>
-      );
-
-    case "map":
-      return (
-        <div className="space-y-3">
-          <Input
-            label="Address"
-            value={(c.address as string) || ""}
-            onChange={(e) => onChange({ ...c, address: e.target.value })}
-          />
-          <Input
-            label="Embed URL"
-            value={(c.embedUrl as string) || ""}
-            onChange={(e) => onChange({ ...c, embedUrl: e.target.value })}
-          />
-        </div>
-      );
-
-    case "rsvp-form":
-      return (
-        <div className="space-y-3">
-          <Input
-            label="Title"
-            value={(c.title as string) || ""}
-            onChange={(e) => onChange({ ...c, title: e.target.value })}
-          />
-          <Input
-            label="Button Text"
-            value={(c.buttonText as string) || ""}
-            onChange={(e) => onChange({ ...c, buttonText: e.target.value })}
-          />
-        </div>
-      );
-
-    case "guest-list":
-      return (
-        <Input
-          label="Title"
-          value={(c.title as string) || ""}
-          onChange={(e) => onChange({ ...c, title: e.target.value })}
-        />
-      );
-
-    case "schedule":
-      return (
-        <Input
-          label="Title"
-          value={(c.title as string) || ""}
-          onChange={(e) => onChange({ ...c, title: e.target.value })}
-        />
-      );
-
-    case "venue":
-      return (
-        <div className="space-y-3">
-          <Input
-            label="Venue Name"
-            value={(c.name as string) || ""}
-            onChange={(e) => onChange({ ...c, name: e.target.value })}
-          />
-          <Textarea
-            label="Address"
-            value={(c.address as string) || ""}
-            onChange={(e) => onChange({ ...c, address: e.target.value })}
-            rows={2}
-          />
-          <Input
-            label="Map URL"
-            value={(c.mapUrl as string) || ""}
-            onChange={(e) => onChange({ ...c, mapUrl: e.target.value })}
-          />
-        </div>
-      );
-
-    case "faq":
-      return (
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-dash-text">
-            FAQ Items
-          </label>
+        );
+      case "gallery":
+        return (
           <div className="space-y-3">
-            {((c.items as { question: string; answer: string }[]) || []).map(
-              (item, i) => (
-                <div key={i} className="space-y-2 rounded-lg border border-dash-border p-3">
-                  <Input
-                    value={item.question}
-                    onChange={(e) => {
-                      const items = [...((c.items as { question: string; answer: string }[]) || [])];
-                      items[i] = { ...items[i], question: e.target.value };
-                      onChange({ ...c, items });
-                    }}
-                    placeholder="Question"
-                  />
-                  <Textarea
-                    value={item.answer}
-                    onChange={(e) => {
-                      const items = [...((c.items as { question: string; answer: string }[]) || [])];
-                      items[i] = { ...items[i], answer: e.target.value };
-                      onChange({ ...c, items });
-                    }}
-                    placeholder="Answer"
-                    rows={2}
-                  />
-                  <button
-                    onClick={() => {
-                      const items = ((c.items as { question: string; answer: string }[]) || []).filter((_, idx) => idx !== i);
-                      onChange({ ...c, items });
-                    }}
-                    className="text-xs text-red-500 hover:underline"
-                  >
-                    Remove
-                  </button>
-                </div>
-              )
-            )}
-            <button
-              onClick={() =>
-                onChange({
-                  ...c,
-                  items: [
-                    ...((c.items as { question: string; answer: string }[]) || []),
-                    { question: "", answer: "" },
-                  ],
-                })
-              }
-              className="text-sm text-dash-primary hover:underline"
-            >
-              + Add FAQ Item
+            {block.images.map((img, i) => (
+              <div key={i} className="flex gap-2">
+                <input className={inputCls} value={img.src} onChange={(e) => {
+                  const images = [...block.images]; images[i] = { ...img, src: e.target.value }; update({ images });
+                }} placeholder={`Image ${i + 1} URL`} />
+                <button type="button" className="rounded-md border border-dash-border px-2 text-xs text-dash-danger" onClick={() => {
+                  update({ images: block.images.filter((_, idx) => idx !== i) });
+                }}>✕</button>
+              </div>
+            ))}
+            <button type="button" className="text-sm text-dash-primary" onClick={() => update({ images: [...block.images, { src: "", alt: "" }] })}>
+              + Add image
+            </button>
+            <select className={inputCls} value={block.columns} onChange={(e) => update({ columns: Number(e.target.value) as 2 | 3 | 4 })}>
+              <option value={2}>2 columns</option>
+              <option value={3}>3 columns</option>
+              <option value={4}>4 columns</option>
+            </select>
+          </div>
+        );
+      case "video":
+        return (
+          <div className="space-y-3">
+            <input className={inputCls} value={block.url} onChange={(e) => update({ url: e.target.value })} placeholder="Video URL (YouTube, Vimeo, or direct)" />
+            <label className="flex items-center gap-2 text-sm text-dash-text">
+              <input type="checkbox" checked={block.autoplay} onChange={(e) => update({ autoplay: e.target.checked })} />
+              Autoplay
+            </label>
+          </div>
+        );
+      case "button":
+        return (
+          <div className="space-y-3">
+            <input className={inputCls} value={block.label} onChange={(e) => update({ label: e.target.value })} placeholder="Button label" />
+            <input className={inputCls} value={block.url} onChange={(e) => update({ url: e.target.value })} placeholder="Button URL" />
+            <div className="flex gap-2">
+              <select className={inputCls} value={block.variant} onChange={(e) => update({ variant: e.target.value as "primary" | "outline" })}>
+                <option value="primary">Primary</option>
+                <option value="outline">Outline</option>
+              </select>
+              <select className={inputCls} value={block.align} onChange={(e) => update({ align: e.target.value as "left" | "center" | "right" })}>
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
+          </div>
+        );
+      case "columns":
+        return (
+          <div className="space-y-3">
+            <select className={inputCls} value={block.count} onChange={(e) => {
+              const count = Number(e.target.value) as 2 | 3;
+              const items = [...block.items];
+              while (items.length < count) items.push("");
+              items.length = count;
+              update({ count, items });
+            }}>
+              <option value={2}>2 columns</option>
+              <option value={3}>3 columns</option>
+            </select>
+            {block.items.map((item, i) => (
+              <textarea key={i} className={cn(inputCls, "min-h-[60px]")} value={item} onChange={(e) => {
+                const items = [...block.items]; items[i] = e.target.value; update({ items });
+              }} placeholder={`Column ${i + 1}`} />
+            ))}
+          </div>
+        );
+      case "list":
+        return (
+          <div className="space-y-3">
+            {block.items.map((item, i) => (
+              <div key={i} className="flex gap-2">
+                <input className={inputCls} value={item} onChange={(e) => {
+                  const items = [...block.items]; items[i] = e.target.value; update({ items });
+                }} placeholder={`Item ${i + 1}`} />
+                <button type="button" className="rounded-md border border-dash-border px-2 text-xs text-dash-danger" onClick={() => {
+                  update({ items: block.items.filter((_, idx) => idx !== i) });
+                }}>✕</button>
+              </div>
+            ))}
+            <div className="flex items-center gap-4">
+              <button type="button" className="text-sm text-dash-primary" onClick={() => update({ items: [...block.items, ""] })}>
+                + Add item
+              </button>
+              <label className="flex items-center gap-2 text-sm text-dash-text">
+                <input type="checkbox" checked={block.ordered} onChange={(e) => update({ ordered: e.target.checked })} />
+                Ordered
+              </label>
+            </div>
+          </div>
+        );
+      case "quote":
+        return (
+          <div className="space-y-3">
+            <textarea className={cn(inputCls, "min-h-[80px]")} value={block.text} onChange={(e) => update({ text: e.target.value })} placeholder="Quote text" />
+            <input className={inputCls} value={block.author} onChange={(e) => update({ author: e.target.value })} placeholder="Author (optional)" />
+            <select className={inputCls} value={block.align} onChange={(e) => update({ align: e.target.value as "left" | "center" | "right" })}>
+              <option value="left">Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+            </select>
+          </div>
+        );
+      case "countdown":
+        return (
+          <div className="space-y-3">
+            <input className={inputCls} value={block.label} onChange={(e) => update({ label: e.target.value })} placeholder="Label" />
+            <input className={inputCls} type="date" value={block.targetDate?.split("T")[0] ?? ""} onChange={(e) => update({ targetDate: e.target.value })} />
+          </div>
+        );
+      case "map":
+        return (
+          <div className="space-y-3">
+            <input className={inputCls} value={block.embedUrl} onChange={(e) => update({ embedUrl: e.target.value })} placeholder="Map embed URL" />
+            <input className={inputCls} type="number" value={block.height} onChange={(e) => update({ height: Number(e.target.value) })} placeholder="Height (px)" />
+          </div>
+        );
+      case "rsvp-form":
+        return (
+          <div className="space-y-3">
+            <input className={inputCls} value={block.heading} onChange={(e) => update({ heading: e.target.value })} placeholder="Heading" />
+            <textarea className={cn(inputCls, "min-h-[60px]")} value={block.body} onChange={(e) => update({ body: e.target.value })} placeholder="Body text" />
+          </div>
+        );
+      case "guest-list":
+        return (
+          <div className="space-y-3">
+            <input className={inputCls} value={block.heading} onChange={(e) => update({ heading: e.target.value })} placeholder="Heading" />
+            <select className={inputCls} value={block.columns} onChange={(e) => update({ columns: Number(e.target.value) as 2 | 3 | 4 })}>
+              <option value={2}>2 columns</option>
+              <option value={3}>3 columns</option>
+              <option value={4}>4 columns</option>
+            </select>
+          </div>
+        );
+      case "schedule":
+        return (
+          <div className="space-y-3">
+            <input className={inputCls} value={block.heading} onChange={(e) => update({ heading: e.target.value })} placeholder="Heading" />
+            <label className="flex items-center gap-2 text-sm text-dash-text">
+              <input type="checkbox" checked={block.showTime} onChange={(e) => update({ showTime: e.target.checked })} />
+              Show time
+            </label>
+          </div>
+        );
+      case "venue":
+        return (
+          <div className="space-y-3">
+            <input className={inputCls} value={block.name} onChange={(e) => update({ name: e.target.value })} placeholder="Venue name" />
+            <input className={inputCls} value={block.address} onChange={(e) => update({ address: e.target.value })} placeholder="Address" />
+            <input className={inputCls} value={block.mapUrl} onChange={(e) => update({ mapUrl: e.target.value })} placeholder="Map embed URL" />
+          </div>
+        );
+      case "faq":
+        return (
+          <div className="space-y-3">
+            {block.items.map((item, i) => (
+              <div key={i} className="space-y-2 rounded-md border border-dash-border p-3">
+                <input className={inputCls} value={item.question} onChange={(e) => {
+                  const items = [...block.items]; items[i] = { ...item, question: e.target.value }; update({ items });
+                }} placeholder="Question" />
+                <textarea className={cn(inputCls, "min-h-[60px]")} value={item.answer} onChange={(e) => {
+                  const items = [...block.items]; items[i] = { ...item, answer: e.target.value }; update({ items });
+                }} placeholder="Answer" />
+                <button type="button" className="text-xs text-dash-danger" onClick={() => update({ items: block.items.filter((_, idx) => idx !== i) })}>
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button type="button" className="text-sm text-dash-primary" onClick={() => update({ items: [...block.items, { question: "", answer: "" }] })}>
+              + Add FAQ
             </button>
           </div>
+        );
+    }
+  };
+
+  const typeDef = BLOCK_TYPES.find((t) => t.type === block.type);
+
+  return (
+    <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-dash-primary/10 text-sm font-medium text-dash-primary">
+            {typeDef?.icon ?? "?"}
+          </span>
+          <span className="text-sm font-medium text-dash-text">{typeDef?.label ?? block.type}</span>
         </div>
-      );
-
-    default:
-      return null;
-  }
+        <button type="button" onClick={onRemove} className="text-sm text-dash-danger hover:underline">
+          Remove
+        </button>
+      </div>
+      {renderEditor()}
+    </div>
+  );
 }
 
-export function blocksToJson(blocks: Block[]): Json {
-  return blocks as unknown as Json;
-}
-
-export function jsonToBlocks(json: Json | null | undefined): Block[] {
-  if (!json || !Array.isArray(json)) return [];
-  return json as unknown as Block[];
+// Utility to normalize blocks from JSON
+export function normalizeBlocks(json: unknown): Block[] {
+  if (!Array.isArray(json)) return [];
+  return json.filter((b) => b && typeof b === "object" && "type" in b && "id" in b) as Block[];
 }

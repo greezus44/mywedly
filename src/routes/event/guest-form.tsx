@@ -1,155 +1,155 @@
-import React from "react";
-import { Input, Select, Badge } from "../../components/ui";
-import { Button } from "../../components/ui/Button";
-import type { EventGuest, GuestGroup } from "../../lib/supabase";
-import { generateUsername } from "../../lib/utils";
+import { cn } from "../../lib/utils";
+import { Input, Select } from "../../components/ui";
+import type { EventGuest } from "../../lib/supabase";
 
-export interface GuestFormState {
+export const SIDES = ["", "Bride", "Groom", "Family", "Friend", "Other"] as const;
+
+export const RSVP_STATUSES = [
+  "pending",
+  "confirmed",
+  "declined",
+  "maybe",
+  "attending",
+  "not_attending",
+] as const;
+
+export interface GuestFormFields {
   name: string;
-  username: string;
   email: string;
   phone: string;
-  group_id: string;
+  username: string;
   side: string;
-  rsvp_status: string;
-  plus_ones: number;
-  dietary: string;
-  message: string;
+  group_id: string;
+  group_name: string;
+  guest_count: string;
+  plus_one_allowed: boolean;
+  dietary_notes: string;
   table_number: string;
 }
 
-export function guestToForm(guest: EventGuest): GuestFormState {
+export const EMPTY_GUEST_FORM: GuestFormFields = {
+  name: "",
+  email: "",
+  phone: "",
+  username: "",
+  side: "",
+  group_id: "",
+  group_name: "",
+  guest_count: "1",
+  plus_one_allowed: false,
+  dietary_notes: "",
+  table_number: "",
+};
+
+export function guestToForm(guest: EventGuest): GuestFormFields {
+  const g = guest as unknown as Record<string, unknown>;
   return {
     name: guest.name ?? "",
-    username: guest.username ?? "",
     email: guest.email ?? "",
     phone: guest.phone ?? "",
-    group_id: guest.group_id ?? "",
-    side: guest.side ?? "",
-    rsvp_status: guest.rsvp_status ?? "pending",
-    plus_ones: guest.plus_ones ?? 0,
-    dietary: guest.dietary ?? "",
-    message: guest.message ?? "",
-    table_number: guest.table_number ?? "",
+    username: (g.username as string) ?? "",
+    side: (g.side as string) ?? "",
+    group_id: (g.group_id as string) ?? "",
+    group_name: (g.group_name as string) ?? "",
+    guest_count: String(guest.guest_count ?? 1),
+    plus_one_allowed: guest.plus_one_allowed ?? false,
+    dietary_notes: guest.dietary_notes ?? "",
+    table_number: (g.table_number as string) ?? "",
   };
 }
 
-export function emptyGuestForm(): GuestFormState {
-  return {
-    name: "",
-    username: "",
-    email: "",
-    phone: "",
-    group_id: "",
-    side: "",
-    rsvp_status: "pending",
-    plus_ones: 0,
-    dietary: "",
-    message: "",
-    table_number: "",
+interface RsvpBadgeProps {
+  status: string | null | undefined;
+  className?: string;
+}
+
+export function RsvpBadge({ status, className }: RsvpBadgeProps) {
+  const s = (status ?? "pending").toLowerCase();
+  const variants: Record<string, string> = {
+    pending: "bg-amber-50 text-amber-700 border-amber-200",
+    confirmed: "bg-green-50 text-green-700 border-green-200",
+    attending: "bg-green-50 text-green-700 border-green-200",
+    declined: "bg-red-50 text-red-700 border-red-200",
+    not_attending: "bg-red-50 text-red-700 border-red-200",
+    maybe: "bg-blue-50 text-blue-700 border-blue-200",
   };
+  const cls = variants[s] ?? variants.pending;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium",
+        cls,
+        className
+      )}
+    >
+      {s}
+    </span>
+  );
 }
 
-export const SIDES = ["", "Bride", "Groom", "Both", "Other"];
-
-export const RSVP_STATUSES = ["pending", "yes", "no", "maybe"];
-
-export interface RsvpBadgeProps {
-  status: string;
-}
-
-export function RsvpBadge({ status }: RsvpBadgeProps) {
-  const variant =
-    status === "yes"
-      ? "success"
-      : status === "no"
-      ? "danger"
-      : status === "maybe"
-      ? "warning"
-      : "default";
-  return <Badge variant={variant as "success" | "danger" | "warning" | "default"}>{status}</Badge>;
-}
-
-export interface GuestFormProps {
-  form: GuestFormState;
-  setForm: (form: GuestFormState) => void;
-  groups: GuestGroup[];
+interface GuestFormFieldsComponentProps {
+  form: GuestFormFields;
+  setForm: (updater: (prev: GuestFormFields) => GuestFormFields) => void;
+  groups: { id: string; name: string }[];
   usernameError?: string | null;
-  onAutoUsername?: () => void;
 }
 
-export function GuestForm({
+export function GuestFormFieldsComponent({
   form,
   setForm,
   groups,
   usernameError,
-  onAutoUsername,
-}: GuestFormProps) {
+}: GuestFormFieldsComponentProps) {
+  const inputClass =
+    "w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30";
+
+  const update = <K extends keyof GuestFormFields>(key: K, value: GuestFormFields[K]) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
+
   return (
     <div className="space-y-4">
       <Input
-        label="Full Name"
+        label="Name"
         value={form.name}
-        onChange={(e) => setForm({ ...form, name: e.target.value })}
-        placeholder="e.g. John Smith"
+        onChange={(e) => update("name", e.target.value)}
+        placeholder="Jane Doe"
+        required
+        autoFocus
       />
-
-      <div>
-        <label className="mb-1.5 block text-sm font-medium text-dash-text">
-          Username
-        </label>
-        <div className="flex gap-2">
-          <Input
-            value={form.username}
-            onChange={(e) => setForm({ ...form, username: e.target.value })}
-            placeholder="auto-generated"
-            error={usernameError ?? undefined}
-          />
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={onAutoUsername}
-          >
-            Auto
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Input
           label="Email"
           type="email"
           value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-          placeholder="guest@example.com"
+          onChange={(e) => update("email", e.target.value)}
+          placeholder="jane@example.com"
         />
         <Input
           label="Phone"
-          type="tel"
           value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
-          placeholder="+1 555-000-0000"
+          onChange={(e) => update("phone", e.target.value)}
+          placeholder="555-0100"
         />
       </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Select
-          label="Group"
-          value={form.group_id}
-          onChange={(e) => setForm({ ...form, group_id: e.target.value })}
-        >
-          <option value="">No group</option>
-          {groups.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </Select>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="block text-sm font-medium text-dash-text mb-1">
+            Username
+          </label>
+          <input
+            className={cn(inputClass, usernameError ? "border-dash-danger" : "")}
+            value={form.username}
+            onChange={(e) => update("username", e.target.value)}
+            placeholder="auto-generated if blank"
+          />
+          {usernameError && (
+            <p className="mt-1 text-xs text-dash-danger">{usernameError}</p>
+          )}
+        </div>
         <Select
           label="Side"
           value={form.side}
-          onChange={(e) => setForm({ ...form, side: e.target.value })}
+          onChange={(e) => update("side", e.target.value)}
         >
           {SIDES.map((s) => (
             <option key={s} value={s}>
@@ -158,53 +158,60 @@ export function GuestForm({
           ))}
         </Select>
       </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Select
-          label="RSVP Status"
-          value={form.rsvp_status}
-          onChange={(e) => setForm({ ...form, rsvp_status: e.target.value })}
+          label="Group"
+          value={form.group_id}
+          onChange={(e) => {
+            const g = groups.find((g) => g.id === e.target.value);
+            setForm((prev) => ({
+              ...prev,
+              group_id: e.target.value,
+              group_name: g?.name ?? "",
+            }));
+          }}
         >
-          {RSVP_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
+          <option value="">— No group —</option>
+          {groups.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
             </option>
           ))}
         </Select>
         <Input
-          label="Plus Ones"
+          label="Guest Count"
           type="number"
-          min={0}
-          value={form.plus_ones}
-          onChange={(e) =>
-            setForm({ ...form, plus_ones: parseInt(e.target.value) || 0 })
-          }
+          min="1"
+          value={form.guest_count}
+          onChange={(e) => update("guest_count", e.target.value)}
+          placeholder="1"
         />
       </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Input
           label="Table Number"
           value={form.table_number}
-          onChange={(e) => setForm({ ...form, table_number: e.target.value })}
-          placeholder="e.g. Table 1"
+          onChange={(e) => update("table_number", e.target.value)}
+          placeholder="Table 1"
         />
-        <Input
-          label="Dietary Restrictions"
-          value={form.dietary}
-          onChange={(e) => setForm({ ...form, dietary: e.target.value })}
-          placeholder="e.g. Vegetarian, Nut allergy"
-        />
+        <div className="flex items-end">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.plus_one_allowed}
+              onChange={(e) => update("plus_one_allowed", e.target.checked)}
+              className="h-4 w-4 rounded border-dash-border accent-dash-primary"
+            />
+            <span className="text-sm text-dash-text">Plus one allowed</span>
+          </label>
+        </div>
       </div>
-
       <Input
-        label="Message"
-        value={form.message}
-        onChange={(e) => setForm({ ...form, message: e.target.value })}
-        placeholder="Optional message from guest"
+        label="Dietary Notes"
+        value={form.dietary_notes}
+        onChange={(e) => update("dietary_notes", e.target.value)}
+        placeholder="Vegetarian, allergies, etc."
       />
     </div>
   );
 }
-
-export { generateUsername };

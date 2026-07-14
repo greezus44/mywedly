@@ -1,182 +1,176 @@
-import React, { useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type Json } from "../../lib/supabase";
+import { supabase, type Json } from "../../lib/supabase";
+import { useEventContext } from "./event-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
-import { Input } from "../../components/ui";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
 import { Button } from "../../components/ui/Button";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { jsonToTheme } from "../../lib/theme";
-import type { EventOutletContext } from "./event-layout";
 
-interface ContentConfig {
-  welcomeText?: string;
-  storyTitle?: string;
+interface HomeContent {
+  welcomeHeading?: string;
+  welcomeBody?: string;
+  storyHeading?: string;
   storyBody?: string;
-  rsvpTitle?: string;
+  rsvpHeading?: string;
   rsvpBody?: string;
-  rsvpButtonText?: string;
-  scheduleText?: string;
-}
-
-function parseConfig(json: Json | null | undefined): ContentConfig {
-  if (!json || typeof json !== "object") return {};
-  return json as ContentConfig;
 }
 
 export default function HomeEditor() {
-  const { event, eventId } = useOutletContext<EventOutletContext>();
+  const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const existing = parseConfig(event.draft_content ?? event.content);
-  const [config, setConfig] = useState<ContentConfig>({
-    welcomeText: existing.welcomeText ?? "",
-    storyTitle: existing.storyTitle ?? "Our Story",
-    storyBody: existing.storyBody ?? "<p>Share the story of how you met and fell in love.</p>",
-    rsvpTitle: existing.rsvpTitle ?? "RSVP",
-    rsvpBody: existing.rsvpBody ?? "<p>Let us know if you can make it!</p>",
-    rsvpButtonText: existing.rsvpButtonText ?? "Respond Now",
-    scheduleText: existing.scheduleText ?? "",
-  });
-  const [saved, setSaved] = useState(false);
+  const currentContent = (event.content ?? {}) as HomeContent;
+  const [welcomeHeading, setWelcomeHeading] = useState(currentContent.welcomeHeading ?? "Welcome");
+  const [welcomeBody, setWelcomeBody] = useState(
+    currentContent.welcomeBody ?? "We can't wait to share our special day with you."
+  );
+  const [storyHeading, setStoryHeading] = useState(currentContent.storyHeading ?? "Our Story");
+  const [storyBody, setStoryBody] = useState(currentContent.storyBody ?? "");
+  const [rsvpHeading, setRsvpHeading] = useState(currentContent.rsvpHeading ?? "RSVP");
+  const [rsvpBody, setRsvpBody] = useState(currentContent.rsvpBody ?? "Will you be joining us?");
+
+  const draftEvent: typeof event = {
+    ...event,
+    content: {
+      ...currentContent,
+      welcomeHeading,
+      welcomeBody,
+      storyHeading,
+      storyBody,
+      rsvpHeading,
+      rsvpBody,
+    } as Json,
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const newContent: HomeContent = {
+        ...currentContent,
+        welcomeHeading,
+        welcomeBody,
+        storyHeading,
+        storyBody,
+        rsvpHeading,
+        rsvpBody,
+      };
       const { error } = await supabase
         .from("user_events")
-        .update({
-          draft_content: config as unknown as Json,
-        })
+        .update({ content: newContent as Json })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  const previewEvent = {
-    ...event,
-    content: config as unknown as Json,
-  };
-
-  const theme = jsonToTheme(event.draft_theme ?? event.theme);
-
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-dash-border bg-dash-surface px-4 py-3">
-        <h2 className="text-lg font-semibold text-dash-text">Home Editor</h2>
-        <div className="flex items-center gap-2">
-          {saved && <span className="text-sm text-green-600">Saved!</span>}
-          <Button
-            onClick={() => saveMutation.mutate()}
-            loading={saveMutation.isPending}
-          >
-            Save Changes
-          </Button>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-dash-text">Home Editor</h2>
+          <p className="text-sm text-dash-muted">Edit the content sections of your home page.</p>
         </div>
+        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+          Save Changes
+        </Button>
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        <SplitEditor
-          editorRatio={0.4}
-          editor={
-            <div className="space-y-6 p-4">
-              {/* Welcome */}
+      {saveMutation.isError && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          Error saving: {saveMutation.error?.message}
+        </div>
+      )}
+      {saveMutation.isSuccess && (
+        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700">
+          Home content saved successfully!
+        </div>
+      )}
+
+      <SplitEditor
+        editor={
+          <div className="space-y-6">
+            {/* Welcome Section */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-dash-text border-b border-dash-border pb-1">
+                Welcome Section
+              </h3>
               <div>
-                <h3 className="mb-3 text-sm font-semibold text-dash-text">
-                  Welcome Section
-                </h3>
-                <Input
-                  label="Welcome Text"
-                  value={config.welcomeText ?? ""}
-                  onChange={(e) =>
-                    setConfig({ ...config, welcomeText: e.target.value })
-                  }
-                  placeholder="We invite you to celebrate our special day."
+                <label className="block text-sm font-medium text-dash-text mb-1">Heading</label>
+                <input
+                  type="text"
+                  value={welcomeHeading}
+                  onChange={(e) => setWelcomeHeading(e.target.value)}
+                  className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
                 />
               </div>
-
-              {/* Story */}
               <div>
-                <h3 className="mb-3 text-sm font-semibold text-dash-text">
-                  Story Section
-                </h3>
-                <div className="space-y-3">
-                  <Input
-                    label="Story Title"
-                    value={config.storyTitle ?? ""}
-                    onChange={(e) =>
-                      setConfig({ ...config, storyTitle: e.target.value })
-                    }
-                    placeholder="Our Story"
-                  />
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-dash-text">
-                      Story Body
-                    </label>
-                    <RichTextEditor
-                      value={config.storyBody ?? ""}
-                      onChange={(html) =>
-                        setConfig({ ...config, storyBody: html })
-                      }
-                      placeholder="Share your story..."
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* RSVP */}
-              <div>
-                <h3 className="mb-3 text-sm font-semibold text-dash-text">
-                  RSVP Section
-                </h3>
-                <div className="space-y-3">
-                  <Input
-                    label="RSVP Title"
-                    value={config.rsvpTitle ?? ""}
-                    onChange={(e) =>
-                      setConfig({ ...config, rsvpTitle: e.target.value })
-                    }
-                    placeholder="RSVP"
-                  />
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-dash-text">
-                      RSVP Body
-                    </label>
-                    <RichTextEditor
-                      value={config.rsvpBody ?? ""}
-                      onChange={(html) =>
-                        setConfig({ ...config, rsvpBody: html })
-                      }
-                      placeholder="Let us know if you can make it!"
-                    />
-                  </div>
-                  <Input
-                    label="RSVP Button Text"
-                    value={config.rsvpButtonText ?? ""}
-                    onChange={(e) =>
-                      setConfig({ ...config, rsvpButtonText: e.target.value })
-                    }
-                    placeholder="Respond Now"
-                  />
-                </div>
+                <label className="block text-sm font-medium text-dash-text mb-1">Body Text</label>
+                <RichTextEditor
+                  value={welcomeBody}
+                  onChange={setWelcomeBody}
+                  placeholder="Welcome message..."
+                />
               </div>
             </div>
-          }
-          preview={
-            <div className="p-4">
-              <EventThemeProvider initialTheme={theme}>
-                <HomePreview event={previewEvent} />
-              </EventThemeProvider>
+
+            {/* Story Section */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-dash-text border-b border-dash-border pb-1">
+                Story Section
+              </h3>
+              <div>
+                <label className="block text-sm font-medium text-dash-text mb-1">Heading</label>
+                <input
+                  type="text"
+                  value={storyHeading}
+                  onChange={(e) => setStoryHeading(e.target.value)}
+                  className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-dash-text mb-1">Body Text</label>
+                <RichTextEditor
+                  value={storyBody}
+                  onChange={setStoryBody}
+                  placeholder="Tell your story..."
+                />
+              </div>
             </div>
-          }
-        />
-      </div>
+
+            {/* RSVP Section */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-dash-text border-b border-dash-border pb-1">
+                RSVP Section
+              </h3>
+              <div>
+                <label className="block text-sm font-medium text-dash-text mb-1">Heading</label>
+                <input
+                  type="text"
+                  value={rsvpHeading}
+                  onChange={(e) => setRsvpHeading(e.target.value)}
+                  className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-dash-text mb-1">Body Text</label>
+                <RichTextEditor
+                  value={rsvpBody}
+                  onChange={setRsvpBody}
+                  placeholder="RSVP message..."
+                />
+              </div>
+            </div>
+          </div>
+        }
+        preview={
+          <EventThemeProvider theme={event.theme}>
+            <HomePreview event={draftEvent} />
+          </EventThemeProvider>
+        }
+      />
     </div>
   );
 }

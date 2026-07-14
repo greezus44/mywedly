@@ -1,11 +1,10 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, type FormEvent } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventGuest } from "../../lib/supabase";
+import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { RUSTY_THEME } from "../../lib/theme";
-import { cn } from "../../lib/utils";
 
 export default function RustySignIn() {
   const { slug } = useParams<{ slug: string }>();
@@ -30,113 +29,101 @@ export default function RustySignIn() {
     enabled: !!slug,
   });
 
-  // Redirect if already signed in for this event
-  useEffect(() => {
-    if (event && guestId && eventId === event.id) {
-      navigate(`/r/${slug}/home`, { replace: true });
-    }
-  }, [event, guestId, eventId, slug, navigate]);
+  if (event && guestId && eventId === event.id) {
+    navigate(`/r/${slug}/home`, { replace: true });
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     const trimmed = username.trim();
     if (!trimmed || !event) return;
-
     setSubmitting(true);
     try {
       const { data, error } = await supabase
         .from("event_guests")
         .select("*")
-        .ilike("username", trimmed)
         .eq("event_id", event.id)
+        .ilike("username", trimmed)
         .maybeSingle();
-
       if (error) throw error;
       if (!data) {
-        setError("We couldn't find that username. Please check and try again.");
+        setError("We couldn't find that username. Please check your invitation and try again.");
         return;
       }
-
-      const guest = data as EventGuest;
-      signIn(guest.name, event.id, guest.id, guest.token);
-      // Navigate to /r/${slug}/home on success
+      signIn(event.id, data.id, data.name, data.email ?? undefined);
       navigate(`/r/${slug}/home`, { replace: true });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } catch {
+      setError("Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }
-  };
+  }
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: RUSTY_THEME.bg }}>
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: RUSTY_THEME.primary }} />
       </div>
     );
   }
 
   if (!event) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
-        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
-        <p className="text-dash-muted">This invitation website could not be found or is no longer available.</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center" style={{ backgroundColor: RUSTY_THEME.bg }}>
+        <h1 className="text-2xl font-bold" style={{ color: RUSTY_THEME.heading }}>Invitation Not Found</h1>
+        <p style={{ color: RUSTY_THEME.muted }}>This invitation website could not be found or is no longer available.</p>
+        <Link to="/" className="hover:underline" style={{ color: RUSTY_THEME.primary }}>Return home</Link>
       </div>
     );
   }
 
-  const theme = RUSTY_THEME;
-  const loginConfig = (event.login_config ?? {}) as {
-    heading?: string;
-    subtitle?: string;
-    placeholder?: string;
-    buttonText?: string;
-  };
-
   return (
-    <EventThemeProvider initialTheme={theme}>
-      <div className="flex min-h-screen flex-col items-center justify-center px-4 py-16 animate-fadeIn">
-        <div className="w-full max-w-md">
-          <div className="mb-8 text-center">
-            <p className="guest-eyebrow">{event.name}</p>
-            <h1 className="guest-title">
-              {loginConfig.heading || "Welcome"}
-            </h1>
-            <p className="guest-subtitle mx-auto">
-              {loginConfig.subtitle || "Enter your username to view the invitation"}
-            </p>
-          </div>
+    <EventThemeProvider theme={event.theme}>
+      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16 animate-fadeIn">
+        <div className="w-full max-w-sm">
+          <p className="guest-eyebrow text-center">{event.title || "Our Wedding"}</p>
+          <h1 className="guest-title text-center" style={{ marginBottom: "0.5rem" }}>Welcome</h1>
+          <p className="guest-subtitle text-center" style={{ marginBottom: "2rem" }}>
+            Enter the username from your invitation to continue.
+          </p>
 
-          <form onSubmit={handleSubmit} className="event-card event-card-hover space-y-5">
-            <div>
-              <label htmlFor="username" className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                Username
-              </label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder={loginConfig.placeholder || "Your username"}
-                className="event-input"
-                autoComplete="off"
-                autoFocus
-              />
-            </div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Your username"
+              required
+              autoFocus
+              autoComplete="username"
+              className="event-input"
+              disabled={submitting}
+            />
 
             {error && (
-              <p className="text-sm" style={{ color: "#dc2626" }}>{error}</p>
+              <p className="text-sm" style={{ color: "#f87171" }}>{error}</p>
             )}
 
             <button
               type="submit"
-              disabled={submitting || !username.trim()}
-              className={cn("event-btn-primary w-full", (submitting || !username.trim()) && "opacity-60 cursor-not-allowed")}
+              disabled={submitting}
+              className="event-btn-primary w-full"
+              style={{ opacity: submitting ? 0.6 : 1 }}
             >
-              {submitting ? "Signing in…" : loginConfig.buttonText || "View Invitation"}
+              {submitting ? "Signing in…" : "Sign In"}
             </button>
           </form>
+
+          <div className="mt-6 text-center">
+            <Link
+              to={`/r/${slug}`}
+              className="text-sm hover:underline"
+              style={{ color: "var(--event-muted)" }}
+            >
+              ← Back to cover
+            </Link>
+          </div>
         </div>
       </div>
     </EventThemeProvider>

@@ -1,33 +1,35 @@
-import React, { createContext, useContext, useMemo } from "react";
-import { DEFAULT_THEME, themeToEventCssVars, type ThemeConfig } from "./theme";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { DEFAULT_THEME, jsonToTheme, themeToEventCssVars, type ThemeConfig } from "./theme";
+import type { Json } from "./supabase";
 
 interface EventThemeContextValue {
   theme: ThemeConfig;
+  cssVars: Record<string, string>;
 }
 
 const EventThemeContext = createContext<EventThemeContextValue>({
   theme: DEFAULT_THEME,
+  cssVars: themeToEventCssVars(DEFAULT_THEME),
 });
 
 interface EventThemeProviderProps {
-  children: React.ReactNode;
-  initialTheme?: ThemeConfig;
+  theme: Json | null | undefined;
+  children: ReactNode;
   className?: string;
 }
 
-export function EventThemeProvider({
-  children,
-  initialTheme,
-  className,
-}: EventThemeProviderProps) {
-  const theme = initialTheme ?? DEFAULT_THEME;
-  const cssVars = useMemo(() => themeToEventCssVars(theme), [theme]);
-
-  const style = useMemo(() => cssVars as React.CSSProperties, [cssVars]);
+export function EventThemeProvider({ theme, children, className }: EventThemeProviderProps) {
+  const value = useMemo<EventThemeContextValue>(() => {
+    const resolved = jsonToTheme(theme);
+    return {
+      theme: resolved,
+      cssVars: themeToEventCssVars(resolved),
+    };
+  }, [theme]);
 
   return (
-    <EventThemeContext.Provider value={{ theme }}>
-      <div className={cn("event-themed", className)} style={style}>
+    <EventThemeContext.Provider value={value}>
+      <div className={`event-themed ${className ?? ""}`} style={value.cssVars as React.CSSProperties}>
         {children}
       </div>
     </EventThemeContext.Provider>
@@ -36,9 +38,4 @@ export function EventThemeProvider({
 
 export function useEventTheme(): EventThemeContextValue {
   return useContext(EventThemeContext);
-}
-
-// Local cn to avoid circular dependency issues; matches utils.cn
-function cn(...inputs: (string | undefined | false | null)[]): string {
-  return inputs.filter(Boolean).join(" ");
 }

@@ -1,48 +1,35 @@
-import React from "react";
+import { type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
-export interface SplitEditorProps {
-  /** Content for the editor (left) column */
-  editor: React.ReactNode;
-  /** Content for the preview (right) column */
-  preview: React.ReactNode;
-  /** Optional className to apply to the preview pane */
+interface SplitEditorProps {
+  editor: ReactNode;
+  preview: ReactNode;
   previewClassName?: string;
-  /** Ratio of editor width (0–1). Default 0.5 (50/50 split). */
   editorRatio?: number;
 }
 
-export function SplitEditor({
-  editor,
-  preview,
-  previewClassName,
-  editorRatio = 0.5,
-}: SplitEditorProps) {
-  const clamped = Math.min(1, Math.max(0, editorRatio));
-  const editorPct = `${clamped * 100}%`;
-  const previewPct = `${(1 - clamped) * 100}%`;
+export function SplitEditor({ editor, preview, previewClassName, editorRatio = 1 }: SplitEditorProps) {
+  const totalRatio = editorRatio + 1;
+  const editorWidth = `${(editorRatio / totalRatio) * 100}%`;
+  const previewWidth = `${(1 / totalRatio) * 100}%`;
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
-      {/* Editor pane */}
+    <div className="flex h-full min-h-[600px] gap-0 overflow-hidden rounded-lg border border-dash-border">
       <div
-        className="h-full overflow-y-auto border-r border-dash-border bg-dash-surface"
-        style={{ width: editorPct }}
+        className="overflow-y-auto scrollbar-thin bg-dash-surface p-4"
+        style={{ width: editorWidth, flexShrink: 0 }}
       >
         {editor}
       </div>
-      {/* Preview pane */}
       <div
         className={cn(
-          "h-full overflow-y-auto bg-dash-bg",
+          "overflow-y-auto scrollbar-thin border-l border-dash-border bg-dash-bg",
           previewClassName
         )}
-        style={{ width: previewPct }}
+        style={{ width: previewWidth, flexShrink: 0 }}
       >
         {preview}
       </div>
     </div>
   );
 }
-
-export default SplitEditor;

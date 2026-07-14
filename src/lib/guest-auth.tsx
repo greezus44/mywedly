@@ -1,51 +1,58 @@
-import React, {
+import {
   createContext,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
+  type ReactNode,
 } from "react";
-
-const STORAGE_KEY = "mywedly-guest-auth";
+import { supabase } from "./supabase";
 
 interface GuestAuthState {
-  guestName: string | null;
   guestId: string | null;
   eventId: string | null;
-  token: string | null;
+  name: string | null;
+  email: string | null;
+  isAuthenticated: boolean;
 }
 
 interface GuestAuthContextValue extends GuestAuthState {
-  signIn: (name: string, eventId: string, guestId?: string, token?: string) => void;
+  signIn: (eventId: string, guestId: string, name?: string, email?: string) => void;
   signOut: () => void;
 }
 
+const STORAGE_KEY = "mywedly-guest-auth";
+
 const GuestAuthContext = createContext<GuestAuthContextValue>({
-  guestName: null,
   guestId: null,
   eventId: null,
-  token: null,
+  name: null,
+  email: null,
+  isAuthenticated: false,
   signIn: () => {},
   signOut: () => {},
 });
 
-interface GuestAuthProviderProps {
-  children: React.ReactNode;
-}
-
 function loadState(): GuestAuthState {
+  if (typeof window === "undefined") return { guestId: null, eventId: null, name: null, email: null, isAuthenticated: false };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { guestName: null, guestId: null, eventId: null, token: null };
+    if (!raw) return { guestId: null, eventId: null, name: null, email: null, isAuthenticated: false };
     const parsed = JSON.parse(raw) as GuestAuthState;
-    return parsed;
+    return {
+      guestId: parsed.guestId ?? null,
+      eventId: parsed.eventId ?? null,
+      name: parsed.name ?? null,
+      email: parsed.email ?? null,
+      isAuthenticated: Boolean(parsed.guestId && parsed.eventId),
+    };
   } catch {
-    return { guestName: null, guestId: null, eventId: null, token: null };
+    return { guestId: null, eventId: null, name: null, email: null, isAuthenticated: false };
   }
 }
 
-function saveState(state: GuestAuthState) {
+function saveState(state: GuestAuthState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
@@ -53,58 +60,62 @@ function saveState(state: GuestAuthState) {
   }
 }
 
+interface GuestAuthProviderProps {
+  children: ReactNode;
+}
+
 export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
-  const [state, setState] = useState<GuestAuthState>(() => loadState());
+  const [state, setState] = useState<GuestAuthState>(loadState);
 
   useEffect(() => {
     saveState(state);
   }, [state]);
 
   const signIn = useCallback(
-    (name: string, eventId: string, guestId?: string, token?: string) => {
+    (eventId: string, guestId: string, name?: string, email?: string) => {
       setState({
-        guestName: name,
-        guestId: guestId ?? null,
+        guestId,
         eventId,
-        token: token ?? null,
+        name: name ?? null,
+        email: email ?? null,
+        isAuthenticated: true,
       });
     },
     []
   );
 
   const signOut = useCallback(() => {
-    setState({ guestName: null, guestId: null, eventId: null, token: null });
+    setState({ guestId: null, eventId: null, name: null, email: null, isAuthenticated: false });
   }, []);
 
   const value = useMemo<GuestAuthContextValue>(
-    () => ({
-      guestName: state.guestName,
-      guestId: state.guestId,
-      eventId: state.eventId,
-      token: state.token,
-      signIn,
-      signOut,
-    }),
+    () => ({ ...state, signIn, signOut }),
     [state, signIn, signOut]
   );
 
-  return (
-    <GuestAuthContext.Provider value={value}>
-      {children}
-    </GuestAuthContext.Provider>
-  );
+  return <GuestAuthContext.Provider value={value}>{children}</GuestAuthContext.Provider>;
 }
 
 export function useGuestAuth(): GuestAuthContextValue {
   return useContext(GuestAuthContext);
 }
 
-export function useSignIn(): GuestAuthContextValue["signIn"] {
+export function useSignIn() {
   const { signIn } = useGuestAuth();
   return signIn;
 }
 
-export function useGuestSignIn(): GuestAuthContextValue["signIn"] {
+export async function useGuestSignIn(eventId: string, identifier: string): Promise<boolean> {
   const { signIn } = useGuestAuth();
-  return signIn;
+  const { data, error } = await supabase
+    .from("event_guests")
+    .select("*")
+    .eq("event_id", eventId)
+    .or(`email.eq.${identifier},phone.eq.${identifier},name.eq.${identifier}`)
+    .single();
+
+  if (error || !data) return false;
+
+  signIn(eventId, data.id, data.name, data.email);
+  return true;
 }

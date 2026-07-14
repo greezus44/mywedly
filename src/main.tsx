@@ -69,6 +69,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 <Route path="timeline" element={<TimelinePage />} />
                 <Route path="pages" element={<PagesPage />} />
                 <Route path="pages/:pageId" element={<PageBuilder />} />
+                <Route path="pages/:pageId/builder" element={<PageBuilder />} />
                 <Route path="theme" element={<ThemeEditor />} />
                 <Route path="sharing" element={<SharingPage />} />
                 <Route path="analytics" element={<AnalyticsPage />} />
