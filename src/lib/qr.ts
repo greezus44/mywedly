@@ -1,25 +1,27 @@
 import QRCode from "qrcode";
 
+/**
+ * Generate a QR code as a data URL (base64 PNG by default).
+ */
 export async function generateQrDataUrl(
   text: string,
-  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
+  options?: QRCode.QRCodeToDataURLOptions
 ): Promise<string> {
-  const opts = {
-    width: options?.width ?? 256,
-    margin: options?.margin ?? 2,
-    color: {
-      dark: options?.color?.dark ?? "#000000",
-      light: options?.color?.light ?? "#ffffff",
-    },
-    errorCorrectionLevel: "M" as const,
-  };
-  return QRCode.toDataURL(text, opts);
+  return QRCode.toDataURL(text, {
+    width: 256,
+    margin: 2,
+    color: { dark: "#000000", light: "#ffffff" },
+    ...options,
+  });
 }
 
+/**
+ * Download a QR code as a PNG image.
+ */
 export async function downloadQrCode(
   text: string,
-  filename = "qr-code.png",
-  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
+  filename: string = "qr-code.png",
+  options?: QRCode.QRCodeToDataURLOptions
 ): Promise<void> {
   const dataUrl = await generateQrDataUrl(text, options);
   const link = document.createElement("a");
@@ -30,22 +32,21 @@ export async function downloadQrCode(
   document.body.removeChild(link);
 }
 
+/**
+ * Download a QR code as an SVG file.
+ */
 export async function downloadQrSvg(
   text: string,
-  filename = "qr-code.svg",
-  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
+  filename: string = "qr-code.svg",
+  options?: QRCode.QRCodeToStringOptions
 ): Promise<void> {
-  const opts = {
-    width: options?.width ?? 256,
-    margin: options?.margin ?? 2,
-    color: {
-      dark: options?.color?.dark ?? "#000000",
-      light: options?.color?.light ?? "#ffffff",
-    },
-    errorCorrectionLevel: "M" as const,
-  };
-  const svg = await QRCode.toString(text, { ...opts, type: "svg" });
-  const blob = new Blob([svg], { type: "image/svg+xml" });
+  const svgString = await QRCode.toString(text, {
+    type: "svg",
+    margin: 2,
+    color: { dark: "#000000", light: "#ffffff" },
+    ...options,
+  });
+  const blob = new Blob([svgString], { type: "image/svg+xml" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

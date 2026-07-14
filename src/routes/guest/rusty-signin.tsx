@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
+import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
+import { RUSTY_THEME } from "../../lib/theme";
 import { resolveTypography } from "../../lib/typography";
 
 interface LoginConfig {
@@ -23,12 +24,12 @@ export default function RustySignIn() {
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["published-event", slug],
-    enabled: !!slug,
     queryFn: async () => {
       const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
+    enabled: !!slug,
   });
 
   useEffect(() => { if (event && guest && eventId === event.id) navigate(`/r/${slug}/home`, { replace: true }); }, [event, guest, eventId, slug, navigate]);
@@ -53,7 +54,7 @@ export default function RustySignIn() {
   const buttonLabel = loginConfig.buttonLabel || "Sign In";
 
   return (
-    <EventThemeProvider theme={event.theme}>
+    <EventThemeProvider theme={RUSTY_THEME as unknown as Json}>
       <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
         <div className="w-full max-w-md">
           <div className="mb-8 text-center">

@@ -36,7 +36,7 @@ export default function GuestCover() {
   const logoAlign = logoConfig.align || "center";
   const buttonText = (rawCoverConfig.ctaText as string) || "Enter";
   const eyebrow = resolveTypography(rawCoverConfig.eyebrow, "");
-  const heading = resolveTypography(rawCoverConfig.heading, event.name);
+  const heading = resolveTypography(rawCoverConfig.heading, event.name ?? undefined);
   const subheading = resolveTypography(rawCoverConfig.subheading, "");
 
   return (

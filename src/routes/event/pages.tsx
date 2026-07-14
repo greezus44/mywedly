@@ -1,25 +1,29 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type CustomPage } from "../../lib/supabase";
+import { supabase, type CustomPage, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
-import { Card, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
+import { Card, Input, EmptyState, LoadingSpinner, ErrorState, Modal, Badge, Toggle } from "../../components/ui";
 import { slugify, isValidSlug } from "../../lib/theme";
-import { formatDate } from "../../lib/utils";
+
+interface PageForm {
+  title: string;
+  slug: string;
+  is_published: boolean;
+}
 
 export function PagesPage() {
   const { eventId } = useEventContext();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [title, setTitle] = useState("");
-  const [slug, setSlug] = useState("");
-  const [slugError, setSlugError] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<CustomPage | null>(null);
+  const [form, setForm] = useState<PageForm>({ title: "", slug: "", is_published: false });
+  const [formError, setFormError] = useState<string | null>(null);
 
-  const { data: pages, isLoading, isError, refetch } = useQuery({
-    queryKey: ["custom-pages", eventId],
+  const { data: pages, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ["pages", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
@@ -31,46 +35,53 @@ export function PagesPage() {
     },
   });
 
-  const createMutation = useMutation({
+  const saveMutation = useMutation({
     mutationFn: async () => {
-      const finalSlug = slug ? slugify(slug) : slugify(title);
-      if (!isValidSlug(finalSlug)) {
-        throw new Error("Invalid slug. Use only lowercase letters, numbers, and hyphens.");
-      }
-      // Check uniqueness
-      const { data: existing } = await supabase
+      if (!form.title.trim()) throw new Error("Title is required.");
+      const slug = form.slug || slugify(form.title);
+      if (!isValidSlug(slug)) throw new Error("Slug must contain only lowercase letters, numbers, and hyphens.");
+
+      // Check slug uniqueness within this event
+      const { data: existing, error: checkError } = await supabase
         .from("custom_pages")
         .select("id")
         .eq("event_id", eventId)
-        .eq("slug", finalSlug)
+        .eq("slug", slug)
         .maybeSingle();
-      if (existing) {
-        throw new Error("A page with this slug already exists. Choose a different slug.");
+      if (checkError) throw checkError;
+      if (existing && existing.id !== editing?.id) {
+        throw new Error("A page with this slug already exists. Please choose a different slug.");
       }
-      const sortOrder = (pages?.length ?? 0);
-      const { data, error } = await supabase
-        .from("custom_pages")
-        .insert({
-          event_id: eventId,
-          title,
-          slug: finalSlug,
-          content: { blocks: [] },
-          sort_order: sortOrder,
-        })
-        .select()
-        .maybeSingle();
-      if (error) throw error;
-      return data as CustomPage;
+
+      if (editing) {
+        const { error } = await supabase
+          .from("custom_pages")
+          .update({ title: form.title, slug, is_published: form.is_published })
+          .eq("id", editing.id);
+        if (error) throw error;
+      } else {
+        const sortOrder = (pages?.length ?? 0);
+        const { error } = await supabase
+          .from("custom_pages")
+          .insert({
+            event_id: eventId,
+            title: form.title,
+            slug,
+            content: { blocks: [] } as Json,
+            sort_order: sortOrder,
+            is_published: form.is_published,
+          });
+        if (error) throw error;
+      }
     },
-    onSuccess: (page) => {
-      queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] });
-      setShowForm(false);
-      setTitle("");
-      setSlug("");
-      setSlugError(null);
-      if (page) {
-        navigate(`/event/${eventId}/pages/${page.id}`);
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pages", eventId] });
+      setShowModal(false);
+      setEditing(null);
+      setFormError(null);
+    },
+    onError: (err) => {
+      setFormError(err instanceof Error ? err.message : "Failed to save page.");
     },
   });
 
@@ -83,136 +94,148 @@ export function PagesPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["pages", eventId] });
     },
   });
 
-  function handleSlugChange(value: string) {
-    setSlug(value);
-    if (value && !isValidSlug(slugify(value))) {
-      setSlugError("Use only lowercase letters, numbers, and hyphens.");
-    } else {
-      setSlugError(null);
-    }
-  }
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ title: "", slug: "", is_published: false });
+    setFormError(null);
+    setShowModal(true);
+  };
+
+  const openEdit = (page: CustomPage) => {
+    setEditing(page);
+    setForm({ title: page.title, slug: page.slug, is_published: page.is_published });
+    setFormError(null);
+    setShowModal(true);
+  };
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    saveMutation.mutate();
+  };
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-12">
-        <LoadingSpinner size="lg" />
+      <div className="flex justify-center py-20">
+        <LoadingSpinner />
       </div>
     );
   }
 
   if (isError) {
-    return <ErrorState message="Failed to load pages." onRetry={() => refetch()} />;
+    return (
+      <ErrorState
+        title="Failed to load pages"
+        message={error instanceof Error ? error.message : "An error occurred."}
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-dash-text">Pages</h1>
-          <p className="mt-1 text-sm text-dash-muted">
-            Create custom pages with a drag-and-drop builder.
-          </p>
+          <h2 className="text-xl font-bold text-dash-text">Pages</h2>
+          <p className="text-sm text-dash-muted">Create custom pages for your event site.</p>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          Add Page
-        </Button>
+        <Button onClick={openCreate}>Add Page</Button>
       </div>
 
-      {showForm && (
-        <Card>
-          <h2 className="mb-4 text-lg font-semibold text-dash-text">New Page</h2>
-          <div className="space-y-4">
-            <Input
-              label="Page title"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Our Story"
-              autoFocus
-            />
-            <Input
-              label="URL slug (optional)"
-              type="text"
-              value={slug}
-              onChange={(e) => handleSlugChange(e.target.value)}
-              placeholder="auto-generated from title"
-            />
-            {slugError && <p className="text-sm text-dash-danger">{slugError}</p>}
-            <div className="flex gap-2">
-              <Button
-                onClick={() => createMutation.mutate()}
-                loading={createMutation.isPending}
-                disabled={!title.trim() || createMutation.isPending}
-              >
-                Create
-              </Button>
-              <Button variant="secondary" onClick={() => { setShowForm(false); setTitle(""); setSlug(""); setSlugError(null); }}>
-                Cancel
-              </Button>
-            </div>
-            {createMutation.isError && (
-              <p className="text-sm text-dash-danger">
-                {createMutation.error instanceof Error ? createMutation.error.message : "Create failed."}
-              </p>
-            )}
-          </div>
-        </Card>
-      )}
-
-      {pages && pages.length > 0 ? (
-        <div className="space-y-3">
-          {pages.map((page, idx) => (
-            <Card key={page.id} hover className="cursor-pointer" onClick={() => navigate(`/event/${eventId}/pages/${page.id}`)}>
-              <div className="flex items-start justify-between">
+      {!pages || pages.length === 0 ? (
+        <EmptyState
+          title="No pages yet"
+          message="Create custom pages like 'Our Story', 'Travel Info', or 'Registry'."
+          action={<Button onClick={openCreate}>Add Page</Button>}
+        />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {pages.map((page) => (
+            <Card key={page.id} className="cursor-pointer" onClick={() => navigate(`/event/${eventId}/pages/${page.id}`)}>
+              <div className="flex items-start justify-between" onClick={(e) => e.stopPropagation()}>
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="primary">Page {idx + 1}</Badge>
-                    <h3 className="text-base font-semibold text-dash-text">{page.title}</h3>
+                  <h3 className="font-semibold text-dash-text">{page.title}</h3>
+                  <p className="text-xs text-dash-muted">/{page.slug}</p>
+                  <div className="mt-2">
+                    {page.is_published ? (
+                      <Badge variant="success">Published</Badge>
+                    ) : (
+                      <Badge variant="default">Draft</Badge>
+                    )}
                   </div>
-                  <p className="mt-1 text-sm text-dash-muted">/{page.slug}</p>
-                  <p className="mt-1 text-xs text-dash-muted">Updated {formatDate(page.updated_at)}</p>
                 </div>
                 <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/event/${eventId}/pages/${page.id}`);
-                    }}
+                  <button
+                    type="button"
+                    onClick={() => openEdit(page)}
+                    className="rounded-md p-1.5 text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text"
+                    title="Edit settings"
                   >
-                    Edit
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (window.confirm(`Delete "${page.title}"?`)) {
-                        deleteMutation.mutate(page.id);
-                      }
-                    }}
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteMutation.mutate(page.id)}
+                    className="rounded-md p-1.5 text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-danger"
+                    title="Delete"
                   >
-                    ✕
-                  </Button>
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                 </div>
+              </div>
+              <div className="mt-3">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => navigate(`/event/${eventId}/pages/${page.id}`)}
+                >
+                  Edit Content
+                </Button>
               </div>
             </Card>
           ))}
         </div>
-      ) : (
-        !showForm && (
-          <EmptyState
-            title="No pages yet"
-            description="Create custom pages like 'Our Story', 'Gallery', or 'Travel Info'."
-            action={<Button onClick={() => setShowForm(true)}>Add Page</Button>}
-          />
-        )
       )}
+
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Page Settings" : "Add Page"}>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Input
+            label="Title"
+            value={form.title}
+            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            placeholder="e.g. Our Story"
+            required
+            autoFocus
+          />
+          <Input
+            label="Slug"
+            value={form.slug}
+            onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
+            placeholder="our-story"
+          />
+          <p className="-mt-2 text-xs text-dash-muted">Leave blank to auto-generate from title.</p>
+          <Toggle
+            checked={form.is_published}
+            onChange={(is_published) => setForm((f) => ({ ...f, is_published }))}
+            label="Published"
+          />
+          {formError && <p className="text-sm text-dash-danger">{formError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
+            <Button type="submit" loading={saveMutation.isPending}>
+              {editing ? "Save" : "Add"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

@@ -1,266 +1,247 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type SubEvent, type EventRsvp } from "../../lib/supabase";
+import { supabase, type SubEvent, type EventRsvp, type Json } from "../../lib/supabase";
 import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { formatDate, formatTime12, isRsvpClosed } from "../../lib/utils";
+import { formatTime12, formatDate } from "../../lib/utils";
 
-type Status = "attending" | "not_attending" | "pending";
+type RsvpStatus = "attending" | "not_attending" | "no_response";
+
+interface RsvpRow {
+  id?: string;
+  status: RsvpStatus;
+  plus_one: boolean;
+  plus_one_names: string[];
+  message: string | null;
+  sub_event_id: string;
+}
 
 export default function GuestRsvp() {
   const { event, slug, invitedSubEventIds } = useGuestOutletContext();
   const { guest } = useGuestAuth();
   const queryClient = useQueryClient();
 
-  const [status, setStatus] = useState<Status>("pending");
-  const [plusOne, setPlusOne] = useState(false);
-  const [plusOneNames, setPlusOneNames] = useState("");
-  const [message, setMessage] = useState("");
-  const [responses, setResponses] = useState<Record<string, Status>>({});
-  const [saved, setSaved] = useState(false);
-
-  // Fetch the Events the guest is invited to
-  const { data: subEvents, isLoading } = useQuery({
+  // Fetch invited sub-events
+  const { data: subEvents, isLoading: eventsLoading } = useQuery({
     queryKey: ["guest-sub-events", event.id, invitedSubEventIds],
-    enabled: invitedSubEventIds.length > 0,
     queryFn: async () => {
+      if (invitedSubEventIds.length === 0) return [] as SubEvent[];
       const { data, error } = await supabase
         .from("sub_events")
         .select("*")
         .in("id", invitedSubEventIds)
-        .order("sort_order", { ascending: true });
+        .order("start_time", { ascending: true, nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as SubEvent[];
     },
+    enabled: invitedSubEventIds.length > 0,
   });
 
   // Fetch existing RSVPs for this guest
-  const { data: existingRsvps } = useQuery({
+  const { data: existingRsvps, isLoading: rsvpsLoading } = useQuery({
     queryKey: ["guest-rsvps", event.id, guest?.id],
-    enabled: !!guest,
     queryFn: async () => {
+      if (!guest) return [] as EventRsvp[];
       const { data, error } = await supabase
         .from("event_rsvps")
         .select("*")
         .eq("event_id", event.id)
-        .eq("guest_id", guest!.id);
+        .eq("guest_id", guest.id);
       if (error) throw error;
       return (data ?? []) as EventRsvp[];
     },
+    enabled: !!guest,
   });
 
-  // Initialize form from existing RSVPs
-  useEffect(() => {
-    if (!existingRsvps) return;
-    const bySub: Record<string, Status> = {};
-    let overall: Status = "pending";
-    let hasPlusOne = false;
-    let names: string[] = [];
-    let msg = "";
-    for (const r of existingRsvps) {
-      if (r.sub_event_id) {
-        bySub[r.sub_event_id] = r.status;
-      } else {
-        overall = r.status;
-        hasPlusOne = r.plus_one;
-        names = r.plus_one_names ?? [];
-        msg = r.message ?? "";
-      }
-    }
-    setStatus(overall);
-    setResponses(bySub);
-    setPlusOne(hasPlusOne);
-    setPlusOneNames(names.join(", "));
-    setMessage(msg);
-  }, [existingRsvps]);
+  // Build RSVP state from existing data
+  const events = subEvents ?? [];
+  const rsvpBySubEvent = new Map<string, EventRsvp | undefined>();
+  for (const r of existingRsvps ?? []) {
+    const subId = (r as unknown as { sub_event_id?: string }).sub_event_id;
+    if (subId) rsvpBySubEvent.set(subId, r);
+  }
 
-  const rsvpClosed = isRsvpClosed(event.rsvp_deadline);
+  const [statuses, setStatuses] = useState<Record<string, RsvpStatus>>({});
+  const [plusOneNames, setPlusOneNames] = useState<Record<string, string>>({});
+  const [messages, setMessages] = useState<Record<string, string>>({});
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (existingRsvps) {
+      const newStatuses: Record<string, RsvpStatus> = {};
+      const newPlusOneNames: Record<string, string> = {};
+      const newMessages: Record<string, string> = {};
+      for (const sub of events) {
+        const existing = rsvpBySubEvent.get(sub.id);
+        if (existing) {
+          newStatuses[sub.id] = (existing.status as RsvpStatus) || "no_response";
+          newPlusOneNames[sub.id] = (existing.plus_one_names ?? []).join(", ");
+          newMessages[sub.id] = existing.message ?? "";
+        } else {
+          newStatuses[sub.id] = "no_response";
+        }
+      }
+      setStatuses(newStatuses);
+      setPlusOneNames(newPlusOneNames);
+      setMessages(newMessages);
+    }
+  }, [existingRsvps, events]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!guest) throw new Error("Not signed in");
-      const names = plusOne
-        ? plusOneNames.split(",").map((n) => n.trim()).filter(Boolean)
-        : [];
-      const rows: Array<{
-        event_id: string;
-        guest_id: string;
-        guest_name: string;
-        sub_event_id: string | null;
-        status: string;
-        plus_one: boolean;
-        plus_one_names: string[];
-        message: string | null;
-      }> = (subEvents ?? []).map((se) => ({
-        event_id: event.id,
-        guest_id: guest.id,
-        guest_name: guest.name,
-        sub_event_id: se.id,
-        status: responses[se.id] ?? status,
-        plus_one: plusOne,
-        plus_one_names: names,
-        message: message || null,
-      }));
-      // If no sub-events, save a single overall row
-      if (rows.length === 0) {
-        rows.push({
+      if (!guest) throw new Error("Not authenticated");
+      for (const sub of events) {
+        const status = statuses[sub.id];
+        if (!status || status === "no_response") continue;
+        const existing = rsvpBySubEvent.get(sub.id);
+        const payload = {
           event_id: event.id,
           guest_id: guest.id,
           guest_name: guest.name,
-          sub_event_id: null,
+          sub_event_id: sub.id,
           status,
-          plus_one: plusOne,
-          plus_one_names: names,
-          message: message || null,
-        });
+          plus_ones: status === "attending" ? 1 : 0,
+          plus_one_names: status === "attending"
+            ? plusOneNames[sub.id]?.split(",").map((s) => s.trim()).filter(Boolean) ?? []
+            : [],
+          message: messages[sub.id] ?? null,
+          submitted_at: new Date().toISOString(),
+          responded_at: new Date().toISOString(),
+        };
+        if (existing) {
+          const { error } = await supabase.from("event_rsvps").update(payload).eq("id", existing.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from("event_rsvps").insert(payload);
+          if (error) throw error;
+        }
       }
-      // Upsert: delete existing then insert
-      const { error: delError } = await supabase
-        .from("event_rsvps")
-        .delete()
-        .eq("event_id", event.id)
-        .eq("guest_id", guest.id);
-      if (delError) throw delError;
-      const { error: insError } = await supabase
-        .from("event_rsvps")
-        .insert(rows);
-      if (insError) throw insError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guest-rsvps", event.id, guest?.id] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      setSavedMsg("Your RSVP has been saved. Thank you!");
+      setTimeout(() => setSavedMsg(null), 4000);
     },
   });
 
-  if (isLoading) {
+  if (eventsLoading || rsvpsLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--event-primary)", borderTopColor: "transparent" }} />
+      </div>
+    );
+  }
+
+  if (events.length === 0) {
     return (
       <section className="guest-section text-center">
-        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: "var(--event-primary)", borderTopColor: "transparent" }} />
+        <div className="mx-auto max-w-md">
+          <h1 className="guest-title mb-4">RSVP</h1>
+          <p className="guest-subtitle">There are no Events to RSVP to at this time.</p>
+        </div>
       </section>
     );
   }
 
-  const hasInvitedEvents = (subEvents ?? []).length > 0;
-
   return (
     <section className="guest-section">
-      <div className="mx-auto max-w-xl">
-        <p className="guest-eyebrow text-center">RSVP</p>
-        <h1 className="guest-title mb-2 text-center">Will you join us?</h1>
-        <p className="guest-subtitle mb-8 text-center">Let us know if you'll be attending{hasInvitedEvents ? " and which Events you'll join" : ""}.</p>
+      <div className="mx-auto max-w-2xl">
+        <div className="text-center mb-8">
+          <p className="guest-eyebrow">Kindly Respond</p>
+          <h1 className="guest-title">RSVP</h1>
+          <p className="guest-subtitle mx-auto">Let us know which Events you'll be attending.</p>
+        </div>
 
-        {rsvpClosed && (
-          <p className="mb-6 text-center text-sm" style={{ color: "var(--event-primary)" }}>
-            The RSVP deadline ({formatDate(event.rsvp_deadline)}) has passed, but you may still update your response below.
-          </p>
+        {savedMsg && (
+          <div className="event-card mb-6 text-center" style={{ borderColor: "var(--event-primary)" }}>
+            <p style={{ color: "var(--event-primary)" }}>{savedMsg}</p>
+          </div>
         )}
 
-        <div className="event-card space-y-6">
-          {/* Per-Event responses */}
-          {hasInvitedEvents && (
-            <div className="space-y-4">
-              {(subEvents ?? []).map((se) => (
-                <div key={se.id}>
-                  <p className="mb-1 text-sm font-semibold" style={{ color: "var(--event-heading)" }}>{se.name}</p>
-                  <p className="mb-2 text-xs" style={{ color: "var(--event-muted)" }}>
-                    {formatDate(se.start_date)}{se.start_time ? ` · ${formatTime12(se.start_time)}` : ""}
-                    {se.venue ? ` · ${se.venue}` : ""}
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setResponses((p) => ({ ...p, [se.id]: "attending" }))}
-                      className="event-btn-primary flex-1"
-                      style={{ opacity: (responses[se.id] ?? status) === "attending" ? 1 : 0.5 }}
-                    >
-                      Attending
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setResponses((p) => ({ ...p, [se.id]: "not_attending" }))}
-                      className="event-btn-secondary flex-1"
-                      style={{ opacity: (responses[se.id] ?? status) === "not_attending" ? 1 : 0.5 }}
-                    >
-                      Decline
-                    </button>
-                  </div>
+        <div className="space-y-6">
+          {events.map((sub) => {
+            const status = statuses[sub.id] ?? "no_response";
+            return (
+              <div key={sub.id} className="event-card">
+                <div className="mb-4">
+                  <h2 className="text-xl font-bold mb-1" style={{ color: "var(--event-heading)" }}>{sub.name}</h2>
+                  {sub.start_time && (
+                    <p className="text-sm" style={{ color: "var(--event-muted)" }}>
+                      {formatTime12(sub.start_time)}
+                      {sub.end_time ? ` – ${formatTime12(sub.end_time)}` : ""}
+                    </p>
+                  )}
+                  {sub.venue && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{sub.venue}</p>}
                 </div>
-              ))}
-            </div>
-          )}
 
-          {/* Overall response when no sub-events */}
-          {!hasInvitedEvents && (
-            <div>
-              <p className="guest-eyebrow mb-2">Your response</p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStatus("attending")}
-                  className="event-btn-primary flex-1"
-                  style={{ opacity: status === "attending" ? 1 : 0.5 }}
-                >
-                  Attending
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatus("not_attending")}
-                  className="event-btn-secondary flex-1"
-                  style={{ opacity: status === "not_attending" ? 1 : 0.5 }}
-                >
-                  Decline
-                </button>
+                <div className="flex gap-3 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setStatuses((s) => ({ ...s, [sub.id]: "attending" }))}
+                    className="event-btn-primary flex-1"
+                    style={status === "attending" ? {} : { opacity: 0.5, backgroundColor: "transparent", color: "var(--event-primary)", border: "1px solid var(--event-border)" }}
+                  >
+                    Attending
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatuses((s) => ({ ...s, [sub.id]: "not_attending" }))}
+                    className="event-btn-primary flex-1"
+                    style={status === "not_attending" ? {} : { opacity: 0.5, backgroundColor: "transparent", color: "var(--event-primary)", border: "1px solid var(--event-border)" }}
+                  >
+                    Decline
+                  </button>
+                </div>
+
+                {status === "attending" && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium" style={{ color: "var(--event-muted)" }}>
+                        Plus one names (optional, comma-separated)
+                      </label>
+                      <input
+                        type="text"
+                        value={plusOneNames[sub.id] ?? ""}
+                        onChange={(e) => setPlusOneNames((p) => ({ ...p, [sub.id]: e.target.value }))}
+                        className="event-input"
+                        placeholder="e.g. Jane Doe"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-3">
+                  <label className="mb-1 block text-sm font-medium" style={{ color: "var(--event-muted)" }}>
+                    Message (optional)
+                  </label>
+                  <textarea
+                    value={messages[sub.id] ?? ""}
+                    onChange={(e) => setMessages((m) => ({ ...m, [sub.id]: e.target.value }))}
+                    className="event-input"
+                    rows={2}
+                    placeholder="Leave a note for the hosts..."
+                  />
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })}
+        </div>
 
-          {/* Plus one */}
-          {guest?.plus_one_allowed && (
-            <div>
-              <label className="flex items-center gap-2 text-sm" style={{ color: "var(--event-text)" }}>
-                <input type="checkbox" checked={plusOne} onChange={(e) => setPlusOne(e.target.checked)} className="rounded" />
-                Bringing a plus one
-              </label>
-              {plusOne && (
-                <input
-                  type="text"
-                  value={plusOneNames}
-                  onChange={(e) => setPlusOneNames(e.target.value)}
-                  className="event-input mt-2"
-                  placeholder="Plus one names (comma separated)"
-                />
-              )}
-            </div>
-          )}
-
-          {/* Message */}
-          <div>
-            <label className="guest-eyebrow mb-1 block">Message (optional)</label>
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              className="event-input min-h-[80px]"
-              placeholder="Leave a note for the host…"
-            />
-          </div>
-
-          {saveMutation.isError && (
-            <p className="text-sm" style={{ color: "var(--event-primary)" }}>
-              {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save RSVP."}
-            </p>
-          )}
-          {saved && <p className="text-sm" style={{ color: "var(--event-muted)" }}>Thank you! Your RSVP has been saved.</p>}
-
+        <div className="mt-6 text-center">
           <button
             type="button"
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
-            className="event-btn-primary w-full"
+            className="event-btn-primary"
             style={{ opacity: saveMutation.isPending ? 0.6 : 1 }}
           >
-            {saveMutation.isPending ? "Saving…" : "Submit RSVP"}
+            {saveMutation.isPending ? "Saving..." : "Submit RSVP"}
           </button>
+          {saveMutation.isError && (
+            <p className="mt-3 text-sm" style={{ color: "var(--event-primary)" }}>
+              {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save RSVP."}
+            </p>
+          )}
         </div>
       </div>
     </section>

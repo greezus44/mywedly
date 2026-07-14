@@ -1,366 +1,362 @@
-import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type CustomPage, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea } from "../../components/ui/Input";
-import { Card, LoadingSpinner, ErrorState, Badge } from "../../components/ui";
+import { Card, Input, LoadingSpinner, ErrorState } from "../../components/ui";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import {
   BLOCK_TYPES,
   createBlock,
-  parseBlocks,
-  blocksToJson,
+  blocksFromContent,
+  blocksToContent,
+  BlockContent,
   type Block,
-  type BlockType,
 } from "./block-types";
-import { cn } from "../../lib/utils";
 
 export function PageBuilder() {
+  const { eventId, event } = useEventContext();
   const { pageId } = useParams<{ pageId: string }>();
-  const { event, eventId } = useEventContext();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [userId, setUserId] = useState<string | null>(null);
+  const [blocks, setBlocks] = useState<Block[] | null>(null);
+  const [saved, setSaved] = useState(false);
 
-  const { data: page, isLoading, isError, refetch } = useQuery({
-    queryKey: ["custom-page", pageId],
-    enabled: !!pageId,
+  const { data: page, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ["page", pageId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
         .select("*")
-        .eq("id", pageId!)
+        .eq("id", pageId)
+        .eq("event_id", eventId)
         .maybeSingle();
       if (error) throw error;
-      return data as CustomPage | null;
+      if (!data) throw new Error("Page not found.");
+      return data as CustomPage;
     },
+    enabled: !!pageId,
   });
 
-  const [blocks, setBlocks] = useState<Block[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [title, setTitle] = useState("");
-
-  // Initialize blocks when page loads
-  if (page && !loaded) {
-    setBlocks(parseBlocks(page.content));
-    setTitle(page.title);
-    setLoaded(true);
+  // Initialize blocks once page is loaded
+  if (page && blocks === null) {
+    setBlocks(blocksFromContent(page.content));
   }
+
+  // Get user ID for image uploads
+  useEffect(() => {
+    let mounted = true;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (mounted) setUserId(session?.user?.id ?? null);
+    });
+    return () => { mounted = false; };
+  }, []);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      if (!pageId) return;
+      const content = blocksToContent(blocks ?? []) as Json;
       const { error } = await supabase
         .from("custom_pages")
-        .update({
-          title,
-          content: blocksToJson(blocks),
-        })
-        .eq("id", pageId!);
+        .update({ content })
+        .eq("id", pageId);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["custom-page", pageId] });
-      queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["page", pageId] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     },
   });
 
-  function addBlock(type: BlockType) {
-    setBlocks((prev) => [...prev, createBlock(type)]);
-  }
+  const addBlock = (type: Block["type"]) => {
+    const block = createBlock(type);
+    setBlocks((prev) => [...(prev ?? []), block]);
+  };
 
-  function updateBlock(idx: number, patch: Partial<Block["content"]>) {
-    setBlocks((prev) => prev.map((b, i) => (i === idx ? { ...b, content: { ...b.content, ...patch } } : b)));
-  }
+  const updateBlock = (id: string, content: Record<string, unknown>) => {
+    setBlocks((prev) => (prev ?? []).map((b) => (b.id === id ? { ...b, content } : b)));
+  };
 
-  function removeBlock(idx: number) {
-    setBlocks((prev) => prev.filter((_, i) => i !== idx));
-  }
+  const removeBlock = (id: string) => {
+    setBlocks((prev) => (prev ?? []).filter((b) => b.id !== id));
+  };
 
-  function moveBlock(idx: number, dir: -1 | 1) {
+  const moveBlock = (id: string, dir: "up" | "down") => {
     setBlocks((prev) => {
-      const next = [...prev];
-      const target = idx + dir;
-      if (target < 0 || target >= next.length) return prev;
-      [next[idx], next[target]] = [next[target], next[idx]];
+      const list = prev ?? [];
+      const idx = list.findIndex((b) => b.id === id);
+      if (idx === -1) return list;
+      const newIdx = dir === "up" ? idx - 1 : idx + 1;
+      if (newIdx < 0 || newIdx >= list.length) return list;
+      const next = [...list];
+      [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
       return next;
     });
-  }
+  };
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-12">
-        <LoadingSpinner size="lg" />
+      <div className="flex justify-center py-20">
+        <LoadingSpinner />
       </div>
     );
   }
 
-  if (isError) {
-    return <ErrorState message="Failed to load page." onRetry={() => refetch()} />;
-  }
-
-  if (!page) {
+  if (isError || !page) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 gap-4">
-        <p className="text-lg font-semibold text-dash-text">Page not found</p>
-        <Button variant="secondary" onClick={() => navigate(`/event/${eventId}/pages`)}>
-          Back to Pages
-        </Button>
-      </div>
+      <ErrorState
+        title="Failed to load page"
+        message={error instanceof Error ? error.message : "An error occurred."}
+        onRetry={() => refetch()}
+      />
     );
   }
+
+  const blockList = blocks ?? [];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      {/* Header */}
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate(`/event/${eventId}/pages`)}>
-            ← Pages
-          </Button>
-          <h1 className="text-2xl font-bold text-dash-text">Page Builder</h1>
+        <div>
+          <button
+            type="button"
+            onClick={() => navigate(`/event/${eventId}/pages`)}
+            className="mb-1 text-sm text-dash-muted hover:text-dash-text"
+          >
+            ← Back to Pages
+          </button>
+          <h2 className="text-xl font-bold text-dash-text">{page.title}</h2>
+          <p className="text-sm text-dash-muted">/e/{event.slug || event.draft_slug}/{page.slug}</p>
         </div>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-          disabled={saveMutation.isPending}
-        >
-          Save Page
+        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+          {saved ? "Saved!" : "Save"}
         </Button>
       </div>
 
-      {saveMutation.isSuccess && (
-        <p className="text-sm text-green-600">Page saved successfully!</p>
-      )}
-      {saveMutation.isError && (
-        <p className="text-sm text-dash-danger">
-          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed."}
-        </p>
-      )}
-
-      {/* Page Title */}
+      {/* Block type picker */}
       <Card>
-        <Input
-          label="Page title"
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Page title"
-        />
-        <p className="mt-2 text-sm text-dash-muted">Slug: /{page.slug}</p>
-      </Card>
-
-      {/* Block Palette */}
-      <Card>
-        <h2 className="mb-3 text-sm font-semibold text-dash-text">Add Block</h2>
+        <h3 className="mb-3 text-sm font-semibold text-dash-text">Add Block</h3>
         <div className="flex flex-wrap gap-2">
           {BLOCK_TYPES.map((bt) => (
             <button
               key={bt.type}
               type="button"
               onClick={() => addBlock(bt.type)}
+              className="flex items-center gap-2 rounded-lg border border-dash-border px-3 py-1.5 text-sm text-dash-text transition-colors hover:border-dash-primary hover:bg-dash-primary/5"
               title={bt.description}
-              className="flex items-center gap-2 rounded-lg border border-dash-border px-3 py-2 text-sm text-dash-text transition-colors hover:border-dash-primary hover:bg-dash-primary/5"
             >
-              <span className="text-base">{bt.icon}</span>
-              <span>{bt.label}</span>
+              <span className="text-lg">{bt.icon}</span>
+              {bt.label}
             </button>
           ))}
         </div>
       </Card>
 
       {/* Blocks */}
-      {blocks.map((block, idx) => (
-        <Card key={block.id}>
-          <div className="mb-3 flex items-center justify-between">
-            <Badge variant="primary">{block.type}</Badge>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="sm" onClick={() => moveBlock(idx, -1)} disabled={idx === 0}>↑</Button>
-              <Button variant="ghost" size="sm" onClick={() => moveBlock(idx, 1)} disabled={idx === blocks.length - 1}>↓</Button>
-              <Button variant="ghost" size="sm" onClick={() => removeBlock(idx)}>✕</Button>
-            </div>
-          </div>
-          <BlockEditor block={block} onChange={(patch) => updateBlock(idx, patch)} userId={event.creator_id} />
-        </Card>
-      ))}
-
-      {blocks.length === 0 && (
+      {blockList.length === 0 ? (
         <Card>
           <p className="py-8 text-center text-sm text-dash-muted">
-            No blocks yet. Use the palette above to add content blocks.
+            No blocks yet. Add a block above to start building your page.
           </p>
         </Card>
+      ) : (
+        <div className="space-y-3">
+          {blockList.map((block, idx) => (
+            <Card key={block.id}>
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-xs font-medium uppercase text-dash-muted">
+                  {block.type} (#{idx + 1})
+                </span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => moveBlock(block.id, "up")}
+                    disabled={idx === 0}
+                    className="rounded p-1 text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text disabled:opacity-30"
+                    title="Move up"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveBlock(block.id, "down")}
+                    disabled={idx === blockList.length - 1}
+                    className="rounded p-1 text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-text disabled:opacity-30"
+                    title="Move down"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeBlock(block.id)}
+                    className="rounded p-1 text-dash-muted transition-colors hover:bg-dash-bg hover:text-dash-danger"
+                    title="Remove"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Block editor */}
+              <BlockEditor block={block} onChange={(content) => updateBlock(block.id, content)} userId={userId} />
+
+              {/* Block preview */}
+              <div className="mt-3 rounded-lg border border-dash-border bg-dash-bg p-3">
+                <p className="mb-2 text-xs text-dash-muted">Preview:</p>
+                <BlockContent block={block} />
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {saveMutation.isError && (
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save."}
+        </p>
       )}
     </div>
   );
 }
 
-// ---------- Block Editor ----------
-function BlockEditor({
-  block,
-  onChange,
-  userId,
-}: {
+interface BlockEditorProps {
   block: Block;
-  onChange: (patch: Partial<Block["content"]>) => void;
-  userId: string;
-}) {
+  onChange: (content: Record<string, unknown>) => void;
+  userId: string | null;
+}
+
+function BlockEditor({ block, onChange, userId }: BlockEditorProps) {
   const c = block.content;
+  const update = (patch: Record<string, unknown>) => onChange({ ...c, ...patch });
 
   switch (block.type) {
     case "heading":
-    case "paragraph":
-    case "quote":
       return (
         <div className="space-y-3">
-          <Textarea
+          <Input
             label="Text"
-            value={c.text ?? ""}
-            onChange={(e) => onChange({ text: e.target.value })}
-            placeholder="Enter text…"
+            value={(c.text as string) || ""}
+            onChange={(e) => update({ text: e.target.value })}
+            placeholder="Heading text"
           />
-          {block.type === "heading" && (
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label="Font size (px)"
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-dash-text">Font Size (px)</label>
+              <input
                 type="number"
-                value={c.fontSize ?? 28}
-                onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
-              />
-              <Input
-                label="Font weight"
-                type="number"
-                value={c.fontWeight ?? 700}
-                onChange={(e) => onChange({ fontWeight: Number(e.target.value) })}
+                value={(c.fontSize as number) || 24}
+                onChange={(e) => update({ fontSize: Number(e.target.value) })}
+                className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+                min={8}
+                max={72}
               />
             </div>
-          )}
-          <div className="flex gap-2">
-            {(["left", "center", "right"] as const).map((a) => (
-              <button
-                key={a}
-                type="button"
-                onClick={() => onChange({ align: a })}
-                className={cn(
-                  "rounded-lg border px-3 py-1.5 text-xs capitalize",
-                  (c.align ?? "left") === a
-                    ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
-                    : "border-dash-border text-dash-text hover:bg-dash-bg"
-                )}
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-dash-text">Alignment</label>
+              <select
+                value={(c.align as string) || "center"}
+                onChange={(e) => update({ align: e.target.value })}
+                className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
               >
-                {a}
-              </button>
-            ))}
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
           </div>
+        </div>
+      );
+
+    case "text":
+      return (
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-dash-text">HTML Content</label>
+          <textarea
+            value={(c.html as string) || ""}
+            onChange={(e) => update({ html: e.target.value })}
+            placeholder="<p>Write your content here...</p>"
+            rows={5}
+            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+          />
         </div>
       );
 
     case "image":
       return (
         <div className="space-y-3">
-          <ImageUpload
-            userId={userId}
-            value={c.url ?? ""}
-            onChange={(url) => onChange({ url })}
-            label="Image"
-            aspectRatio="auto"
-          />
+          {userId && (
+            <ImageUpload
+              value={(c.url as string) || null}
+              onChange={(url) => update({ url })}
+              userId={userId}
+              label="Image"
+              aspectRatio="auto"
+            />
+          )}
           <Input
-            label="Alt text"
-            type="text"
-            value={c.alt ?? ""}
-            onChange={(e) => onChange({ alt: e.target.value })}
+            label="Alt Text"
+            value={(c.alt as string) || ""}
+            onChange={(e) => update({ alt: e.target.value })}
             placeholder="Image description"
           />
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-dash-text">Width</label>
+            <select
+              value={(c.width as string) || "full"}
+              onChange={(e) => update({ width: e.target.value })}
+              className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+            >
+              <option value="full">Full Width</option>
+              <option value="auto">Auto</option>
+            </select>
+          </div>
         </div>
       );
 
-    case "gallery":
-      return (
-        <div className="space-y-3">
-          {(c.images ?? []).map((img, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <img src={img} alt="" className="h-16 w-16 rounded object-cover" />
-              <Input
-                type="text"
-                value={img}
-                onChange={(e) => {
-                  const images = [...(c.images ?? [])];
-                  images[idx] = e.target.value;
-                  onChange({ images });
-                }}
-                className="flex-1"
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  const images = (c.images ?? []).filter((_, i) => i !== idx);
-                  onChange({ images });
-                }}
-              >
-                ✕
-              </Button>
-            </div>
-          ))}
-          <Button variant="secondary" size="sm" onClick={() => onChange({ images: [...(c.images ?? []), ""] })}>
-            + Add Image URL
-          </Button>
-        </div>
-      );
+    case "divider":
+      return <p className="text-sm text-dash-muted">A horizontal divider line. No configuration needed.</p>;
 
     case "button":
       return (
         <div className="space-y-3">
           <Input
-            label="Button text"
-            type="text"
-            value={c.buttonText ?? ""}
-            onChange={(e) => onChange({ buttonText: e.target.value })}
-            placeholder="Click here"
+            label="Button Text"
+            value={(c.text as string) || ""}
+            onChange={(e) => update({ text: e.target.value })}
+            placeholder="Click Here"
           />
           <Input
             label="Link URL"
-            type="url"
-            value={c.href ?? ""}
-            onChange={(e) => onChange({ href: e.target.value })}
-            placeholder="https://…"
-          />
-        </div>
-      );
-
-    case "map":
-    case "video":
-      return (
-        <div className="space-y-3">
-          <Input
-            label="Embed URL"
-            type="url"
-            value={c.embedUrl ?? ""}
-            onChange={(e) => onChange({ embedUrl: e.target.value })}
-            placeholder={block.type === "video" ? "https://youtube.com/embed/…" : "https://maps.google.com/…"}
-          />
-          <Input
-            label="Caption (optional)"
-            type="text"
-            value={c.caption ?? ""}
-            onChange={(e) => onChange({ caption: e.target.value })}
+            value={(c.url as string) || ""}
+            onChange={(e) => update({ url: e.target.value })}
+            placeholder="https://..."
           />
         </div>
       );
 
     case "spacer":
       return (
-        <Input
-          label="Spacing (px)"
-          type="number"
-          value={c.spacing ?? 32}
-          onChange={(e) => onChange({ spacing: Number(e.target.value) })}
-        />
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-dash-text">Height (px)</label>
+          <input
+            type="number"
+            value={(c.height as number) || 32}
+            onChange={(e) => update({ height: Number(e.target.value) })}
+            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+            min={0}
+            max={200}
+          />
+        </div>
       );
-
-    case "divider":
-      return <p className="text-sm text-dash-muted">A horizontal divider line.</p>;
 
     default:
       return null;

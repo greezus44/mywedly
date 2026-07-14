@@ -1,9 +1,16 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  type ReactNode,
+} from "react";
 import { supabase, type EventGuest } from "./supabase";
 
-const STORAGE_KEY = "mywedly:guest";
+const STORAGE_KEY = "mywedly_guest_session";
 
-interface StoredGuest {
+interface GuestSession {
   guest: EventGuest;
   eventId: string;
 }
@@ -18,22 +25,26 @@ interface GuestAuthContextValue {
 
 const GuestAuthContext = createContext<GuestAuthContextValue | null>(null);
 
-function loadStored(): StoredGuest | null {
+interface GuestAuthProviderProps {
+  children: ReactNode;
+}
+
+function loadSession(): GuestSession | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.guest && parsed.eventId) return parsed;
-    return null;
+    const parsed = JSON.parse(raw) as GuestSession;
+    if (!parsed.guest || !parsed.eventId) return null;
+    return parsed;
   } catch {
     return null;
   }
 }
 
-function saveStored(value: StoredGuest | null) {
+function saveSession(session: GuestSession | null): void {
   try {
-    if (value) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+    if (session) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
     } else {
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -42,50 +53,47 @@ function saveStored(value: StoredGuest | null) {
   }
 }
 
-interface GuestAuthProviderProps {
-  children: React.ReactNode;
-}
-
 export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
   const [guest, setGuest] = useState<EventGuest | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = loadStored();
-    if (stored) {
-      setGuest(stored.guest);
-      setEventId(stored.eventId);
+    const session = loadSession();
+    if (session) {
+      setGuest(session.guest);
+      setEventId(session.eventId);
     }
     setLoading(false);
   }, []);
 
   const signIn = useCallback(
-    async (targetEventId: string, username: string): Promise<{ error: string | null }> => {
-      if (!username || !targetEventId) {
-        return { error: "Please enter your username." };
-      }
+    async (eventId: string, username: string): Promise<{ error: string | null }> => {
       const trimmed = username.trim();
       if (!trimmed) {
         return { error: "Please enter your username." };
       }
+
       const { data, error } = await supabase
         .from("event_guests")
         .select("*")
-        .eq("event_id", targetEventId)
+        .eq("event_id", eventId)
         .ilike("username", trimmed)
         .maybeSingle();
 
       if (error) {
-        return { error: "Something went wrong. Please try again." };
+        return { error: "Unable to sign in. Please try again." };
       }
+
       if (!data) {
         return { error: "We couldn't find that username. Please check and try again." };
       }
-      const g = data as EventGuest;
-      setGuest(g);
-      setEventId(targetEventId);
-      saveStored({ guest: g, eventId: targetEventId });
+
+      const guestData = data as EventGuest;
+      setGuest(guestData);
+      setEventId(eventId);
+      saveSession({ guest: guestData, eventId });
+
       return { error: null };
     },
     []
@@ -94,7 +102,7 @@ export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
   const signOut = useCallback(() => {
     setGuest(null);
     setEventId(null);
-    saveStored(null);
+    saveSession(null);
   }, []);
 
   const value: GuestAuthContextValue = {
@@ -105,7 +113,9 @@ export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
     signOut,
   };
 
-  return <GuestAuthContext.Provider value={value}>{children}</GuestAuthContext.Provider>;
+  return (
+    <GuestAuthContext.Provider value={value}>{children}</GuestAuthContext.Provider>
+  );
 }
 
 export function useGuestAuth(): GuestAuthContextValue {
@@ -116,12 +126,18 @@ export function useGuestAuth(): GuestAuthContextValue {
   return ctx;
 }
 
+/**
+ * Convenience hook for sign-in forms. Returns a signIn function and loading state.
+ */
 export function useSignIn() {
-  const { signIn } = useGuestAuth();
-  return signIn;
+  const { signIn, loading } = useGuestAuth();
+  return { signIn, loading };
 }
 
+/**
+ * Convenience hook returning the current guest's sign-in state.
+ */
 export function useGuestSignIn() {
-  const { signIn } = useGuestAuth();
-  return signIn;
+  const { guest, eventId, loading, signOut } = useGuestAuth();
+  return { guest, eventId, loading, signOut };
 }

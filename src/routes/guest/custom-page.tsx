@@ -1,21 +1,30 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type CustomPage } from "../../lib/supabase";
+import { supabase, type CustomPage, type Json } from "../../lib/supabase";
 import { useGuestOutletContext } from "./guest-layout";
 import { BlockRenderer } from "./block-renderer";
 
-interface GuestPage extends CustomPage {
-  nav_label?: string;
+interface PageBlock {
+  id: string;
+  type: string;
+  content: Record<string, unknown>;
+}
+
+function blocksFromContent(content: Json | null | undefined): PageBlock[] {
+  if (!content || typeof content !== "object" || Array.isArray(content)) return [];
+  const obj = content as Record<string, unknown>;
+  // Support both { blocks: [...] } and { blocks: [...] } shapes
+  const blocks = obj.blocks;
+  if (!Array.isArray(blocks)) return [];
+  return blocks as PageBlock[];
 }
 
 export default function GuestCustomPage() {
   const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
-  const navigate = useNavigate();
   const { event } = useGuestOutletContext();
 
-  const { data: page, isLoading, isError } = useQuery({
+  const { data: page, isLoading } = useQuery({
     queryKey: ["guest-custom-page", event.id, pageSlug],
-    enabled: !!pageSlug,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
@@ -25,37 +34,49 @@ export default function GuestCustomPage() {
         .eq("is_published", true)
         .maybeSingle();
       if (error) throw error;
-      return data as GuestPage | null;
+      return data as CustomPage | null;
     },
+    enabled: !!event.id && !!pageSlug,
   });
 
   if (isLoading) {
     return (
-      <section className="guest-section text-center">
-        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: "var(--event-primary)", borderTopColor: "transparent" }} />
-      </section>
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--event-primary)", borderTopColor: "transparent" }} />
+      </div>
     );
   }
 
-  if (isError || !page) {
+  if (!page) {
     return (
       <section className="guest-section text-center">
         <div className="mx-auto max-w-md">
-          <h1 className="guest-title mb-2">Page Not Found</h1>
+          <h1 className="guest-title mb-4">Page Not Found</h1>
           <p className="guest-subtitle mb-6">This page could not be found or is no longer available.</p>
-          <button onClick={() => navigate(`/e/${slug}/home`)} className="event-btn-primary">Back to Home</button>
+          <Link to={`/e/${slug}/home`} className="event-btn-primary">Back to Home</Link>
         </div>
       </section>
     );
   }
 
+  const blocks = blocksFromContent(page.content);
+
   return (
-    <section className="guest-section">
-      <div className="mx-auto max-w-3xl">
-        <p className="guest-eyebrow text-center">{page.nav_label || page.title}</p>
-        <h1 className="guest-title mb-8 text-center">{page.title}</h1>
-        <BlockRenderer content={page.content} />
-      </div>
-    </section>
+    <article>
+      {blocks.length === 0 ? (
+        <section className="guest-section text-center">
+          <div className="mx-auto max-w-md">
+            <h1 className="guest-title mb-4">{page.title}</h1>
+            <p className="guest-subtitle">Content coming soon.</p>
+          </div>
+        </section>
+      ) : (
+        <div>
+          {blocks.map((block) => (
+            <BlockRenderer key={block.id} block={block} />
+          ))}
+        </div>
+      )}
+    </article>
   );
 }

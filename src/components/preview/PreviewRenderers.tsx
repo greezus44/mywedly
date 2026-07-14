@@ -1,137 +1,234 @@
-import React, { useMemo } from "react";
-import type { Json, UserEvent } from "../../lib/supabase";
-import { jsonToTheme, type ThemeConfig } from "../../lib/theme";
-import {
-  type TypographyStyle,
-  isTypographyObject,
-  getTypographyText,
-  getTypographyStyle,
-  resolveTypography,
-} from "../../lib/typography";
-import { RichTextContent } from "../../lib/sanitize";
+import type { CSSProperties } from "react";
+import type { Json } from "../../lib/supabase";
 import { cn } from "../../lib/utils";
+import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
+import { resolveTypography } from "../../lib/typography";
+import { RichTextContent } from "../../lib/sanitize";
 
-// ---------- Interfaces ----------
+// --- Config Interfaces ---
+
 export interface CoverConfig {
   layout?: "centered" | "split" | "minimal";
+  heading?: TypographyLike;
+  subheading?: TypographyLike;
+  dateText?: TypographyLike;
+  venueText?: TypographyLike;
+  showCountdown?: boolean;
   overlayColor?: string;
   overlayOpacity?: number;
-  showDate?: boolean;
-  showVenue?: boolean;
-  heading?: TypographyStyle;
-  subheading?: TypographyStyle;
-  logo?: { url: string; size?: number; marginTop?: number; marginBottom?: number };
 }
 
 export interface LogoConfig {
-  url?: string;
-  size?: number;
-  marginTop?: number;
-  marginBottom?: number;
+  src?: string | null;
+  width?: number;
+  height?: number;
+  borderRadius?: number;
+  position?: "top-left" | "top-right" | "top-center" | "hidden";
 }
 
 export interface LoginConfig {
-  heading?: TypographyStyle;
+  heading?: TypographyLike;
+  subheading?: TypographyLike;
   placeholder?: string;
   buttonText?: string;
-  helperText?: string;
-}
-
-export interface EventContentSection {
-  id?: string;
-  heading?: TypographyStyle;
-  body?: string; // rich text HTML
+  showUsernameHint?: boolean;
 }
 
 export interface EventContent {
-  sections?: EventContentSection[];
-  logo?: { url: string; size?: number; marginTop?: number; marginBottom?: number };
+  // Home page
+  homeTitle?: TypographyLike;
+  homeSubtitle?: TypographyLike;
+  homeBody?: string;
+  homeCtaText?: string;
+  logo?: LogoConfig;
+  // Schedule
+  scheduleTitle?: TypographyLike;
+  scheduleItems?: ScheduleItem[];
+  // RSVP
+  rsvpTitle?: TypographyLike;
+  rsvpBody?: string;
+  rsvpCtaText?: string;
+  // Custom sections
+  sections?: ContentSection[];
 }
 
-// ---------- Helpers ----------
-function parseContent(content: Json | null | undefined): EventContent {
-  if (!content || typeof content !== "object") return {};
-  return content as EventContent;
+interface TypographyLike {
+  text?: string;
+  align?: string;
+  color?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: number;
+  italic?: boolean;
+  underline?: boolean;
 }
 
-function parseCoverConfig(config: Json | null | undefined): CoverConfig {
-  if (!config || typeof config !== "object") return {};
-  return config as CoverConfig;
+interface ScheduleItem {
+  title: string;
+  time?: string;
+  location?: string;
+  description?: string;
 }
 
-function parseLoginConfig(config: Json | null | undefined): LoginConfig {
-  if (!config || typeof config !== "object") return {};
-  return config as LoginConfig;
+interface ContentSection {
+  id: string;
+  title?: string;
+  body?: string;
 }
 
-// ---------- CoverPreview ----------
+// --- Helper: convert config JSON to typed config ---
+
+function asConfig<T>(json: Json | null | undefined, defaults: T): T {
+  if (!json || typeof json !== "object" || Array.isArray(json)) return defaults;
+  return { ...defaults, ...(json as Record<string, unknown>) } as T;
+}
+
+const defaultCover: CoverConfig = {
+  layout: "centered",
+  showCountdown: true,
+  overlayOpacity: 0.3,
+};
+
+const defaultLogin: LoginConfig = {
+  buttonText: "Enter",
+  placeholder: "Enter your username",
+  showUsernameHint: true,
+};
+
+const defaultContent: EventContent = {
+  homeCtaText: "View Details",
+  scheduleTitle: { text: "Schedule" },
+  rsvpCtaText: "RSVP Now",
+};
+
+// --- CoverPreview ---
+
 export interface CoverPreviewProps {
-  coverImage?: string | null;
-  coverConfig?: Json | null;
-  name?: string;
-  theme?: Json | null;
-  logoConfig?: Json | null;
+  coverImage: string | null;
+  coverConfig: Json | null | undefined;
+  eventName: string | null;
+  eventDate: string | null;
+  eventTime: string | null;
+  venue: string | null;
+  className?: string;
 }
 
-export function CoverPreview({ coverImage, coverConfig, name, theme, logoConfig }: CoverPreviewProps) {
-  const cfg = useMemo(() => parseCoverConfig(coverConfig), [coverConfig]);
-  const resolvedTheme = useMemo<ThemeConfig>(() => jsonToTheme(theme), [theme]);
-  const logo = useMemo<LogoConfig>(() => {
-    if (!logoConfig || typeof logoConfig !== "object") return {};
-    return logoConfig as LogoConfig;
-  }, [logoConfig]);
+export function CoverPreview({
+  coverImage,
+  coverConfig,
+  eventName,
+  eventDate,
+  eventTime,
+  venue,
+  className,
+}: CoverPreviewProps) {
+  const config = asConfig(coverConfig, defaultCover);
+  const heading = resolveTypography(config.heading, eventName || "Our Wedding");
+  const subheading = resolveTypography(config.subheading, "We invite you to celebrate with us");
+  const dateText = resolveTypography(config.dateText, eventDate ? formatDate(eventDate) : "");
+  const venueText = resolveTypography(config.venueText, venue || "");
 
-  const headingStyle = useMemo(() => getTypographyStyle(cfg.heading), [cfg.heading]);
-  const headingText = useMemo(() => getTypographyText(cfg.heading, name || ""), [cfg.heading, name]);
-  const subheadingStyle = useMemo(() => getTypographyStyle(cfg.subheading), [cfg.subheading]);
-  const subheadingText = useMemo(() => getTypographyText(cfg.subheading, ""), [cfg.subheading]);
+  const countdown = getCountdown(eventDate);
 
   return (
-    <div className="relative flex min-h-[320px] items-center justify-center overflow-hidden">
-      {coverImage && (
-        <img
-          src={coverImage}
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover"
+    <div
+      className={cn("relative flex min-h-[400px] items-center justify-center overflow-hidden rounded-lg", className)}
+    >
+      {coverImage ? (
+        <img src={coverImage} alt="Cover" className="absolute inset-0 h-full w-full object-cover" />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-br from-event-primary/20 to-event-accent/20" />
+      )}
+      {(config.overlayColor || coverImage) && (
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundColor: config.overlayColor || "rgba(0,0,0,0.3)",
+            opacity: config.overlayOpacity ?? 0.3,
+          }}
         />
       )}
-      {/* Overlay */}
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundColor: cfg.overlayColor || "rgba(0,0,0,0.35)",
-          opacity: cfg.overlayOpacity ?? 0.35,
-        }}
-      />
-      <div className="relative z-10 flex flex-col items-center px-6 py-12 text-center">
-        {logo.url && (
-          <img
-            src={logo.url}
-            alt="Logo"
-            className="home-logo mb-4"
-            style={{
-              maxWidth: logo.size ? `${logo.size}px` : "120px",
-              width: "auto",
-              maxHeight: "120px",
-              marginTop: logo.marginTop ? `${logo.marginTop}px` : undefined,
-              marginBottom: logo.marginBottom ? `${logo.marginBottom}px` : "1rem",
-            }}
+      <div className="relative z-10 px-6 py-12 text-center">
+        <h1 className="guest-title" style={heading.style}>
+          {heading.text}
+        </h1>
+        {subheading.text && (
+          <p className="guest-subtitle mt-2" style={subheading.style}>
+            {subheading.text}
+          </p>
+        )}
+        {dateText.text && (
+          <p className="mt-4 text-lg" style={dateText.style}>
+            {dateText.text}
+            {eventTime && <span> · {formatTime12(eventTime)}</span>}
+          </p>
+        )}
+        {venueText.text && (
+          <p className="mt-1 text-base" style={venueText.style}>
+            {venueText.text}
+          </p>
+        )}
+        {config.showCountdown && !countdown.isPast && eventDate && (
+          <div className="mt-6 flex justify-center gap-4">
+            {[
+              { label: "Days", value: countdown.days },
+              { label: "Hours", value: countdown.hours },
+              { label: "Minutes", value: countdown.minutes },
+              { label: "Seconds", value: countdown.seconds },
+            ].map((item) => (
+              <div key={item.label} className="text-center">
+                <div className="text-2xl font-bold" style={{ color: "var(--event-heading)" }}>
+                  {item.value}
+                </div>
+                <div className="text-xs uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>
+                  {item.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- LoginPreview ---
+
+export interface LoginPreviewProps {
+  loginConfig: Json | null | undefined;
+  className?: string;
+}
+
+export function LoginPreview({ loginConfig, className }: LoginPreviewProps) {
+  const config = asConfig(loginConfig, defaultLogin);
+  const heading = resolveTypography(config.heading, "Welcome");
+  const subheading = resolveTypography(config.subheading, "Please enter your username to continue");
+
+  return (
+    <div className={cn("flex min-h-[300px] items-center justify-center", className)}>
+      <div className="event-card w-full max-w-md text-center">
+        <h2 className="guest-title" style={heading.style}>
+          {heading.text}
+        </h2>
+        {subheading.text && (
+          <p className="guest-subtitle mt-2" style={subheading.style}>
+            {subheading.text}
+          </p>
+        )}
+        <div className="mt-6">
+          <input
+            type="text"
+            className="event-input"
+            placeholder={config.placeholder || "Enter your username"}
+            disabled
           />
-        )}
-        {headingText && (
-          <h1
-            className="text-3xl md:text-4xl"
-            style={{ color: "#ffffff", ...headingStyle }}
-          >
-            {headingText}
-          </h1>
-        )}
-        {subheadingText && (
-          <p
-            className="mt-2 text-base md:text-lg"
-            style={{ color: "#ffffff", opacity: 0.9, ...subheadingStyle }}
-          >
-            {subheadingText}
+        </div>
+        <button type="button" className="event-btn-primary mt-4" disabled>
+          {config.buttonText || "Enter"}
+        </button>
+        {config.showUsernameHint && (
+          <p className="mt-3 text-xs" style={{ color: "var(--event-muted)" }}>
+            Check your invitation for your unique username
           </p>
         )}
       </div>
@@ -139,144 +236,108 @@ export function CoverPreview({ coverImage, coverConfig, name, theme, logoConfig 
   );
 }
 
-// ---------- LoginPreview ----------
-export interface LoginPreviewProps {
-  event: UserEvent;
-  loginConfig?: Json | null;
-  theme?: Json | null;
+// --- HomePreview ---
+
+export interface HomePreviewProps {
+  content: Json | null | undefined;
+  logoConfig: Json | null | undefined;
+  className?: string;
 }
 
-export function LoginPreview({ event, loginConfig, theme }: LoginPreviewProps) {
-  const cfg = useMemo<LoginConfig>(() => {
-    const fromProp = parseLoginConfig(loginConfig);
-    const fromEvent = parseLoginConfig(event.login_config);
-    return {
-      heading: fromProp.heading ?? fromEvent.heading,
-      placeholder: fromProp.placeholder ?? fromEvent.placeholder,
-      buttonText: fromProp.buttonText ?? fromEvent.buttonText,
-      helperText: fromProp.helperText ?? fromEvent.helperText,
-    };
-  }, [loginConfig, event.login_config]);
+export function HomePreview({ content, logoConfig, className }: HomePreviewProps) {
+  const config = asConfig(content, defaultContent);
+  const title = resolveTypography(config.homeTitle, "Our Wedding");
+  const subtitle = resolveTypography(config.homeSubtitle, "Join us as we celebrate our special day");
 
-  const heading = useMemo(() => resolveTypography(cfg.heading, "Enter your username"), [cfg.heading]);
+  // Resolve logo
+  const logo = asConfig<LogoConfig>(logoConfig, {});
+  const showLogo = logo.src && logo.position !== "hidden";
 
   return (
-    <div className="flex flex-col items-center justify-center px-6 py-12" style={{ textAlign: "center" }}>
-      <h2 className="mb-2 text-xl md:text-2xl" style={heading.style}>
-        {heading.text}
-      </h2>
-      {cfg.helperText && (
-        <p className="mb-6 text-sm" style={{ color: "var(--event-muted)" }}>
-          {cfg.helperText}
+    <div className={cn("guest-section text-center", className)}>
+      {showLogo && (
+        <img
+          src={logo.src!}
+          alt="Logo"
+          className="home-logo mb-6"
+          style={{
+            maxWidth: logo.width ? `${logo.width}px` : "120px",
+            maxHeight: logo.height ? `${logo.height}px` : "120px",
+            borderRadius: logo.borderRadius ? `${logo.borderRadius}px` : undefined,
+          }}
+        />
+      )}
+      <p className="guest-eyebrow">We invite you to</p>
+      <h1 className="guest-title" style={title.style}>
+        {title.text}
+      </h1>
+      {subtitle.text && (
+        <p className="guest-subtitle mx-auto mt-2" style={subtitle.style}>
+          {subtitle.text}
         </p>
       )}
-      <input
-        type="text"
-        placeholder={cfg.placeholder || "Your username"}
-        className="event-input mb-4"
-        style={{ maxWidth: "20rem", textAlign: "center" }}
-        readOnly
-      />
-      <button type="button" className="event-btn-primary">
-        {cfg.buttonText || "Enter"}
+      {config.homeBody && (
+        <RichTextContent
+          html={config.homeBody}
+          className="mx-auto mt-6 max-w-2xl"
+        />
+      )}
+      <button type="button" className="event-btn-primary mt-6" disabled>
+        {config.homeCtaText || "View Details"}
       </button>
     </div>
   );
 }
 
-// ---------- HomePreview ----------
-export interface HomePreviewProps {
-  event: UserEvent;
-  theme?: Json | null;
-  content?: EventContent;
+// --- RsvpPreview ---
+
+export interface RsvpPreviewProps {
+  content: Json | null | undefined;
+  className?: string;
 }
 
-export function HomePreview({ event, theme, content }: HomePreviewProps) {
-  const resolvedContent = useMemo<EventContent>(() => {
-    if (content) return content;
-    return parseContent(event.content);
-  }, [content, event.content]);
-
-  const sections = resolvedContent.sections ?? [];
+export function RsvpPreview({ content, className }: RsvpPreviewProps) {
+  const config = asConfig(content, defaultContent);
+  const title = resolveTypography(config.rsvpTitle, "RSVP");
 
   return (
-    <div className="guest-section">
-      {/* Logo at the top, transparent, centered, no container */}
-      {resolvedContent.logo?.url && (
-        <img
-          src={resolvedContent.logo.url}
-          alt="Event logo"
-          className="home-logo mb-6"
-          style={{
-            maxWidth: resolvedContent.logo.size ? `${resolvedContent.logo.size}px` : "140px",
-            width: "auto",
-            maxHeight: "160px",
-            marginTop: resolvedContent.logo.marginTop ? `${resolvedContent.logo.marginTop}px` : undefined,
-            marginBottom: resolvedContent.logo.marginBottom ? `${resolvedContent.logo.marginBottom}px` : "1.5rem",
-          }}
+    <div className={cn("guest-section text-center", className)}>
+      <h2 className="guest-title" style={title.style}>
+        {title.text}
+      </h2>
+      {config.rsvpBody && (
+        <RichTextContent
+          html={config.rsvpBody}
+          className="mx-auto mt-4 max-w-2xl"
         />
       )}
-
-      {/* Sections */}
-      {sections.map((section, idx) => {
-        const heading = resolveTypography(section.heading, "");
-        return (
-          <div key={section.id ?? idx} className="mb-8 last:mb-0">
-            {heading.text && (
-              <h2 className="guest-title mb-3" style={heading.style}>
-                {heading.text}
-              </h2>
-            )}
-            {section.body && (
-              <div className="rich-content" style={{ maxWidth: "42rem", margin: "0 auto" }}>
-                <RichTextContent html={section.body} />
-              </div>
-            )}
-          </div>
-        );
-      })}
-
-      {sections.length === 0 && !resolvedContent.logo?.url && (
-        <p className="text-center text-sm" style={{ color: "var(--event-muted)" }}>
-          No content yet. Add sections to your event home page.
-        </p>
-      )}
-    </div>
-  );
-}
-
-// ---------- RsvpPreview ----------
-export interface RsvpPreviewProps {
-  event: UserEvent;
-  theme?: Json | null;
-}
-
-export function RsvpPreview({ event, theme }: RsvpPreviewProps) {
-  return (
-    <div className="guest-section">
-      <div className="mx-auto max-w-xl">
-        <h2 className="guest-title mb-2">RSVP</h2>
-        <p className="guest-subtitle mb-6">
-          Let us know if you'll be joining us.
-        </p>
-        <div className="event-card space-y-4">
+      <div className="event-card mx-auto mt-6 max-w-md text-left">
+        <div className="space-y-3">
           <div>
-            <label className="guest-eyebrow mb-1 block">Your name</label>
-            <input type="text" className="event-input" placeholder="Your name" readOnly />
-          </div>
-          <div>
-            <label className="guest-eyebrow mb-1 block">Will you attend?</label>
+            <label className="mb-1 block text-sm font-medium" style={{ color: "var(--event-muted)" }}>
+              Will you attend?
+            </label>
             <div className="flex gap-2">
-              <button type="button" className="event-btn-primary flex-1">Yes</button>
-              <button type="button" className="event-btn-secondary flex-1">No</button>
+              <button type="button" className="event-btn-primary" disabled>Yes</button>
+              <button type="button" className="event-btn-secondary" disabled>No</button>
             </div>
           </div>
           <div>
-            <label className="guest-eyebrow mb-1 block">Message (optional)</label>
-            <textarea className="event-input min-h-[80px]" placeholder="Leave a message…" readOnly />
+            <label className="mb-1 block text-sm font-medium" style={{ color: "var(--event-muted)" }}>
+              Number of guests
+            </label>
+            <input type="number" className="event-input" disabled defaultValue={1} />
           </div>
-          <button type="button" className="event-btn-primary w-full">Submit RSVP</button>
+          <div>
+            <label className="mb-1 block text-sm font-medium" style={{ color: "var(--event-muted)" }}>
+              Message (optional)
+            </label>
+            <textarea className="event-input" disabled rows={3} placeholder="Leave a message for the host..." />
+          </div>
         </div>
+        <button type="button" className="event-btn-primary mt-4 w-full" disabled>
+          {config.rsvpCtaText || "Submit RSVP"}
+        </button>
       </div>
     </div>
   );

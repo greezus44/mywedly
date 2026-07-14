@@ -1,57 +1,76 @@
-import React, { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
 export interface SplitEditorProps {
-  editor: React.ReactNode;
-  preview: React.ReactNode;
+  editor: ReactNode;
+  preview: ReactNode;
   className?: string;
-  initialSplit?: number; // percentage for editor width, 0-100
+  editorClassName?: string;
+  previewClassName?: string;
 }
 
-export function SplitEditor({ editor, preview, className, initialSplit = 50 }: SplitEditorProps) {
-  const [split, setSplit] = useState(initialSplit);
-  const [dragging, setDragging] = useState(false);
-
-  function onMouseDown(e: React.MouseEvent) {
-    e.preventDefault();
-    setDragging(true);
-
-    function onMove(ev: MouseEvent) {
-      const container = containerRef.current;
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      const pct = ((ev.clientX - rect.left) / rect.width) * 100;
-      setSplit(Math.max(20, Math.min(80, pct)));
-    }
-    function onUp() {
-      setDragging(false);
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-    }
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  }
-
-  const containerRef = React.useRef<HTMLDivElement>(null);
+export function SplitEditor({
+  editor,
+  preview,
+  className,
+  editorClassName,
+  previewClassName,
+}: SplitEditorProps) {
+  const [mobileTab, setMobileTab] = useState<"editor" | "preview">("editor");
 
   return (
-    <div ref={containerRef} className={cn("flex h-full w-full overflow-hidden", className)}>
+    <div className={cn("flex h-full flex-col lg:flex-row", className)}>
+      {/* Mobile tab switcher */}
+      <div className="flex border-b border-dash-border lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileTab("editor")}
+          className={cn(
+            "flex-1 px-4 py-2 text-sm font-medium transition-colors",
+            mobileTab === "editor"
+              ? "border-b-2 border-dash-primary text-dash-primary"
+              : "text-dash-muted hover:text-dash-text"
+          )}
+        >
+          ✏️ Editor
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("preview")}
+          className={cn(
+            "flex-1 px-4 py-2 text-sm font-medium transition-colors",
+            mobileTab === "preview"
+              ? "border-b-2 border-dash-primary text-dash-primary"
+              : "text-dash-muted hover:text-dash-text"
+          )}
+        >
+          👁️ Preview
+        </button>
+      </div>
+
+      {/* Editor panel */}
       <div
-        className="overflow-auto scrollbar-thin"
-        style={{ width: `${split}%` }}
+        className={cn(
+          "overflow-auto border-dash-border p-4 lg:w-1/2 lg:border-r",
+          mobileTab !== "editor" && "hidden lg:block",
+          editorClassName
+        )}
       >
         {editor}
       </div>
+
+      {/* Preview panel */}
       <div
-        onMouseDown={onMouseDown}
-        className="w-1 cursor-col-resize bg-dash-border hover:bg-dash-primary transition-colors"
-      />
-      <div
-        className="overflow-auto scrollbar-thin"
-        style={{ width: `${100 - split}%` }}
+        className={cn(
+          "overflow-auto bg-dash-bg p-4 lg:w-1/2",
+          mobileTab !== "preview" && "hidden lg:block",
+          previewClassName
+        )}
       >
         {preview}
       </div>
     </div>
   );
 }
+
+export default SplitEditor;

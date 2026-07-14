@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -25,7 +25,7 @@ export interface Profile {
 export interface UserEvent {
   id: string;
   creator_id: string;
-  name: string;
+  name: string | null;
   draft_name: string | null;
   event_type: string | null;
   draft_event_type: string | null;
@@ -67,13 +67,10 @@ export interface SubEvent {
   event_id: string;
   name: string;
   description: string | null;
-  start_date: string | null;
   start_time: string | null;
-  end_date: string | null;
   end_time: string | null;
   venue: string | null;
   address: string | null;
-  sort_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -82,10 +79,12 @@ export interface EventGuest {
   id: string;
   event_id: string;
   name: string;
-  username: string;
   email: string | null;
   phone: string | null;
+  username: string;
   plus_one_allowed: boolean;
+  plus_one_count: number;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -110,12 +109,13 @@ export interface EventRsvp {
   id: string;
   event_id: string;
   guest_id: string;
-  sub_event_id: string | null;
-  status: "attending" | "not_attending" | "pending";
+  status: "attending" | "not_attending" | "maybe" | "no_response";
   plus_one: boolean;
   plus_one_names: string[];
-  dietary_notes: string | null;
+  sub_event_attendance: Json | null;
+  dietary_requirements: string | null;
   message: string | null;
+  submitted_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -137,10 +137,12 @@ export interface EventSchedule {
 export interface EventMessage {
   id: string;
   event_id: string;
-  guest_id: string | null;
-  author_name: string;
+  guest_id: string;
+  parent_id: string | null;
   message: string;
+  is_from_host: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 export interface CustomPage {
@@ -150,6 +152,7 @@ export interface CustomPage {
   slug: string;
   content: Json;
   sort_order: number;
+  is_published: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -163,16 +166,22 @@ export interface SubEventGroupAssignment {
 
 export interface GuestInvitationOverride {
   id: string;
+  event_id: string;
   guest_id: string;
   sub_event_id: string;
   is_invited: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 export interface SharingEvent {
   id: string;
   event_id: string;
   share_token: string;
-  share_type: "link" | "qr" | "social";
+  share_type: "public" | "private" | "link";
+  expires_at: string | null;
+  max_uses: number | null;
+  use_count: number;
   created_at: string;
+  updated_at: string;
 }

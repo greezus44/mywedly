@@ -1,4 +1,4 @@
-import React from "react";
+import { Link } from "react-router-dom";
 import { cn } from "../../lib/utils";
 
 export interface SiteFooterProps {
@@ -6,32 +6,66 @@ export interface SiteFooterProps {
 }
 
 export function SiteFooter({ className }: SiteFooterProps) {
-  const year = new Date().getFullYear();
+  const footerLinks = {
+    Product: [
+      { label: "Features", href: "/#features" },
+      { label: "Pricing", href: "/#pricing" },
+      { label: "Templates", href: "/#templates" },
+    ],
+    Company: [
+      { label: "About", href: "/#about" },
+      { label: "Contact", href: "/#contact" },
+      { label: "Blog", href: "/#blog" },
+    ],
+    Support: [
+      { label: "FAQ", href: "/#faq" },
+      { label: "Privacy", href: "/privacy" },
+      { label: "Terms", href: "/terms" },
+    ],
+  };
 
   return (
     <footer className={cn("border-t border-dash-border bg-dash-surface", className)}>
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-          <div className="flex items-center gap-2 text-sm font-semibold text-dash-text">
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-dash-primary text-dash-primary-fg">
-              <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
-              </svg>
-            </span>
-            MyWedly
+      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
+          {/* Brand */}
+          <div className="col-span-2 md:col-span-1">
+            <Link to="/" className="flex items-center gap-2">
+              <span className="text-xl font-bold text-dash-primary">MyWedly</span>
+            </Link>
+            <p className="mt-3 text-sm text-dash-muted">
+              Beautiful invitation websites for your special day.
+            </p>
           </div>
 
-          <nav className="flex items-center gap-4 text-sm text-dash-muted">
-            <a href="/#features" className="transition-colors hover:text-dash-text">Features</a>
-            <a href="/#pricing" className="transition-colors hover:text-dash-text">Pricing</a>
-            <a href="/login" className="transition-colors hover:text-dash-text">Sign in</a>
-          </nav>
+          {/* Link columns */}
+          {Object.entries(footerLinks).map(([heading, links]) => (
+            <div key={heading}>
+              <h3 className="text-sm font-semibold text-dash-text">{heading}</h3>
+              <ul className="mt-3 space-y-2">
+                {links.map((link) => (
+                  <li key={link.href}>
+                    <a
+                      href={link.href}
+                      className="text-sm text-dash-muted transition-colors hover:text-dash-text"
+                    >
+                      {link.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
 
-          <p className="text-sm text-dash-muted">
-            © {year} MyWedly. All rights reserved.
+        <div className="mt-8 border-t border-dash-border pt-6">
+          <p className="text-center text-xs text-dash-muted">
+            © {new Date().getFullYear()} MyWedly. All rights reserved.
           </p>
         </div>
       </div>
     </footer>
   );
 }
+
+export default SiteFooter;

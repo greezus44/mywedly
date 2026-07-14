@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate, useOutletContext, Outlet, NavLink } from "react-router-dom";
+import { useState } from "react";
+import { useParams, useNavigate, NavLink, Outlet, Link, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
+import { resolveGuestInvitations } from "../../lib/invitations";
 
 export interface GuestOutletContext {
   event: UserEvent;
@@ -20,7 +20,7 @@ export function useGuestOutletContext(): GuestOutletContext {
 interface NavPage {
   slug: string;
   title: string;
-  nav_label: string | null;
+  nav_label: string;
 }
 
 export default function GuestLayout() {
@@ -29,9 +29,8 @@ export default function GuestLayout() {
   const { guest, eventId, loading: authLoading } = useGuestAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const { data: event, isLoading, isError } = useQuery({
+  const { data: event, isLoading: eventLoading } = useQuery({
     queryKey: ["published-event", slug],
-    enabled: !!slug,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
@@ -42,62 +41,46 @@ export default function GuestLayout() {
       if (error) throw error;
       return data as UserEvent | null;
     },
-  });
-
-  const eventIdForInvites = event?.id ?? null;
-  const guestId = guest?.id ?? null;
-
-  const { data: invitations } = useQuery({
-    queryKey: ["guest-invitations", eventIdForInvites, guestId],
-    enabled: !!eventIdForInvites && !!guestId,
-    queryFn: async () => {
-      if (!eventIdForInvites || !guestId) return { invitations: [] };
-      return resolveGuestInvitations(supabase, guestId, eventIdForInvites);
-    },
+    enabled: !!slug,
   });
 
   const { data: navPages } = useQuery({
-    queryKey: ["guest-nav-pages", eventIdForInvites],
-    enabled: !!eventIdForInvites,
+    queryKey: ["guest-nav-pages", event?.id],
     queryFn: async () => {
+      if (!event) return [] as NavPage[];
       const { data, error } = await supabase
         .from("custom_pages")
-        .select("id, slug, title, nav_label")
-        .eq("event_id", eventIdForInvites!)
+        .select("slug, title, nav_label")
+        .eq("event_id", event.id)
         .eq("is_published", true)
         .eq("show_in_nav", true)
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return (data ?? []) as NavPage[];
     },
+    enabled: !!event,
   });
 
-  const invitedSubEventIds = useMemo(
-    () => (invitations ? getInvitedSubEventIds(invitations) : []),
-    [invitations]
-  );
+  const { data: invitedSubEventIds } = useQuery({
+    queryKey: ["guest-invitations", event?.id, guest?.id],
+    queryFn: async () => {
+      if (!event || !guest) return [] as string[];
+      const result = await resolveGuestInvitations(supabase, guest.id, event.id);
+      return result.invitations.filter((i) => i.isInvited).map((i) => i.subEventId);
+    },
+    enabled: !!event && !!guest,
+  });
 
-  // Redirect to sign-in if not authenticated (after auth has finished loading)
-  useEffect(() => {
-    if (authLoading) return;
-    if (event && eventId !== event.id) {
-      navigate(`/e/${slug}/signin`, { replace: true });
-    }
-  }, [authLoading, event, eventId, slug, navigate]);
+  // Redirect to sign-in if not authenticated
+  const shouldRedirect = !authLoading && !eventLoading && !!event && (!guest || eventId !== event.id);
+  if (shouldRedirect) {
+    navigate(`/e/${slug}/signin`, { replace: true });
+  }
 
-  if (isLoading || authLoading) {
+  if (eventLoading || authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-dash-bg">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
-        <h1 className="text-2xl font-bold text-dash-text">Something went wrong</h1>
-        <p className="text-dash-muted">We couldn't load this invitation.</p>
       </div>
     );
   }
@@ -106,55 +89,41 @@ export default function GuestLayout() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
         <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
-        <p className="text-dash-muted">This invitation website could not be found or is no longer available.</p>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
 
-  if (!guest || eventId !== event.id) {
-    return null; // effect will redirect
-  }
+  const context: GuestOutletContext = {
+    event,
+    slug: slug!,
+    theme: event.theme,
+    invitedSubEventIds: invitedSubEventIds ?? [],
+  };
 
-  const navLinks = [
-    { label: "Home", to: `/e/${slug}/home` },
-    { label: "RSVP", to: `/e/${slug}/rsvp` },
-    { label: "Wishes", to: `/e/${slug}/wishes` },
-    { label: "Contact", to: `/e/${slug}/contact` },
-    ...(navPages ?? []).map((p) => ({
-      label: p.nav_label || p.title,
-      to: `/e/${slug}/p/${p.slug}`,
-    })),
-  ];
+  const pages = navPages ?? [];
 
   return (
     <EventThemeProvider theme={event.theme}>
       <div className="relative min-h-screen">
-        {/* Top bar with hamburger */}
-        <header className="sticky top-0 z-30 border-b" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
+        {/* Hamburger header */}
+        <header className="sticky top-0 z-30" style={{ backgroundColor: "var(--event-surface)", borderBottom: "1px solid var(--event-border)" }}>
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-            <NavLink to={`/e/${slug}/home`} className="text-sm font-semibold" style={{ color: "var(--event-heading)" }}>
-              {event.name}
-            </NavLink>
+            <Link to={`/e/${slug}/home`} className="text-sm font-semibold" style={{ color: "var(--event-heading)" }}>
+              {event.name || "Our Event"}
+            </Link>
             <button
               type="button"
-              aria-label="Toggle menu"
-              aria-expanded={menuOpen}
               onClick={() => setMenuOpen((v) => !v)}
-              className="flex h-9 w-9 items-center justify-center rounded"
+              className="rounded-md p-2 transition-colors"
               style={{ color: "var(--event-text)" }}
+              aria-label="Menu"
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {menuOpen ? (
-                  <>
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 ) : (
-                  <>
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <line x1="3" y1="12" x2="21" y2="12" />
-                    <line x1="3" y1="18" x2="21" y2="18" />
-                  </>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 )}
               </svg>
             </button>
@@ -163,24 +132,42 @@ export default function GuestLayout() {
 
         {/* Slide-down menu */}
         {menuOpen && (
-          <nav className="sticky top-[57px] z-20 border-b shadow-sm" style={{ borderColor: "var(--event-border)", backgroundColor: "var(--event-surface)" }}>
-            <div className="mx-auto max-w-5xl px-4 py-2">
-              {navLinks.map((link) => (
-                <NavLink
-                  key={link.to}
-                  to={link.to}
-                  onClick={() => setMenuOpen(false)}
-                  className="guest-nav-link block"
-                >
-                  {link.label}
-                </NavLink>
-              ))}
+          <nav className="absolute left-0 right-0 top-full z-20 border-b shadow-lg" style={{ backgroundColor: "var(--event-surface)", borderColor: "var(--event-border)" }}>
+            <div className="mx-auto max-w-5xl px-4 py-3">
+              <div className="flex flex-col gap-1">
+                <MenuLink to={`/e/${slug}/home`} label="Home" onNavigate={() => setMenuOpen(false)} />
+                {(invitedSubEventIds ?? []).length > 0 && (
+                  <MenuLink to={`/e/${slug}/rsvp`} label="RSVP" onNavigate={() => setMenuOpen(false)} />
+                )}
+                <MenuLink to={`/e/${slug}/wishes`} label="Wishes" onNavigate={() => setMenuOpen(false)} />
+                <MenuLink to={`/e/${slug}/contact`} label="Contact" onNavigate={() => setMenuOpen(false)} />
+                {pages.map((p) => (
+                  <MenuLink key={p.slug} to={`/e/${slug}/p/${p.slug}`} label={p.nav_label || p.title} onNavigate={() => setMenuOpen(false)} />
+                ))}
+              </div>
             </div>
           </nav>
         )}
 
-        <Outlet context={{ event, slug: slug!, theme: event.theme, invitedSubEventIds } satisfies GuestOutletContext} />
+        {/* Page content */}
+        <main>
+          <Outlet context={context} />
+        </main>
       </div>
     </EventThemeProvider>
+  );
+}
+
+function MenuLink({ to, label, onNavigate }: { to: string; label: string; onNavigate: () => void }) {
+  return (
+    <NavLink
+      to={to}
+      onClick={onNavigate}
+      className={({ isActive }) =>
+        `guest-nav-link ${isActive ? "active" : ""}`
+      }
+    >
+      {label}
+    </NavLink>
   );
 }

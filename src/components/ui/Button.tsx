@@ -1,10 +1,10 @@
-import React, { forwardRef } from "react";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "../../lib/utils";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-type ButtonSize = "sm" | "md" | "lg";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+export type ButtonSize = "sm" | "md" | "lg";
 
-export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   loading?: boolean;
@@ -14,15 +14,15 @@ const variantClasses: Record<ButtonVariant, string> = {
   primary:
     "bg-dash-primary text-dash-primary-fg hover:bg-dash-primary-hover focus-visible:ring-dash-primary",
   secondary:
-    "bg-dash-surface text-dash-text border border-dash-border hover:bg-dash-bg focus-visible:ring-dash-border",
+    "bg-transparent border border-dash-border text-dash-text hover:bg-dash-surface focus-visible:ring-dash-border",
   ghost:
-    "bg-transparent text-dash-text hover:bg-dash-surface focus-visible:ring-dash-muted",
+    "bg-transparent text-dash-text hover:bg-dash-surface focus-visible:ring-dash-border",
   danger:
     "bg-dash-danger text-dash-danger-fg hover:bg-dash-danger-hover focus-visible:ring-dash-danger",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "h-8 px-3 text-sm",
+  sm: "h-8 px-3 text-xs",
   md: "h-10 px-4 text-sm",
   lg: "h-12 px-6 text-base",
 };
