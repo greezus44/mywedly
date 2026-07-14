@@ -1,14 +1,13 @@
-import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import React, { forwardRef } from "react";
 import { cn } from "../../lib/utils";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-export type ButtonSize = "sm" | "md" | "lg";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonSize = "sm" | "md" | "lg";
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
   loading?: boolean;
-  children?: ReactNode;
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
@@ -17,31 +16,28 @@ const variantClasses: Record<ButtonVariant, string> = {
   secondary:
     "bg-dash-surface text-dash-text border border-dash-border hover:bg-dash-bg focus-visible:ring-dash-border",
   ghost:
-    "bg-transparent text-dash-text hover:bg-dash-surface-alt focus-visible:ring-dash-border",
+    "bg-transparent text-dash-text hover:bg-dash-surface focus-visible:ring-dash-muted",
   danger:
     "bg-dash-danger text-dash-danger-fg hover:bg-dash-danger-hover focus-visible:ring-dash-danger",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "px-3 py-1.5 text-sm",
-  md: "px-4 py-2 text-sm",
-  lg: "px-6 py-3 text-base",
+  sm: "h-8 px-3 text-sm",
+  md: "h-10 px-4 text-sm",
+  lg: "h-12 px-6 text-base",
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  (
-    { variant = "primary", size = "md", loading = false, disabled, className, children, ...props },
-    ref,
-  ) => {
+  ({ className, variant = "primary", size = "md", loading = false, disabled, children, ...props }, ref) => {
     return (
       <button
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+          "inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
           variantClasses[variant],
           sizeClasses[size],
-          className,
+          className
         )}
         {...props}
       >
@@ -52,14 +48,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             fill="none"
             viewBox="0 0 24 24"
           >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path
               className="opacity-75"
               fill="currentColor"
@@ -70,7 +59,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {children}
       </button>
     );
-  },
+  }
 );
 
 Button.displayName = "Button";

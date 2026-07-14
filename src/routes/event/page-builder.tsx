@@ -1,63 +1,52 @@
-import { useState, useEffect } from "react";
-import { useOutletContext, useParams, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type CustomPage, type Json } from "../../lib/supabase";
-import { SplitEditor } from "../../components/preview/SplitEditor";
+import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Card, Input, Select, LoadingSpinner } from "../../components/ui";
-import { RichTextEditor } from "../../components/ui/RichTextEditor";
+import { Input, Textarea } from "../../components/ui/Input";
+import { Card, LoadingSpinner, ErrorState, Badge } from "../../components/ui";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import {
   BLOCK_TYPES,
   createBlock,
+  parseBlocks,
   blocksToJson,
-  jsonToBlocks,
-  renderBlockPreview,
   type Block,
   type BlockType,
-  type BlockContent,
 } from "./block-types";
-import { EventThemeProvider } from "../../lib/theme-context";
-import { jsonToTheme, themeToEventCssVars } from "../../lib/theme";
-import type { EventContextValue } from "./event-layout";
+import { cn } from "../../lib/utils";
 
 export function PageBuilder() {
-  const { event, eventId } = useOutletContext<EventContextValue>();
   const { pageId } = useParams<{ pageId: string }>();
+  const { event, eventId } = useEventContext();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const userId = event.creator_id;
 
-  const { data: page, isLoading: pageLoading } = useQuery({
-    queryKey: ["page", pageId],
+  const { data: page, isLoading, isError, refetch } = useQuery({
+    queryKey: ["custom-page", pageId],
+    enabled: !!pageId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
         .select("*")
-        .eq("id", pageId)
+        .eq("id", pageId!)
         .maybeSingle();
       if (error) throw error;
       return data as CustomPage | null;
     },
-    enabled: !!pageId,
   });
 
-  const [title, setTitle] = useState("");
-  const [navLabel, setNavLabel] = useState("");
-  const [showInNav, setShowInNav] = useState(true);
   const [blocks, setBlocks] = useState<Block[]>([]);
-  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [title, setTitle] = useState("");
 
-  useEffect(() => {
-    if (page && !loaded) {
-      setBlocks(jsonToBlocks(page.blocks));
-      setTitle(page.title);
-      setNavLabel(page.nav_label ?? "");
-      setShowInNav(page.show_in_nav);
-      setLoaded(true);
-    }
-  }, [page, loaded]);
+  // Initialize blocks when page loads
+  if (page && !loaded) {
+    setBlocks(parseBlocks(page.content));
+    setTitle(page.title);
+    setLoaded(true);
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -65,69 +54,71 @@ export function PageBuilder() {
         .from("custom_pages")
         .update({
           title,
-          nav_label: navLabel || null,
-          show_in_nav: showInNav,
-          blocks: blocksToJson(blocks),
+          content: blocksToJson(blocks),
         })
-        .eq("id", pageId);
+        .eq("id", pageId!);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pages", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["page", pageId] });
+      queryClient.invalidateQueries({ queryKey: ["custom-page", pageId] });
+      queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] });
     },
   });
 
   function addBlock(type: BlockType) {
-    const newBlock = createBlock(type, blocks.length);
-    setBlocks((prev) => [...prev, newBlock]);
-    setSelectedBlockId(newBlock.id);
+    setBlocks((prev) => [...prev, createBlock(type)]);
   }
 
-  function updateBlock(id: string, content: BlockContent) {
-    setBlocks((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, content: { ...b.content, ...content } } : b))
-    );
+  function updateBlock(idx: number, patch: Partial<Block["content"]>) {
+    setBlocks((prev) => prev.map((b, i) => (i === idx ? { ...b, content: { ...b.content, ...patch } } : b)));
   }
 
-  function deleteBlock(id: string) {
-    setBlocks((prev) => prev.filter((b) => b.id !== id));
-    if (selectedBlockId === id) setSelectedBlockId(null);
+  function removeBlock(idx: number) {
+    setBlocks((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  function moveBlock(id: string, direction: "up" | "down") {
+  function moveBlock(idx: number, dir: -1 | 1) {
     setBlocks((prev) => {
-      const index = prev.findIndex((b) => b.id === id);
-      if (index === -1) return prev;
-      const newIndex = direction === "up" ? index - 1 : index + 1;
-      if (newIndex < 0 || newIndex >= prev.length) return prev;
-      const newBlocks = [...prev];
-      [newBlocks[index], newBlocks[newIndex]] = [newBlocks[newIndex], newBlocks[index]];
-      return newBlocks.map((b, i) => ({ ...b, order_index: i }));
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
     });
   }
 
-  if (pageLoading || !page) return <LoadingSpinner />;
-  if (!loaded) {
+  if (isLoading) {
     return (
-      <div className="flex justify-center py-20">
+      <div className="flex justify-center py-12">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
-  const selectedBlock = blocks.find((b) => b.id === selectedBlockId);
-  const fullTheme = jsonToTheme(event.draft_theme ?? event.theme);
-  const cssVars = themeToEventCssVars(fullTheme) as React.CSSProperties;
+  if (isError) {
+    return <ErrorState message="Failed to load page." onRetry={() => refetch()} />;
+  }
+
+  if (!page) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-4">
+        <p className="text-lg font-semibold text-dash-text">Page not found</p>
+        <Button variant="secondary" onClick={() => navigate(`/event/${eventId}/pages`)}>
+          Back to Pages
+        </Button>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="mx-auto max-w-4xl space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => navigate(`/event/${eventId}/pages`)}>
-            ← Back to Pages
+            ← Pages
           </Button>
-          <h2 className="text-lg font-semibold text-dash-text">Page Builder</h2>
+          <h1 className="text-2xl font-bold text-dash-text">Page Builder</h1>
         </div>
         <Button
           onClick={() => saveMutation.mutate()}
@@ -138,220 +129,240 @@ export function PageBuilder() {
         </Button>
       </div>
 
-      {saveMutation.isError && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-dash-danger">
-          {saveMutation.error?.message ?? "Failed to save"}
-        </div>
-      )}
       {saveMutation.isSuccess && (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-          Page saved successfully!
-        </div>
+        <p className="text-sm text-green-600">Page saved successfully!</p>
+      )}
+      {saveMutation.isError && (
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed."}
+        </p>
       )}
 
-      {/* Page Settings */}
-      <Card className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
+      {/* Page Title */}
+      <Card>
         <Input
-          label="Page Title"
+          label="Page title"
+          type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          placeholder="Page title"
         />
-        <Input
-          label="Nav Label"
-          value={navLabel}
-          onChange={(e) => setNavLabel(e.target.value)}
-          placeholder="Menu label"
-        />
-        <div className="flex items-end gap-2">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={showInNav}
-              onChange={(e) => setShowInNav(e.target.checked)}
-              className="rounded border-dash-border"
-            />
-            <span className="text-sm text-dash-text">Show in navigation</span>
-          </label>
+        <p className="mt-2 text-sm text-dash-muted">Slug: /{page.slug}</p>
+      </Card>
+
+      {/* Block Palette */}
+      <Card>
+        <h2 className="mb-3 text-sm font-semibold text-dash-text">Add Block</h2>
+        <div className="flex flex-wrap gap-2">
+          {BLOCK_TYPES.map((bt) => (
+            <button
+              key={bt.type}
+              type="button"
+              onClick={() => addBlock(bt.type)}
+              title={bt.description}
+              className="flex items-center gap-2 rounded-lg border border-dash-border px-3 py-2 text-sm text-dash-text transition-colors hover:border-dash-primary hover:bg-dash-primary/5"
+            >
+              <span className="text-base">{bt.icon}</span>
+              <span>{bt.label}</span>
+            </button>
+          ))}
         </div>
       </Card>
 
-      <div className="h-[calc(100vh-340px)] min-h-[500px]">
-        <SplitEditor
-          editorRatio={0.5}
-          editor={
-            <div className="space-y-4">
-              {/* Block Palette */}
-              <div>
-                <h3 className="mb-2 text-sm font-semibold text-dash-text">Add Block</h3>
-                <div className="grid grid-cols-4 gap-2">
-                  {BLOCK_TYPES.map((bt) => (
-                    <button
-                      key={bt.type}
-                      type="button"
-                      onClick={() => addBlock(bt.type)}
-                      title={bt.description}
-                      className="flex flex-col items-center gap-1 rounded-md border border-dash-border bg-dash-surface p-2 text-center transition-colors hover:border-dash-primary"
-                    >
-                      <span className="text-lg">{bt.icon}</span>
-                      <span className="text-xs text-dash-text">{bt.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Block List */}
-              <div className="space-y-2">
-                {blocks.map((block, index) => (
-                  <div
-                    key={block.id}
-                    className={`rounded-md border p-2 ${
-                      selectedBlockId === block.id
-                        ? "border-dash-primary bg-dash-primary/5"
-                        : "border-dash-border bg-dash-surface"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedBlockId(block.id)}
-                        className="flex-1 text-left text-sm font-medium text-dash-text"
-                      >
-                        {BLOCK_TYPES.find((bt) => bt.type === block.type)?.label ?? block.type}
-                      </button>
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={() => moveBlock(block.id, "up")}
-                          disabled={index === 0}
-                          className="rounded p-1 text-dash-muted hover:bg-dash-bg disabled:opacity-30"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveBlock(block.id, "down")}
-                          disabled={index === blocks.length - 1}
-                          className="rounded p-1 text-dash-muted hover:bg-dash-bg disabled:opacity-30"
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteBlock(block.id)}
-                          className="rounded p-1 text-dash-danger hover:bg-red-50"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {blocks.length === 0 && (
-                  <p className="py-4 text-center text-sm text-dash-muted">
-                    No blocks yet. Add one from above.
-                  </p>
-                )}
-              </div>
-
-              {/* Block Editor */}
-              {selectedBlock && (
-                <Card className="space-y-3 p-3">
-                  <h3 className="text-sm font-semibold text-dash-text">
-                    Edit: {BLOCK_TYPES.find((bt) => bt.type === selectedBlock.type)?.label}
-                  </h3>
-                  {selectedBlock.type === "heading" && (
-                    <>
-                      <Input
-                        label="Text"
-                        value={selectedBlock.content.text ?? ""}
-                        onChange={(e) => updateBlock(selectedBlock.id, { text: e.target.value })}
-                      />
-                      <Input
-                        label="Font Size"
-                        type="number"
-                        value={selectedBlock.content.fontSize ?? 32}
-                        onChange={(e) => updateBlock(selectedBlock.id, { fontSize: Number(e.target.value) })}
-                      />
-                      <Input
-                        label="Colour"
-                        type="color"
-                        value={selectedBlock.content.color ?? "#78350f"}
-                        onChange={(e) => updateBlock(selectedBlock.id, { color: e.target.value })}
-                      />
-                      <Select
-                        label="Alignment"
-                        value={selectedBlock.content.align ?? "center"}
-                        onChange={(e) => updateBlock(selectedBlock.id, { align: e.target.value as "left" | "center" | "right" })}
-                      >
-                        <option value="left">Left</option>
-                        <option value="center">Center</option>
-                        <option value="right">Right</option>
-                      </Select>
-                    </>
-                  )}
-                  {selectedBlock.type === "paragraph" && (
-                    <RichTextEditor
-                      value={selectedBlock.content.html ?? ""}
-                      onChange={(html) => updateBlock(selectedBlock.id, { html })}
-                    />
-                  )}
-                  {selectedBlock.type === "image" && (
-                    <>
-                      <ImageUpload
-                        value={selectedBlock.content.url ?? null}
-                        onChange={(url) => updateBlock(selectedBlock.id, { url: url ?? "" })}
-                        userId={userId}
-                        label="Image"
-                      />
-                      <Input
-                        label="Alt Text"
-                        value={selectedBlock.content.alt ?? ""}
-                        onChange={(e) => updateBlock(selectedBlock.id, { alt: e.target.value })}
-                      />
-                    </>
-                  )}
-                  {selectedBlock.type === "button" && (
-                    <>
-                      <Input
-                        label="Button Text"
-                        value={selectedBlock.content.buttonText ?? ""}
-                        onChange={(e) => updateBlock(selectedBlock.id, { buttonText: e.target.value })}
-                      />
-                      <Input
-                        label="Link URL"
-                        value={selectedBlock.content.href ?? ""}
-                        onChange={(e) => updateBlock(selectedBlock.id, { href: e.target.value })}
-                      />
-                    </>
-                  )}
-                  {selectedBlock.type === "spacer" && (
-                    <Input
-                      label="Height (px)"
-                      type="number"
-                      value={selectedBlock.content.heightPx ?? 40}
-                      onChange={(e) => updateBlock(selectedBlock.id, { heightPx: Number(e.target.value) })}
-                    />
-                  )}
-                </Card>
-              )}
+      {/* Blocks */}
+      {blocks.map((block, idx) => (
+        <Card key={block.id}>
+          <div className="mb-3 flex items-center justify-between">
+            <Badge variant="primary">{block.type}</Badge>
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => moveBlock(idx, -1)} disabled={idx === 0}>↑</Button>
+              <Button variant="ghost" size="sm" onClick={() => moveBlock(idx, 1)} disabled={idx === blocks.length - 1}>↓</Button>
+              <Button variant="ghost" size="sm" onClick={() => removeBlock(idx)}>✕</Button>
             </div>
-          }
-          preview={
-            <EventThemeProvider theme={event.draft_theme ?? event.theme}>
-              <div className="event-themed min-h-full p-6" style={cssVars}>
-                <h1 className="guest-title mb-4">{title}</h1>
-                <div className="space-y-4">
-                  {blocks.map((block) => (
-                    <div key={block.id}>{renderBlockPreview(block)}</div>
-                  ))}
-                </div>
-              </div>
-            </EventThemeProvider>
-          }
-        />
-      </div>
+          </div>
+          <BlockEditor block={block} onChange={(patch) => updateBlock(idx, patch)} userId={event.creator_id} />
+        </Card>
+      ))}
+
+      {blocks.length === 0 && (
+        <Card>
+          <p className="py-8 text-center text-sm text-dash-muted">
+            No blocks yet. Use the palette above to add content blocks.
+          </p>
+        </Card>
+      )}
     </div>
   );
 }
 
-export default PageBuilder;
+// ---------- Block Editor ----------
+function BlockEditor({
+  block,
+  onChange,
+  userId,
+}: {
+  block: Block;
+  onChange: (patch: Partial<Block["content"]>) => void;
+  userId: string;
+}) {
+  const c = block.content;
+
+  switch (block.type) {
+    case "heading":
+    case "paragraph":
+    case "quote":
+      return (
+        <div className="space-y-3">
+          <Textarea
+            label="Text"
+            value={c.text ?? ""}
+            onChange={(e) => onChange({ text: e.target.value })}
+            placeholder="Enter text…"
+          />
+          {block.type === "heading" && (
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Font size (px)"
+                type="number"
+                value={c.fontSize ?? 28}
+                onChange={(e) => onChange({ fontSize: Number(e.target.value) })}
+              />
+              <Input
+                label="Font weight"
+                type="number"
+                value={c.fontWeight ?? 700}
+                onChange={(e) => onChange({ fontWeight: Number(e.target.value) })}
+              />
+            </div>
+          )}
+          <div className="flex gap-2">
+            {(["left", "center", "right"] as const).map((a) => (
+              <button
+                key={a}
+                type="button"
+                onClick={() => onChange({ align: a })}
+                className={cn(
+                  "rounded-lg border px-3 py-1.5 text-xs capitalize",
+                  (c.align ?? "left") === a
+                    ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
+                    : "border-dash-border text-dash-text hover:bg-dash-bg"
+                )}
+              >
+                {a}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+
+    case "image":
+      return (
+        <div className="space-y-3">
+          <ImageUpload
+            userId={userId}
+            value={c.url ?? ""}
+            onChange={(url) => onChange({ url })}
+            label="Image"
+            aspectRatio="auto"
+          />
+          <Input
+            label="Alt text"
+            type="text"
+            value={c.alt ?? ""}
+            onChange={(e) => onChange({ alt: e.target.value })}
+            placeholder="Image description"
+          />
+        </div>
+      );
+
+    case "gallery":
+      return (
+        <div className="space-y-3">
+          {(c.images ?? []).map((img, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <img src={img} alt="" className="h-16 w-16 rounded object-cover" />
+              <Input
+                type="text"
+                value={img}
+                onChange={(e) => {
+                  const images = [...(c.images ?? [])];
+                  images[idx] = e.target.value;
+                  onChange({ images });
+                }}
+                className="flex-1"
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const images = (c.images ?? []).filter((_, i) => i !== idx);
+                  onChange({ images });
+                }}
+              >
+                ✕
+              </Button>
+            </div>
+          ))}
+          <Button variant="secondary" size="sm" onClick={() => onChange({ images: [...(c.images ?? []), ""] })}>
+            + Add Image URL
+          </Button>
+        </div>
+      );
+
+    case "button":
+      return (
+        <div className="space-y-3">
+          <Input
+            label="Button text"
+            type="text"
+            value={c.buttonText ?? ""}
+            onChange={(e) => onChange({ buttonText: e.target.value })}
+            placeholder="Click here"
+          />
+          <Input
+            label="Link URL"
+            type="url"
+            value={c.href ?? ""}
+            onChange={(e) => onChange({ href: e.target.value })}
+            placeholder="https://…"
+          />
+        </div>
+      );
+
+    case "map":
+    case "video":
+      return (
+        <div className="space-y-3">
+          <Input
+            label="Embed URL"
+            type="url"
+            value={c.embedUrl ?? ""}
+            onChange={(e) => onChange({ embedUrl: e.target.value })}
+            placeholder={block.type === "video" ? "https://youtube.com/embed/…" : "https://maps.google.com/…"}
+          />
+          <Input
+            label="Caption (optional)"
+            type="text"
+            value={c.caption ?? ""}
+            onChange={(e) => onChange({ caption: e.target.value })}
+          />
+        </div>
+      );
+
+    case "spacer":
+      return (
+        <Input
+          label="Spacing (px)"
+          type="number"
+          value={c.spacing ?? 32}
+          onChange={(e) => onChange({ spacing: Number(e.target.value) })}
+        />
+      );
+
+    case "divider":
+      return <p className="text-sm text-dash-muted">A horizontal divider line.</p>;
+
+    default:
+      return null;
+  }
+}

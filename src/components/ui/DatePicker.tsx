@@ -1,162 +1,175 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { cn, formatDateShort } from "../../lib/utils";
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import { cn } from "../../lib/utils";
 
-interface DatePickerProps {
-  value: string; // ISO date string "YYYY-MM-DD"
+export interface DatePickerProps {
+  value: string; // ISO date string YYYY-MM-DD
   onChange: (value: string) => void;
   label?: string;
+  placeholder?: string;
   className?: string;
-  min?: string;
-  max?: string;
+  id?: string;
 }
 
-function toISODate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function parseISO(s: string): Date | null {
-  if (!s) return null;
-  const d = new Date(s + "T00:00:00");
-  return isNaN(d.getTime()) ? null : d;
-}
-
-const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-const MONTHS = [
+const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
 
-export function DatePicker({ value, onChange, label, className, min, max }: DatePickerProps) {
+const DAY_NAMES = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function toDateInputValue(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function DatePicker({
+  value,
+  onChange,
+  label,
+  placeholder = "Select a date",
+  className,
+  id,
+}: DatePickerProps) {
   const [open, setOpen] = useState(false);
-  const [viewDate, setViewDate] = useState(() => parseISO(value) ?? new Date());
   const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  // Internal view state for the calendar
+  const initial = useMemo(() => {
     if (value) {
-      const d = parseISO(value);
-      if (d) setViewDate(d);
+      const d = new Date(value + "T00:00:00");
+      if (!isNaN(d.getTime())) return d;
     }
+    return new Date();
   }, [value]);
 
+  const [viewYear, setViewYear] = useState(initial.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initial.getMonth());
+
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
+    setViewYear(initial.getFullYear());
+    setViewMonth(initial.getMonth());
+  }, [initial]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
-    if (open) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
     }
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
   }, [open]);
 
-  const minDate = parseISO(min ?? "");
-  const maxDate = parseISO(max ?? "");
+  const firstOfMonth = new Date(viewYear, viewMonth, 1);
+  const startDay = firstOfMonth.getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
 
-  const daysInMonth = useMemo(() => {
-    const year = viewDate.getFullYear();
-    const month = viewDate.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    const numDays = new Date(year, month + 1, 0).getDate();
-    const cells: (Date | null)[] = [];
-    for (let i = 0; i < firstDay; i++) cells.push(null);
-    for (let d = 1; d <= numDays; d++) cells.push(new Date(year, month, d));
-    return cells;
-  }, [viewDate]);
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < startDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
 
-  const selected = parseISO(value);
+  const selectedDate = value ? new Date(value + "T00:00:00") : null;
+  const today = new Date();
+  const todayStr = toDateInputValue(today);
 
-  function isDisabled(d: Date): boolean {
-    if (minDate && d < minDate) return true;
-    if (maxDate && d > maxDate) return true;
-    return false;
-  }
+  const displayValue = value || "";
 
   function prevMonth() {
-    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
+    } else {
+      setViewMonth((m) => m - 1);
+    }
   }
   function nextMonth() {
-    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
+    } else {
+      setViewMonth((m) => m + 1);
+    }
   }
 
   return (
-    <div ref={containerRef} className={cn("relative w-full", className)}>
+    <div className={cn("w-full", className)} ref={containerRef}>
       {label && (
-        <label className="mb-1.5 block text-sm font-medium text-dash-text">{label}</label>
+        <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-dash-text">
+          {label}
+        </label>
       )}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-left text-sm text-dash-text transition-colors hover:border-dash-primary focus:outline-none focus:ring-2 focus:ring-dash-primary"
-      >
-        {value ? formatDateShort(value) : "Select date"}
-      </button>
-      {open && (
-        <div className="absolute z-50 mt-1 w-72 rounded-md border border-dash-border bg-dash-surface p-3 shadow-lg">
-          <div className="mb-2 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={prevMonth}
-              className="rounded p-1 text-dash-muted hover:bg-dash-bg"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-            <span className="text-sm font-semibold text-dash-text">
-              {MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}
-            </span>
-            <button
-              type="button"
-              onClick={nextMonth}
-              className="rounded p-1 text-dash-muted hover:bg-dash-bg"
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
+      <div className="relative">
+        <button
+          type="button"
+          id={id}
+          onClick={() => setOpen((v) => !v)}
+          className="w-full flex items-center justify-between rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text cursor-pointer transition-colors hover:border-dash-primary focus:outline-none focus:ring-1 focus:ring-dash-primary"
+        >
+          <span className={cn(!displayValue && "text-dash-muted/60")}>
+            {displayValue || placeholder}
+          </span>
+          <svg className="h-4 w-4 text-dash-muted" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M5.75 2a.75.75 0 01.75.75V4h7V2.75a.75.75 0 011.5 0V4h.25A2.75 2.75 0 0118 6.75v8.5A2.75 2.75 0 0115.25 18H4.75A2.75 2.75 0 012 15.25v-8.5A2.75 2.75 0 014.75 4H5V2.75A.75.75 0 015.75 2zm-.75 5.5h10v-.75A1.25 1.25 0 0013.75 5.5H6.25A1.25 1.25 0 005 6.75v.75z" clipRule="evenodd" />
+          </svg>
+        </button>
+
+        {open && (
+          <div className="absolute z-50 mt-1 w-72 rounded-lg border border-dash-border bg-dash-surface p-3 shadow-lg">
+            <div className="mb-2 flex items-center justify-between">
+              <button type="button" onClick={prevMonth} className="rounded p-1 text-dash-muted hover:bg-dash-bg" aria-label="Previous month">
+                <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" /></svg>
+              </button>
+              <span className="text-sm font-semibold text-dash-text">
+                {MONTH_NAMES[viewMonth]} {viewYear}
+              </span>
+              <button type="button" onClick={nextMonth} className="rounded p-1 text-dash-muted hover:bg-dash-bg" aria-label="Next month">
+                <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.21 5.23a.75.75 0 01 1.06.02l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 11-1.04-1.08L8.832 10 4.894 6.29a.75.75 0 01-.02-1.06z" clipRule="evenodd" /></svg>
+              </button>
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {DAY_NAMES.map((d) => (
+                <div key={d} className="text-center text-xs font-medium text-dash-muted">{d}</div>
+              ))}
+              {cells.map((day, idx) => {
+                if (day === null) return <div key={idx} />;
+                const dateStr = `${viewYear}-${pad(viewMonth + 1)}-${pad(day)}`;
+                const isSelected = selectedDate && !isNaN(selectedDate.getTime()) && toDateInputValue(selectedDate) === dateStr;
+                const isToday = dateStr === todayStr;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      onChange(dateStr);
+                      setOpen(false);
+                    }}
+                    className={cn(
+                      "h-8 w-8 rounded text-sm transition-colors hover:bg-dash-bg",
+                      isSelected && "bg-dash-primary text-dash-primary-fg hover:bg-dash-primary-hover",
+                      !isSelected && isToday && "border border-dash-primary text-dash-primary",
+                      !isSelected && !isToday && "text-dash-text"
+                    )}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="mb-1 grid grid-cols-7 gap-1">
-            {WEEKDAYS.map((wd) => (
-              <div key={wd} className="text-center text-xs font-medium text-dash-muted">
-                {wd}
-              </div>
-            ))}
-          </div>
-          <div className="grid grid-cols-7 gap-1">
-            {daysInMonth.map((d, i) => {
-              if (!d) return <div key={i} />;
-              const isSelected = selected && toISODate(d) === toISODate(selected);
-              const disabled = isDisabled(d);
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  disabled={disabled}
-                  onClick={() => {
-                    onChange(toISODate(d));
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "rounded p-1.5 text-center text-xs transition-colors",
-                    disabled
-                      ? "cursor-not-allowed text-dash-muted opacity-40"
-                      : "text-dash-text hover:bg-dash-bg",
-                    isSelected && "bg-dash-primary text-dash-primary-fg hover:bg-dash-primary-hover",
-                  )}
-                >
-                  {d.getDate()}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
-
-export default DatePicker;

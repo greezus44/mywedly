@@ -1,63 +1,55 @@
-import { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type Json } from "../../lib/supabase";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase, type Json } from "../../lib/supabase";
+import { useEventContext } from "./event-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview, type CoverConfig, type LogoConfig } from "../../components/preview/PreviewRenderers";
 import { TypographyControls } from "../../components/ui/TypographyControls";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { Button } from "../../components/ui/Button";
-import { Card, RangeInput, ColorInput, LoadingSpinner } from "../../components/ui";
+import { Input, Select } from "../../components/ui/Input";
+import { ColorInput, RangeInput } from "../../components/ui";
 import type { TypographyStyle } from "../../lib/typography";
-import type { EventContextValue } from "./event-layout";
-
-const DEFAULT_COVER: CoverConfig = {
-  eyebrow: { text: "", fontFamily: "'Cormorant Garamond', serif", fontSize: 14, fontWeight: 500, align: "center", color: "#ffffff" },
-  heading: { text: "", fontFamily: "'Playfair Display', serif", fontSize: 48, fontWeight: 700, align: "center", color: "#ffffff" },
-  subheading: { text: "", fontFamily: "'EB Garamond', serif", fontSize: 18, fontWeight: 400, align: "center", color: "#ffffff" },
-  overlay: 0.5,
-  overlayColor: "rgba(0,0,0,0.4)",
-};
-
-const DEFAULT_LOGO: LogoConfig = {
-  image: null,
-  width: 80,
-  height: 80,
-  borderRadius: "50%",
-  position: "center",
-  background: "transparent",
-};
 
 export function CoverEditor() {
-  const { event, eventId } = useOutletContext<EventContextValue>();
+  const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
-  const userId = event.creator_id;
 
-  const [coverConfig, setCoverConfig] = useState<CoverConfig>(DEFAULT_COVER);
-  const [logoConfig, setLogoConfig] = useState<LogoConfig>(DEFAULT_LOGO);
-  const [coverImage, setCoverImage] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const initialConfig = (event.draft_cover_config ?? {}) as CoverConfig;
+  const initialLogo = (event.draft_logo_config ?? {}) as LogoConfig;
 
-  useEffect(() => {
-    if (!loaded) {
-      const draftCover = (event.draft_cover_config ?? event.cover_config) as CoverConfig | null;
-      const draftLogo = (event.draft_logo_config ?? event.logo_config) as LogoConfig | null;
-      const draftImage = event.draft_cover_image ?? event.cover_image;
-      if (draftCover) setCoverConfig({ ...DEFAULT_COVER, ...draftCover });
-      if (draftLogo) setLogoConfig({ ...DEFAULT_LOGO, ...draftLogo });
-      setCoverImage(draftImage);
-      setLoaded(true);
-    }
-  }, [event, loaded]);
+  const [coverImage, setCoverImage] = useState(event.draft_cover_image ?? "");
+  const [heading, setHeading] = useState<TypographyStyle>(
+    (initialConfig.heading ?? {}) as TypographyStyle
+  );
+  const [subheading, setSubheading] = useState<TypographyStyle>(
+    (initialConfig.subheading ?? {}) as TypographyStyle
+  );
+  const [overlayColor, setOverlayColor] = useState(initialConfig.overlayColor ?? "rgba(0,0,0,0.35)");
+  const [overlayOpacity, setOverlayOpacity] = useState(initialConfig.overlayOpacity ?? 35);
+  const [layout, setLayout] = useState<CoverConfig["layout"]>(initialConfig.layout ?? "centered");
+  const [showDate, setShowDate] = useState(initialConfig.showDate ?? true);
+  const [showVenue, setShowVenue] = useState(initialConfig.showVenue ?? true);
+  const [logo, setLogo] = useState<LogoConfig>(initialLogo);
+
+  const coverConfig: CoverConfig = {
+    layout,
+    overlayColor,
+    overlayOpacity: overlayOpacity / 100,
+    showDate,
+    showVenue,
+    heading,
+    subheading,
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
-        .from("user_events")
+        .from("events")
         .update({
           draft_cover_config: coverConfig as unknown as Json,
-          draft_logo_config: logoConfig as unknown as Json,
           draft_cover_image: coverImage,
+          draft_logo_config: logo as unknown as Json,
         })
         .eq("id", eventId);
       if (error) throw error;
@@ -67,162 +59,164 @@ export function CoverEditor() {
     },
   });
 
-  function updateCover<K extends keyof CoverConfig>(key: K, val: CoverConfig[K]) {
-    setCoverConfig((prev) => ({ ...prev, [key]: val }));
-  }
-
-  function updateLogo<K extends keyof LogoConfig>(key: K, val: LogoConfig[K]) {
-    setLogoConfig((prev) => ({ ...prev, [key]: val }));
-  }
-
-  if (!loaded) {
-    return (
-      <div className="flex justify-center py-20">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-dash-text">Cover Editor</h2>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-          disabled={saveMutation.isPending}
-        >
-          Save Changes
-        </Button>
+  const editor = (
+    <div className="space-y-6 p-4">
+      <div>
+        <h2 className="mb-3 text-lg font-semibold text-dash-text">Cover Image</h2>
+        <ImageUpload
+          userId={event.creator_id}
+          value={coverImage}
+          onChange={setCoverImage}
+          label="Background image"
+          aspectRatio="wide"
+        />
       </div>
 
-      {saveMutation.isError && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-dash-danger">
-          {saveMutation.error?.message ?? "Failed to save"}
-        </div>
-      )}
-      {saveMutation.isSuccess && (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-          Saved successfully!
-        </div>
-      )}
-
-      <div className="h-[calc(100vh-280px)] min-h-[500px]">
-        <SplitEditor
-          editorRatio={0.45}
-          editor={
-            <div className="space-y-6">
-              <Card className="p-4">
-                <h3 className="mb-3 text-sm font-semibold text-dash-text">Cover Image</h3>
-                <ImageUpload
-                  value={coverImage}
-                  onChange={setCoverImage}
-                  userId={userId}
-                  label="Background Image"
-                  aspectRatio="16/9"
-                />
-                <div className="mt-3">
-                  <RangeInput
-                    label="Overlay Opacity"
-                    value={Math.round((coverConfig.overlay ?? 0.5) * 100)}
-                    onChange={(v) => updateCover("overlay", v / 100)}
-                    min={0}
-                    max={100}
-                    step={5}
-                  />
-                </div>
-                <div className="mt-3">
-                  <ColorInput
-                    label="Overlay Colour"
-                    value={coverConfig.overlayColor ?? "rgba(0,0,0,0.4)"}
-                    onChange={(v) => updateCover("overlayColor", v)}
-                  />
-                </div>
-              </Card>
-
-              <Card className="p-4">
-                <h3 className="mb-3 text-sm font-semibold text-dash-text">Logo</h3>
-                <ImageUpload
-                  value={logoConfig.image ?? null}
-                  onChange={(v) => updateLogo("image", v)}
-                  userId={userId}
-                  label="Logo Image"
-                  aspectRatio="1/1"
-                />
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-dash-text">Width (px)</label>
-                    <input
-                      type="number"
-                      value={logoConfig.width ?? 80}
-                      onChange={(e) => updateLogo("width", Number(e.target.value))}
-                      className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-dash-text">Height (px)</label>
-                    <input
-                      type="number"
-                      value={logoConfig.height ?? 80}
-                      onChange={(e) => updateLogo("height", Number(e.target.value))}
-                      className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-                    />
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <label className="mb-1.5 block text-sm font-medium text-dash-text">Border Radius</label>
-                  <select
-                    value={logoConfig.borderRadius ?? "50%"}
-                    onChange={(e) => updateLogo("borderRadius", e.target.value)}
-                    className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-                  >
-                    <option value="0">None</option>
-                    <option value="25%">Rounded</option>
-                    <option value="50%">Circle</option>
-                  </select>
-                </div>
-              </Card>
-
-              <Card className="p-4">
-                <TypographyControls
-                  label="Eyebrow"
-                  value={(coverConfig.eyebrow ?? {}) as TypographyStyle}
-                  onChange={(v) => updateCover("eyebrow", v)}
-                />
-              </Card>
-
-              <Card className="p-4">
-                <TypographyControls
-                  label="Title"
-                  value={(coverConfig.heading ?? {}) as TypographyStyle}
-                  onChange={(v) => updateCover("heading", v)}
-                />
-              </Card>
-
-              <Card className="p-4">
-                <TypographyControls
-                  label="Subtitle"
-                  value={(coverConfig.subheading ?? {}) as TypographyStyle}
-                  onChange={(v) => updateCover("subheading", v)}
-                />
-              </Card>
-            </div>
-          }
-          preview={
-            <div className="p-4">
-              <CoverPreview
-                event={event}
-                theme={event.draft_theme ?? event.theme}
-                coverConfig={coverConfig}
-                logoConfig={logoConfig}
-                coverImage={coverImage}
+      <div>
+        <h2 className="mb-3 text-lg font-semibold text-dash-text">Logo</h2>
+        <ImageUpload
+          userId={event.creator_id}
+          value={logo.url ?? ""}
+          onChange={(url) => setLogo({ ...logo, url })}
+          label="Cover logo"
+          aspectRatio="auto"
+        />
+        {logo.url && (
+          <div className="mt-3 space-y-3">
+            <Select
+              label="Logo size"
+              value={String(logo.size ?? 120)}
+              onChange={(e) => setLogo({ ...logo, size: Number(e.target.value) })}
+            >
+              <option value="80">Small (80px)</option>
+              <option value="120">Medium (120px)</option>
+              <option value="160">Large (160px)</option>
+              <option value="200">Extra Large (200px)</option>
+            </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Top spacing (px)"
+                type="number"
+                value={logo.marginTop ?? 0}
+                onChange={(e) => setLogo({ ...logo, marginTop: Number(e.target.value) })}
+              />
+              <Input
+                label="Bottom spacing (px)"
+                type="number"
+                value={logo.marginBottom ?? 16}
+                onChange={(e) => setLogo({ ...logo, marginBottom: Number(e.target.value) })}
               />
             </div>
-          }
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setLogo({})}
+            >
+              Remove Logo
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-lg font-semibold text-dash-text">Layout</h2>
+        <Select
+          label="Cover layout"
+          value={layout}
+          onChange={(e) => setLayout(e.target.value as CoverConfig["layout"])}
+        >
+          <option value="centered">Centered</option>
+          <option value="split">Split</option>
+          <option value="minimal">Minimal</option>
+        </Select>
+      </div>
+
+      <div>
+        <h2 className="mb-3 text-lg font-semibold text-dash-text">Overlay</h2>
+        <ColorInput label="Overlay colour" value={overlayColor} onChange={setOverlayColor} />
+        <RangeInput
+          label="Overlay opacity"
+          value={overlayOpacity}
+          onChange={setOverlayOpacity}
+          min={0}
+          max={100}
+          step={5}
+          unit="%"
+          className="mt-3"
+        />
+      </div>
+
+      <TypographyControls
+        label="Title"
+        value={heading}
+        onChange={setHeading}
+        showText
+      />
+
+      <TypographyControls
+        label="Subtitle"
+        value={subheading}
+        onChange={setSubheading}
+        showText
+      />
+
+      <div className="flex gap-4">
+        <label className="flex items-center gap-2 text-sm text-dash-text">
+          <input
+            type="checkbox"
+            checked={showDate}
+            onChange={(e) => setShowDate(e.target.checked)}
+            className="rounded"
+          />
+          Show date
+        </label>
+        <label className="flex items-center gap-2 text-sm text-dash-text">
+          <input
+            type="checkbox"
+            checked={showVenue}
+            onChange={(e) => setShowVenue(e.target.checked)}
+            className="rounded"
+          />
+          Show venue
+        </label>
+      </div>
+
+      <Button
+        onClick={() => saveMutation.mutate()}
+        loading={saveMutation.isPending}
+        disabled={saveMutation.isPending}
+        className="w-full"
+      >
+        Save Changes
+      </Button>
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-green-600">Saved successfully!</p>
+      )}
+      {saveMutation.isError && (
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed."}
+        </p>
+      )}
+    </div>
+  );
+
+  const preview = (
+    <div className="bg-dash-bg p-4">
+      <div className="overflow-hidden rounded-lg border border-dash-border shadow-sm">
+        <CoverPreview
+          coverImage={coverImage}
+          coverConfig={coverConfig as unknown as Json}
+          name={event.draft_name || event.name}
+          theme={event.draft_theme}
+          logoConfig={logo as unknown as Json}
         />
       </div>
     </div>
   );
-}
 
-export default CoverEditor;
+  return (
+    <div className="h-[calc(100vh-10rem)]">
+      <SplitEditor editor={editor} preview={preview} />
+    </div>
+  );
+}

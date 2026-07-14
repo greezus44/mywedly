@@ -1,74 +1,82 @@
 import { useGuestOutletContext } from "./guest-layout";
-import { formatDate, formatTime12 } from "../../lib/utils";
+
+interface ContactInfo {
+  name?: string;
+  email?: string;
+  phone?: string;
+  venue?: string;
+  address?: string;
+  mapUrl?: string;
+}
+
+function parseContact(content: unknown): ContactInfo {
+  if (!content || typeof content !== "object") return {};
+  return content as ContactInfo;
+}
 
 export default function GuestContact() {
   const { event } = useGuestOutletContext();
+  const contact = parseContact(event.content);
 
-  const mapSrc = event.address
-    ? `https://maps.google.com/maps?q=${encodeURIComponent(event.address)}&output=embed`
-    : null;
+  const venue = contact.venue || event.venue || "";
+  const address = contact.address || event.address || "";
+  const mapUrl = contact.mapUrl || (address ? `https://maps.google.com/?q=${encodeURIComponent(`${venue} ${address}`)}` : "");
 
   return (
     <section className="guest-section">
-      <div className="mx-auto max-w-3xl">
-        <div className="mb-10 text-center">
-          <p className="guest-eyebrow">Get In Touch</p>
-          <h1 className="guest-title">Contact & Venue</h1>
-          <p className="guest-subtitle mx-auto">Details for {event.name}.</p>
+      <div className="mx-auto max-w-2xl">
+        <p className="guest-eyebrow text-center">Contact</p>
+        <h1 className="guest-title mb-8 text-center">Get in touch</h1>
+
+        <div
+          className="event-card mb-8 space-y-6"
+          style={{ backgroundColor: "var(--event-surface)", color: "var(--event-text)" }}
+        >
+          {venue && (
+            <div>
+              <p className="guest-eyebrow">Venue</p>
+              <p style={{ color: "var(--event-text)" }}>{venue}</p>
+              {address && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{address}</p>}
+            </div>
+          )}
+
+          {contact.email && (
+            <div>
+              <p className="guest-eyebrow">Email</p>
+              <a href={`mailto:${contact.email}`} style={{ color: "var(--event-primary)" }}>{contact.email}</a>
+            </div>
+          )}
+
+          {contact.phone && (
+            <div>
+              <p className="guest-eyebrow">Phone</p>
+              <a href={`tel:${contact.phone}`} style={{ color: "var(--event-primary)" }}>{contact.phone}</a>
+            </div>
+          )}
+
+          {contact.name && (
+            <div>
+              <p className="guest-eyebrow">Contact Person</p>
+              <p style={{ color: "var(--event-text)" }}>{contact.name}</p>
+            </div>
+          )}
+
+          {!venue && !contact.email && !contact.phone && !contact.name && (
+            <p className="text-center text-sm" style={{ color: "var(--event-muted)" }}>Contact details will be added soon.</p>
+          )}
         </div>
 
-        <div className="grid gap-6 sm:grid-cols-2">
-          {/* Date & Time */}
-          <div
-            className="rounded-md p-6"
-            style={{ backgroundColor: "var(--event-surface)", color: "var(--event-text)", border: "1px solid var(--event-border)" }}
-          >
-            <p className="guest-eyebrow mb-2">When</p>
-            <p className="text-lg font-semibold" style={{ color: "var(--event-heading)" }}>
-              {formatDate(event.event_date) || "Date to be announced"}
-            </p>
-            {event.event_time && (
-              <p className="text-sm" style={{ color: "var(--event-muted)" }}>{formatTime12(event.event_time)}</p>
-            )}
-          </div>
-
-          {/* Venue */}
-          <div
-            className="rounded-md p-6"
-            style={{ backgroundColor: "var(--event-surface)", color: "var(--event-text)", border: "1px solid var(--event-border)" }}
-          >
-            <p className="guest-eyebrow mb-2">Where</p>
-            <p className="text-lg font-semibold" style={{ color: "var(--event-heading)" }}>
-              {event.venue || "Venue to be announced"}
-            </p>
-            {event.address && (
-              <p className="text-sm" style={{ color: "var(--event-muted)" }}>{event.address}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Embedded map */}
-        {mapSrc && (
-          <div className="mt-6 overflow-hidden rounded-md" style={{ border: "1px solid var(--event-border)" }}>
+        {mapUrl && (
+          <div>
+            <p className="guest-eyebrow mb-2">Location</p>
             <iframe
-              title="Venue map"
-              src={mapSrc}
-              style={{ width: "100%", height: "320px", border: "none" }}
+              src={mapUrl}
+              title="Event location map"
+              style={{ width: "100%", height: "320px", border: 0, borderRadius: "var(--event-radius)" }}
               loading="lazy"
             />
           </div>
         )}
-
-        {/* Contact card */}
-        <div
-          className="mt-6 rounded-md p-6 text-center"
-          style={{ backgroundColor: "var(--event-surface)", color: "var(--event-text)", border: "1px solid var(--event-border)" }}
-        >
-          <p className="guest-eyebrow mb-2">Questions?</p>
-          <p className="text-sm" style={{ color: "var(--event-muted)" }}>
-            If you have any questions about the event, please reach out to your hosts.
-          </p>
-        </div>
       </div>
     </section>
   );

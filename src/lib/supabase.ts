@@ -3,12 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-});
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export type Json =
   | string
@@ -20,7 +15,8 @@ export type Json =
 
 export interface Profile {
   id: string;
-  display_name: string | null;
+  email: string;
+  full_name: string | null;
   avatar_url: string | null;
   created_at: string;
   updated_at: string;
@@ -31,7 +27,7 @@ export interface UserEvent {
   creator_id: string;
   name: string;
   draft_name: string | null;
-  event_type: string;
+  event_type: string | null;
   draft_event_type: string | null;
   event_date: string | null;
   draft_event_date: string | null;
@@ -68,98 +64,81 @@ export interface UserEvent {
 
 export interface SubEvent {
   id: string;
-  parent_event_id: string;
+  event_id: string;
   name: string;
-  date: string | null;
-  time: string | null;
+  description: string | null;
+  start_date: string | null;
+  start_time: string | null;
+  end_date: string | null;
+  end_time: string | null;
   venue: string | null;
   address: string | null;
-  description: string | null;
-  dress_code: string | null;
-  rsvp_deadline: string | null;
-  rsvp_enabled: boolean;
-  order_index: number;
+  sort_order: number;
   created_at: string;
   updated_at: string;
-  start_time: string | null;
-  end_time: string | null;
-  display_order: number;
 }
 
 export interface EventGuest {
   id: string;
   event_id: string;
   name: string;
-  username: string | null;
+  username: string;
   email: string | null;
   phone: string | null;
-  group_name: string | null;
-  side: string | null;
-  group_id: string | null;
-  token: string;
-  rsvp_status: string;
-  rsvp_submitted_at: string | null;
-  plus_ones: number;
-  dietary: string | null;
-  message: string | null;
+  plus_one_allowed: boolean;
   created_at: string;
-  table_number: string | null;
+  updated_at: string;
 }
 
 export interface GuestGroup {
   id: string;
   event_id: string;
   name: string;
-  sort_order: number;
+  description: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface GuestGroupMember {
-  guest_id: string;
+  id: string;
   group_id: string;
+  guest_id: string;
   created_at: string;
 }
 
 export interface EventRsvp {
   id: string;
   event_id: string;
-  guest_id: string | null;
-  guest_name: string;
-  status: string;
-  plus_ones: number;
+  guest_id: string;
+  sub_event_id: string | null;
+  status: "attending" | "not_attending" | "pending";
+  plus_one: boolean;
   plus_one_names: string[];
-  dietary: string | null;
   dietary_notes: string | null;
   message: string | null;
-  answers: Json;
-  submitted_at: string;
-  responded_at: string | null;
-  sub_event_id: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface EventSchedule {
   id: string;
   event_id: string;
+  sub_event_id: string | null;
   title: string;
   description: string | null;
-  schedule_date: string | null;
-  start_time: string | null;
+  start_time: string;
   end_time: string | null;
-  venue: string | null;
-  address: string | null;
-  dress_code: string | null;
-  category: string | null;
-  cover_image: string | null;
-  order_index: number;
+  location: string | null;
+  sort_order: number;
   created_at: string;
-  sub_event_id: string | null;
+  updated_at: string;
 }
 
 export interface EventMessage {
   id: string;
   event_id: string;
-  guest_name: string;
+  guest_id: string | null;
+  author_name: string;
   message: string;
   created_at: string;
 }
@@ -167,20 +146,12 @@ export interface EventMessage {
 export interface CustomPage {
   id: string;
   event_id: string;
-  slug: string;
   title: string;
-  body: string;
-  cover_image_url: string | null;
-  inline_image_url: string | null;
+  slug: string;
+  content: Json;
   sort_order: number;
-  is_published: boolean;
   created_at: string;
   updated_at: string;
-  nav_label: string | null;
-  icon: string | null;
-  show_in_nav: boolean;
-  blocks: Json;
-  is_footer: boolean;
 }
 
 export interface SubEventGroupAssignment {
@@ -192,8 +163,8 @@ export interface SubEventGroupAssignment {
 
 export interface GuestInvitationOverride {
   id: string;
-  sub_event_id: string;
   guest_id: string;
+  sub_event_id: string;
   is_invited: boolean;
   created_at: string;
 }
@@ -201,10 +172,7 @@ export interface GuestInvitationOverride {
 export interface SharingEvent {
   id: string;
   event_id: string;
-  event_type: string;
-  guest_id: string | null;
-  source: string | null;
-  device_type: string | null;
-  metadata: Json;
+  share_token: string;
+  share_type: "link" | "qr" | "social";
   created_at: string;
 }

@@ -1,57 +1,56 @@
-import { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Json } from "../../lib/supabase";
+import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Card, ColorInput, Select, RangeInput, LoadingSpinner } from "../../components/ui";
-import { cn } from "../../lib/utils";
+import { Input, Select } from "../../components/ui/Input";
+import { ColorInput } from "../../components/ui";
+import { FontSelect } from "../../components/ui/FontSelect";
 import {
   THEME_PRESETS,
   HEADING_FONT_OPTIONS,
+  jsonToTheme,
   fullToSimplifiedTheme,
   simplifiedToFullTheme,
-  jsonToTheme,
   type SimplifiedThemeConfig,
+  type ThemeConfig,
 } from "../../lib/theme";
-import type { EventContextValue } from "./event-layout";
+import { cn } from "../../lib/utils";
 
-const BUTTON_FONT_WEIGHTS = [
+const FONT_SIZE_OPTIONS = [
+  { label: "Small (0.75rem)", value: "0.75rem" },
+  { label: "Medium (0.875rem)", value: "0.875rem" },
+  { label: "Large (1rem)", value: "1rem" },
+  { label: "Extra Large (1.125rem)", value: "1.125rem" },
+];
+
+const WEIGHT_OPTIONS = [
   { label: "Regular", value: 400 },
   { label: "Medium", value: 500 },
   { label: "Bold", value: 700 },
 ];
 
-const BUTTON_FONT_SIZES = [
-  { label: "Small (0.75rem)", value: "0.75rem" },
-  { label: "Normal (0.875rem)", value: "0.875rem" },
-  { label: "Medium (1rem)", value: "1rem" },
-  { label: "Large (1.125rem)", value: "1.125rem" },
-];
-
 export function ThemeEditor() {
-  const { event, eventId } = useOutletContext<EventContextValue>();
+  const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const [theme, setTheme] = useState<SimplifiedThemeConfig>({});
-  const [loaded, setLoaded] = useState(false);
+  const currentTheme = jsonToTheme(event.draft_theme);
+  const [theme, setTheme] = useState<SimplifiedThemeConfig>(fullToSimplifiedTheme(currentTheme));
 
-  useEffect(() => {
-    if (!loaded) {
-      const draftJson = event.draft_theme ?? event.theme;
-      const fullTheme = jsonToTheme(draftJson);
-      setTheme(fullToSimplifiedTheme(fullTheme));
-      setLoaded(true);
-    }
-  }, [event, loaded]);
+  function update<K extends keyof SimplifiedThemeConfig>(key: K, val: SimplifiedThemeConfig[K]) {
+    setTheme((prev) => ({ ...prev, [key]: val }));
+  }
+
+  function applyPreset(presetTheme: ThemeConfig) {
+    setTheme(fullToSimplifiedTheme(presetTheme));
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const fullTheme = simplifiedToFullTheme(theme);
       const { error } = await supabase
-        .from("user_events")
-        .update({
-          draft_theme: fullTheme as unknown as Json,
-        })
+        .from("events")
+        .update({ draft_theme: fullTheme as unknown as Json })
         .eq("id", eventId);
       if (error) throw error;
     },
@@ -60,192 +59,159 @@ export function ThemeEditor() {
     },
   });
 
-  function applyPreset(presetName: string) {
-    const preset = THEME_PRESETS.find((p) => p.name === presetName);
-    if (preset) {
-      setTheme(fullToSimplifiedTheme(preset.theme));
-    }
-  }
-
-  function update<K extends keyof SimplifiedThemeConfig>(key: K, val: SimplifiedThemeConfig[K]) {
-    setTheme((prev) => ({ ...prev, [key]: val }));
-  }
-
-  if (!loaded) {
-    return (
-      <div className="flex justify-center py-20">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-dash-text">Theme Editor</h2>
-          <p className="text-sm text-dash-muted">Customize your invitation website's appearance.</p>
+      {/* Presets */}
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h2 className="mb-3 text-lg font-semibold text-dash-text">Theme Presets</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {THEME_PRESETS.map((preset) => {
+            const isSelected =
+              theme.bg === preset.theme.colors.bg &&
+              theme.primary === preset.theme.colors.primary;
+            return (
+              <button
+                key={preset.name}
+                type="button"
+                onClick={() => applyPreset(preset.theme)}
+                className={cn(
+                  "rounded-lg border-2 p-3 text-left transition-colors",
+                  isSelected
+                    ? "border-dash-primary"
+                    : "border-dash-border hover:border-dash-primary/50"
+                )}
+              >
+                <div
+                  className="mb-2 flex gap-1"
+                >
+                  <span className="h-6 w-6 rounded" style={{ background: preset.theme.colors.bg }} />
+                  <span className="h-6 w-6 rounded" style={{ background: preset.theme.colors.primary }} />
+                  <span className="h-6 w-6 rounded" style={{ background: preset.theme.colors.accent }} />
+                </div>
+                <span className="text-sm font-medium text-dash-text">{preset.name}</span>
+              </button>
+            );
+          })}
         </div>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-          disabled={saveMutation.isPending}
-        >
-          Save Theme
-        </Button>
       </div>
 
-      {saveMutation.isError && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-dash-danger">
-          {saveMutation.error?.message ?? "Failed to save theme"}
+      {/* Colours */}
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h2 className="mb-3 text-lg font-semibold text-dash-text">Colours</h2>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <ColorInput label="Background" value={theme.bg} onChange={(v) => update("bg", v)} />
+          <ColorInput label="Surface" value={theme.surface} onChange={(v) => update("surface", v)} />
+          <ColorInput label="Surface Alt" value={theme.surfaceAlt} onChange={(v) => update("surfaceAlt", v)} />
+          <ColorInput label="Border" value={theme.border} onChange={(v) => update("border", v)} />
+          <ColorInput label="Text" value={theme.text} onChange={(v) => update("text", v)} />
+          <ColorInput label="Heading" value={theme.heading} onChange={(v) => update("heading", v)} />
+          <ColorInput label="Muted" value={theme.muted} onChange={(v) => update("muted", v)} />
+          <ColorInput label="Primary" value={theme.primary} onChange={(v) => update("primary", v)} />
+          <ColorInput label="Primary Hover" value={theme.primaryHover} onChange={(v) => update("primaryHover", v)} />
+          <ColorInput label="Primary Foreground" value={theme.primaryFg} onChange={(v) => update("primaryFg", v)} />
+          <ColorInput label="Accent" value={theme.accent} onChange={(v) => update("accent", v)} />
         </div>
-      )}
-      {saveMutation.isSuccess && (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-          Theme saved successfully!
-        </div>
-      )}
-
-      {/* Theme Presets */}
-      <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Theme Presets</h3>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-          {THEME_PRESETS.map((preset) => (
-            <button
-              key={preset.name}
-              type="button"
-              onClick={() => applyPreset(preset.name)}
-              className="rounded-md border border-dash-border p-3 text-left transition-colors hover:border-dash-primary"
-              style={{
-                backgroundColor: preset.theme.colors.bg,
-                borderColor: preset.theme.colors.border,
-              }}
-            >
-              <div className="flex items-center gap-1.5">
-                <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: preset.theme.colors.primary }} />
-                <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: preset.theme.colors.accent }} />
-              </div>
-              <p className="mt-2 text-xs font-medium" style={{ color: preset.theme.colors.heading }}>
-                {preset.name}
-              </p>
-            </button>
-          ))}
-        </div>
-      </Card>
-
-      {/* Colors */}
-      <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Colours</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <ColorInput label="Background" value={theme.bg ?? "#fffbeb"} onChange={(v) => update("bg", v)} />
-          <ColorInput label="Surface" value={theme.surface ?? "#ffffff"} onChange={(v) => update("surface", v)} />
-          <ColorInput label="Border" value={theme.border ?? "#fde68a"} onChange={(v) => update("border", v)} />
-          <ColorInput label="Text" value={theme.text ?? "#78350f"} onChange={(v) => update("text", v)} />
-          <ColorInput label="Heading" value={theme.heading ?? "#78350f"} onChange={(v) => update("heading", v)} />
-          <ColorInput label="Muted Text" value={theme.muted ?? "#92400e"} onChange={(v) => update("muted", v)} />
-          <ColorInput label="Primary" value={theme.primary ?? "#b45309"} onChange={(v) => update("primary", v)} />
-          <ColorInput label="Primary Hover" value={theme.primaryHover ?? "#92400e"} onChange={(v) => update("primaryHover", v)} />
-          <ColorInput label="Primary Foreground" value={theme.primaryFg ?? "#ffffff"} onChange={(v) => update("primaryFg", v)} />
-          <ColorInput label="Accent" value={theme.accent ?? "#d97706"} onChange={(v) => update("accent", v)} />
-        </div>
-      </Card>
+      </div>
 
       {/* Fonts */}
-      <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Fonts</h3>
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h2 className="mb-3 text-lg font-semibold text-dash-text">Fonts</h2>
         <div className="space-y-4">
-          <Select
-            label="Heading Font"
-            value={theme.headingFont ?? "Georgia, serif"}
-            onChange={(e) => update("headingFont", e.target.value)}
-          >
-            {HEADING_FONT_OPTIONS.map((f) => (
-              <option key={f.value} value={f.value}>{f.label}</option>
-            ))}
-          </Select>
-          <Select
-            label="Body Font"
-            value={theme.bodyFont ?? "Georgia, serif"}
-            onChange={(e) => update("bodyFont", e.target.value)}
-          >
-            {HEADING_FONT_OPTIONS.map((f) => (
-              <option key={f.value} value={f.value}>{f.label}</option>
-            ))}
-          </Select>
-          <Select
-            label="Rich Text Font"
-            value={theme.richFont ?? "'EB Garamond', serif"}
-            onChange={(e) => update("richFont", e.target.value)}
-          >
-            {HEADING_FONT_OPTIONS.map((f) => (
-              <option key={f.value} value={f.value}>{f.label}</option>
-            ))}
-          </Select>
-          <RangeInput
-            label="Font Scale"
-            value={theme.fontScale ?? 1}
-            onChange={(v) => update("fontScale", v)}
-            min={0.8}
-            max={1.5}
-            step={0.05}
+          <FontSelect
+            label="Heading font"
+            value={theme.headingFont}
+            onChange={(v) => update("headingFont", v)}
+            options={HEADING_FONT_OPTIONS}
+          />
+          <FontSelect
+            label="Body font"
+            value={theme.bodyFont}
+            onChange={(v) => update("bodyFont", v)}
+            options={HEADING_FONT_OPTIONS}
+          />
+          <FontSelect
+            label="Rich text font"
+            value={theme.richFont}
+            onChange={(v) => update("richFont", v)}
+            options={HEADING_FONT_OPTIONS}
           />
         </div>
-      </Card>
+      </div>
+
+      {/* Layout */}
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h2 className="mb-3 text-lg font-semibold text-dash-text">Layout</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="Border radius"
+            type="text"
+            value={theme.radius}
+            onChange={(e) => update("radius", e.target.value)}
+            placeholder="0.5rem"
+          />
+          <Input
+            label="Font scale"
+            type="number"
+            step="0.1"
+            min="0.5"
+            max="2"
+            value={theme.fontScale}
+            onChange={(e) => update("fontScale", Number(e.target.value))}
+          />
+        </div>
+      </div>
 
       {/* Button Styling */}
-      <Card className="p-4">
-        <h3 className="mb-1 text-sm font-semibold text-dash-text">Button Styling</h3>
-        <p className="mb-4 text-xs text-dash-muted">
-          Customize the appearance of buttons on your invitation website. Leave blank to inherit from the Event Theme.
-        </p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <ColorInput
-            label="Button Text Colour"
-            value={theme.buttonColor ?? theme.primaryFg ?? "#ffffff"}
-            onChange={(v) => update("buttonColor", v)}
-          />
-          <ColorInput
-            label="Button Background Colour"
-            value={theme.buttonBgColor ?? theme.primary ?? "#b45309"}
-            onChange={(v) => update("buttonBgColor", v)}
-          />
-          <ColorInput
-            label="Button Background Hover Colour"
-            value={theme.buttonBgColorHover ?? theme.primaryHover ?? "#92400e"}
-            onChange={(v) => update("buttonBgColorHover", v)}
-          />
-          <Select
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h2 className="mb-3 text-lg font-semibold text-dash-text">Button Styling</h2>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <ColorInput
+              label="Button Text Colour"
+              value={theme.buttonColor ?? ""}
+              onChange={(v) => update("buttonColor", v)}
+            />
+            <ColorInput
+              label="Button Background Colour"
+              value={theme.buttonBgColor ?? ""}
+              onChange={(v) => update("buttonBgColor", v)}
+            />
+            <ColorInput
+              label="Button Background Hover Colour"
+              value={theme.buttonBgColorHover ?? ""}
+              onChange={(v) => update("buttonBgColorHover", v)}
+            />
+          </div>
+          <FontSelect
             label="Button Label Font Family"
-            value={theme.buttonFontFamily ?? theme.headingFont ?? "Georgia, serif"}
-            onChange={(e) => update("buttonFontFamily", e.target.value)}
-          >
-            {HEADING_FONT_OPTIONS.map((f) => (
-              <option key={f.value} value={f.value}>{f.label}</option>
-            ))}
-          </Select>
+            value={theme.buttonFontFamily ?? ""}
+            onChange={(v) => update("buttonFontFamily", v)}
+            options={HEADING_FONT_OPTIONS}
+          />
           <Select
             label="Button Label Font Size"
             value={theme.buttonFontSize ?? "0.875rem"}
             onChange={(e) => update("buttonFontSize", e.target.value)}
           >
-            {BUTTON_FONT_SIZES.map((s) => (
+            {FONT_SIZE_OPTIONS.map((s) => (
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </Select>
           <div>
             <span className="mb-1.5 block text-sm font-medium text-dash-text">Button Font Weight</span>
             <div className="flex gap-1">
-              {BUTTON_FONT_WEIGHTS.map((w) => (
+              {WEIGHT_OPTIONS.map((w) => (
                 <button
                   key={w.value}
                   type="button"
                   onClick={() => update("buttonFontWeight", w.value)}
                   className={cn(
-                    "flex-1 rounded-md border px-2 py-1.5 text-xs transition-colors",
+                    "flex-1 rounded-lg border px-2 py-1.5 text-xs transition-colors",
                     (theme.buttonFontWeight ?? 600) === w.value
-                      ? "border-dash-primary bg-dash-primary text-dash-primary-fg"
-                      : "border-dash-border bg-dash-surface text-dash-text hover:bg-dash-bg",
+                      ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
+                      : "border-dash-border text-dash-text hover:bg-dash-bg"
                   )}
+                  style={{ fontWeight: w.value }}
                 >
                   {w.label}
                 </button>
@@ -253,54 +219,25 @@ export function ThemeEditor() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Button Preview */}
-        <div className="mt-4 rounded-md border border-dash-border bg-dash-bg p-4">
-          <p className="mb-2 text-xs text-dash-muted">Preview</p>
-          <button
-            type="button"
-            className="rounded-md px-6 py-2.5 transition-all"
-            style={{
-              backgroundColor: theme.buttonBgColor ?? theme.primary ?? "#b45309",
-              color: theme.buttonColor ?? theme.primaryFg ?? "#ffffff",
-              fontFamily: theme.buttonFontFamily ?? theme.headingFont ?? "Georgia, serif",
-              fontSize: theme.buttonFontSize ?? "0.875rem",
-              fontWeight: theme.buttonFontWeight ?? 600,
-              border: "none",
-              cursor: "pointer",
-              letterSpacing: "0.05em",
-              textTransform: "uppercase",
-            }}
-            onMouseOver={(e) => {
-              e.currentTarget.style.backgroundColor = theme.buttonBgColorHover ?? theme.primaryHover ?? "#92400e";
-            }}
-            onMouseOut={(e) => {
-              e.currentTarget.style.backgroundColor = theme.buttonBgColor ?? theme.primary ?? "#b45309";
-            }}
-          >
-            RSVP Now
-          </button>
-        </div>
-      </Card>
-
-      {/* Radius */}
-      <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Border Radius</h3>
-        <Select
-          label="Corner Radius"
-          value={theme.radius ?? "0.5rem"}
-          onChange={(e) => update("radius", e.target.value)}
-        >
-          <option value="0">None</option>
-          <option value="0.25rem">Small</option>
-          <option value="0.375rem">Medium-Small</option>
-          <option value="0.5rem">Medium</option>
-          <option value="0.75rem">Large</option>
-          <option value="1rem">Extra Large</option>
-        </Select>
-      </Card>
+      {/* Save */}
+      <Button
+        onClick={() => saveMutation.mutate()}
+        loading={saveMutation.isPending}
+        disabled={saveMutation.isPending}
+        className="w-full"
+      >
+        Save Theme
+      </Button>
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-green-600">Theme saved successfully!</p>
+      )}
+      {saveMutation.isError && (
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed."}
+        </p>
+      )}
     </div>
   );
 }
-
-export default ThemeEditor;

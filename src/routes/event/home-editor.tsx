@@ -1,53 +1,45 @@
-import { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Json } from "../../lib/supabase";
+import { useEventContext } from "./event-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
-import { HomePreview, type EventContent } from "../../components/preview/PreviewRenderers";
+import { HomePreview, type EventContent, type EventContentSection } from "../../components/preview/PreviewRenderers";
 import { TypographyControls } from "../../components/ui/TypographyControls";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
+import { ImageUpload } from "../../components/ui/ImageUpload";
 import { Button } from "../../components/ui/Button";
-import { Card, Select, LoadingSpinner } from "../../components/ui";
-import { HEADING_FONT_OPTIONS } from "../../lib/theme";
+import { Input, Select } from "../../components/ui/Input";
 import type { TypographyStyle } from "../../lib/typography";
-import type { EventContextValue } from "./event-layout";
 
-const DEFAULT_CONTENT: EventContent = {
-  home: {
-    heading: { text: "Welcome", fontFamily: "'Playfair Display', serif", fontSize: 36, fontWeight: 700, align: "center", color: "#78350f" },
-    body: "",
-  },
-};
+const LOGO_SIZES = [
+  { label: "Small (80px)", value: 80 },
+  { label: "Medium (140px)", value: 140 },
+  { label: "Large (200px)", value: 200 },
+];
+
+function makeId(): string {
+  return `section-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+}
 
 export function HomeEditor() {
-  const { event, eventId } = useOutletContext<EventContextValue>();
+  const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const [content, setContent] = useState<EventContent>(DEFAULT_CONTENT);
-  const [headingFont, setHeadingFont] = useState<string>("'Playfair Display', serif");
-  const [headingColor, setHeadingColor] = useState<string>("#78350f");
-  const [loaded, setLoaded] = useState(false);
+  const initialContent = (event.draft_content ?? {}) as EventContent;
+  const [logo, setLogo] = useState(
+    initialContent.logo ?? { url: "", size: 140, marginTop: 0, marginBottom: 24 }
+  );
+  const [sections, setSections] = useState<EventContentSection[]>(
+    initialContent.sections ?? []
+  );
 
-  useEffect(() => {
-    if (!loaded) {
-      const draft = (event.draft_content ?? event.content) as EventContent | null;
-      if (draft) {
-        setContent({ ...DEFAULT_CONTENT, ...draft });
-        const home = draft.home as { heading?: TypographyStyle; body?: string } | undefined;
-        if (home?.heading?.fontFamily) setHeadingFont(home.heading.fontFamily);
-        if (home?.heading?.color) setHeadingColor(home.heading.color);
-      }
-      setLoaded(true);
-    }
-  }, [event, loaded]);
+  const content: EventContent = { logo, sections };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
-        .from("user_events")
-        .update({
-          draft_content: content as unknown as Json,
-        })
+        .from("events")
+        .update({ draft_content: content as unknown as Json })
         .eq("id", eventId);
       if (error) throw error;
     },
@@ -56,129 +48,153 @@ export function HomeEditor() {
     },
   });
 
-  function updateHeading(v: TypographyStyle) {
-    setContent((prev) => ({
+  function updateSection(idx: number, patch: Partial<EventContentSection>) {
+    setSections((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
+  }
+
+  function addSection() {
+    setSections((prev) => [
       ...prev,
-      home: { ...prev.home, heading: v },
-    }));
-    if (v.fontFamily) setHeadingFont(v.fontFamily);
-    if (v.color) setHeadingColor(v.color);
+      { id: makeId(), heading: { text: "", fontFamily: "Georgia, serif", fontSize: 24, fontWeight: 700, align: "center" } as TypographyStyle, body: "" },
+    ]);
   }
 
-  function updateBody(body: string) {
-    setContent((prev) => ({
-      ...prev,
-      home: { ...prev.home, body },
-    }));
+  function removeSection(idx: number) {
+    setSections((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  if (!loaded) {
-    return (
-      <div className="flex justify-center py-20">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
+  function moveSection(idx: number, dir: -1 | 1) {
+    setSections((prev) => {
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
   }
 
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-dash-text">Home Page Editor</h2>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-          disabled={saveMutation.isPending}
-        >
-          Save Changes
-        </Button>
-      </div>
-
-      {saveMutation.isError && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-dash-danger">
-          {saveMutation.error?.message ?? "Failed to save"}
-        </div>
-      )}
-      {saveMutation.isSuccess && (
-        <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-          Saved successfully!
-        </div>
-      )}
-
-      <div className="h-[calc(100vh-280px)] min-h-[500px]">
-        <SplitEditor
-          editorRatio={0.5}
-          editor={
-            <div className="space-y-6">
-              <Card className="p-4">
-                <TypographyControls
-                  label="Home Heading"
-                  value={(content.home?.heading ?? {}) as TypographyStyle}
-                  onChange={updateHeading}
-                />
-              </Card>
-
-              <Card className="p-4">
-                <h3 className="mb-3 text-sm font-semibold text-dash-text">Home Body Content</h3>
-                <RichTextEditor
-                  value={content.home?.body ?? ""}
-                  onChange={updateBody}
-                  placeholder="Write your welcome message here..."
-                />
-              </Card>
-
-              <Card className="p-4 space-y-3">
-                <h3 className="text-sm font-semibold text-dash-text">Heading Style</h3>
-                <Select
-                  label="Heading Font Family"
-                  value={headingFont}
-                  onChange={(e) => {
-                    setHeadingFont(e.target.value);
-                    updateHeading({ ...(content.home?.heading ?? {}), fontFamily: e.target.value } as TypographyStyle);
-                  }}
-                >
-                  {HEADING_FONT_OPTIONS.map((f) => (
-                    <option key={f.value} value={f.value}>{f.label}</option>
-                  ))}
-                </Select>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-dash-text">Heading Colour</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={headingColor}
-                      onChange={(e) => {
-                        setHeadingColor(e.target.value);
-                        updateHeading({ ...(content.home?.heading ?? {}), color: e.target.value } as TypographyStyle);
-                      }}
-                      className="h-9 w-12 cursor-pointer rounded border border-dash-border bg-dash-surface"
-                    />
-                    <input
-                      type="text"
-                      value={headingColor}
-                      onChange={(e) => {
-                        setHeadingColor(e.target.value);
-                        updateHeading({ ...(content.home?.heading ?? {}), color: e.target.value } as TypographyStyle);
-                      }}
-                      className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-                    />
-                  </div>
-                </div>
-              </Card>
-            </div>
-          }
-          preview={
-            <div className="p-4">
-              <HomePreview
-                event={event}
-                theme={event.draft_theme ?? event.theme}
-                content={content}
+  const editor = (
+    <div className="space-y-6 p-4">
+      {/* Home Page Logo Section */}
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h2 className="mb-3 text-lg font-semibold text-dash-text">Home Page Logo</h2>
+        <ImageUpload
+          userId={event.creator_id}
+          value={logo.url ?? ""}
+          onChange={(url) => setLogo({ ...logo, url })}
+          label="Logo image"
+          aspectRatio="auto"
+        />
+        {logo.url && (
+          <div className="mt-3 space-y-3">
+            <Select
+              label="Logo size"
+              value={String(logo.size ?? 140)}
+              onChange={(e) => setLogo({ ...logo, size: Number(e.target.value) })}
+            >
+              {LOGO_SIZES.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Top spacing (px)"
+                type="number"
+                value={logo.marginTop ?? 0}
+                onChange={(e) => setLogo({ ...logo, marginTop: Number(e.target.value) })}
+              />
+              <Input
+                label="Bottom spacing (px)"
+                type="number"
+                value={logo.marginBottom ?? 24}
+                onChange={(e) => setLogo({ ...logo, marginBottom: Number(e.target.value) })}
               />
             </div>
-          }
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setLogo({ url: "", size: 140, marginTop: 0, marginBottom: 24 })}
+            >
+              Remove Logo
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Sections */}
+      {sections.map((section, idx) => (
+        <div key={section.id ?? idx} className="rounded-lg border border-dash-border bg-dash-surface p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-dash-text">Section {idx + 1}</h3>
+            <div className="flex gap-1">
+              <Button variant="ghost" size="sm" onClick={() => moveSection(idx, -1)} disabled={idx === 0}>
+                ↑
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => moveSection(idx, 1)} disabled={idx === sections.length - 1}>
+                ↓
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => removeSection(idx)}>
+                ✕
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <TypographyControls
+              label="Heading"
+              value={(section.heading ?? {}) as TypographyStyle}
+              onChange={(v) => updateSection(idx, { heading: v })}
+              showText
+            />
+            <div>
+              <span className="mb-1.5 block text-sm font-medium text-dash-text">Body</span>
+              <RichTextEditor
+                value={section.body ?? ""}
+                onChange={(html) => updateSection(idx, { body: html })}
+                placeholder="Write your section content…"
+              />
+            </div>
+          </div>
+        </div>
+      ))}
+
+      <Button variant="secondary" onClick={addSection} className="w-full">
+        + Add Section
+      </Button>
+
+      <Button
+        onClick={() => saveMutation.mutate()}
+        loading={saveMutation.isPending}
+        disabled={saveMutation.isPending}
+        className="w-full"
+      >
+        Save Changes
+      </Button>
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-green-600">Saved successfully!</p>
+      )}
+      {saveMutation.isError && (
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed."}
+        </p>
+      )}
+    </div>
+  );
+
+  const preview = (
+    <div className="bg-dash-bg p-4">
+      <div className="overflow-hidden rounded-lg border border-dash-border shadow-sm">
+        <HomePreview
+          event={event}
+          theme={event.draft_theme}
+          content={content}
         />
       </div>
     </div>
   );
-}
 
-export default HomeEditor;
+  return (
+    <div className="h-[calc(100vh-10rem)]">
+      <SplitEditor editor={editor} preview={preview} />
+    </div>
+  );
+}

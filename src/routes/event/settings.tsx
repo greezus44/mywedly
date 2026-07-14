@@ -1,68 +1,57 @@
-import { useState, useEffect, type FormEvent } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
+import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Card, Input, Select, Badge, LoadingSpinner } from "../../components/ui";
+import { Input, Textarea, Select } from "../../components/ui/Input";
+import { Card, Toggle } from "../../components/ui";
+import { DatePicker } from "../../components/ui/DatePicker";
+import { TimePicker } from "../../components/ui/TimePicker";
 import { slugify, isValidSlug } from "../../lib/theme";
-import { formatDate } from "../../lib/utils";
-import type { EventContextValue } from "./event-layout";
 
 const EVENT_TYPES = [
-  "Wedding",
-  "Engagement",
-  "Reception",
-  "Mehndi",
-  "Sangeet",
-  "Haldi",
-  "Other",
+  { label: "Wedding", value: "wedding" },
+  { label: "Birthday", value: "birthday" },
+  { label: "Anniversary", value: "anniversary" },
+  { label: "Engagement", value: "engagement" },
+  { label: "Other", value: "other" },
 ];
 
 export function SettingsPage() {
-  const { event, eventId } = useOutletContext<EventContextValue>();
+  const { event, eventId } = useEventContext();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [name, setName] = useState(event.draft_name ?? event.name ?? "");
-  const [eventType, setEventType] = useState(event.draft_event_type ?? event.event_type ?? "Wedding");
-  const [eventDate, setEventDate] = useState(event.draft_event_date ?? event.event_date ?? "");
-  const [eventTime, setEventTime] = useState(event.draft_event_time ?? event.event_time ?? "");
-  const [venue, setVenue] = useState(event.draft_venue ?? event.venue ?? "");
-  const [address, setAddress] = useState(event.draft_address ?? event.address ?? "");
-  const [slug, setSlug] = useState(event.draft_slug ?? event.slug ?? "");
-  const [rsvpDeadline, setRsvpDeadline] = useState(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "");
+  const [name, setName] = useState(event.draft_name ?? event.name);
+  const [eventType, setEventType] = useState(event.draft_event_type ?? event.event_type ?? "wedding");
+  const [eventDate, setEventDate] = useState(event.draft_event_date ?? "");
+  const [eventTime, setEventTime] = useState(event.draft_event_time ?? "");
+  const [venue, setVenue] = useState(event.draft_venue ?? "");
+  const [address, setAddress] = useState(event.draft_address ?? "");
+  const [slug, setSlug] = useState(event.draft_slug ?? "");
+  const [rsvpDeadline, setRsvpDeadline] = useState(event.draft_rsvp_deadline ?? "");
+  const [isArchived, setIsArchived] = useState(event.is_archived);
   const [slugError, setSlugError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    if (!loaded) {
-      setName(event.draft_name ?? event.name ?? "");
-      setEventType(event.draft_event_type ?? event.event_type ?? "Wedding");
-      setEventDate(event.draft_event_date ?? event.event_date ?? "");
-      setEventTime(event.draft_event_time ?? event.event_time ?? "");
-      setVenue(event.draft_venue ?? event.venue ?? "");
-      setAddress(event.draft_address ?? event.address ?? "");
-      setSlug(event.draft_slug ?? event.slug ?? "");
-      setRsvpDeadline(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "");
-      setLoaded(true);
-    }
-  }, [event, loaded]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (slug && !isValidSlug(slug)) {
-        throw new Error("Slug can only contain lowercase letters, numbers, and hyphens.");
+      const finalSlug = slug ? slugify(slug) : slugify(name);
+      if (finalSlug && !isValidSlug(finalSlug)) {
+        throw new Error("Invalid URL slug. Use only lowercase letters, numbers, and hyphens.");
       }
       const { error } = await supabase
-        .from("user_events")
+        .from("events")
         .update({
           draft_name: name,
           draft_event_type: eventType,
           draft_event_date: eventDate || null,
           draft_event_time: eventTime || null,
-          draft_venue: venue || null,
-          draft_address: address || null,
-          draft_slug: slug || null,
+          draft_venue: venue,
+          draft_address: address,
+          draft_slug: finalSlug || null,
           draft_rsvp_deadline: rsvpDeadline || null,
+          is_archived: isArchived,
         })
         .eq("id", eventId);
       if (error) throw error;
@@ -72,162 +61,163 @@ export function SettingsPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from("events")
+        .delete()
+        .eq("id", eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      navigate("/dashboard");
+    },
+  });
+
   function handleSlugChange(value: string) {
     setSlug(value);
-    if (value && !isValidSlug(value)) {
-      setSlugError("Slug can only contain lowercase letters, numbers, and hyphens.");
+    if (value && !isValidSlug(slugify(value))) {
+      setSlugError("Use only lowercase letters, numbers, and hyphens.");
     } else {
       setSlugError(null);
     }
   }
 
-  function handleSlugify() {
-    const generated = slugify(name || event.name || "");
-    setSlug(generated);
-    setSlugError(null);
-  }
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    saveMutation.mutate();
-  }
-
-  if (!loaded) {
-    return (
-      <div className="flex justify-center py-20">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-dash-text">Website Settings</h2>
-        <p className="text-sm text-dash-muted">Configure your event details and website URL.</p>
+        <h1 className="text-2xl font-bold text-dash-text">Settings</h1>
+        <p className="mt-1 text-sm text-dash-muted">
+          Manage your event details and configuration.
+        </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Event Details */}
-        <Card className="space-y-4 p-4">
-          <h3 className="text-sm font-semibold text-dash-text">Event Details</h3>
+      {/* Event Details */}
+      <Card>
+        <h2 className="mb-4 text-lg font-semibold text-dash-text">Event Details</h2>
+        <div className="space-y-4">
           <Input
-            label="Event Name"
-            required
+            label="Event name"
+            type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Our Wedding"
+            placeholder="e.g. Sarah & John's Wedding"
           />
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-dash-text">Event Type</label>
-            <select
-              value={eventType}
-              onChange={(e) => setEventType(e.target.value)}
-              className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-            >
-              {EVENT_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Event Date"
-              type="date"
+          <Select
+            label="Event type"
+            value={eventType}
+            onChange={(e) => setEventType(e.target.value)}
+          >
+            {EVENT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </Select>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <DatePicker
+              label="Event date"
               value={eventDate}
-              onChange={(e) => setEventDate(e.target.value)}
+              onChange={setEventDate}
             />
-            <Input
-              label="Event Time"
-              type="time"
+            <TimePicker
+              label="Event time"
               value={eventTime}
-              onChange={(e) => setEventTime(e.target.value)}
+              onChange={setEventTime}
             />
           </div>
           <Input
             label="Venue"
+            type="text"
             value={venue}
             onChange={(e) => setVenue(e.target.value)}
-            placeholder="e.g. Grand Hotel Ballroom"
+            placeholder="e.g. The Grand Ballroom"
           />
-          <Input
+          <Textarea
             label="Address"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            placeholder="e.g. 123 Main St, City, State"
+            placeholder="123 Main Street, City, State"
           />
-          <Input
-            label="RSVP Deadline"
-            type="datetime-local"
-            value={rsvpDeadline}
-            onChange={(e) => setRsvpDeadline(e.target.value)}
-          />
-        </Card>
-
-        {/* Website URL */}
-        <Card className="space-y-4 p-4">
-          <h3 className="text-sm font-semibold text-dash-text">Website URL</h3>
-          <div>
-            <div className="flex items-center gap-2">
-              <Input
-                label="URL Slug"
-                value={slug}
-                onChange={(e) => handleSlugChange(e.target.value)}
-                placeholder="my-event"
-                error={slugError ?? undefined}
-              />
-              <div className="pt-6">
-                <Button type="button" variant="secondary" size="sm" onClick={handleSlugify}>
-                  Auto-Generate
-                </Button>
-              </div>
-            </div>
-            {slug && !slugError && (
-              <p className="mt-2 text-xs text-dash-muted">
-                Your guest page will be: <span className="font-medium text-dash-text">{window.location.origin}/e/{slug}</span>
-              </p>
-            )}
-          </div>
-        </Card>
-
-        {/* Publish Status */}
-        <Card className="p-4">
-          <h3 className="mb-3 text-sm font-semibold text-dash-text">Publish Status</h3>
-          <div className="flex items-center gap-2">
-            {event.is_published ? (
-              <>
-                <Badge variant="success">Published</Badge>
-                {event.published_at && (
-                  <span className="text-xs text-dash-muted">
-                    on {formatDate(event.published_at)}
-                  </span>
-                )}
-              </>
-            ) : (
-              <Badge variant="warning">Draft</Badge>
-            )}
-          </div>
-        </Card>
-
-        {saveMutation.isError && (
-          <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-dash-danger">
-            {saveMutation.error?.message ?? "Failed to save settings"}
-          </div>
-        )}
-        {saveMutation.isSuccess && (
-          <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-            Settings saved successfully!
-          </div>
-        )}
-
-        <div className="flex justify-end">
-          <Button type="submit" loading={saveMutation.isPending} disabled={saveMutation.isPending}>
-            Save Settings
-          </Button>
         </div>
-      </form>
+      </Card>
+
+      {/* Website Settings */}
+      <Card>
+        <h2 className="mb-4 text-lg font-semibold text-dash-text">Website Settings</h2>
+        <div className="space-y-4">
+          <Input
+            label="Website URL slug"
+            type="text"
+            value={slug}
+            onChange={(e) => handleSlugChange(e.target.value)}
+            placeholder="sarah-and-john"
+          />
+          {slugError && <p className="text-sm text-dash-danger">{slugError}</p>}
+          <p className="text-sm text-dash-muted">
+            Your website will be available at: {window.location.origin}/e/{slug ? slugify(slug) : "your-slug"}
+          </p>
+          <DatePicker
+            label="RSVP deadline"
+            value={rsvpDeadline}
+            onChange={setRsvpDeadline}
+          />
+        </div>
+      </Card>
+
+      {/* Archive */}
+      <Card>
+        <h2 className="mb-4 text-lg font-semibold text-dash-text">Archive</h2>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-dash-text">Archive this event</p>
+            <p className="text-sm text-dash-muted">Archived events are hidden from your dashboard.</p>
+          </div>
+          <Toggle checked={isArchived} onChange={setIsArchived} label="" />
+        </div>
+      </Card>
+
+      {/* Save */}
+      <Button
+        onClick={() => saveMutation.mutate()}
+        loading={saveMutation.isPending}
+        disabled={saveMutation.isPending}
+        className="w-full"
+      >
+        Save Settings
+      </Button>
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-green-600">Settings saved successfully!</p>
+      )}
+      {saveMutation.isError && (
+        <p className="text-sm text-dash-danger">
+          {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed."}
+        </p>
+      )}
+
+      {/* Danger Zone */}
+      <Card className="border-dash-danger/30">
+        <h2 className="mb-2 text-lg font-semibold text-dash-danger">Danger Zone</h2>
+        <p className="mb-4 text-sm text-dash-muted">
+          Permanently delete this event and all associated data. This cannot be undone.
+        </p>
+        <Button
+          variant="danger"
+          loading={deleteMutation.isPending}
+          disabled={deleteMutation.isPending}
+          onClick={() => {
+            if (window.confirm("Are you sure you want to delete this event? This cannot be undone.")) {
+              deleteMutation.mutate();
+            }
+          }}
+        >
+          Delete Event
+        </Button>
+        {deleteMutation.isError && (
+          <p className="mt-2 text-sm text-dash-danger">
+            {deleteMutation.error instanceof Error ? deleteMutation.error.message : "Delete failed."}
+          </p>
+        )}
+      </Card>
     </div>
   );
 }
-
-export default SettingsPage;

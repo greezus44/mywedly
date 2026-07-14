@@ -1,17 +1,10 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { supabase, type EventGuest } from "./supabase";
 
-const STORAGE_KEY = "mywedly-guest-auth";
+const STORAGE_KEY = "mywedly:guest";
 
-interface StoredAuth {
-  guestId: string;
+interface StoredGuest {
+  guest: EventGuest;
   eventId: string;
 }
 
@@ -23,34 +16,34 @@ interface GuestAuthContextValue {
   signOut: () => void;
 }
 
-const GuestAuthContext = createContext<GuestAuthContextValue | undefined>(undefined);
+const GuestAuthContext = createContext<GuestAuthContextValue | null>(null);
 
-function getStoredAuth(): StoredAuth | null {
+function loadStored(): StoredGuest | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as StoredAuth;
-    if (parsed && parsed.guestId && parsed.eventId) return parsed;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.guest && parsed.eventId) return parsed;
     return null;
   } catch {
     return null;
   }
 }
 
-function setStoredAuth(auth: StoredAuth | null): void {
+function saveStored(value: StoredGuest | null) {
   try {
-    if (auth) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+    if (value) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
     } else {
       localStorage.removeItem(STORAGE_KEY);
     }
   } catch {
-    // ignore
+    // ignore storage errors
   }
 }
 
 interface GuestAuthProviderProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
 export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
@@ -58,73 +51,61 @@ export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
   const [eventId, setEventId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchGuest = useCallback(async (guestId: string, evId: string) => {
-    const { data, error } = await supabase
-      .from("event_guests")
-      .select("*")
-      .eq("id", guestId)
-      .eq("event_id", evId)
-      .maybeSingle();
-    if (error || !data) {
-      setStoredAuth(null);
-      setGuest(null);
-      setEventId(null);
-      return;
+  useEffect(() => {
+    const stored = loadStored();
+    if (stored) {
+      setGuest(stored.guest);
+      setEventId(stored.eventId);
     }
-    setGuest(data as EventGuest);
-    setEventId(evId);
+    setLoading(false);
   }, []);
 
-  useEffect(() => {
-    const stored = getStoredAuth();
-    if (!stored) {
-      setLoading(false);
-      return;
-    }
-    setEventId(stored.eventId);
-    fetchGuest(stored.guestId, stored.eventId).finally(() => setLoading(false));
-  }, [fetchGuest]);
-
   const signIn = useCallback(
-    async (evId: string, username: string): Promise<{ error: string | null }> => {
-      try {
-        const { data, error } = await supabase
-          .from("event_guests")
-          .select("*")
-          .eq("event_id", evId)
-          .ilike("username", username.trim())
-          .maybeSingle();
-
-        if (error) {
-          return { error: "Failed to sign in. Please try again." };
-        }
-        if (!data) {
-          return { error: "Guest not found. Please check your username." };
-        }
-
-        const g = data as EventGuest;
-        setStoredAuth({ guestId: g.id, eventId: evId });
-        setGuest(g);
-        setEventId(evId);
-        return { error: null };
-      } catch {
-        return { error: "Failed to sign in. Please try again." };
+    async (targetEventId: string, username: string): Promise<{ error: string | null }> => {
+      if (!username || !targetEventId) {
+        return { error: "Please enter your username." };
       }
+      const trimmed = username.trim();
+      if (!trimmed) {
+        return { error: "Please enter your username." };
+      }
+      const { data, error } = await supabase
+        .from("event_guests")
+        .select("*")
+        .eq("event_id", targetEventId)
+        .ilike("username", trimmed)
+        .maybeSingle();
+
+      if (error) {
+        return { error: "Something went wrong. Please try again." };
+      }
+      if (!data) {
+        return { error: "We couldn't find that username. Please check and try again." };
+      }
+      const g = data as EventGuest;
+      setGuest(g);
+      setEventId(targetEventId);
+      saveStored({ guest: g, eventId: targetEventId });
+      return { error: null };
     },
-    [],
+    []
   );
 
   const signOut = useCallback(() => {
-    setStoredAuth(null);
     setGuest(null);
     setEventId(null);
+    saveStored(null);
   }, []);
 
-  return (
-    <GuestAuthContext.Provider value={{ guest, eventId, loading, signIn, signOut }}>
-      {children}
-    </GuestAuthContext.Provider>
-  );
+  const value: GuestAuthContextValue = {
+    guest,
+    eventId,
+    loading,
+    signIn,
+    signOut,
+  };
+
+  return <GuestAuthContext.Provider value={value}>{children}</GuestAuthContext.Provider>;
 }
 
 export function useGuestAuth(): GuestAuthContextValue {

@@ -1,15 +1,15 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
-export function cn(...inputs: ClassValue[]): string {
+export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-US", {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -19,9 +19,9 @@ export function formatDate(dateStr: string | null | undefined): string {
 
 export function formatDateShort(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-US", {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -30,49 +30,23 @@ export function formatDateShort(dateStr: string | null | undefined): string {
 
 export function formatTime12(timeStr: string | null | undefined): string {
   if (!timeStr) return "";
-  const t = to12Hour(timeStr);
-  return t;
+  const [hStr, mStr] = timeStr.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (isNaN(h)) return "";
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  const mm = isNaN(m) ? "00" : String(m).padStart(2, "0");
+  return `${hour12}:${mm} ${period}`;
 }
 
-export function to12Hour(time24: string | null | undefined): string {
-  if (!time24) return "";
-  const parts = time24.split(":");
-  if (parts.length < 2) return "";
-  let hours = parseInt(parts[0], 10);
-  const minutes = parts[1];
-  if (isNaN(hours)) return "";
-  const period = hours >= 12 ? "PM" : "AM";
-  hours = hours % 12;
-  if (hours === 0) hours = 12;
-  return `${hours}:${minutes} ${period}`;
-}
-
-export function to24Hour(time12: string): string {
-  if (!time12) return "";
-  const match = time12.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-  if (!match) return time12;
-  let hours = parseInt(match[1], 10);
-  const minutes = match[2];
-  const period = match[3]?.toUpperCase();
-  if (period === "PM" && hours !== 12) hours += 12;
-  if (period === "AM" && hours === 12) hours = 0;
-  return `${String(hours).padStart(2, "0")}:${minutes}`;
-}
-
-export function roundTo5Min(timeStr: string): string {
-  if (!timeStr) return "";
-  const parts = timeStr.split(":");
-  if (parts.length < 2) return timeStr;
-  let hours = parseInt(parts[0], 10);
-  let minutes = parseInt(parts[1], 10);
-  if (isNaN(hours) || isNaN(minutes)) return timeStr;
-  minutes = Math.round(minutes / 5) * 5;
-  if (minutes >= 60) {
-    minutes = 0;
-    hours += 1;
-  }
-  if (hours >= 24) hours = 0;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+export function formatDateTime(dateStr: string | null | undefined, timeStr: string | null | undefined): string {
+  const d = formatDate(dateStr);
+  const t = formatTime12(timeStr);
+  if (!d && !t) return "";
+  if (!d) return t;
+  if (!t) return d;
+  return `${d} at ${t}`;
 }
 
 export function getCountdown(targetDate: string | null | undefined): {
@@ -82,52 +56,81 @@ export function getCountdown(targetDate: string | null | undefined): {
   seconds: number;
   isPast: boolean;
 } {
-  if (!targetDate) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
+  const result = { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: false };
+  if (!targetDate) return result;
   const target = new Date(targetDate).getTime();
+  if (isNaN(target)) return result;
   const now = Date.now();
   const diff = target - now;
-  if (diff <= 0) return { days: 0, hours: 0, minutes: 0, seconds: 0, isPast: true };
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-  return { days, hours, minutes, seconds, isPast: false };
+  if (diff <= 0) {
+    result.isPast = true;
+    return result;
+  }
+  result.days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  result.hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+  result.minutes = Math.floor((diff / (1000 * 60)) % 60);
+  result.seconds = Math.floor((diff / 1000) % 60);
+  return result;
+}
+
+export function to12Hour(time24: string): string {
+  if (!time24) return "";
+  const [hStr, mStr] = time24.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (isNaN(h)) return "";
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  const mm = isNaN(m) ? "00" : String(m).padStart(2, "0");
+  return `${String(hour12).padStart(2, "0")}:${mm} ${period}`;
+}
+
+export function to24Hour(time12: string): string {
+  if (!time12) return "";
+  const match = time12.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/);
+  if (!match) return time12;
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+  if (period === "AM" && h === 12) h = 0;
+  if (period === "PM" && h !== 12) h += 12;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+export function roundTo5Min(timeStr: string): string {
+  if (!timeStr) return "";
+  const [hStr, mStr] = timeStr.split(":");
+  const h = parseInt(hStr, 10);
+  let m = parseInt(mStr, 10);
+  if (isNaN(h) || isNaN(m)) return timeStr;
+  m = Math.round(m / 5) * 5;
+  if (m === 60) {
+    m = 0;
+    // Don't overflow hour for simplicity; just reset minutes
+  }
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
 export function isRsvpClosed(deadline: string | null | undefined): boolean {
   if (!deadline) return false;
-  const target = new Date(deadline).getTime();
-  if (isNaN(target)) return false;
-  return Date.now() > target;
+  const d = new Date(deadline).getTime();
+  if (isNaN(d)) return false;
+  return Date.now() > d;
 }
 
 export function generateUsername(name: string): string {
-  if (!name) return "";
-  return name
+  const base = name
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9\s]/g, "")
-    .replace(/\s+/g, ".")
-    .replace(/\.+/g, ".")
-    .replace(/^\.|\.$/g, "");
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return `${base}-${suffix}`;
 }
 
-export function truncate(str: string, maxLength: number): string {
+export function truncate(str: string, maxLen: number): string {
   if (!str) return "";
-  if (str.length <= maxLength) return str;
-  return str.slice(0, maxLength).trimEnd() + "…";
-}
-
-export function formatDateTime(dateStr: string | null | undefined): string {
-  if (!dateStr) return "";
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return "";
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  if (str.length <= maxLen) return str;
+  return str.slice(0, maxLen - 1) + "…";
 }

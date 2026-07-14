@@ -1,103 +1,45 @@
 import { useState } from "react";
-import { useOutletContext } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Json } from "../../lib/supabase";
+import { useQuery } from "@tanstack/react-query";
+import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Card, Input, LoadingSpinner, ErrorState } from "../../components/ui";
+import { Input } from "../../components/ui/Input";
+import { Card, LoadingSpinner, Badge } from "../../components/ui";
 import { generateQrDataUrl, downloadQrCode } from "../../lib/qr";
-import type { EventContextValue } from "./event-layout";
-
-interface SharingConfig {
-  message?: string;
-  facebook?: boolean;
-  twitter?: boolean;
-  whatsapp?: boolean;
-  email?: boolean;
-}
-
-const DEFAULT_SHARING: SharingConfig = {
-  message: "You're invited! Join us for our special day.",
-  facebook: true,
-  twitter: true,
-  whatsapp: true,
-  email: true,
-};
 
 export function SharingPage() {
-  const { event, eventId } = useOutletContext<EventContextValue>();
-  const queryClient = useQueryClient();
-  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const { event, eventId } = useEventContext();
   const [copied, setCopied] = useState(false);
 
   const isPublished = event.is_published && !!event.slug;
-  const guestPageUrl = isPublished
+  const shareUrl = isPublished
     ? `${window.location.origin}/e/${event.slug}`
-    : null;
+    : "";
 
-  const [sharingConfig, setSharingConfig] = useState<SharingConfig>(() => {
-    const draft = (event.draft_sharing_config ?? event.sharing_config) as SharingConfig | null;
-    return { ...DEFAULT_SHARING, ...draft };
-  });
-
-  const { data: sharingStats, isLoading: statsLoading } = useQuery({
-    queryKey: ["sharing-stats", eventId],
+  const { data: qrUrl, isLoading: qrLoading } = useQuery({
+    queryKey: ["qr", shareUrl],
+    enabled: !!shareUrl,
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from("sharing_events")
-        .select("*", { count: "exact", head: true })
-        .eq("event_id", eventId);
-      if (error) throw error;
-      return count ?? 0;
+      return generateQrDataUrl(shareUrl, { width: 256, margin: 2 });
     },
   });
 
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from("user_events")
-        .update({
-          draft_sharing_config: sharingConfig as unknown as Json,
-        })
-        .eq("id", eventId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-    },
-  });
-
-  async function handleGenerateQr() {
-    if (!guestPageUrl) return;
-    const dataUrl = await generateQrDataUrl(guestPageUrl, { width: 256 });
-    setQrUrl(dataUrl);
-  }
-
-  async function handleDownloadQr() {
-    if (!guestPageUrl) return;
-    await downloadQrCode(guestPageUrl, `${event.slug ?? "invitation"}-qr.png`, { width: 512 });
-  }
-
-  async function handleCopyLink() {
-    if (!guestPageUrl) return;
-    try {
-      await navigator.clipboard.writeText(guestPageUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore
-    }
-  }
-
-  function update<K extends keyof SharingConfig>(key: K, val: SharingConfig[K]) {
-    setSharingConfig((prev) => ({ ...prev, [key]: val }));
+  function copyLink() {
+    if (!shareUrl) return;
+    navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   if (!isPublished) {
     return (
       <div className="mx-auto max-w-2xl">
-        <Card className="p-8 text-center">
-          <div className="mb-4 text-4xl">🔒</div>
-          <h2 className="text-lg font-semibold text-dash-text">Publish Required</h2>
+        <Card className="text-center">
+          <div className="mb-4 flex justify-center">
+            <svg className="h-12 w-12 text-dash-muted" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.68.283 1.093s-.103.769-.283 1.09m0-2.186c.18.324.283.68.283 1.093s-.103.769-.283 1.09m-4.5 1.093a2.25 2.25 0 1 0 0-2.186m0 2.186c.18.324.283.68.283 1.093s-.103.769-.283 1.09M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-semibold text-dash-text">Not published yet</h2>
           <p className="mt-2 text-sm text-dash-muted">
             Publish your invitation website to enable the Guest Page.
           </p>
@@ -107,108 +49,85 @@ export function SharingPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-dash-text">Share Your Invitation</h2>
-        <p className="text-sm text-dash-muted">Share your invitation website with guests.</p>
+        <h1 className="text-2xl font-bold text-dash-text">Share</h1>
+        <p className="mt-1 text-sm text-dash-muted">
+          Share your invitation website with guests.
+        </p>
       </div>
 
-      {/* Guest Page Link */}
-      <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Guest Page URL</h3>
-        <div className="flex items-center gap-2">
+      <Card>
+        <div className="mb-4 flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-dash-text">Website URL</h2>
+          <Badge variant="success">Published</Badge>
+        </div>
+        <div className="flex gap-2">
           <Input
-            value={guestPageUrl ?? ""}
+            type="text"
+            value={shareUrl}
             readOnly
             className="flex-1"
           />
-          <Button variant="secondary" onClick={handleCopyLink}>
+          <Button onClick={copyLink} variant={copied ? "secondary" : "primary"}>
             {copied ? "Copied!" : "Copy"}
           </Button>
         </div>
-        <p className="mt-2 text-xs text-dash-muted">
-          Share this link with your guests so they can RSVP and view your invitation.
+        <p className="mt-2 text-sm text-dash-muted">
+          Share this link with your guests so they can RSVP and view event details.
         </p>
       </Card>
 
-      {/* QR Code */}
-      <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">QR Code</h3>
-        <p className="mb-4 text-sm text-dash-muted">
-          Generate a QR code that links directly to your guest page.
-        </p>
-        <div className="flex flex-col items-center gap-4">
-          {qrUrl ? (
-            <img src={qrUrl} alt="QR Code" className="h-48 w-48 rounded-md border border-dash-border" />
-          ) : (
-            <div className="flex h-48 w-48 items-center justify-center rounded-md border border-dashed border-dash-border bg-dash-bg text-dash-muted">
-              <span className="text-sm">QR code will appear here</span>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={handleGenerateQr}>
-              Generate QR
-            </Button>
-            <Button variant="secondary" onClick={handleDownloadQr} disabled={!qrUrl}>
-              Download QR
+      <Card>
+        <h2 className="mb-4 text-lg font-semibold text-dash-text">QR Code</h2>
+        {qrLoading ? (
+          <div className="flex justify-center py-8">
+            <LoadingSpinner size="lg" />
+          </div>
+        ) : qrUrl ? (
+          <div className="flex flex-col items-center gap-4">
+            <img src={qrUrl} alt="QR Code" className="h-48 w-48 rounded-lg border border-dash-border" />
+            <Button
+              variant="secondary"
+              onClick={() => downloadQrCode(shareUrl, `${event.slug}-qr.png`, { width: 512 })}
+            >
+              Download QR Code
             </Button>
           </div>
-        </div>
-      </Card>
-
-      {/* Sharing Message */}
-      <Card className="p-4 space-y-3">
-        <h3 className="text-sm font-semibold text-dash-text">Sharing Message</h3>
-        <Input
-          label="Default Message"
-          value={sharingConfig.message ?? ""}
-          onChange={(e) => update("message", e.target.value)}
-          placeholder="You're invited!"
-        />
-        <div className="space-y-2">
-          {(["facebook", "twitter", "whatsapp", "email"] as const).map((platform) => (
-            <label key={platform} className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={sharingConfig[platform] ?? false}
-                onChange={(e) => update(platform, e.target.checked)}
-                className="rounded border-dash-border"
-              />
-              <span className="text-sm capitalize text-dash-text">{platform}</span>
-            </label>
-          ))}
-        </div>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-          disabled={saveMutation.isPending}
-        >
-          Save Sharing Settings
-        </Button>
-        {saveMutation.isError && (
-          <p className="text-sm text-dash-danger">
-            {saveMutation.error?.message ?? "Failed to save"}
-          </p>
-        )}
-        {saveMutation.isSuccess && (
-          <p className="text-sm text-green-700">Saved successfully!</p>
-        )}
-      </Card>
-
-      {/* Sharing Stats */}
-      <Card className="p-4">
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Sharing Stats</h3>
-        {statsLoading ? (
-          <LoadingSpinner size="sm" />
         ) : (
-          <div className="flex items-center gap-2">
-            <span className="text-2xl font-bold text-dash-primary">{sharingStats ?? 0}</span>
-            <span className="text-sm text-dash-muted">total shares</span>
-          </div>
+          <p className="text-sm text-dash-muted">QR code unavailable.</p>
         )}
+      </Card>
+
+      <Card>
+        <h2 className="mb-4 text-lg font-semibold text-dash-text">Social Sharing</h2>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(`You're invited! ${shareUrl}`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg border border-dash-border px-4 py-2 text-sm font-medium text-dash-text hover:bg-dash-bg"
+          >
+            WhatsApp
+          </a>
+          <a
+            href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg border border-dash-border px-4 py-2 text-sm font-medium text-dash-text hover:bg-dash-bg"
+          >
+            Facebook
+          </a>
+          <a
+            href={`https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg border border-dash-border px-4 py-2 text-sm font-medium text-dash-text hover:bg-dash-bg"
+          >
+            Twitter / X
+          </a>
+        </div>
       </Card>
     </div>
   );
 }
-
-export default SharingPage;

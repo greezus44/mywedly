@@ -2,23 +2,24 @@ import QRCode from "qrcode";
 
 export async function generateQrDataUrl(
   text: string,
-  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } },
+  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
 ): Promise<string> {
-  return QRCode.toDataURL(text, {
+  const opts = {
     width: options?.width ?? 256,
     margin: options?.margin ?? 2,
     color: {
       dark: options?.color?.dark ?? "#000000",
       light: options?.color?.light ?? "#ffffff",
     },
-    errorCorrectionLevel: "M",
-  });
+    errorCorrectionLevel: "M" as const,
+  };
+  return QRCode.toDataURL(text, opts);
 }
 
 export async function downloadQrCode(
   text: string,
   filename = "qr-code.png",
-  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } },
+  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
 ): Promise<void> {
   const dataUrl = await generateQrDataUrl(text, options);
   const link = document.createElement("a");
@@ -32,18 +33,18 @@ export async function downloadQrCode(
 export async function downloadQrSvg(
   text: string,
   filename = "qr-code.svg",
-  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } },
+  options?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
 ): Promise<void> {
-  const svg = await QRCode.toString(text, {
-    type: "svg",
+  const opts = {
     width: options?.width ?? 256,
     margin: options?.margin ?? 2,
     color: {
       dark: options?.color?.dark ?? "#000000",
       light: options?.color?.light ?? "#ffffff",
     },
-    errorCorrectionLevel: "M",
-  });
+    errorCorrectionLevel: "M" as const,
+  };
+  const svg = await QRCode.toString(text, { ...opts, type: "svg" });
   const blob = new Blob([svg], { type: "image/svg+xml" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

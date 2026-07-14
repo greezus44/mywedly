@@ -1,38 +1,57 @@
-import type { ReactNode } from "react";
+import React, { useState } from "react";
 import { cn } from "../../lib/utils";
 
-interface SplitEditorProps {
-  editor: ReactNode;
-  preview: ReactNode;
-  previewClassName?: string;
-  editorRatio?: number; // 0-1, fraction of width for editor (default 0.5)
+export interface SplitEditorProps {
+  editor: React.ReactNode;
+  preview: React.ReactNode;
+  className?: string;
+  initialSplit?: number; // percentage for editor width, 0-100
 }
 
-export function SplitEditor({
-  editor,
-  preview,
-  previewClassName,
-  editorRatio = 0.5,
-}: SplitEditorProps) {
-  const editorWidth = `${editorRatio * 100}%`;
-  const previewWidth = `${(1 - editorRatio) * 100}%`;
+export function SplitEditor({ editor, preview, className, initialSplit = 50 }: SplitEditorProps) {
+  const [split, setSplit] = useState(initialSplit);
+  const [dragging, setDragging] = useState(false);
+
+  function onMouseDown(e: React.MouseEvent) {
+    e.preventDefault();
+    setDragging(true);
+
+    function onMove(ev: MouseEvent) {
+      const container = containerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+      setSplit(Math.max(20, Math.min(80, pct)));
+    }
+    function onUp() {
+      setDragging(false);
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }
+
+  const containerRef = React.useRef<HTMLDivElement>(null);
 
   return (
-    <div className="flex h-full w-full overflow-hidden rounded-lg border border-dash-border bg-dash-surface">
+    <div ref={containerRef} className={cn("flex h-full w-full overflow-hidden", className)}>
       <div
-        className="h-full overflow-y-auto border-r border-dash-border p-4 scrollbar-thin"
-        style={{ width: editorWidth, flexShrink: 0 }}
+        className="overflow-auto scrollbar-thin"
+        style={{ width: `${split}%` }}
       >
         {editor}
       </div>
       <div
-        className={cn("h-full overflow-y-auto scrollbar-thin", previewClassName)}
-        style={{ width: previewWidth, flexShrink: 0 }}
+        onMouseDown={onMouseDown}
+        className="w-1 cursor-col-resize bg-dash-border hover:bg-dash-primary transition-colors"
+      />
+      <div
+        className="overflow-auto scrollbar-thin"
+        style={{ width: `${100 - split}%` }}
       >
         {preview}
       </div>
     </div>
   );
 }
-
-export default SplitEditor;

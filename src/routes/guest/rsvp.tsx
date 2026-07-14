@@ -1,40 +1,43 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type SubEvent, type EventRsvp } from "../../lib/supabase";
-import { useGuestAuth } from "../../lib/guest-auth";
 import { useGuestOutletContext } from "./guest-layout";
+import { useGuestAuth } from "../../lib/guest-auth";
 import { formatDate, formatTime12, isRsvpClosed } from "../../lib/utils";
 
-interface RsvpFormState {
-  status: "attending" | "declined" | "";
-  plusOneNames: string;
-  message: string;
-}
+type Status = "attending" | "not_attending" | "pending";
 
 export default function GuestRsvp() {
   const { event, slug, invitedSubEventIds } = useGuestOutletContext();
   const { guest } = useGuestAuth();
   const queryClient = useQueryClient();
 
-  // Fetch the sub-events this guest is invited to
+  const [status, setStatus] = useState<Status>("pending");
+  const [plusOne, setPlusOne] = useState(false);
+  const [plusOneNames, setPlusOneNames] = useState("");
+  const [message, setMessage] = useState("");
+  const [responses, setResponses] = useState<Record<string, Status>>({});
+  const [saved, setSaved] = useState(false);
+
+  // Fetch the Events the guest is invited to
   const { data: subEvents, isLoading } = useQuery({
     queryKey: ["guest-sub-events", event.id, invitedSubEventIds],
+    enabled: invitedSubEventIds.length > 0,
     queryFn: async () => {
-      if (invitedSubEventIds.length === 0) return [] as SubEvent[];
       const { data, error } = await supabase
         .from("sub_events")
         .select("*")
         .in("id", invitedSubEventIds)
-        .order("display_order", { ascending: true });
+        .order("sort_order", { ascending: true });
       if (error) throw error;
       return (data ?? []) as SubEvent[];
     },
-    enabled: invitedSubEventIds.length > 0,
   });
 
   // Fetch existing RSVPs for this guest
   const { data: existingRsvps } = useQuery({
     queryKey: ["guest-rsvps", event.id, guest?.id],
+    enabled: !!guest,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_rsvps")
@@ -44,200 +47,220 @@ export default function GuestRsvp() {
       if (error) throw error;
       return (data ?? []) as EventRsvp[];
     },
-    enabled: !!guest,
   });
 
-  // Build per-sub-event form state from existing RSVPs
-  const [forms, setForms] = useState<Record<string, RsvpFormState>>({});
-
+  // Initialize form from existing RSVPs
   useEffect(() => {
-    if (!subEvents) return;
-    const next: Record<string, RsvpFormState> = {};
-    for (const se of subEvents) {
-      const existing = (existingRsvps ?? []).find((r) => r.sub_event_id === se.id);
-      next[se.id] = {
-        status: (existing?.status as "attending" | "declined") ?? "",
-        plusOneNames: (existing?.plus_one_names ?? []).join(", "),
-        message: existing?.message ?? "",
-      };
+    if (!existingRsvps) return;
+    const bySub: Record<string, Status> = {};
+    let overall: Status = "pending";
+    let hasPlusOne = false;
+    let names: string[] = [];
+    let msg = "";
+    for (const r of existingRsvps) {
+      if (r.sub_event_id) {
+        bySub[r.sub_event_id] = r.status;
+      } else {
+        overall = r.status;
+        hasPlusOne = r.plus_one;
+        names = r.plus_one_names ?? [];
+        msg = r.message ?? "";
+      }
     }
-    setForms(next);
-  }, [subEvents, existingRsvps]);
+    setStatus(overall);
+    setResponses(bySub);
+    setPlusOne(hasPlusOne);
+    setPlusOneNames(names.join(", "));
+    setMessage(msg);
+  }, [existingRsvps]);
+
+  const rsvpClosed = isRsvpClosed(event.rsvp_deadline);
 
   const saveMutation = useMutation({
-    mutationFn: async ({ subEventId, form }: { subEventId: string; form: RsvpFormState }) => {
+    mutationFn: async () => {
       if (!guest) throw new Error("Not signed in");
-      const subEvent = subEvents?.find((s) => s.id === subEventId);
-      const plusOneNames = form.plusOneNames
-        .split(",")
-        .map((n) => n.trim())
-        .filter(Boolean);
-      const payload = {
+      const names = plusOne
+        ? plusOneNames.split(",").map((n) => n.trim()).filter(Boolean)
+        : [];
+      const rows: Array<{
+        event_id: string;
+        guest_id: string;
+        guest_name: string;
+        sub_event_id: string | null;
+        status: string;
+        plus_one: boolean;
+        plus_one_names: string[];
+        message: string | null;
+      }> = (subEvents ?? []).map((se) => ({
         event_id: event.id,
         guest_id: guest.id,
         guest_name: guest.name,
-        sub_event_id: subEventId,
-        status: form.status,
-        plus_ones: plusOneNames.length,
-        plus_one_names: plusOneNames,
-        message: form.message || null,
-        submitted_at: new Date().toISOString(),
-        responded_at: new Date().toISOString(),
-      };
-      const existing = (existingRsvps ?? []).find((r) => r.sub_event_id === subEventId);
-      if (existing) {
-        const { error } = await supabase.from("event_rsvps").update(payload).eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("event_rsvps").insert(payload);
-        if (error) throw error;
+        sub_event_id: se.id,
+        status: responses[se.id] ?? status,
+        plus_one: plusOne,
+        plus_one_names: names,
+        message: message || null,
+      }));
+      // If no sub-events, save a single overall row
+      if (rows.length === 0) {
+        rows.push({
+          event_id: event.id,
+          guest_id: guest.id,
+          guest_name: guest.name,
+          sub_event_id: null,
+          status,
+          plus_one: plusOne,
+          plus_one_names: names,
+          message: message || null,
+        });
       }
+      // Upsert: delete existing then insert
+      const { error: delError } = await supabase
+        .from("event_rsvps")
+        .delete()
+        .eq("event_id", event.id)
+        .eq("guest_id", guest.id);
+      if (delError) throw delError;
+      const { error: insError } = await supabase
+        .from("event_rsvps")
+        .insert(rows);
+      if (insError) throw insError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guest-rsvps", event.id, guest?.id] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
     },
   });
 
-  const [savedId, setSavedId] = useState<string | null>(null);
-
-  const events = useMemo(() => subEvents ?? [], [subEvents]);
-
   if (isLoading) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: "var(--event-primary)", borderTopColor: "transparent" }} />
-      </div>
-    );
-  }
-
-  if (events.length === 0) {
-    return (
       <section className="guest-section text-center">
-        <div className="mx-auto max-w-md">
-          <h1 className="guest-title mb-2">RSVP</h1>
-          <p className="guest-subtitle">There are no Events to RSVP to at this time. Please check back later.</p>
-        </div>
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: "var(--event-primary)", borderTopColor: "transparent" }} />
       </section>
     );
   }
 
+  const hasInvitedEvents = (subEvents ?? []).length > 0;
+
   return (
     <section className="guest-section">
-      <div className="mx-auto max-w-2xl">
-        <div className="mb-8 text-center">
-          <p className="guest-eyebrow">Your Response</p>
-          <h1 className="guest-title">RSVP</h1>
-          <p className="guest-subtitle mx-auto">Let us know which Events you'll be attending, {guest?.name ?? "guest"}.</p>
-        </div>
+      <div className="mx-auto max-w-xl">
+        <p className="guest-eyebrow text-center">RSVP</p>
+        <h1 className="guest-title mb-2 text-center">Will you join us?</h1>
+        <p className="guest-subtitle mb-8 text-center">Let us know if you'll be attending{hasInvitedEvents ? " and which Events you'll join" : ""}.</p>
 
-        <div className="space-y-6">
-          {events.map((se) => {
-            const form = forms[se.id] ?? { status: "", plusOneNames: "", message: "" };
-            const closed = isRsvpClosed(se.rsvp_deadline);
-            const saved = savedId === se.id;
-            return (
-              <div key={se.id} className="event-card">
-                <div className="mb-4">
-                  <h2 className="text-xl font-bold" style={{ color: "var(--event-heading)" }}>{se.name}</h2>
-                  {(se.date || se.time) && (
-                    <p className="text-sm" style={{ color: "var(--event-muted)" }}>
-                      {formatDate(se.date)}{se.time ? ` · ${formatTime12(se.start_time || se.time)}` : ""}
-                    </p>
-                  )}
-                  {se.venue && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{se.venue}</p>}
-                  {se.rsvp_enabled === false && (
-                    <p className="mt-1 text-xs" style={{ color: "var(--event-muted)" }}>RSVP is not required for this Event.</p>
-                  )}
-                </div>
+        {rsvpClosed && (
+          <p className="mb-6 text-center text-sm" style={{ color: "var(--event-primary)" }}>
+            The RSVP deadline ({formatDate(event.rsvp_deadline)}) has passed, but you may still update your response below.
+          </p>
+        )}
 
-                {closed ? (
-                  <p className="text-sm" style={{ color: "var(--event-muted)" }}>RSVP for this Event has closed.</p>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setForms((f) => ({ ...f, [se.id]: { ...form, status: "attending" } }))}
-                        className="event-btn-primary flex-1"
-                        style={{
-                          opacity: form.status === "attending" ? 1 : 0.5,
-                          outline: form.status === "attending" ? "2px solid var(--event-primary)" : "none",
-                        }}
-                      >
-                        Attending
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setForms((f) => ({ ...f, [se.id]: { ...form, status: "declined" } }))}
-                        className="event-btn-secondary flex-1"
-                        style={{
-                          opacity: form.status === "declined" ? 1 : 0.5,
-                          outline: form.status === "declined" ? "2px solid var(--event-primary)" : "none",
-                        }}
-                      >
-                        Decline
-                      </button>
-                    </div>
-
-                    {form.status === "attending" && (
-                      <div>
-                        <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                          Plus one names (comma separated)
-                        </label>
-                        <input
-                          type="text"
-                          value={form.plusOneNames}
-                          onChange={(e) => setForms((f) => ({ ...f, [se.id]: { ...form, plusOneNames: e.target.value } }))}
-                          className="event-input"
-                          placeholder="e.g. Jane Doe, John Doe"
-                        />
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
-                        Message (optional)
-                      </label>
-                      <textarea
-                        value={form.message}
-                        onChange={(e) => setForms((f) => ({ ...f, [se.id]: { ...form, message: e.target.value } }))}
-                        className="event-input"
-                        rows={3}
-                        placeholder="Leave a note for the hosts..."
-                      />
-                    </div>
-
+        <div className="event-card space-y-6">
+          {/* Per-Event responses */}
+          {hasInvitedEvents && (
+            <div className="space-y-4">
+              {(subEvents ?? []).map((se) => (
+                <div key={se.id}>
+                  <p className="mb-1 text-sm font-semibold" style={{ color: "var(--event-heading)" }}>{se.name}</p>
+                  <p className="mb-2 text-xs" style={{ color: "var(--event-muted)" }}>
+                    {formatDate(se.start_date)}{se.start_time ? ` · ${formatTime12(se.start_time)}` : ""}
+                    {se.venue ? ` · ${se.venue}` : ""}
+                  </p>
+                  <div className="flex gap-2">
                     <button
                       type="button"
-                      disabled={!form.status || saveMutation.isPending}
-                      onClick={() => {
-                        saveMutation.mutate(
-                          { subEventId: se.id, form },
-                          {
-                            onSuccess: () => {
-                              setSavedId(se.id);
-                              setTimeout(() => setSavedId((id) => (id === se.id ? null : id)), 2500);
-                            },
-                          },
-                        );
-                      }}
-                      className="event-btn-primary w-full"
-                      style={{ opacity: !form.status || saveMutation.isPending ? 0.6 : 1 }}
+                      onClick={() => setResponses((p) => ({ ...p, [se.id]: "attending" }))}
+                      className="event-btn-primary flex-1"
+                      style={{ opacity: (responses[se.id] ?? status) === "attending" ? 1 : 0.5 }}
                     >
-                      {saveMutation.isPending ? "Saving..." : "Save Response"}
+                      Attending
                     </button>
-
-                    {saveMutation.isError && saveMutation.variables?.subEventId === se.id && (
-                      <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>
-                        {(saveMutation.error as Error)?.message ?? "Failed to save. Please try again."}
-                      </p>
-                    )}
-                    {saved && <p className="text-center text-sm" style={{ color: "var(--event-muted)" }}>Saved — thank you!</p>}
+                    <button
+                      type="button"
+                      onClick={() => setResponses((p) => ({ ...p, [se.id]: "not_attending" }))}
+                      className="event-btn-secondary flex-1"
+                      style={{ opacity: (responses[se.id] ?? status) === "not_attending" ? 1 : 0.5 }}
+                    >
+                      Decline
+                    </button>
                   </div>
-                )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Overall response when no sub-events */}
+          {!hasInvitedEvents && (
+            <div>
+              <p className="guest-eyebrow mb-2">Your response</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStatus("attending")}
+                  className="event-btn-primary flex-1"
+                  style={{ opacity: status === "attending" ? 1 : 0.5 }}
+                >
+                  Attending
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatus("not_attending")}
+                  className="event-btn-secondary flex-1"
+                  style={{ opacity: status === "not_attending" ? 1 : 0.5 }}
+                >
+                  Decline
+                </button>
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* Plus one */}
+          {guest?.plus_one_allowed && (
+            <div>
+              <label className="flex items-center gap-2 text-sm" style={{ color: "var(--event-text)" }}>
+                <input type="checkbox" checked={plusOne} onChange={(e) => setPlusOne(e.target.checked)} className="rounded" />
+                Bringing a plus one
+              </label>
+              {plusOne && (
+                <input
+                  type="text"
+                  value={plusOneNames}
+                  onChange={(e) => setPlusOneNames(e.target.value)}
+                  className="event-input mt-2"
+                  placeholder="Plus one names (comma separated)"
+                />
+              )}
+            </div>
+          )}
+
+          {/* Message */}
+          <div>
+            <label className="guest-eyebrow mb-1 block">Message (optional)</label>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className="event-input min-h-[80px]"
+              placeholder="Leave a note for the host…"
+            />
+          </div>
+
+          {saveMutation.isError && (
+            <p className="text-sm" style={{ color: "var(--event-primary)" }}>
+              {saveMutation.error instanceof Error ? saveMutation.error.message : "Failed to save RSVP."}
+            </p>
+          )}
+          {saved && <p className="text-sm" style={{ color: "var(--event-muted)" }}>Thank you! Your RSVP has been saved.</p>}
+
+          <button
+            type="button"
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            className="event-btn-primary w-full"
+            style={{ opacity: saveMutation.isPending ? 0.6 : 1 }}
+          >
+            {saveMutation.isPending ? "Saving…" : "Submit RSVP"}
+          </button>
         </div>
       </div>
     </section>
