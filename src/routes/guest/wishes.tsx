@@ -1,24 +1,18 @@
-import React, { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type EventMessage } from "../../lib/supabase";
+import { useState } from "react";
 import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { formatDateTime } from "../../lib/utils";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase, type EventMessage } from "../../lib/supabase";
+import { formatDate } from "../../lib/utils";
 
-export default function Wishes() {
+export default function GuestWishes() {
   const { event } = useGuestOutletContext();
   const { guestName } = useGuestAuth();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
-  const {
-    data: messages,
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ["guest_messages", event.id],
-    enabled: !!event.id,
+  const { data: messages, isLoading } = useQuery({
+    queryKey: ["guest-wishes", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_messages")
@@ -30,85 +24,56 @@ export default function Wishes() {
     },
   });
 
-  const postMutation = useMutation({
+  const postMessage = useMutation({
     mutationFn: async () => {
-      const trimmed = message.trim();
-      if (!trimmed) throw new Error("Please write a message.");
       const { error } = await supabase.from("event_messages").insert({
         event_id: event.id,
-        guest_name: guestName ?? "Guest",
-        message: trimmed,
+        guest_name: guestName || "Anonymous",
+        message: message.trim(),
       });
       if (error) throw error;
     },
     onSuccess: () => {
       setMessage("");
-      setError(null);
-      queryClient.invalidateQueries({
-        queryKey: ["guest_messages", event.id],
-      });
-    },
-    onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to post message");
+      queryClient.invalidateQueries({ queryKey: ["guest-wishes", event.id] });
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    postMutation.mutate();
-  };
-
   return (
-    <div className="mx-auto max-w-3xl">
-      <h1 className="mb-2 text-center text-3xl font-bold text-event-heading">
-        Wishes
-      </h1>
-      <p className="mb-6 text-center text-sm text-event-muted">
-        Leave a message for {event.name}
-      </p>
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold">Wishes</h1>
 
-      {/* Post form */}
-      <form
-        onSubmit={handleSubmit}
-        className="event-card mb-8 flex flex-col gap-3"
-      >
+      <div className="event-card">
+        <h2 className="mb-3 text-lg font-semibold">Leave a Wish</h2>
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="Write your wishes…"
-          className="event-input min-h-[100px]"
-          maxLength={1000}
+          className="event-input"
+          rows={3}
+          placeholder="Write your wishes here..."
         />
-        {error && <p className="text-sm text-red-600">{error}</p>}
         <button
-          type="submit"
-          disabled={postMutation.isPending || !message.trim()}
-          className="event-btn-primary self-end disabled:opacity-50"
+          onClick={() => postMessage.mutate()}
+          disabled={!message.trim() || postMessage.isPending}
+          className="event-btn-primary mt-3 disabled:opacity-50"
         >
-          {postMutation.isPending ? "Posting…" : "Post message"}
+          {postMessage.isPending ? "Posting..." : "Post Wish"}
         </button>
-      </form>
+        {postMessage.isError && <p className="mt-2 text-sm text-red-600">Failed to post. Please try again.</p>}
+      </div>
 
-      {/* Messages list */}
       {isLoading ? (
-        <div className="animate-pulse text-event-muted">Loading messages…</div>
-      ) : isError ? (
-        <div className="event-card text-center text-event-muted">
-          Failed to load messages.
-        </div>
-      ) : !messages || messages.length === 0 ? (
-        <div className="event-card text-center text-event-muted">
-          No messages yet. Be the first to leave a wish!
-        </div>
+        <div className="flex justify-center py-8"><div className="h-8 w-8 animate-spin rounded-full border-2 border-event-primary border-t-transparent" /></div>
       ) : (
-        <div className="flex flex-col gap-4">
-          {messages.map((m) => (
-            <div key={m.id} className="event-card">
-              <p className="text-event-text">{m.message}</p>
-              <div className="mt-3 flex items-center justify-between text-xs text-event-muted">
-                <span className="font-medium">— {m.guest_name}</span>
-                <span>{formatDateTime(m.created_at)}</span>
-              </div>
+        <div className="space-y-4">
+          {messages?.length === 0 && (
+            <p className="text-center opacity-70">No wishes yet. Be the first to leave a wish!</p>
+          )}
+          {messages?.map((msg) => (
+            <div key={msg.id} className="event-card">
+              <p className="font-semibold">{msg.guest_name}</p>
+              <p className="mt-1 text-sm opacity-80">{msg.message}</p>
+              <p className="mt-2 text-xs opacity-50">{formatDate(msg.created_at)}</p>
             </div>
           ))}
         </div>

@@ -1,128 +1,125 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Json } from "../../lib/supabase";
-import { useOutletContext } from "./event-layout";
+import { supabase } from "../../lib/supabase";
+import { useEventContext } from "./event-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
 import { Button } from "../../components/ui/Button";
 
-interface HomeContent {
-  intro?: string;
+type ContentConfig = {
+  welcome?: string;
   story?: string;
-  details?: string;
-}
-
-const DEFAULT_CONTENT: HomeContent = {
-  intro: "",
-  story: "",
-  details: "",
+  schedule?: string;
 };
 
+function parseConfig(json: unknown): ContentConfig {
+  if (!json || typeof json !== "object") return {};
+  return (json as Record<string, unknown>) as ContentConfig;
+}
+
 export default function HomeEditor() {
-  const { event, eventId } = useOutletContext();
+  const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const existingContent = (event.draft_content ?? event.content) as HomeContent;
-
-  const [content, setContent] = useState<HomeContent>({
-    intro: existingContent?.intro ?? "",
-    story: existingContent?.story ?? "",
-    details: existingContent?.details ?? "",
-  });
-  const [savedEvent, setSavedEvent] = useState(event);
-
-  useEffect(() => {
-    setSavedEvent(event);
-  }, [event]);
+  const existing = parseConfig(event.draft_content ?? event.content);
+  const [welcome, setWelcome] = useState(existing.welcome ?? "");
+  const [story, setStory] = useState(existing.story ?? "");
+  const [schedule, setSchedule] = useState(existing.schedule ?? "");
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase
+      const config: ContentConfig = { welcome, story, schedule };
+      const { error } = await supabase
         .from("user_events")
         .update({
-          draft_content: content as unknown as Json,
+          draft_content: config,
+          updated_at: new Date().toISOString(),
         })
-        .eq("id", eventId)
-        .select()
-        .maybeSingle();
+        .eq("id", eventId);
       if (error) throw error;
-      return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["user_event", eventId] });
-      if (data) setSavedEvent(data as typeof event);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setSavedMsg("Saved successfully!");
+      setTimeout(() => setSavedMsg(null), 3000);
     },
   });
 
   const previewEvent = {
-    ...savedEvent,
-    draft_content: content as unknown as Json,
+    ...event,
+    content: { welcome, story, schedule },
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] flex-col">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-dash-text">Home Editor</h2>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-        >
-          Save Changes
-        </Button>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-dash-text">Home Editor</h1>
+          <p className="text-sm text-dash-muted">
+            Customize the content sections on your home page.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {savedMsg && <span className="text-sm text-green-600">{savedMsg}</span>}
+          <Button
+            loading={saveMutation.isPending}
+            onClick={() => saveMutation.mutate()}
+          >
+            Save Changes
+          </Button>
+        </div>
       </div>
 
       {saveMutation.isError && (
-        <p className="mb-2 text-sm text-dash-danger">
-          {saveMutation.error instanceof Error
-            ? saveMutation.error.message
-            : "Failed to save"}
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-dash-danger">
+          {saveMutation.error?.message}
         </p>
       )}
-      {saveMutation.isSuccess && (
-        <p className="mb-2 text-sm text-green-600">Changes saved successfully!</p>
-      )}
 
-      <div className="flex-1 overflow-hidden rounded-lg border border-dash-border">
-        <SplitEditor
-          editor={
-            <div className="flex flex-col gap-6">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-dash-text">
-                  Introduction
-                </label>
-                <RichTextEditor
-                  value={content.intro ?? ""}
-                  onChange={(html) => setContent((c) => ({ ...c, intro: html }))}
-                  placeholder="Welcome message for your guests..."
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-dash-text">
-                  Our Story
-                </label>
-                <RichTextEditor
-                  value={content.story ?? ""}
-                  onChange={(html) => setContent((c) => ({ ...c, story: html }))}
-                  placeholder="Share your story..."
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-dash-text">
-                  Additional Details
-                </label>
-                <RichTextEditor
-                  value={content.details ?? ""}
-                  onChange={(html) => setContent((c) => ({ ...c, details: html }))}
-                  placeholder="Any extra information for guests..."
-                />
-              </div>
+      <SplitEditor
+        editor={
+          <div className="flex flex-col gap-6">
+            {/* Welcome section */}
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-dash-text">
+                Welcome Section
+              </label>
+              <RichTextEditor
+                value={welcome}
+                onChange={setWelcome}
+                placeholder="Write a welcome message for your guests..."
+              />
             </div>
-          }
-          preview={<HomePreview event={previewEvent} draft />}
-          editorRatio={0.5}
-        />
-      </div>
+
+            {/* Story section */}
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-dash-text">
+                Our Story Section
+              </label>
+              <RichTextEditor
+                value={story}
+                onChange={setStory}
+                placeholder="Share your love story..."
+              />
+            </div>
+
+            {/* Schedule section */}
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-dash-text">
+                Schedule Overview Section
+              </label>
+              <RichTextEditor
+                value={schedule}
+                onChange={setSchedule}
+                placeholder="Give a brief overview of the day's schedule..."
+              />
+            </div>
+          </div>
+        }
+        preview={<HomePreview event={previewEvent} />}
+      />
     </div>
   );
 }

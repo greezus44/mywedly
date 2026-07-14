@@ -1,116 +1,144 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Json } from "../../lib/supabase";
-import { useOutletContext } from "./event-layout";
+import { supabase } from "../../lib/supabase";
+import { useEventContext } from "./event-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
 import { ImageUpload } from "../../components/ui/ImageUpload";
+import { Input } from "../../components/ui";
 import { Button } from "../../components/ui/Button";
-import { Input, LoadingSpinner, ErrorState } from "../../components/ui";
 
-interface CoverConfig {
-  subtitle?: string;
+type CoverConfig = {
+  heading?: string;
+  subheading?: string;
+  layout?: "centered" | "split" | "minimal";
+};
+
+function parseConfig(json: unknown): CoverConfig {
+  if (!json || typeof json !== "object") return {};
+  return (json as Record<string, unknown>) as CoverConfig;
 }
 
 export default function CoverEditor() {
-  const { event, eventId } = useOutletContext();
+  const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
+  const existingConfig = parseConfig(event.draft_cover_config ?? event.cover_config);
   const [coverImage, setCoverImage] = useState<string | null>(
     event.draft_cover_image ?? event.cover_image
   );
-  const [subtitle, setSubtitle] = useState<string>(
-    (event.draft_cover_config as CoverConfig)?.subtitle ??
-      (event.cover_config as CoverConfig)?.subtitle ??
-      ""
+  const [heading, setHeading] = useState(existingConfig.heading ?? event.name ?? "");
+  const [subheading, setSubheading] = useState(existingConfig.subheading ?? "");
+  const [layout, setLayout] = useState<CoverConfig["layout"]>(
+    existingConfig.layout ?? "centered"
   );
-  const [savedEvent, setSavedEvent] = useState(event);
-
-  useEffect(() => {
-    setSavedEvent(event);
-  }, [event]);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const config: CoverConfig = { subtitle };
-      const { data, error } = await supabase
+      const config: CoverConfig = { heading, subheading, layout };
+      const { error } = await supabase
         .from("user_events")
         .update({
           draft_cover_image: coverImage,
-          draft_cover_config: config as unknown as Json,
+          draft_cover_config: config,
+          updated_at: new Date().toISOString(),
         })
-        .eq("id", eventId)
-        .select()
-        .maybeSingle();
+        .eq("id", eventId);
       if (error) throw error;
-      return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["user_event", eventId] });
-      if (data) setSavedEvent(data as typeof event);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setSavedMsg("Saved successfully!");
+      setTimeout(() => setSavedMsg(null), 3000);
     },
   });
 
+  // Build a preview event with draft values
   const previewEvent = {
-    ...savedEvent,
-    draft_cover_image: coverImage,
-    draft_cover_config: { subtitle } as unknown as Json,
+    ...event,
+    cover_image: coverImage,
+    cover_config: { heading, subheading, layout },
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] flex-col">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-dash-text">Cover Editor</h2>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-        >
-          Save Changes
-        </Button>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-dash-text">Cover Editor</h1>
+          <p className="text-sm text-dash-muted">Customize the cover page of your website.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {savedMsg && (
+            <span className="text-sm text-green-600">{savedMsg}</span>
+          )}
+          <Button
+            loading={saveMutation.isPending}
+            onClick={() => saveMutation.mutate()}
+          >
+            Save Changes
+          </Button>
+        </div>
       </div>
 
       {saveMutation.isError && (
-        <p className="mb-2 text-sm text-dash-danger">
-          {saveMutation.error instanceof Error
-            ? saveMutation.error.message
-            : "Failed to save"}
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-dash-danger">
+          {saveMutation.error?.message}
         </p>
       )}
-      {saveMutation.isSuccess && (
-        <p className="mb-2 text-sm text-green-600">Changes saved successfully!</p>
-      )}
 
-      <div className="flex-1 overflow-hidden rounded-lg border border-dash-border">
-        <SplitEditor
-          editor={
-            <div className="flex flex-col gap-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-dash-text">
-                  Cover Image
-                </label>
-                <ImageUpload
-                  value={coverImage}
-                  onChange={setCoverImage}
-                  eventId={eventId}
-                  aspect="16/9"
-                />
-              </div>
-              <Input
-                label="Subtitle"
-                value={subtitle}
-                onChange={(e) => setSubtitle(e.target.value)}
-                placeholder="e.g. Join us for our special day"
+      <SplitEditor
+        editor={
+          <div className="flex flex-col gap-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-dash-text">
+                Cover Image
+              </label>
+              <ImageUpload
+                value={coverImage}
+                onChange={setCoverImage}
+                eventId={eventId}
+                aspect="wide"
               />
-              <p className="text-sm text-dash-muted">
-                The cover image and subtitle appear at the top of your invitation
-                website. This is the first thing guests see.
-              </p>
             </div>
-          }
-          preview={<CoverPreview event={previewEvent} draft />}
-          editorRatio={0.4}
-        />
-      </div>
+
+            <Input
+              label="Heading"
+              value={heading}
+              onChange={(e) => setHeading(e.target.value)}
+              placeholder={event.name || "Our Wedding"}
+            />
+
+            <Input
+              label="Subheading"
+              value={subheading}
+              onChange={(e) => setSubheading(e.target.value)}
+              placeholder="e.g. June 15, 2025"
+            />
+
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-dash-text">Layout</label>
+              <div className="flex gap-2">
+                {(["centered", "split", "minimal"] as const).map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => setLayout(l)}
+                    className={`rounded-md border px-3 py-1.5 text-sm capitalize transition-colors ${
+                      layout === l
+                        ? "border-dash-primary bg-dash-primary text-dash-primary-fg"
+                        : "border-dash-border bg-dash-surface text-dash-text hover:border-dash-primary/50"
+                    }`}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        }
+        preview={<CoverPreview event={previewEvent} />}
+      />
     </div>
   );
 }

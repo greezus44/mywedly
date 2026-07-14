@@ -1,147 +1,89 @@
-import React, { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase, type SubEvent, type Json } from "../../lib/supabase";
+import { useState, useEffect } from "react";
 import { useGuestOutletContext } from "./guest-layout";
+import { useQuery } from "@tanstack/react-query";
+import { supabase, type SubEvent } from "../../lib/supabase";
 import { RichTextContent } from "../../lib/sanitize";
-import {
-  formatDate,
-  formatTime12,
-  getCountdown,
-  to12Hour,
-} from "../../lib/utils";
+import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
 
-export default function Home() {
-  const { event, slug } = useGuestOutletContext();
-  const [countdown, setCountdown] = useState(() =>
-    getCountdown(event.event_date)
-  );
+export default function GuestHome() {
+  const { event, invitedSubEventIds } = useGuestOutletContext();
+  const [countdown, setCountdown] = useState(getCountdown(event.event_date));
 
-  // Update countdown every second
   useEffect(() => {
     if (!event.event_date) return;
-    const interval = setInterval(() => {
-      setCountdown(getCountdown(event.event_date));
-    }, 1000);
-    return () => clearInterval(interval);
+    const timer = setInterval(() => setCountdown(getCountdown(event.event_date)), 1000);
+    return () => clearInterval(timer);
   }, [event.event_date]);
 
-  const { data: subEvents, isLoading } = useQuery({
-    queryKey: ["guest_sub_events", event.id],
-    enabled: !!event.id,
+  // Only fetch sub-events the guest is invited to
+  const { data: subEvents } = useQuery({
+    queryKey: ["guest-invited-sub-events-data", event.id, invitedSubEventIds],
     queryFn: async () => {
+      if (invitedSubEventIds.length === 0) return [];
       const { data, error } = await supabase
         .from("sub_events")
         .select("*")
-        .eq("parent_event_id", event.id)
+        .in("id", invitedSubEventIds)
         .order("display_order", { ascending: true });
       if (error) throw error;
       return data as SubEvent[];
     },
+    enabled: invitedSubEventIds.length > 0,
   });
 
-  const content = event.content as Record<string, unknown> | null;
-  const introHtml =
-    content && typeof content === "object" && "intro" in content
-      ? (content.intro as string)
-      : "";
+  const content = (event.content ?? {}) as { welcome?: string; story?: string; schedule?: string };
 
   return (
-    <div className="flex flex-col gap-8">
-      {/* Cover hero */}
-      {event.cover_image && (
-        <div className="relative h-64 overflow-hidden rounded-lg">
-          <img
-            src={event.cover_image}
-            alt={event.name}
-            className="h-full w-full object-cover"
-          />
+    <div className="space-y-8">
+      {countdown && (
+        <div className="event-card text-center">
+          <p className="mb-2 text-sm opacity-70">Counting down to {event.name}</p>
+          <div className="flex justify-center gap-6 text-3xl font-bold">
+            {countdown.days > 0 && <div><span>{countdown.days}</span><span className="ml-1 text-sm font-normal opacity-60">days</span></div>}
+            <div><span>{countdown.hours}</span><span className="ml-1 text-sm font-normal opacity-60">hrs</span></div>
+            <div><span>{countdown.minutes}</span><span className="ml-1 text-sm font-normal opacity-60">min</span></div>
+            <div><span>{countdown.seconds}</span><span className="ml-1 text-sm font-normal opacity-60">sec</span></div>
+          </div>
         </div>
       )}
 
-      {/* Title & date */}
-      <div className="text-center">
-        <h1 className="mb-2 text-4xl font-bold text-event-heading">
-          {event.name}
-        </h1>
-        {event.event_type && (
-          <p className="mb-4 text-sm uppercase tracking-widest text-event-muted">
-            {event.event_type}
-          </p>
-        )}
-        <div className="space-y-1">
-          {event.event_date && (
-            <p className="text-event-text">
-              {formatDate(event.event_date)}
-              {event.event_time && ` at ${to12Hour(event.event_time)}`}
-            </p>
-          )}
-          {event.venue && <p className="text-event-text">{event.venue}</p>}
-          {event.address && (
-            <p className="text-sm text-event-muted">{event.address}</p>
-          )}
-        </div>
-      </div>
-
-      {/* Countdown */}
-      {event.event_date && !countdown.isPast && (
-        <div className="flex justify-center gap-6">
-          {(["days", "hours", "minutes", "seconds"] as const).map((unit) => (
-            <div key={unit} className="text-center">
-              <div className="text-3xl font-bold text-event-heading">
-                {countdown[unit]}
-              </div>
-              <div className="text-xs uppercase text-event-muted">{unit}</div>
-            </div>
-          ))}
-        </div>
+      {content.welcome && (
+        <section className="event-card">
+          <h2 className="mb-4 text-2xl font-bold">Welcome</h2>
+          <RichTextContent html={content.welcome} />
+        </section>
       )}
 
-      {/* Rich text content */}
-      {introHtml && (
-        <div className="mx-auto max-w-2xl">
-          <RichTextContent html={introHtml} />
-        </div>
+      {content.story && (
+        <section className="event-card">
+          <h2 className="mb-4 text-2xl font-bold">Our Story</h2>
+          <RichTextContent html={content.story} />
+        </section>
       )}
 
-      {/* Events list */}
-      <div>
-        <h2 className="mb-4 text-2xl font-bold text-event-heading">Events</h2>
-        {isLoading ? (
-          <div className="animate-pulse text-event-muted">Loading events…</div>
-        ) : !subEvents || subEvents.length === 0 ? (
-          <p className="text-sm text-event-muted">
-            No additional events have been scheduled.
-          </p>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {subEvents.map((se) => (
-              <div
-                key={se.id}
-                className="event-card flex flex-col gap-1"
-              >
-                <h3 className="text-lg font-semibold text-event-heading">
-                  {se.name}
-                </h3>
-                {se.description && (
-                  <p className="text-sm text-event-muted">{se.description}</p>
-                )}
-                <div className="mt-1 flex flex-wrap gap-3 text-sm text-event-text">
-                  {se.date && <span>{formatDate(se.date)}</span>}
-                  {se.start_time && (
-                    <span>{formatTime12(se.start_time)}</span>
-                  )}
-                  {se.venue && <span>📍 {se.venue}</span>}
-                </div>
-                {se.dress_code && (
-                  <p className="text-xs text-event-muted">
-                    Dress code: {se.dress_code}
-                  </p>
-                )}
+      {content.schedule && (
+        <section className="event-card">
+          <h2 className="mb-4 text-2xl font-bold">Details</h2>
+          <RichTextContent html={content.schedule} />
+        </section>
+      )}
+
+      {subEvents && subEvents.length > 0 && (
+        <section className="event-card">
+          <h2 className="mb-4 text-2xl font-bold">Events</h2>
+          <div className="space-y-3">
+            {subEvents.map((sub) => (
+              <div key={sub.id} className="rounded-lg border border-event-border p-4">
+                <h3 className="text-lg font-semibold">{sub.name}</h3>
+                {sub.date && <p className="text-sm opacity-70">{formatDate(sub.date)}</p>}
+                {sub.time && <p className="text-sm opacity-70">{formatTime12(sub.time)}</p>}
+                {sub.venue && <p className="text-sm opacity-70">{sub.venue}</p>}
+                {sub.description && <p className="mt-2 text-sm">{sub.description}</p>}
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </section>
+      )}
     </div>
   );
 }

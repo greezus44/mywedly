@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useMemo, useState, useEffect } from "react";
-import { DEFAULT_THEME, themeToEventCssVars, type ThemeConfig } from "./theme";
+import { ThemeConfig, DEFAULT_THEME, themeToEventCssVars } from "./theme";
 
 interface EventThemeContextValue {
   theme: ThemeConfig;
@@ -23,24 +23,11 @@ export function EventThemeProvider({
 
   const cssVars = useMemo(() => themeToEventCssVars(theme), [theme]);
 
-  const style = useMemo(() => {
-    const style: Record<string, string> = { ...cssVars };
-    if (theme.bgType === "gradient" && theme.bgGradient) {
-      style.backgroundImage = theme.bgGradient;
-    } else if (theme.bgType === "image" && theme.bgImage) {
-      style.backgroundImage = `url(${theme.bgImage})`;
-      style.backgroundSize = "cover";
-      style.backgroundPosition = theme.bgImagePosition ?? "center";
-      if (theme.bgOverlayOpacity !== undefined) {
-        style.backgroundImage = `linear-gradient(rgba(0,0,0,${theme.bgOverlayOpacity}), rgba(0,0,0,${theme.bgOverlayOpacity})), url(${theme.bgImage})`;
-      }
-    }
-    return style;
-  }, [cssVars, theme]);
+  const value = useMemo(() => ({ theme, setTheme }), [theme]);
 
   return (
-    <EventThemeContext.Provider value={{ theme, setTheme }}>
-      <div className="event-themed" style={style}>
+    <EventThemeContext.Provider value={value}>
+      <div className="event-themed" style={cssVars as React.CSSProperties}>
         {children}
       </div>
     </EventThemeContext.Provider>

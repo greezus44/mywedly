@@ -1,57 +1,67 @@
 import React, { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../lib/supabase";
-import { useOutletContext } from "./event-layout";
-import { slugify, isValidSlug } from "../../lib/theme";
-import { Button } from "../../components/ui/Button";
+import { useEventContext } from "./event-layout";
 import { Input } from "../../components/ui";
+import { Button } from "../../components/ui/Button";
+import { slugify, isValidSlug } from "../../lib/theme";
 import { generateQrDataUrl, downloadQrCode } from "../../lib/qr";
 
-export default function Sharing() {
-  const { event, eventId } = useOutletContext();
+export default function SharingPage() {
+  const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
   const [slug, setSlug] = useState(event.draft_slug ?? event.slug ?? "");
   const [slugError, setSlugError] = useState<string | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
-  const guestUrl = `${window.location.origin}/e/${slug}`;
+  const origin = window.location.origin;
+  const guestUrl = `${origin}/e/${slug || "your-event"}`;
 
   useEffect(() => {
     if (slug) {
-      generateQrDataUrl(guestUrl).then(setQrDataUrl).catch(() => {});
+      generateQrDataUrl(`${origin}/e/${slug}`).then(setQrUrl).catch(() => setQrUrl(null));
+    } else {
+      setQrUrl(null);
     }
-  }, [guestUrl]);
+  }, [slug, origin]);
 
-  const saveSlugMutation = useMutation({
+  const slugMutation = useMutation({
     mutationFn: async () => {
       if (!isValidSlug(slug)) {
-        throw new Error("Invalid slug. Use only lowercase letters, numbers, and hyphens (2-80 chars).");
+        throw new Error("Invalid slug. Use lowercase letters, numbers, and hyphens (min 2 chars).");
       }
-      const { data, error } = await supabase
+      // Check uniqueness
+      const { data: existing, error: checkErr } = await supabase
         .from("user_events")
-        .update({ draft_slug: slug })
-        .eq("id", eventId)
-        .select()
+        .select("id")
+        .eq("draft_slug", slug)
+        .neq("id", eventId)
         .maybeSingle();
+      if (checkErr) throw checkErr;
+      if (existing) throw new Error("This URL is already taken. Please choose another.");
+
+      const { error } = await supabase
+        .from("user_events")
+        .update({
+          draft_slug: slug,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", eventId);
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user_event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
       setSlugError(null);
+      setSavedMsg("URL saved!");
+      setTimeout(() => setSavedMsg(null), 3000);
     },
-    onError: (err) => {
-      setSlugError(err instanceof Error ? err.message : "Failed to save slug");
+    onError: (err: Error) => {
+      setSlugError(err.message);
     },
   });
-
-  const handleSlugChange = (value: string) => {
-    const slugified = slugify(value);
-    setSlug(slugified);
-    setSlugError(null);
-  };
 
   const handleCopy = async () => {
     try {
@@ -59,100 +69,102 @@ export default function Sharing() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      /* ignore */
+      // fallback
+      const input = document.createElement("input");
+      input.value = guestUrl;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
-  const handleOpenGuestPage = () => {
-    window.open(guestUrl, "_blank");
-  };
-
-  const handleDownloadQr = () => {
-    downloadQrCode(guestUrl, `${slug}-qr.png`);
-  };
-
   return (
-    <div className="mx-auto max-w-2xl">
-      <h2 className="mb-6 text-lg font-semibold text-dash-text">Sharing</h2>
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="text-xl font-bold text-dash-text">Sharing</h1>
+        <p className="text-sm text-dash-muted">Share your invitation website with guests.</p>
+      </div>
 
-      {/* Slug editor */}
-      <div className="mb-6 rounded-lg border border-dash-border bg-dash-surface p-4">
-        <h3 className="mb-1 text-sm font-semibold text-dash-text">
-          Website URL
-        </h3>
-        <p className="mb-3 text-sm text-dash-muted">
-          Customize the URL for your invitation website.
+      {/* URL Editor */}
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-6">
+        <h2 className="text-lg font-semibold text-dash-text">Website URL</h2>
+        <p className="mt-1 text-sm text-dash-muted">
+          Customize the URL your guests will visit.
         </p>
-        <div className="flex items-center gap-2">
-          <span className="whitespace-nowrap text-sm text-dash-muted">
-            {window.location.origin}/e/
+
+        <div className="mt-4 flex items-center gap-2">
+          <span className="whitespace-nowrap rounded-md border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-muted">
+            {origin}/e/
           </span>
           <Input
             value={slug}
-            onChange={(e) => handleSlugChange(e.target.value)}
-            placeholder="my-event"
+            onChange={(e) => setSlug(slugify(e.target.value))}
+            placeholder="your-event"
             error={slugError ?? undefined}
             className="flex-1"
           />
-        </div>
-        <div className="mt-3 flex items-center gap-2">
           <Button
-            onClick={() => saveSlugMutation.mutate()}
-            loading={saveSlugMutation.isPending}
-            size="sm"
+            loading={slugMutation.isPending}
+            onClick={() => slugMutation.mutate()}
+            disabled={slug === (event.draft_slug ?? event.slug)}
           >
-            Save URL
+            Save
           </Button>
-          {saveSlugMutation.isSuccess && !slugError && (
-            <span className="text-sm text-green-600">URL saved!</span>
-          )}
         </div>
-      </div>
 
-      {/* Guest link */}
-      <div className="mb-6 rounded-lg border border-dash-border bg-dash-surface p-4">
-        <h3 className="mb-1 text-sm font-semibold text-dash-text">
-          Guest Link
-        </h3>
-        <p className="mb-3 text-sm text-dash-muted">
-          Share this link with your guests so they can access your invitation website.
-        </p>
-        <div className="flex items-center gap-2 rounded-md border border-dash-border bg-dash-bg px-3 py-2">
-          <span className="flex-1 truncate text-sm text-dash-text">{guestUrl}</span>
+        {savedMsg && <p className="mt-2 text-sm text-green-600">{savedMsg}</p>}
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 rounded-md border border-dash-border bg-dash-bg px-3 py-2">
+            <span className="text-sm text-dash-text">{guestUrl}</span>
+          </div>
           <Button variant="secondary" size="sm" onClick={handleCopy}>
-            {copied ? "Copied!" : "Copy"}
+            {copied ? "✓ Copied!" : "Copy Link"}
           </Button>
-        </div>
-        <div className="mt-3">
-          <Button variant="secondary" size="sm" onClick={handleOpenGuestPage}>
-            Open Guest Page
-          </Button>
+          {event.slug && (
+            <a
+              href={`${origin}/e/${event.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-dash-primary hover:underline"
+            >
+              Open Guest Page ↗
+            </a>
+          )}
         </div>
       </div>
 
       {/* QR Code */}
-      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
-        <h3 className="mb-1 text-sm font-semibold text-dash-text">
-          QR Code
-        </h3>
-        <p className="mb-3 text-sm text-dash-muted">
-          Guests can scan this QR code to open your invitation website.
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-6">
+        <h2 className="text-lg font-semibold text-dash-text">QR Code</h2>
+        <p className="mt-1 text-sm text-dash-muted">
+          Download a QR code to include in printed invitations.
         </p>
-        <div className="flex flex-col items-center gap-4">
-          {qrDataUrl ? (
+
+        <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+          {qrUrl ? (
             <img
-              src={qrDataUrl}
+              src={qrUrl}
               alt="QR Code"
-              className="h-48 w-48 rounded-md border border-dash-border"
+              className="h-48 w-48 rounded-lg border border-dash-border bg-white p-2"
             />
           ) : (
-            <div className="flex h-48 w-48 items-center justify-center rounded-md border border-dash-border bg-dash-bg">
-              <span className="text-sm text-dash-muted">Generating...</span>
+            <div className="flex h-48 w-48 items-center justify-center rounded-lg border border-dash-border bg-dash-bg">
+              <span className="text-sm text-dash-muted">Enter a URL to generate QR</span>
             </div>
           )}
-          <Button variant="secondary" size="sm" onClick={handleDownloadQr}>
-            Download QR Code
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => downloadQrCode(guestUrl, `${slug || "event"}-qr.png`)}
+              disabled={!qrUrl}
+            >
+              Download PNG
+            </Button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,197 +1,123 @@
-import React, { useEffect } from "react";
-import {
-  useParams,
-  useNavigate,
-  Outlet,
-  NavLink,
-  useOutletContext as useRRDOutletContext,
-} from "react-router-dom";
+import { useParams, Outlet, Navigate, useOutletContext, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import {
-  supabase,
-  type UserEvent,
-  type CustomPage,
-} from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME } from "../../lib/theme";
-import { cn } from "../../lib/utils";
-import { type GuestOutletContext } from "./guest-layout";
-
-export type RustyOutletContext = GuestOutletContext;
-
-export function useRustyOutletContext(): RustyOutletContext {
-  return useRRDOutletContext<RustyOutletContext>();
-}
+import { RUSTY_THEME, jsonToTheme, type ThemeConfig } from "../../lib/theme";
+import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
+import { useGuestOutletContext as useGuestOutletContextBase, type GuestOutletContext } from "./guest-layout";
 
 export default function RustyLayout() {
   const { slug } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
-  const { isAuthenticated, eventId, guestName, signOut } = useGuestAuth();
+  const { guestId, eventId, signOut } = useGuestAuth();
 
-  // Redirect to cover if not signed in
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate(`/r/${slug}`, { replace: true });
-    }
-  }, [isAuthenticated, eventId, slug, navigate]);
-
-  const {
-    data: event,
-    isLoading,
-    isError,
-  } = useQuery({
-    queryKey: ["guest_event", slug],
-    enabled: !!slug,
+  const { data: event, isLoading } = useQuery({
+    queryKey: ["published-event", slug],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("slug", slug!)
+        .eq("slug", slug)
         .eq("is_published", true)
         .maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
+    enabled: !!slug,
   });
 
   const { data: navPages } = useQuery({
-    queryKey: ["guest_nav_pages", slug],
-    enabled: !!event,
+    queryKey: ["guest-nav-pages", event?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
         .select("*")
         .eq("event_id", event!.id)
-        .eq("show_in_nav", true)
         .eq("is_published", true)
+        .eq("show_in_nav", true)
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return data as CustomPage[];
     },
+    enabled: !!event?.id,
   });
 
   const { data: footerPages } = useQuery({
-    queryKey: ["guest_footer_pages", slug],
-    enabled: !!event,
+    queryKey: ["guest-footer-pages", event?.id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
         .select("*")
         .eq("event_id", event!.id)
-        .eq("is_footer", true)
         .eq("is_published", true)
+        .eq("is_footer", true)
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return data as CustomPage[];
     },
+    enabled: !!event?.id,
   });
 
-  if (!isAuthenticated || (event && eventId !== event.id)) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <div className="animate-pulse text-dash-muted">Redirecting…</div>
-      </div>
-    );
-  }
+  const { data: invitedSubEventIds } = useQuery({
+    queryKey: ["guest-invited-sub-events", event?.id, guestId],
+    queryFn: async () => {
+      const invitations = await resolveGuestInvitations(supabase, guestId!, event!.id);
+      return getInvitedSubEventIds(invitations);
+    },
+    enabled: !!event?.id && !!guestId,
+  });
 
   if (isLoading) {
+    return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
+  }
+
+  if (!event) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <div className="animate-pulse text-dash-muted">Loading…</div>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 text-center">
+        <h1 className="text-2xl font-bold">Invitation Not Found</h1>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
 
-  if (isError || !event) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
-        <p className="max-w-md text-lg text-dash-text">
-          This invitation website could not be found or is no longer available.
-        </p>
-      </div>
-    );
+  if (!guestId || eventId !== event.id) {
+    return <Navigate to={`/r/${slug}`} replace />;
   }
 
-  const navItems = [
-    { label: "Home", to: `/r/${slug}/home` },
-    { label: "Events", to: `/r/${slug}/events` },
-    { label: "RSVP", to: `/r/${slug}/rsvp` },
-    { label: "Wishes", to: `/r/${slug}/wishes` },
-    { label: "Contact", to: `/r/${slug}/contact` },
-    ...(navPages ?? []).map((p) => ({
-      label: p.nav_label ?? p.title,
-      to: `/r/${slug}/p/${p.slug}`,
-    })),
-  ];
+  const theme = RUSTY_THEME;
+  const invitedIds = invitedSubEventIds ?? [];
 
   return (
-    <EventThemeProvider initialTheme={RUSTY_THEME}>
-      <div className="flex min-h-screen flex-col">
-        {/* Header */}
-        <header className="sticky top-0 z-40 border-b border-event-border bg-event-surface/80 backdrop-blur">
-          <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4">
-            <h1 className="text-lg font-semibold text-event-heading">
+    <EventThemeProvider initialTheme={theme}>
+      <div className="min-h-screen">
+        <nav className="sticky top-0 z-50 border-b border-event-border bg-event-surface/95 backdrop-blur">
+          <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+            <Link to={`/r/${slug}/home`} className="text-lg font-bold" style={{ fontFamily: "var(--event-font-heading)" }}>
               {event.name}
-            </h1>
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-event-muted">Hi, {guestName}</span>
-              <button
-                onClick={() => {
-                  signOut();
-                  navigate(`/r/${slug}`, { replace: true });
-                }}
-                className="text-sm text-event-muted hover:text-event-text"
-              >
-                Sign out
-              </button>
+            </Link>
+            <div className="flex items-center gap-1 text-sm">
+              <Link to={`/r/${slug}/home`} className="rounded-lg px-3 py-1.5 font-medium opacity-70 hover:opacity-100" style={{ color: "var(--event-text)" }}>Home</Link>
+              {invitedIds.length > 0 && <Link to={`/r/${slug}/rsvp`} className="rounded-lg px-3 py-1.5 font-medium opacity-70 hover:opacity-100" style={{ color: "var(--event-text)" }}>RSVP</Link>}
+              <Link to={`/r/${slug}/wishes`} className="rounded-lg px-3 py-1.5 font-medium opacity-70 hover:opacity-100" style={{ color: "var(--event-text)" }}>Wishes</Link>
+              <Link to={`/r/${slug}/contact`} className="rounded-lg px-3 py-1.5 font-medium opacity-70 hover:opacity-100" style={{ color: "var(--event-text)" }}>Contact</Link>
+              {navPages?.map((page) => (
+                <Link key={page.id} to={`/r/${slug}/p/${page.slug}`} className="rounded-lg px-3 py-1.5 font-medium opacity-70 hover:opacity-100" style={{ color: "var(--event-text)" }}>
+                  {page.nav_label || page.title}
+                </Link>
+              ))}
+              <button onClick={() => { signOut(); window.location.href = `/r/${slug}`; }} className="ml-2 rounded-lg px-3 py-1.5 text-xs font-medium opacity-70 hover:opacity-100">Sign Out</button>
             </div>
           </div>
-          <nav className="border-t border-event-border">
-            <div className="mx-auto max-w-5xl px-4">
-              <div className="flex gap-1 overflow-x-auto scrollbar-thin py-1">
-                {navItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end
-                    className={({ isActive }) =>
-                      cn(
-                        "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                        isActive
-                          ? "bg-event-primary text-event-primary-fg"
-                          : "text-event-muted hover:bg-event-surface-alt hover:text-event-text"
-                      )
-                    }
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-              </div>
-            </div>
-          </nav>
-        </header>
-
-        {/* Main content */}
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
-          <Outlet context={{ event, slug: slug! }} />
+        </nav>
+        <main className="mx-auto max-w-4xl px-4 py-8">
+          <Outlet context={{ event, slug: slug!, theme, invitedSubEventIds: invitedIds } satisfies GuestOutletContext} />
         </main>
-
-        {/* Footer */}
-        {(footerPages?.length ?? 0) > 0 && (
-          <footer className="border-t border-event-border bg-event-surface">
-            <div className="mx-auto max-w-5xl px-4 py-6">
-              <div className="flex flex-wrap gap-4">
-                {footerPages!.map((p) => (
-                  <NavLink
-                    key={p.id}
-                    to={`/r/${slug}/p/${p.slug}`}
-                    className="text-sm text-event-muted hover:text-event-text"
-                  >
-                    {p.nav_label ?? p.title}
-                  </NavLink>
-                ))}
-              </div>
+        {footerPages && footerPages.length > 0 && (
+          <footer className="border-t border-event-border px-4 py-6">
+            <div className="mx-auto flex max-w-4xl flex-wrap gap-4 text-sm opacity-70">
+              {footerPages.map((page) => (
+                <Link key={page.id} to={`/r/${slug}/p/${page.slug}`} className="hover:underline">{page.nav_label || page.title}</Link>
+              ))}
             </div>
           </footer>
         )}

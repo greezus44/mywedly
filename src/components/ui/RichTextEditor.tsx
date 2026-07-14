@@ -8,151 +8,114 @@ export interface RichTextEditorProps {
   placeholder?: string;
 }
 
-function execCommand(command: string, value?: string) {
-  document.execCommand(command, false, value);
+interface ToolBarAction {
+  cmd?: string;
+  arg?: string;
+  label?: string;
+  title?: string;
+  sep?: boolean;
 }
 
-export function RichTextEditor({
-  value,
-  onChange,
-  className,
-  placeholder = "Write something...",
-}: RichTextEditorProps) {
-  const editorRef = useRef<HTMLDivElement>(null);
+const TOOLBAR_ACTIONS: ToolBarAction[] = [
+  { cmd: "bold", label: "B", title: "Bold" },
+  { cmd: "italic", label: "I", title: "Italic" },
+  { cmd: "underline", label: "U", title: "Underline" },
+  { cmd: "strikeThrough", label: "S", title: "Strikethrough" },
+  { sep: true },
+  { cmd: "formatBlock", arg: "H1", label: "H1", title: "Heading 1" },
+  { cmd: "formatBlock", arg: "H2", label: "H2", title: "Heading 2" },
+  { cmd: "formatBlock", arg: "H3", label: "H3", title: "Heading 3" },
+  { cmd: "formatBlock", arg: "P", label: "P", title: "Paragraph" },
+  { sep: true },
+  { cmd: "insertUnorderedList", label: "• List", title: "Bullet list" },
+  { cmd: "insertOrderedList", label: "1. List", title: "Numbered list" },
+  { cmd: "formatBlock", arg: "BLOCKQUOTE", label: "❝", title: "Quote" },
+  { sep: true },
+  { cmd: "createLink", label: "🔗", title: "Insert link", arg: "prompt" },
+  { cmd: "insertImage", label: "🖼", title: "Insert image", arg: "prompt" },
+];
+
+export function RichTextEditor({ value, onChange, className, placeholder }: RichTextEditorProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const lastValue = useRef<string>(value);
 
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = value || "";
+    if (ref.current && lastValue.current !== value && document.activeElement !== ref.current) {
+      ref.current.innerHTML = value || "";
+      lastValue.current = value;
     }
   }, [value]);
 
-  const handleInput = useCallback(() => {
-    if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+  useEffect(() => {
+    if (ref.current && !ref.current.innerHTML && value) {
+      ref.current.innerHTML = value;
+      lastValue.current = value;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const exec = useCallback((cmd: string, arg?: string) => {
+    let finalArg: string | undefined = arg;
+    if (arg === "prompt") {
+      if (cmd === "createLink") {
+        const url = window.prompt("Enter URL:");
+        if (!url) return;
+        finalArg = url;
+      } else if (cmd === "insertImage") {
+        const url = window.prompt("Enter image URL:");
+        if (!url) return;
+        finalArg = url;
+      }
+    }
+    document.execCommand(cmd, false, finalArg);
+    if (ref.current) {
+      lastValue.current = ref.current.innerHTML;
+      onChange(ref.current.innerHTML);
     }
   }, [onChange]);
 
-  const toolbarButtons = [
-    { label: "B", command: "bold", title: "Bold" },
-    { label: "I", command: "italic", title: "Italic" },
-    { label: "U", command: "underline", title: "Underline" },
-    { label: "S", command: "strikeThrough", title: "Strikethrough" },
-  ];
+  const handleInput = useCallback(() => {
+    if (ref.current) {
+      lastValue.current = ref.current.innerHTML;
+      onChange(ref.current.innerHTML);
+    }
+  }, [onChange]);
 
   return (
-    <div
-      className={cn(
-        "rounded-lg border border-dash-border bg-dash-surface overflow-hidden",
-        className
-      )}
-    >
+    <div className={cn("flex flex-col rounded-md border border-dash-border bg-dash-surface", className)}>
       <div className="flex flex-wrap items-center gap-1 border-b border-dash-border bg-dash-bg px-2 py-1.5">
-        {toolbarButtons.map((btn) => (
-          <button
-            key={btn.command}
-            type="button"
-            title={btn.title}
-            onClick={() => execCommand(btn.command)}
-            className="flex h-7 min-w-7 items-center justify-center rounded px-1.5 text-sm font-medium text-dash-text hover:bg-dash-border"
-          >
-            {btn.label === "B" ? (
-              <span className="font-bold">{btn.label}</span>
-            ) : btn.label === "I" ? (
-              <span className="italic">{btn.label}</span>
-            ) : btn.label === "U" ? (
-              <span className="underline">{btn.label}</span>
-            ) : (
-              <span className="line-through">{btn.label}</span>
-            )}
-          </button>
-        ))}
-        <div className="mx-1 h-5 w-px bg-dash-border" />
-        <button
-          type="button"
-          title="Heading 1"
-          onClick={() => execCommand("formatBlock", "<h1>")}
-          className="rounded px-2 py-0.5 text-sm font-medium text-dash-text hover:bg-dash-border"
-        >
-          H1
-        </button>
-        <button
-          type="button"
-          title="Heading 2"
-          onClick={() => execCommand("formatBlock", "<h2>")}
-          className="rounded px-2 py-0.5 text-sm font-medium text-dash-text hover:bg-dash-border"
-        >
-          H2
-        </button>
-        <button
-          type="button"
-          title="Heading 3"
-          onClick={() => execCommand("formatBlock", "<h3>")}
-          className="rounded px-2 py-0.5 text-sm font-medium text-dash-text hover:bg-dash-border"
-        >
-          H3
-        </button>
-        <div className="mx-1 h-5 w-px bg-dash-border" />
-        <button
-          type="button"
-          title="Bullet list"
-          onClick={() => execCommand("insertUnorderedList")}
-          className="rounded px-2 py-0.5 text-sm text-dash-text hover:bg-dash-border"
-        >
-          • List
-        </button>
-        <button
-          type="button"
-          title="Numbered list"
-          onClick={() => execCommand("insertOrderedList")}
-          className="rounded px-2 py-0.5 text-sm text-dash-text hover:bg-dash-border"
-        >
-          1. List
-        </button>
-        <div className="mx-1 h-5 w-px bg-dash-border" />
-        <button
-          type="button"
-          title="Link"
-          onClick={() => {
-            const url = window.prompt("Enter URL:");
-            if (url) execCommand("createLink", url);
-          }}
-          className="rounded px-2 py-0.5 text-sm text-dash-text hover:bg-dash-border"
-        >
-          Link
-        </button>
-        <button
-          type="button"
-          title="Align left"
-          onClick={() => execCommand("justifyLeft")}
-          className="rounded px-2 py-0.5 text-sm text-dash-text hover:bg-dash-border"
-        >
-          ⬅
-        </button>
-        <button
-          type="button"
-          title="Align center"
-          onClick={() => execCommand("justifyCenter")}
-          className="rounded px-2 py-0.5 text-sm text-dash-text hover:bg-dash-border"
-        >
-          ⬌
-        </button>
-        <button
-          type="button"
-          title="Align right"
-          onClick={() => execCommand("justifyRight")}
-          className="rounded px-2 py-0.5 text-sm text-dash-text hover:bg-dash-border"
-        >
-          ➡
-        </button>
+        {TOOLBAR_ACTIONS.map((action, i) =>
+          action.sep ? (
+            <span key={i} className="mx-1 h-5 w-px bg-dash-border" />
+          ) : (
+            <button
+              key={i}
+              type="button"
+              title={action.title}
+              onClick={() => action.cmd && exec(action.cmd, action.arg)}
+              className="min-w-[28px] rounded px-1.5 py-1 text-sm font-medium text-dash-text hover:bg-dash-surface"
+            >
+              {action.label}
+            </button>
+          )
+        )}
       </div>
       <div
-        ref={editorRef}
+        ref={ref}
         contentEditable
+        suppressContentEditableWarning
         onInput={handleInput}
+        onBlur={handleInput}
         data-placeholder={placeholder}
-        className="rich-content min-h-[120px] resize-y p-3 outline-none empty:before:text-dash-muted empty:before:content-[attr(data-placeholder)]"
-        style={{ fontFamily: "inherit" }}
+        className="rich-content min-h-[160px] flex-1 overflow-y-auto scrollbar-thin px-3 py-2 text-sm text-dash-text focus:outline-none"
       />
+      <style>{`
+        [contenteditable][data-placeholder]:empty::before {
+          content: attr(data-placeholder);
+          color: var(--dash-muted, #64748b);
+          pointer-events: none;
+        }
+      `}</style>
     </div>
   );
 }

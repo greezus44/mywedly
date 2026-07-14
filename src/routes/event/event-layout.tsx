@@ -1,55 +1,49 @@
-import React from "react";
-import {
-  useParams,
-  useNavigate,
-  Outlet,
-  NavLink,
-  useOutletContext as useRRDOutletContext,
-} from "react-router-dom";
+import React, { useState } from "react";
+import { NavLink, useParams, Outlet, useOutletContext, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { cn } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
-import { LoadingSpinner, ErrorState } from "../../components/ui";
+import { LoadingSpinner, ErrorState, Badge } from "../../components/ui";
 
-export interface EventOutletContext {
+export interface EventContext {
   event: UserEvent;
   eventId: string;
 }
 
-export function useOutletContext(): EventOutletContext {
-  return useRRDOutletContext<EventOutletContext>();
+export function useEventContext(): EventContext {
+  return useOutletContext<EventContext>();
 }
 
 const NAV_TABS = [
   { label: "Cover", to: "", end: true },
-  { label: "Login", to: "login", end: false },
-  { label: "Home", to: "home", end: false },
-  { label: "Events", to: "events", end: false },
-  { label: "Guests", to: "guests", end: false },
-  { label: "Guest Groups", to: "groups", end: false },
-  { label: "RSVP", to: "rsvp", end: false },
-  { label: "Schedule", to: "schedule", end: false },
-  { label: "Pages", to: "pages", end: false },
-  { label: "Theme", to: "theme", end: false },
-  { label: "Sharing", to: "sharing", end: false },
-  { label: "Analytics", to: "analytics", end: false },
-  { label: "Settings", to: "settings", end: false },
+  { label: "Login", to: "login" },
+  { label: "Home", to: "home" },
+  { label: "Events", to: "events" },
+  { label: "Guests", to: "guests" },
+  { label: "Guest Groups", to: "groups" },
+  { label: "RSVP", to: "rsvp" },
+  { label: "Schedule", to: "schedule" },
+  { label: "Pages", to: "pages" },
+  { label: "Theme", to: "theme" },
+  { label: "Sharing", to: "sharing" },
+  { label: "Analytics", to: "analytics" },
+  { label: "Settings", to: "settings" },
 ];
 
 export default function EventLayout() {
   const { eventId } = useParams<{ eventId: string }>();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   const {
     data: event,
     isLoading,
     isError,
     error,
+    refetch,
   } = useQuery({
-    queryKey: ["user_event", eventId],
-    enabled: !!eventId,
+    queryKey: ["event", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
@@ -57,15 +51,16 @@ export default function EventLayout() {
         .eq("id", eventId!)
         .maybeSingle();
       if (error) throw error;
-      if (!data) throw new Error("Event not found");
+      if (!data) throw new Error("Event not found.");
       return data as UserEvent;
     },
+    enabled: !!eventId,
   });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      if (!event) throw new Error("No event");
-      const { data, error } = await supabase
+      if (!event) throw new Error("Event not loaded.");
+      const { error } = await supabase
         .from("user_events")
         .update({
           name: event.draft_name ?? event.name,
@@ -85,95 +80,89 @@ export default function EventLayout() {
           rsvp_deadline: event.draft_rsvp_deadline ?? event.rsvp_deadline,
           is_published: true,
           published_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
-        .eq("id", event.id)
-        .select()
-        .maybeSingle();
+        .eq("id", event.id);
       if (error) throw error;
-      return data as UserEvent;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["user_event", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["user_events"] });
+      setPublishError(null);
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+    },
+    onError: (err: Error) => {
+      setPublishError(err.message);
     },
   });
 
-  // CRITICAL: While loading, render spinner and DO NOT render Outlet
+  // CRITICAL: While loading, render spinner and DO NOT render <Outlet>
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <LoadingSpinner size="lg" />
+        <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
 
-  // CRITICAL: On error, render error state and DO NOT render Outlet
+  // CRITICAL: On error, render error message and DO NOT render <Outlet>
   if (isError || !event) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg p-4">
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
         <ErrorState
-          title="Event not found"
-          description={
-            error instanceof Error ? error.message : "Failed to load event"
-          }
-          onRetry={() => navigate("/dashboard")}
+          message={error?.message ?? "Event not found."}
+          onRetry={() => refetch()}
         />
       </div>
     );
   }
 
-  // CRITICAL: Only on success, render Outlet with non-null context
+  // CRITICAL: Only render <Outlet> when event is successfully loaded
   return (
     <div className="min-h-screen bg-dash-bg">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-dash-border bg-dash-surface/80 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+      {/* Top bar */}
+      <header className="sticky top-0 z-40 border-b border-dash-border bg-dash-surface">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="text-dash-muted hover:text-dash-text"
-              aria-label="Back to dashboard"
-            >
-              <svg
-                className="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15 19l-7-7 7-7"
-                />
-              </svg>
-            </button>
-            <div>
-              <h1 className="text-base font-semibold text-dash-text">
-                {event.draft_name ?? event.name}
-              </h1>
-              <p className="text-xs text-dash-muted">
-                {event.is_published ? "Published" : "Draft"}
-              </p>
-            </div>
+            <Link to="/dashboard" className="text-sm text-dash-muted hover:text-dash-text">
+              ← Dashboard
+            </Link>
+            <span className="text-dash-border">/</span>
+            <span className="truncate text-sm font-semibold text-dash-text">{event.name}</span>
+            {event.is_published ? (
+              <Badge variant="success">Published</Badge>
+            ) : (
+              <Badge variant="warning">Draft</Badge>
+            )}
           </div>
-          <Button
-            onClick={() => publishMutation.mutate()}
-            loading={publishMutation.isPending}
-            size="sm"
-          >
-            {event.is_published ? "Update Published" : "Publish"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {publishError && (
+              <span className="text-xs text-dash-danger">{publishError}</span>
+            )}
+            {event.slug && (
+              <a
+                href={`${window.location.origin}/e/${event.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-dash-muted hover:text-dash-text"
+              >
+                View Site ↗
+              </a>
+            )}
+            <Button
+              size="sm"
+              loading={publishMutation.isPending}
+              onClick={() => publishMutation.mutate()}
+            >
+              {event.is_published ? "Republish" : "Publish"}
+            </Button>
+          </div>
         </div>
-      </header>
 
-      {/* Nav tabs */}
-      <nav className="sticky top-16 z-30 border-b border-dash-border bg-dash-surface">
-        <div className="mx-auto max-w-7xl px-4">
-          <div className="flex gap-1 overflow-x-auto scrollbar-thin py-1">
+        {/* Nav tabs */}
+        <nav className="mx-auto max-w-7xl overflow-x-auto px-4">
+          <div className="flex gap-1 pb-1">
             {NAV_TABS.map((tab) => (
               <NavLink
-                key={tab.label}
+                key={tab.to}
                 to={tab.to}
                 end={tab.end}
                 className={({ isActive }) =>
@@ -189,10 +178,10 @@ export default function EventLayout() {
               </NavLink>
             ))}
           </div>
-        </div>
-      </nav>
+        </nav>
+      </header>
 
-      {/* Outlet with non-null context */}
+      {/* Content — Outlet with non-null context */}
       <main className="mx-auto max-w-7xl px-4 py-6">
         <Outlet context={{ event, eventId: eventId! }} />
       </main>

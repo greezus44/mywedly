@@ -69,49 +69,32 @@ export const DEFAULT_THEME: ThemeConfig = {
 };
 
 export const RUSTY_THEME: ThemeConfig = {
-  bg: "#2a1f1a",
-  surface: "#3d2e26",
+  ...DEFAULT_THEME,
+  bg: "#2a1a0f",
+  surface: "#3d2817",
   surfaceAlt: "rgba(255,255,255,0.06)",
-  border: "#5c4238",
-  text: "#e8d5c4",
+  border: "#6b4423",
+  text: "#f5e6d3",
   heading: "#f5e6d3",
-  muted: "#c4a899",
-  primary: "#c8794a",
-  primaryHover: "#b5693e",
-  primaryFg: "#ffffff",
+  muted: "#c4a574",
+  primary: "#c2410c",
+  primaryHover: "#9a3412",
+  primaryFg: "#fff7ed",
   accent: "#e8a87c",
-  fontHeading: "'Playfair Display', Georgia, serif",
-  fontBody: "'Lora', Georgia, serif",
-  fontRich: "'Lora', Georgia, serif",
-  radius: "0.25rem",
-  fontScale: 1,
-  buttonStyle: "soft",
-  buttonSize: "md",
   bgType: "gradient",
-  bgGradient: "linear-gradient(135deg, #2a1f1a 0%, #3d2e26 100%)",
+  bgGradient: "linear-gradient(135deg, #2a1a0f 0%, #3d2817 100%)",
 };
 
-const FONT_SCALE_MAP: Record<"sm" | "md" | "lg", number> = {
-  sm: 0.875,
-  md: 1,
-  lg: 1.125,
+const FONT_SCALE_MAP: Record<string, number> = { sm: 0.9, md: 1, lg: 1.1 };
+const RADIUS_MAP: Record<string, string> = {
+  rounded: "0.5rem",
+  soft: "0.25rem",
+  square: "0rem",
 };
-
-const RADIUS_MAP: Record<"rounded" | "soft" | "square", (r: number) => string> = {
-  rounded: (r) => `${r}rem`,
-  soft: (r) => `${Math.min(r, 0.375)}rem`,
-  square: () => "0rem",
-};
-
-const BUTTON_SIZE_MAP: Record<"sm" | "md" | "lg", string> = {
-  sm: "0.5rem 1rem",
-  md: "0.625rem 1.5rem",
-  lg: "0.75rem 2rem",
-};
+const BUTTON_SIZE_MAP: Record<string, string> = { sm: "0.5rem 1rem", md: "0.625rem 1.5rem", lg: "0.75rem 2rem" };
 
 export function simplifiedToFullTheme(s: SimplifiedThemeConfig): ThemeConfig {
-  const radius = RADIUS_MAP[s.buttonStyle](s.cornerRadius / 16);
-  const fontScale = FONT_SCALE_MAP[s.fontScale];
+  const radius = RADIUS_MAP[s.buttonStyle] ?? "0.5rem";
   return {
     bg: s.backgroundColor,
     surface: s.surfaceColor,
@@ -127,23 +110,21 @@ export function simplifiedToFullTheme(s: SimplifiedThemeConfig): ThemeConfig {
     fontHeading: s.headingFont,
     fontBody: s.bodyFont,
     fontRich: s.bodyFont,
-    radius,
-    fontScale,
+    radius: `${(s.cornerRadius ?? 8) / 16}rem`,
+    fontScale: FONT_SCALE_MAP[s.fontScale] ?? 1,
     buttonStyle: s.buttonStyle,
     buttonSize: s.buttonSize,
     bgType: s.bgType,
     bgGradient: s.bgGradient,
     bgImage: s.bgImage,
-    bgImagePosition: s.bgImagePosition ?? "center",
-    bgOverlayOpacity: s.bgOverlayOpacity ?? 0.3,
+    bgImagePosition: s.bgImagePosition,
+    bgOverlayOpacity: s.bgOverlayOpacity,
   };
 }
 
 export function fullToSimplifiedTheme(t: ThemeConfig): SimplifiedThemeConfig {
-  const fontScale: "sm" | "md" | "lg" =
-    t.fontScale <= 0.9 ? "sm" : t.fontScale >= 1.1 ? "lg" : "md";
-  const radiusMatch = t.radius.match(/([\d.]+)rem/);
-  const cornerRadius = radiusMatch ? Math.round(parseFloat(radiusMatch[1]) * 16) : 8;
+  const fontScale = t.fontScale <= 0.95 ? "sm" : t.fontScale >= 1.05 ? "lg" : "md";
+  const radiusNum = Math.round(parseFloat(t.radius) * 16);
   return {
     primaryColor: t.primary,
     secondaryColor: t.accent,
@@ -153,10 +134,10 @@ export function fullToSimplifiedTheme(t: ThemeConfig): SimplifiedThemeConfig {
     secondaryTextColor: t.muted,
     headingFont: t.fontHeading,
     bodyFont: t.fontBody,
-    fontScale,
+    fontScale: fontScale as "sm" | "md" | "lg",
     buttonStyle: t.buttonStyle,
     buttonSize: t.buttonSize,
-    cornerRadius,
+    cornerRadius: radiusNum,
     bgType: t.bgType,
     bgGradient: t.bgGradient,
     bgImage: t.bgImage,
@@ -165,265 +146,139 @@ export function fullToSimplifiedTheme(t: ThemeConfig): SimplifiedThemeConfig {
   };
 }
 
-export interface ThemePreset {
-  name: string;
-  config: SimplifiedThemeConfig;
-}
-
-export const THEME_PRESETS: ThemePreset[] = [
-  {
-    name: "Minimal",
-    config: {
-      primaryColor: "#1a1a1a",
-      secondaryColor: "#6b7280",
-      backgroundColor: "#ffffff",
-      surfaceColor: "#f9fafb",
-      primaryTextColor: "#111827",
-      secondaryTextColor: "#6b7280",
-      headingFont: "Inter, sans-serif",
-      bodyFont: "Inter, sans-serif",
-      fontScale: "md",
-      buttonStyle: "rounded",
-      buttonSize: "md",
-      cornerRadius: 8,
-      bgType: "solid",
-    },
-  },
-  {
-    name: "Elegant",
-    config: {
-      primaryColor: "#9b6b3f",
-      secondaryColor: "#c4a577",
-      backgroundColor: "#faf7f2",
-      surfaceColor: "#ffffff",
-      primaryTextColor: "#3d2e1f",
-      secondaryTextColor: "#8a7050",
-      headingFont: "'Playfair Display', Georgia, serif",
-      bodyFont: "'Lora', Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "soft",
-      buttonSize: "md",
-      cornerRadius: 4,
-      bgType: "solid",
-    },
-  },
-  {
-    name: "Classic",
-    config: {
-      primaryColor: "#1e3a5f",
-      secondaryColor: "#c9a96e",
-      backgroundColor: "#f5f5f0",
-      surfaceColor: "#ffffff",
-      primaryTextColor: "#1e3a5f",
-      secondaryTextColor: "#5a6a7a",
-      headingFont: "'Cormorant Garamond', Georgia, serif",
-      bodyFont: "Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "square",
-      buttonSize: "md",
-      cornerRadius: 2,
-      bgType: "solid",
-    },
-  },
-  {
-    name: "Modern",
-    config: {
-      primaryColor: "#6366f1",
-      secondaryColor: "#a5b4fc",
-      backgroundColor: "#f8fafc",
-      surfaceColor: "#ffffff",
-      primaryTextColor: "#1e293b",
-      secondaryTextColor: "#64748b",
-      headingFont: "'Poppins', sans-serif",
-      bodyFont: "'Inter', sans-serif",
-      fontScale: "md",
-      buttonStyle: "rounded",
-      buttonSize: "md",
-      cornerRadius: 12,
-      bgType: "solid",
-    },
-  },
-  {
-    name: "Romantic",
-    config: {
-      primaryColor: "#d4626a",
-      secondaryColor: "#f4c4c9",
-      backgroundColor: "#fdf5f6",
-      surfaceColor: "#ffffff",
-      primaryTextColor: "#7a3b40",
-      secondaryTextColor: "#b07075",
-      headingFont: "'Great Vibes', cursive",
-      bodyFont: "'Lora', Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "soft",
-      buttonSize: "md",
-      cornerRadius: 16,
-      bgType: "gradient",
-      bgGradient: "linear-gradient(135deg, #fdf5f6 0%, #fce8ea 100%)",
-    },
-  },
-  {
-    name: "Luxury",
-    config: {
-      primaryColor: "#c5a572",
-      secondaryColor: "#e8d5b7",
-      backgroundColor: "#1a1a1a",
-      surfaceColor: "#2a2a2a",
-      primaryTextColor: "#f5e6d3",
-      secondaryTextColor: "#c5a572",
-      headingFont: "'Cormorant Garamond', Georgia, serif",
-      bodyFont: "'Lora', Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "soft",
-      buttonSize: "md",
-      cornerRadius: 4,
-      bgType: "gradient",
-      bgGradient: "linear-gradient(135deg, #1a1a1a 0%, #2a2520 100%)",
-    },
-  },
-  {
-    name: "Botanical",
-    config: {
-      primaryColor: "#4a7c59",
-      secondaryColor: "#a8c9a3",
-      backgroundColor: "#f4f7f2",
-      surfaceColor: "#ffffff",
-      primaryTextColor: "#2d4a35",
-      secondaryTextColor: "#6b8e6b",
-      headingFont: "'Cormorant Garamond', Georgia, serif",
-      bodyFont: "'Lora', Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "soft",
-      buttonSize: "md",
-      cornerRadius: 8,
-      bgType: "solid",
-    },
-  },
-  {
-    name: "Neutral",
-    config: {
-      primaryColor: "#8b7355",
-      secondaryColor: "#c4b59a",
-      backgroundColor: "#f7f5f0",
-      surfaceColor: "#ffffff",
-      primaryTextColor: "#4a3f35",
-      secondaryTextColor: "#8b7d6b",
-      headingFont: "'Lora', Georgia, serif",
-      bodyFont: "'Lora', Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "rounded",
-      buttonSize: "md",
-      cornerRadius: 8,
-      bgType: "solid",
-    },
-  },
-  {
-    name: "Dark",
-    config: {
-      primaryColor: "#e2b871",
-      secondaryColor: "#a08850",
-      backgroundColor: "#1c1c1e",
-      surfaceColor: "#2c2c2e",
-      primaryTextColor: "#f5f5f5",
-      secondaryTextColor: "#aeaeb2",
-      headingFont: "'Playfair Display', Georgia, serif",
-      bodyFont: "'Inter', sans-serif",
-      fontScale: "md",
-      buttonStyle: "rounded",
-      buttonSize: "md",
-      cornerRadius: 12,
-      bgType: "solid",
-    },
-  },
-  {
-    name: "Editorial",
-    config: {
-      primaryColor: "#c0392b",
-      secondaryColor: "#e67e22",
-      backgroundColor: "#fdfdfd",
-      surfaceColor: "#f8f8f8",
-      primaryTextColor: "#1a1a1a",
-      secondaryTextColor: "#7f8c8d",
-      headingFont: "'Merriweather', Georgia, serif",
-      bodyFont: "'Merriweather', Georgia, serif",
-      fontScale: "md",
-      buttonStyle: "square",
-      buttonSize: "md",
-      cornerRadius: 0,
-      bgType: "solid",
-    },
-  },
+export const RICH_FONT_OPTIONS: { label: string; value: string }[] = [
+  { label: "Georgia", value: "Georgia, serif" },
+  { label: "Times New Roman", value: "'Times New Roman', serif" },
+  { label: "Garamond", value: "Garamond, serif" },
+  { label: "Palatino", value: "Palatino, serif" },
+  { label: "Inter", value: "Inter, sans-serif" },
+  { label: "Helvetica", value: "Helvetica, sans-serif" },
+  { label: "Arial", value: "Arial, sans-serif" },
+  { label: "Verdana", value: "Verdana, sans-serif" },
+  { label: "Courier", value: "'Courier New', monospace" },
+  { label: "Brush Script", value: "'Brush Script MT', cursive" },
+  { label: "Lucida Handwriting", value: "'Lucida Handwriting', cursive" },
+  { label: "Comic Sans", value: "'Comic Sans MS', cursive" },
 ];
 
-export interface FontOption {
-  label: string;
-  value: string;
+export const HEADING_FONT_OPTIONS: { label: string; value: string }[] = RICH_FONT_OPTIONS;
+
+function preset(
+  name: string,
+  s: Omit<SimplifiedThemeConfig, never>
+): { name: string; config: SimplifiedThemeConfig } {
+  return { name, config: s };
 }
 
-export const RICH_FONT_OPTIONS: FontOption[] = [
-  { label: "Georgia (serif)", value: "Georgia, serif" },
-  { label: "Lora (serif)", value: "'Lora', Georgia, serif" },
-  { label: "Merriweather (serif)", value: "'Merriweather', Georgia, serif" },
-  { label: "Playfair Display (serif)", value: "'Playfair Display', Georgia, serif" },
-  { label: "Cormorant Garamond (serif)", value: "'Cormorant Garamond', Georgia, serif" },
-  { label: "Inter (sans-serif)", value: "'Inter', sans-serif" },
-  { label: "Poppins (sans-serif)", value: "'Poppins', sans-serif" },
-  { label: "Roboto (sans-serif)", value: "'Roboto', sans-serif" },
-  { label: "Great Vibes (cursive)", value: "'Great Vibes', cursive" },
-  { label: "Dancing Script (cursive)", value: "'Dancing Script', cursive" },
-  { label: "System UI", value: "system-ui, sans-serif" },
-  { label: "Courier (mono)", value: "'Courier New', monospace" },
+export const THEME_PRESETS: { name: string; config: SimplifiedThemeConfig }[] = [
+  preset("Minimal", {
+    primaryColor: "#0f172a", secondaryColor: "#cbd5e1", backgroundColor: "#ffffff",
+    surfaceColor: "#f8fafc", primaryTextColor: "#0f172a", secondaryTextColor: "#64748b",
+    headingFont: "Inter, sans-serif", bodyFont: "Inter, sans-serif", fontScale: "md",
+    buttonStyle: "square", buttonSize: "md", cornerRadius: 2, bgType: "solid",
+  }),
+  preset("Elegant", {
+    primaryColor: "#7c3aed", secondaryColor: "#e9d5ff", backgroundColor: "#faf5ff",
+    surfaceColor: "#ffffff", primaryTextColor: "#4c1d95", secondaryTextColor: "#7c3aed",
+    headingFont: "Georgia, serif", bodyFont: "Georgia, serif", fontScale: "md",
+    buttonStyle: "rounded", buttonSize: "md", cornerRadius: 8, bgType: "solid",
+  }),
+  preset("Classic", {
+    primaryColor: "#1e3a8a", secondaryColor: "#dbeafe", backgroundColor: "#f8fafc",
+    surfaceColor: "#ffffff", primaryTextColor: "#1e293b", secondaryTextColor: "#475569",
+    headingFont: "'Times New Roman', serif", bodyFont: "Georgia, serif", fontScale: "md",
+    buttonStyle: "soft", buttonSize: "md", cornerRadius: 4, bgType: "solid",
+  }),
+  preset("Modern", {
+    primaryColor: "#0ea5e9", secondaryColor: "#bae6fd", backgroundColor: "#f0f9ff",
+    surfaceColor: "#ffffff", primaryTextColor: "#0c4a6e", secondaryTextColor: "#0369a1",
+    headingFont: "Inter, sans-serif", bodyFont: "Inter, sans-serif", fontScale: "md",
+    buttonStyle: "rounded", buttonSize: "md", cornerRadius: 12, bgType: "solid",
+  }),
+  preset("Romantic", {
+    primaryColor: "#db2777", secondaryColor: "#fbcfe8", backgroundColor: "#fdf2f8",
+    surfaceColor: "#ffffff", primaryTextColor: "#831843", secondaryTextColor: "#be185d",
+    headingFont: "'Brush Script MT', cursive", bodyFont: "Georgia, serif", fontScale: "md",
+    buttonStyle: "rounded", buttonSize: "md", cornerRadius: 16, bgType: "solid",
+  }),
+  preset("Luxury", {
+    primaryColor: "#b45309", secondaryColor: "#fde68a", backgroundColor: "#1c1917",
+    surfaceColor: "#292524", primaryTextColor: "#fef3c7", secondaryTextColor: "#d6d3d1",
+    headingFont: "Garamond, serif", bodyFont: "Garamond, serif", fontScale: "md",
+    buttonStyle: "soft", buttonSize: "md", cornerRadius: 4, bgType: "gradient",
+    bgGradient: "linear-gradient(135deg, #1c1917 0%, #44403c 100%)",
+  }),
+  preset("Botanical", {
+    primaryColor: "#15803d", secondaryColor: "#bbf7d0", backgroundColor: "#f0fdf4",
+    surfaceColor: "#ffffff", primaryTextColor: "#14532d", secondaryTextColor: "#16a34a",
+    headingFont: "Palatino, serif", bodyFont: "Palatino, serif", fontScale: "md",
+    buttonStyle: "rounded", buttonSize: "md", cornerRadius: 10, bgType: "solid",
+  }),
+  preset("Neutral", {
+    primaryColor: "#57534e", secondaryColor: "#e7e5e4", backgroundColor: "#fafaf9",
+    surfaceColor: "#ffffff", primaryTextColor: "#1c1917", secondaryTextColor: "#78716c",
+    headingFont: "Helvetica, sans-serif", bodyFont: "Helvetica, sans-serif", fontScale: "md",
+    buttonStyle: "soft", buttonSize: "md", cornerRadius: 6, bgType: "solid",
+  }),
+  preset("Dark", {
+    primaryColor: "#f59e0b", secondaryColor: "#fde68a", backgroundColor: "#0f172a",
+    surfaceColor: "#1e293b", primaryTextColor: "#f1f5f9", secondaryTextColor: "#94a3b8",
+    headingFont: "Inter, sans-serif", bodyFont: "Inter, sans-serif", fontScale: "md",
+    buttonStyle: "rounded", buttonSize: "md", cornerRadius: 8, bgType: "solid",
+  }),
+  preset("Editorial", {
+    primaryColor: "#0f172a", secondaryColor: "#fbbf24", backgroundColor: "#fefce8",
+    surfaceColor: "#ffffff", primaryTextColor: "#0f172a", secondaryTextColor: "#475569",
+    headingFont: "Georgia, serif", bodyFont: "Inter, sans-serif", fontScale: "lg",
+    buttonStyle: "square", buttonSize: "lg", cornerRadius: 0, bgType: "solid",
+  }),
 ];
 
-export const HEADING_FONT_OPTIONS: FontOption[] = RICH_FONT_OPTIONS;
-
-export function themeToEventCssVars(theme: ThemeConfig): Record<string, string> {
+export function themeToEventCssVars(t: ThemeConfig): Record<string, string> {
   const vars: Record<string, string> = {
-    "--event-bg": theme.bg,
-    "--event-surface": theme.surface,
-    "--event-surface-alt": theme.surfaceAlt,
-    "--event-border": theme.border,
-    "--event-text": theme.text,
-    "--event-heading": theme.heading,
-    "--event-muted": theme.muted,
-    "--event-primary": theme.primary,
-    "--event-primary-hover": theme.primaryHover,
-    "--event-primary-fg": theme.primaryFg,
-    "--event-accent": theme.accent,
-    "--event-font-heading": theme.fontHeading,
-    "--event-font-body": theme.fontBody,
-    "--event-font-rich": theme.fontRich,
-    "--event-radius": theme.radius,
-    "--event-font-scale": String(theme.fontScale),
+    "--event-bg": t.bg,
+    "--event-surface": t.surface,
+    "--event-surface-alt": t.surfaceAlt,
+    "--event-border": t.border,
+    "--event-text": t.text,
+    "--event-heading": t.heading,
+    "--event-muted": t.muted,
+    "--event-primary": t.primary,
+    "--event-primary-hover": t.primaryHover,
+    "--event-primary-fg": t.primaryFg,
+    "--event-accent": t.accent,
+    "--event-font-heading": t.fontHeading,
+    "--event-font-body": t.fontBody,
+    "--event-font-rich": t.fontRich,
+    "--event-radius": t.radius,
+    "--event-font-scale": String(t.fontScale),
   };
-  if (theme.bgType === "gradient" && theme.bgGradient) {
-    vars["--event-bg-image"] = theme.bgGradient;
-  } else if (theme.bgType === "image" && theme.bgImage) {
-    vars["--event-bg-image"] = `url(${theme.bgImage})`;
-    vars["--event-bg-position"] = theme.bgImagePosition ?? "center";
-  }
+  if (t.bgGradient) vars["--event-bg-gradient"] = t.bgGradient;
+  if (t.bgImage) vars["--event-bg-image"] = `url(${t.bgImage})`;
+  if (t.bgImagePosition) vars["--event-bg-image-position"] = t.bgImagePosition;
+  if (t.bgOverlayOpacity != null) vars["--event-bg-overlay-opacity"] = String(t.bgOverlayOpacity);
   return vars;
 }
 
-export function slugify(str: string): string {
-  return str
+export function slugify(text: string): string {
+  return (text || "")
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9\s-]/g, "")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replace(/^-+|-+$/g, "");
 }
 
 export function isValidSlug(slug: string): boolean {
-  return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(slug) && slug.length >= 2 && slug.length <= 80;
+  return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(slug) && slug.length >= 2;
 }
 
 export function jsonToTheme(json: Json | null | undefined): ThemeConfig {
-  if (!json || typeof json !== "object" || Array.isArray(json)) return DEFAULT_THEME;
+  if (!json || typeof json !== "object") return { ...DEFAULT_THEME };
   const obj = json as Record<string, unknown>;
   return {
     ...DEFAULT_THEME,
-    ...obj,
-  } as unknown as ThemeConfig;
+    ...(obj as Partial<ThemeConfig>),
+  };
 }

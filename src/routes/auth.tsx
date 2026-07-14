@@ -4,8 +4,9 @@ import { supabase } from "../lib/supabase";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui";
 import { LoadingSpinner } from "../components/ui";
+import { cn } from "../lib/utils";
 
-export default function Auth() {
+export default function AuthPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -17,51 +18,76 @@ export default function Auth() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-
     try {
       if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        if (data.user) {
+        if (data.user && data.session) {
           navigate("/dashboard");
+        } else {
+          setError("Check your email to confirm your account.");
         }
       } else {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        if (data.user) {
+        if (data.session) {
           navigate("/dashboard");
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Authentication failed");
+      setError(err instanceof Error ? err.message : "Authentication failed.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-dash-bg px-4 py-12">
-      <div className="w-full max-w-sm">
-        <Link to="/" className="mb-8 block text-center">
-          <span className="text-2xl font-bold text-dash-text">
-            My<span className="text-dash-primary">Wedly</span>
-          </span>
-        </Link>
-
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm">
-          <h1 className="mb-1 text-xl font-semibold text-dash-text">
-            {mode === "signin" ? "Sign in" : "Create account"}
+    <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4">
+      <div className="w-full max-w-md">
+        <div className="mb-6 text-center">
+          <Link to="/" className="text-2xl font-bold text-dash-primary">
+            MyWedly
+          </Link>
+        </div>
+        <div className="rounded-lg border border-dash-border bg-dash-surface p-8 shadow-sm">
+          <h1 className="text-2xl font-bold text-dash-text">
+            {mode === "signin" ? "Welcome back" : "Create your account"}
           </h1>
-          <p className="mb-6 text-sm text-dash-muted">
+          <p className="mt-1 text-sm text-dash-muted">
             {mode === "signin"
-              ? "Welcome back! Sign in to manage your events."
-              : "Get started with MyWedly to create beautiful invitation websites."}
+              ? "Sign in to manage your invitation websites."
+              : "Sign up to start building your event website."}
           </p>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {/* Toggle */}
+          <div className="mt-6 inline-flex w-full rounded-md border border-dash-border bg-dash-bg p-0.5 text-sm">
+            <button
+              type="button"
+              onClick={() => setMode("signin")}
+              className={cn(
+                "flex-1 rounded px-3 py-1.5 font-medium transition-colors",
+                mode === "signin"
+                  ? "bg-dash-primary text-dash-primary-fg"
+                  : "text-dash-muted hover:text-dash-text"
+              )}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("signup")}
+              className={cn(
+                "flex-1 rounded px-3 py-1.5 font-medium transition-colors",
+                mode === "signup"
+                  ? "bg-dash-primary text-dash-primary-fg"
+                  : "text-dash-muted hover:text-dash-text"
+              )}
+            >
+              Sign Up
+            </button>
+          </div>
+
+          <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
             <Input
               label="Email"
               type="email"
@@ -78,72 +104,22 @@ export default function Auth() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
-              autoComplete={
-                mode === "signin" ? "current-password" : "new-password"
-              }
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
               minLength={6}
             />
-
             {error && (
-              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {error}
-              </div>
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-dash-danger">{error}</p>
             )}
-
             <Button type="submit" disabled={loading} className="w-full">
-              {loading ? (
-                <>
-                  <LoadingSpinner size="sm" className="text-white" />
-                  <span>{mode === "signin" ? "Signing in..." : "Creating..."}</span>
-                </>
-              ) : mode === "signin" ? (
-                "Sign in"
-              ) : (
-                "Create account"
-              )}
+              {loading ? <LoadingSpinner /> : mode === "signin" ? "Sign In" : "Sign Up"}
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-dash-muted">
-            {mode === "signin" ? (
-              <>
-                Don't have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("signup");
-                    setError(null);
-                  }}
-                  className="font-medium text-dash-primary hover:underline"
-                >
-                  Sign up
-                </button>
-              </>
-            ) : (
-              <>
-                Already have an account?{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("signin");
-                    setError(null);
-                  }}
-                  className="font-medium text-dash-primary hover:underline"
-                >
-                  Sign in
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-6 text-center">
-          <Link
-            to="/"
-            className="text-sm text-dash-muted hover:text-dash-text"
-          >
-            ← Back to home
-          </Link>
+          <p className="mt-4 text-center text-xs text-dash-muted">
+            <Link to="/" className="hover:text-dash-text">
+              ← Back to home
+            </Link>
+          </p>
         </div>
       </div>
     </div>
