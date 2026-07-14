@@ -13,60 +13,50 @@ export interface ResolveResult {
 export async function resolveGuestInvitations(
   supabase: SupabaseClient,
   guestId: string,
-  parentEventId: string
+  parentEventId: string,
 ): Promise<ResolveResult> {
-  // Fetch sub-events for the parent event
-  const { data: subEvents } = await supabase
-    .from("sub_events")
-    .select("id")
-    .eq("parent_event_id", parentEventId);
+  const [subEventsRes, membershipsRes, overridesRes] = await Promise.all([
+    supabase
+      .from("sub_events")
+      .select("id")
+      .eq("parent_event_id", parentEventId),
+    supabase
+      .from("guest_group_members")
+      .select("*")
+      .eq("guest_id", guestId),
+    supabase
+      .from("guest_invitation_overrides")
+      .select("*")
+      .eq("guest_id", guestId),
+  ]);
 
-  if (!subEvents || subEvents.length === 0) {
-    return { invitations: [] };
-  }
+  const subEventIds: string[] = (subEventsRes.data ?? []).map((s: { id: string }) => s.id);
 
-  // Fetch guest group memberships
-  const { data: memberships } = await supabase
-    .from("guest_group_members")
-    .select("*")
-    .eq("guest_id", guestId);
-
-  const groupIds = (memberships ?? []).map((m: { group_id: string }) => m.group_id);
-
-  // Fetch sub_event_group_assignments for the groups the guest belongs to
-  let groupAssignments: { sub_event_id: string; group_id: string }[] = [];
-  if (groupIds.length > 0) {
-    const { data } = await supabase
+  let assignmentsData: { sub_event_id: string; group_id: string }[] = [];
+  if (subEventIds.length > 0) {
+    const assignmentsRes = await supabase
       .from("sub_event_group_assignments")
       .select("sub_event_id, group_id")
-      .in("group_id", groupIds);
-    groupAssignments = data ?? [];
+      .in("sub_event_id", subEventIds);
+    assignmentsData = (assignmentsRes.data ?? []) as { sub_event_id: string; group_id: string }[];
   }
 
-  // Map: subEventId -> Set of groupIds assigned
-  const subEventGroupMap = new Map<string, Set<string>>();
-  for (const a of groupAssignments) {
-    if (!subEventGroupMap.has(a.sub_event_id)) {
-      subEventGroupMap.set(a.sub_event_id, new Set());
+  const groupIds: string[] = (membershipsRes.data ?? []).map((m: { group_id: string }) => m.group_id);
+  const assignmentMap = new Map<string, Set<string>>();
+  for (const a of assignmentsData) {
+    let set = assignmentMap.get(a.sub_event_id);
+    if (!set) {
+      set = new Set();
+      assignmentMap.set(a.sub_event_id, set);
     }
-    subEventGroupMap.get(a.sub_event_id)!.add(a.group_id);
+    set.add(a.group_id);
   }
-
-  // Fetch guest_invitation_overrides for this guest
-  const { data: overrides } = await supabase
-    .from("guest_invitation_overrides")
-    .select("*")
-    .eq("guest_id", guestId);
-
   const overrideMap = new Map<string, boolean>();
-  for (const o of overrides ?? []) {
+  for (const o of (overridesRes.data ?? []) as { sub_event_id: string; is_invited: boolean }[]) {
     overrideMap.set(o.sub_event_id, o.is_invited);
   }
 
-  const invitations: ResolvedInvitation[] = subEvents.map((se: { id: string }) => {
-    const subEventId = se.id;
-
-    // Override takes precedence
+  const invitations: ResolvedInvitation[] = subEventIds.map((subEventId) => {
     if (overrideMap.has(subEventId)) {
       return {
         subEventId,
@@ -74,23 +64,11 @@ export async function resolveGuestInvitations(
         source: "override",
       };
     }
-
-    // Group assignment next
-    const groups = subEventGroupMap.get(subEventId);
-    if (groups && groups.size > 0) {
-      return {
-        subEventId,
-        invited: true,
-        source: "group",
-      };
+    const assignedGroups = assignmentMap.get(subEventId);
+    if (assignedGroups && groupIds.some((g) => assignedGroups.has(g))) {
+      return { subEventId, invited: true, source: "group" };
     }
-
-    // Default: not invited (no group assignment and no override)
-    return {
-      subEventId,
-      invited: false,
-      source: "default",
-    };
+    return { subEventId, invited: true, source: "default" };
   });
 
   return { invitations };

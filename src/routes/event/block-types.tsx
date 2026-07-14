@@ -1,30 +1,29 @@
-import React from "react";
 import type { Json } from "../../lib/supabase";
-
-// ─── Block Types ────────────────────────────────────────────────────────────
 
 export type BlockType =
   | "heading"
   | "paragraph"
   | "image"
   | "gallery"
+  | "button"
   | "divider"
   | "spacer"
-  | "button"
-  | "video";
+  | "video"
+  | "quote"
+  | "list";
 
 export interface BlockContent {
   text?: string;
-  html?: string;
+  level?: 1 | 2 | 3;
   src?: string;
-  url?: string;
   alt?: string;
   images?: string[];
-  align?: "left" | "center" | "right";
-  size?: "sm" | "md" | "lg";
+  url?: string;
   label?: string;
-  link?: string;
   height?: number;
+  align?: "left" | "center" | "right";
+  items?: string[];
+  videoUrl?: string;
 }
 
 export interface Block {
@@ -33,90 +32,95 @@ export interface Block {
   content: BlockContent;
 }
 
-// ─── Block Type Definitions ──────────────────────────────────────────────────
-
-export interface BlockTypeDef {
+export interface BlockTypeMeta {
   type: BlockType;
   label: string;
   icon: string;
   description: string;
+  defaultContent: BlockContent;
 }
 
-export const BLOCK_TYPES: BlockTypeDef[] = [
+export const BLOCK_TYPES: BlockTypeMeta[] = [
   {
     type: "heading",
     label: "Heading",
     icon: "H",
     description: "A section heading",
+    defaultContent: { text: "New Heading", level: 2, align: "left" },
   },
   {
     type: "paragraph",
-    label: "Text",
+    label: "Paragraph",
     icon: "¶",
-    description: "Rich text paragraph",
+    description: "A block of text",
+    defaultContent: { text: "Write something here...", align: "left" },
   },
   {
     type: "image",
     label: "Image",
     icon: "🖼",
     description: "A single image",
+    defaultContent: { src: "", alt: "", align: "center" },
   },
   {
     type: "gallery",
     label: "Gallery",
     icon: "▦",
     description: "Multiple images in a grid",
+    defaultContent: { images: [], align: "center" },
+  },
+  {
+    type: "button",
+    label: "Button",
+    icon: "◉",
+    description: "A clickable button link",
+    defaultContent: { label: "Click Here", url: "", align: "center" },
   },
   {
     type: "divider",
     label: "Divider",
     icon: "—",
     description: "A horizontal line",
+    defaultContent: {},
   },
   {
     type: "spacer",
     label: "Spacer",
-    icon: "␣",
+    icon: "⇕",
     description: "Vertical spacing",
-  },
-  {
-    type: "button",
-    label: "Button",
-    icon: "▢",
-    description: "A clickable button link",
+    defaultContent: { height: 40 },
   },
   {
     type: "video",
     label: "Video",
     icon: "▶",
-    description: "Embedded video URL",
+    description: "Embed a video URL",
+    defaultContent: { videoUrl: "", align: "center" },
+  },
+  {
+    type: "quote",
+    label: "Quote",
+    icon: "❝",
+    description: "A styled quote block",
+    defaultContent: { text: "A memorable quote", align: "center" },
+  },
+  {
+    type: "list",
+    label: "List",
+    icon: "☰",
+    description: "A bulleted list",
+    defaultContent: { items: ["First item", "Second item"], align: "left" },
   },
 ];
 
-// ─── Block Factory ──────────────────────────────────────────────────────────
-
-let blockCounter = 0;
-
 export function createBlock(type: BlockType): Block {
-  const id = `block-${Date.now()}-${++blockCounter}`;
-  const defaultContent: Record<BlockType, BlockContent> = {
-    heading: { text: "New Heading", align: "center", size: "lg" },
-    paragraph: { html: "" },
-    image: { src: "", alt: "", align: "center" },
-    gallery: { images: [] },
-    divider: {},
-    spacer: { height: 32 },
-    button: { label: "Click Here", link: "", align: "center" },
-    video: { url: "", align: "center" },
-  };
+  const meta = BLOCK_TYPES.find((b) => b.type === type);
   return {
-    id,
+    id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     type,
-    content: defaultContent[type],
+    content: { ...(meta?.defaultContent ?? {}) },
   };
 }
-
-// ─── Block Serialization ─────────────────────────────────────────────────────
 
 export function blocksToJson(blocks: Block[]): Json {
   return blocks as unknown as Json;
@@ -124,12 +128,5 @@ export function blocksToJson(blocks: Block[]): Json {
 
 export function jsonToBlocks(json: Json | null | undefined): Block[] {
   if (!json || !Array.isArray(json)) return [];
-  return (json as unknown[]).map((item) => {
-    const obj = item as Record<string, unknown>;
-    return {
-      id: (obj.id as string) ?? `block-${Math.random()}`,
-      type: (obj.type as BlockType) ?? "paragraph",
-      content: (obj.content as BlockContent) ?? {},
-    };
-  });
+  return json as unknown as Block[];
 }

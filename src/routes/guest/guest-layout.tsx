@@ -73,7 +73,7 @@ export default function GuestLayout() {
 
   if (!authLoading && !guest && event) { navigate(`/e/${slug}/signin`, { replace: true }); return null; }
   if (authLoading || eventLoading || (event && guest && eventId === event.id && invitationsLoading)) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
-  if (eventError || !event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
+  if (eventError || !event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
   if (!guest || eventId !== event.id) { navigate(`/e/${slug}/signin`, { replace: true }); return null; }
 
   const theme = jsonToTheme(event.theme);

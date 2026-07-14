@@ -1,170 +1,141 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type Json } from "../../lib/supabase";
+import { supabase, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { ColorInput, FormField, LoadingSpinner } from "../../components/ui";
-import { Select } from "../../components/ui";
+import { ColorInput, FormField, Select } from "../../components/ui";
 import {
   THEME_PRESETS,
-  DEFAULT_THEME,
-  type ThemeConfig,
-  type SimplifiedThemeConfig,
-  simplifiedToFullTheme,
-  fullToSimplifiedTheme,
   HEADING_FONT_OPTIONS,
   RICH_FONT_OPTIONS,
+  type ThemeConfig,
 } from "../../lib/theme";
 import { cn } from "../../lib/utils";
 
-const COLOR_FIELDS: { key: keyof SimplifiedThemeConfig; label: string }[] = [
+const presetNames = Object.keys(THEME_PRESETS);
+
+const colorFields: { key: keyof ThemeConfig["colors"]; label: string }[] = [
   { key: "bg", label: "Background" },
   { key: "surface", label: "Surface" },
-  { key: "border", label: "Border" },
+  { key: "primary", label: "Primary" },
+  { key: "accent", label: "Accent" },
   { key: "text", label: "Text" },
   { key: "heading", label: "Heading" },
-  { key: "primary", label: "Primary" },
 ];
-
-const PRESET_NAMES = Object.keys(THEME_PRESETS);
 
 export function ThemeEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const currentTheme = (event.draft_theme as SimplifiedThemeConfig) ?? {};
-  const [theme, setTheme] = useState<SimplifiedThemeConfig>(currentTheme);
+  const draftTheme = (event.draft_theme as ThemeConfig | null) ?? null;
+  const initial: ThemeConfig = draftTheme ?? THEME_PRESETS.default;
+
+  const [theme, setTheme] = useState<ThemeConfig>(initial);
+  const [savedMsg, setSavedMsg] = useState(false);
 
   useEffect(() => {
-    setTheme((event.draft_theme as SimplifiedThemeConfig) ?? {});
+    const dt = (event.draft_theme as ThemeConfig | null) ?? null;
+    setTheme(dt ?? THEME_PRESETS.default);
   }, [event]);
+
+  const updateColor = (key: keyof ThemeConfig["colors"], value: string) => {
+    setTheme((t) => ({ ...t, colors: { ...t.colors, [key]: value } }));
+  };
+
+  const updateFont = (key: keyof ThemeConfig["fonts"], value: string) => {
+    setTheme((t) => ({ ...t, fonts: { ...t.fonts, [key]: value } }));
+  };
+
+  const applyPreset = (presetName: string) => {
+    const preset = THEME_PRESETS[presetName];
+    if (preset) setTheme(preset);
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("user_events")
-        .update({
-          draft_theme: theme as unknown as Json,
-        })
+        .update({ draft_theme: theme as unknown as Json })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 2000);
     },
   });
 
-  const applyPreset = (presetName: string) => {
-    const preset = THEME_PRESETS[presetName];
-    if (preset) {
-      setTheme(fullToSimplifiedTheme(preset));
-    }
-  };
-
-  const updateColor = (key: keyof SimplifiedThemeConfig, value: string) => {
-    setTheme((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const updateFont = (key: "headingFont" | "bodyFont", value: string) => {
-    setTheme((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const fullTheme: ThemeConfig = simplifiedToFullTheme(theme);
-
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-dash-text">Theme Editor</h2>
-        <Button
-          onClick={() => saveMutation.mutate()}
-          loading={saveMutation.isPending}
-        >
-          Save Changes
-        </Button>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-dash-text">Theme Editor</h2>
+        <p className="mt-1 text-sm text-dash-muted">
+          Choose a preset or customize colors and fonts for your invitation website.
+        </p>
       </div>
 
-      {saveMutation.isError && (
-        <p className="text-sm text-red-600">
-          {saveMutation.error instanceof Error
-            ? saveMutation.error.message
-            : "Failed to save"}
-        </p>
-      )}
-      {saveMutation.isSuccess && (
-        <p className="text-sm text-green-600">Saved successfully!</p>
-      )}
-
       {/* Presets */}
-      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">
-          Theme Presets
-        </h3>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
-          {PRESET_NAMES.map((name) => {
+      <div>
+        <h3 className="mb-3 text-sm font-semibold text-dash-text">Theme Presets</h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+          {presetNames.map((name) => {
             const preset = THEME_PRESETS[name];
+            const isActive =
+              theme.colors.bg === preset.colors.bg &&
+              theme.colors.primary === preset.colors.primary &&
+              theme.colors.surface === preset.colors.surface;
             return (
               <button
                 key={name}
+                type="button"
                 onClick={() => applyPreset(name)}
                 className={cn(
-                  "rounded-md border-2 p-3 text-left transition-all hover:shadow-md",
-                  "border-dash-border"
+                  "rounded-lg border-2 p-3 text-left transition-all",
+                  isActive
+                    ? "border-dash-primary ring-2 ring-dash-primary/30"
+                    : "border-dash-border hover:border-dash-primary/50",
                 )}
-                style={{
-                  backgroundColor: preset.colors.bg,
-                  borderColor: preset.colors.border,
-                }}
               >
                 <div
-                  className="mb-1 text-sm font-semibold"
-                  style={{ color: preset.colors.heading }}
+                  className="mb-2 flex h-12 items-center justify-center rounded"
+                  style={{ backgroundColor: preset.colors.bg }}
                 >
-                  {name.charAt(0).toUpperCase() + name.slice(1)}
-                </div>
-                <div className="flex gap-1">
                   <div
-                    className="h-4 w-4 rounded-full"
+                    className="h-6 w-6 rounded-full"
                     style={{ backgroundColor: preset.colors.primary }}
                   />
-                  <div
-                    className="h-4 w-4 rounded-full"
-                    style={{ backgroundColor: preset.colors.accent }}
-                  />
-                  <div
-                    className="h-4 w-4 rounded-full"
-                    style={{ backgroundColor: preset.colors.surface }}
-                  />
                 </div>
+                <span className="text-xs font-medium capitalize text-dash-text">{name}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Color Pickers */}
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
-          <h3 className="mb-3 text-sm font-semibold text-dash-text">Colors</h3>
-          <div className="space-y-3">
-            {COLOR_FIELDS.map((field) => (
-              <ColorInput
-                key={field.key}
-                label={field.label}
-                value={(theme[field.key] as string) ?? ""}
-                onChange={(v) => updateColor(field.key, v)}
-              />
-            ))}
-          </div>
+      {/* Colors */}
+      <div className="border-t border-dash-border pt-4">
+        <h3 className="mb-3 text-sm font-semibold text-dash-text">Colors</h3>
+        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+          {colorFields.map((field) => (
+            <ColorInput
+              key={field.key}
+              label={field.label}
+              value={theme.colors[field.key]}
+              onChange={(v) => updateColor(field.key, v)}
+            />
+          ))}
         </div>
+      </div>
 
-        {/* Fonts */}
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
-          <h3 className="mb-3 text-sm font-semibold text-dash-text">Fonts</h3>
-          <div className="space-y-4">
+      {/* Fonts */}
+      <div className="border-t border-dash-border pt-4">
+        <h3 className="mb-3 text-sm font-semibold text-dash-text">Fonts</h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="Heading Font">
             <Select
-              label="Heading Font"
-              value={theme.headingFont ?? DEFAULT_THEME.fonts.heading}
-              onChange={(e) => updateFont("headingFont", e.target.value)}
+              value={theme.fonts.heading}
+              onChange={(e) => updateFont("heading", e.target.value)}
             >
               {HEADING_FONT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -172,10 +143,12 @@ export function ThemeEditor() {
                 </option>
               ))}
             </Select>
+          </FormField>
+
+          <FormField label="Body / Rich Text Font">
             <Select
-              label="Body Font"
-              value={theme.bodyFont ?? DEFAULT_THEME.fonts.body}
-              onChange={(e) => updateFont("bodyFont", e.target.value)}
+              value={theme.fonts.rich}
+              onChange={(e) => updateFont("rich", e.target.value)}
             >
               {RICH_FONT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -183,54 +156,59 @@ export function ThemeEditor() {
                 </option>
               ))}
             </Select>
-          </div>
+          </FormField>
         </div>
       </div>
 
-      {/* Preview */}
-      <div
-        className="rounded-lg border p-6"
-        style={{
-          backgroundColor: fullTheme.colors.bg,
-          borderColor: fullTheme.colors.border,
-          fontFamily: fullTheme.fonts.body,
-        }}
-      >
-        <h3
-          className="text-2xl font-bold"
-          style={{
-            color: fullTheme.colors.heading,
-            fontFamily: fullTheme.fonts.heading,
-          }}
-        >
-          Theme Preview
-        </h3>
-        <p className="mt-2" style={{ color: fullTheme.colors.text }}>
-          This is how your event will look with the selected theme.
-        </p>
+      {/* Preview swatch */}
+      <div className="border-t border-dash-border pt-4">
+        <h3 className="mb-3 text-sm font-semibold text-dash-text">Preview</h3>
         <div
-          className="mt-4 inline-block rounded-md px-4 py-2"
+          className="rounded-lg border p-6"
           style={{
-            backgroundColor: fullTheme.colors.primary,
-            color: fullTheme.colors.primaryFg,
+            backgroundColor: theme.colors.bg,
+            borderColor: theme.colors.border,
+            color: theme.colors.text,
+            fontFamily: theme.fonts.body,
           }}
         >
-          Primary Button
-        </div>
-        <div
-          className="mt-4 rounded-md border p-4"
-          style={{
-            backgroundColor: fullTheme.colors.surface,
-            borderColor: fullTheme.colors.border,
-          }}
-        >
-          <p style={{ color: fullTheme.colors.text }}>
-            Surface card with text content.
+          <h4
+            style={{
+              color: theme.colors.heading,
+              fontFamily: theme.fonts.heading,
+              fontSize: "1.5rem",
+              fontWeight: 700,
+            }}
+          >
+            Sample Heading
+          </h4>
+          <p className="mt-2" style={{ color: theme.colors.muted }}>
+            This is how your body text will look on the invitation website.
           </p>
-          <p className="mt-1" style={{ color: fullTheme.colors.muted }}>
-            Muted text example.
-          </p>
+          <button
+            type="button"
+            className="mt-3 rounded-md px-4 py-2 text-sm font-medium"
+            style={{
+              backgroundColor: theme.colors.primary,
+              color: theme.colors.primaryFg,
+            }}
+          >
+            Sample Button
+          </button>
         </div>
+      </div>
+
+      {/* Save */}
+      <div className="flex items-center gap-3 border-t border-dash-border pt-4">
+        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+          Save Theme
+        </Button>
+        {savedMsg && <span className="text-sm text-green-600">Saved!</span>}
+        {saveMutation.isError && (
+          <span className="text-sm text-dash-danger">
+            {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+          </span>
+        )}
       </div>
     </div>
   );

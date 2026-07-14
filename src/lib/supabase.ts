@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
@@ -18,6 +18,7 @@ export interface Profile {
   email: string;
   full_name: string | null;
   avatar_url: string | null;
+  plan: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -95,7 +96,7 @@ export interface EventGuest {
   token: string | null;
   rsvp_status: string | null;
   rsvp_submitted_at: string | null;
-  plus_ones: number | null;
+  plus_ones: number;
   dietary: string | null;
   message: string | null;
   created_at: string;
@@ -121,7 +122,7 @@ export interface EventRsvp {
   id: string;
   event_id: string;
   guest_id: string;
-  guest_name: string | null;
+  guest_name: string;
   status: string;
   plus_ones: number;
   plus_one_names: string[];
@@ -155,7 +156,7 @@ export interface EventSchedule {
 export interface EventMessage {
   id: string;
   event_id: string;
-  guest_name: string | null;
+  guest_name: string;
   message: string;
   created_at: string;
 }
@@ -197,7 +198,7 @@ export interface GuestInvitationOverride {
 export interface SharingEvent {
   id: string;
   event_id: string;
-  event_type: string | null;
+  event_type: string;
   guest_id: string | null;
   source: string | null;
   device_type: string | null;

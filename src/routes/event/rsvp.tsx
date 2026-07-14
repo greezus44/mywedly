@@ -1,15 +1,40 @@
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type EventRsvp, type SubEvent, type GuestGroup, type EventGuest } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Input, Select, Card, Badge, EmptyState, LoadingSpinner, ErrorState } from "../../components/ui";
-import { formatDate, formatTime12 } from "../../lib/utils";
+import { Input, Select, Card, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
+import { formatDate, formatTime12, cn } from "../../lib/utils";
 
 type StatusFilter = "all" | "attending" | "not_attending" | "pending";
 
-interface RsvpWithGuest extends EventRsvp {
-  guest?: EventGuest | null;
+interface RsvpWithSubEvent extends EventRsvp {
+  sub_event_name?: string;
+  sub_event_date?: string | null;
+  sub_event_time?: string | null;
+  group_name?: string | null;
+}
+
+interface EventGroup {
+  subEventId: string;
+  subEventName: string;
+  date: string | null;
+  time: string | null;
+  rsvps: RsvpWithSubEvent[];
+  attending: number;
+  notAttending: number;
+  pending: number;
+}
+
+function statusBadge(status: string) {
+  switch (status) {
+    case "attending":
+      return <Badge variant="success">Attending</Badge>;
+    case "not_attending":
+      return <Badge variant="danger">Not Attending</Badge>;
+    default:
+      return <Badge variant="warning">Pending</Badge>;
+  }
 }
 
 export function RsvpPage() {
@@ -18,46 +43,37 @@ export function RsvpPage() {
   const [search, setSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState<string>("all");
 
-  // Fetch RSVPs
-  const {
-    data: rsvps,
-    isLoading: rsvpsLoading,
-    isError: rsvpsError,
-    refetch: refetchRsvps,
-  } = useQuery({
+  const { data: rsvps, isLoading, isError, error } = useQuery({
     queryKey: ["event-rsvps", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_rsvps")
-        .select("*")
-        .eq("event_id", eventId!);
+        .select("*, sub_events:event_rsvps_sub_event_id_fkey(name, date, time)")
+        .eq("event_id", eventId!)
+        .order("submitted_at", { ascending: false });
       if (error) throw error;
-      return data as EventRsvp[];
+      return (data as unknown as Array<EventRsvp & {
+        sub_events: { name: string; date: string | null; time: string | null } | null;
+      }>) ?? [];
     },
     enabled: !!eventId,
   });
 
-  // Fetch sub-events for grouping
   const { data: subEvents } = useQuery({
     queryKey: ["sub-events-rsvp", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sub_events")
         .select("*")
-        .eq("parent_event_id", eventId!);
+        .eq("parent_event_id", eventId!)
+        .order("display_order", { ascending: true });
       if (error) throw error;
       return data as SubEvent[];
     },
     enabled: !!eventId,
   });
 
-  // Fetch guests for group info
-  const {
-    data: guests,
-    isLoading: guestsLoading,
-    isError: guestsError,
-    refetch: refetchGuests,
-  } = useQuery({
+  const { data: guests } = useQuery({
     queryKey: ["event-guests-rsvp", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -70,131 +86,107 @@ export function RsvpPage() {
     enabled: !!eventId,
   });
 
-  // Fetch guest groups
   const { data: groups } = useQuery({
     queryKey: ["guest-groups-rsvp", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("guest_groups")
         .select("*")
-        .eq("event_id", eventId!);
+        .eq("event_id", eventId!)
+        .order("sort_order", { ascending: true });
       if (error) throw error;
       return data as GuestGroup[];
     },
     enabled: !!eventId,
   });
 
-  // Build guest lookup map
+  // Build guest lookup for group info
   const guestMap = useMemo(() => {
-    const map = new Map<string, EventGuest>();
-    guests?.forEach((g) => map.set(g.id, g));
-    return map;
+    const m = new Map<string, EventGuest>();
+    guests?.forEach((g) => m.set(g.id, g));
+    return m;
   }, [guests]);
 
-  // Group RSVPs by sub_event_id
-  const groupedRsvps = useMemo(() => {
-    const groups = new Map<string | null, RsvpWithGuest[]>();
-    rsvps?.forEach((rsvp) => {
-      const key = rsvp.sub_event_id;
-      if (!groups.has(key)) groups.set(key, []);
-      const enriched: RsvpWithGuest = {
-        ...rsvp,
-        guest: rsvp.guest_id ? guestMap.get(rsvp.guest_id) ?? null : null,
-      };
-      groups.get(key)!.push(enriched);
-    });
-    return groups;
-  }, [rsvps, guestMap]);
+  const groupMap = useMemo(() => {
+    const m = new Map<string, string>();
+    groups?.forEach((g) => m.set(g.id, g.name));
+    return m;
+  }, [groups]);
 
-  // Apply filters
-  const filteredGroupedRsvps = useMemo(() => {
-    const result = new Map<string | null, RsvpWithGuest[]>();
-    groupedRsvps.forEach((items, subEventId) => {
-      const filtered = items.filter((rsvp) => {
-        // Status filter
-        if (statusFilter !== "all" && rsvp.status !== statusFilter) return false;
-        // Search filter
-        if (search.trim()) {
-          const guestName = (rsvp.guest?.name || rsvp.guest_name || "").toLowerCase();
-          if (!guestName.includes(search.toLowerCase())) return false;
-        }
-        // Group filter
-        if (groupFilter !== "all") {
-          const guestGroupId = rsvp.guest?.group_id;
-          if (guestGroupId !== groupFilter) return false;
-        }
-        return true;
-      });
-      if (filtered.length > 0) {
-        result.set(subEventId, filtered);
+  // Normalize RSVPs with sub-event info
+  const normalizedRsvps: RsvpWithSubEvent[] = useMemo(() => {
+    if (!rsvps) return [];
+    return rsvps.map((r) => {
+      const subEvent = r.sub_events;
+      const guest = guestMap.get(r.guest_id);
+      return {
+        ...r,
+        sub_event_name: subEvent?.name ?? "Main Event",
+        sub_event_date: subEvent?.date ?? null,
+        sub_event_time: subEvent?.time ?? null,
+        group_name: guest?.group_id ? groupMap.get(guest.group_id) ?? null : guest?.group_name ?? null,
+      };
+    });
+  }, [rsvps, guestMap, groupMap]);
+
+  // Client-side filtering
+  const filteredRsvps = useMemo(() => {
+    return normalizedRsvps.filter((r) => {
+      if (statusFilter !== "all") {
+        if (statusFilter === "pending" && r.status && r.status !== "pending") return false;
+        if (statusFilter !== "pending" && r.status !== statusFilter) return false;
       }
+      if (search.trim()) {
+        const q = search.toLowerCase().trim();
+        if (!r.guest_name.toLowerCase().includes(q)) return false;
+      }
+      if (groupFilter !== "all") {
+        const guest = guestMap.get(r.guest_id);
+        if (guest?.group_id !== groupFilter) return false;
+      }
+      return true;
     });
-    return result;
-  }, [groupedRsvps, statusFilter, search, groupFilter]);
+  }, [normalizedRsvps, statusFilter, search, groupFilter, guestMap]);
 
-  // Compute totals per sub-event
-  const subEventStats = useMemo(() => {
-    const stats = new Map<string | null, { attending: number; notAttending: number; pending: number }>();
-    groupedRsvps.forEach((items, subEventId) => {
-      const s = {
-        attending: items.filter((r) => r.status === "attending").length,
-        notAttending: items.filter((r) => r.status === "not_attending").length,
-        pending: items.filter((r) => r.status === "pending").length,
-      };
-      stats.set(subEventId, s);
-    });
-    return stats;
-  }, [groupedRsvps]);
-
-  const getSubEventName = (subEventId: string | null): string => {
-    if (!subEventId) return "General RSVP";
-    const se = subEvents?.find((s) => s.id === subEventId);
-    return se?.name ?? "Unknown Event";
-  };
-
-  const getSubEventDateTime = (subEventId: string | null): string => {
-    if (!subEventId) return "";
-    const se = subEvents?.find((s) => s.id === subEventId);
-    if (!se) return "";
-    const parts: string[] = [];
-    if (se.date) parts.push(formatDate(se.date));
-    if (se.start_time) parts.push(formatTime12(se.start_time));
-    return parts.join(" • ");
-  };
-
-  const statusBadge = (status: string) => {
-    switch (status) {
-      case "attending":
-        return <Badge color="success">Attending</Badge>;
-      case "not_attending":
-        return <Badge color="danger">Not Attending</Badge>;
-      default:
-        return <Badge color="warning">Pending</Badge>;
+  // Group by sub-event
+  const eventGroups: EventGroup[] = useMemo(() => {
+    const groupMap = new Map<string, EventGroup>();
+    for (const r of filteredRsvps) {
+      const key = r.sub_event_id ?? "main";
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          subEventId: key,
+          subEventName: r.sub_event_name ?? "Main Event",
+          date: r.sub_event_date ?? null,
+          time: r.sub_event_time ?? null,
+          rsvps: [],
+          attending: 0,
+          notAttending: 0,
+          pending: 0,
+        });
+      }
+      const g = groupMap.get(key)!;
+      g.rsvps.push(r);
+      if (r.status === "attending") g.attending++;
+      else if (r.status === "not_attending") g.notAttending++;
+      else g.pending++;
     }
-  };
+    return Array.from(groupMap.values());
+  }, [filteredRsvps]);
 
-  const exportCsv = () => {
-    const rows: string[] = [];
-    rows.push("Guest Name,Status,Plus One Count,Plus One Names,Event Name");
-
-    groupedRsvps.forEach((items, subEventId) => {
-      const eventName = getSubEventName(subEventId);
-      items.forEach((rsvp) => {
-        const guestName = rsvp.guest?.name || rsvp.guest_name || "Unknown";
-        const plusOneNames = (rsvp.plus_one_names ?? []).join("; ");
-        const csvRow = [
-          `"${guestName.replace(/"/g, '""')}"`,
-          rsvp.status,
-          String(rsvp.plus_ones ?? 0),
-          `"${plusOneNames.replace(/"/g, '""')}"`,
-          `"${eventName.replace(/"/g, '""')}"`,
-        ].join(",");
-        rows.push(csvRow);
-      });
-    });
-
-    const csv = rows.join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  function exportCsv() {
+    const headers = ["Guest Name", "Status", "Plus One Count", "Plus One Names", "Event Name"];
+    const rows = filteredRsvps.map((r) => [
+      r.guest_name,
+      r.status || "pending",
+      String(r.plus_ones ?? 0),
+      (r.plus_one_names ?? []).join("; "),
+      r.sub_event_name ?? "Main Event",
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -203,171 +195,169 @@ export function RsvpPage() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  };
+  }
 
-  if (rsvpsLoading || guestsLoading) {
+  if (isLoading) {
     return (
-      <div className="flex justify-center py-12">
-        <LoadingSpinner />
+      <div className="flex items-center justify-center py-12">
+        <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
 
-  if (rsvpsError || guestsError) {
-    return (
-      <ErrorState
-        title="Failed to load RSVPs"
-        onRetry={() => {
-          refetchRsvps();
-          refetchGuests();
-        }}
-      />
-    );
+  if (isError) {
+    return <ErrorState message={error instanceof Error ? error.message : "Failed to load RSVPs"} />;
   }
 
-  const totalRsvps = rsvps?.length ?? 0;
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-dash-text">RSVP Management</h2>
-        <Button
-          onClick={exportCsv}
-          variant="secondary"
-          size="sm"
-          disabled={totalRsvps === 0}
-        >
-          Export CSV
-        </Button>
+        <div>
+          <h2 className="text-lg font-semibold text-dash-text">RSVP Management</h2>
+          <p className="mt-1 text-sm text-dash-muted">View and manage RSVP responses grouped by Event</p>
+        </div>
+        {filteredRsvps.length > 0 && (
+          <Button variant="secondary" onClick={exportCsv}>
+            Export CSV
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="flex-1">
-          <Input
-            label="Search by guest name"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search..."
-          />
+      <Card className="p-4">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-dash-text">Status</label>
+            <Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            >
+              <option value="all">All</option>
+              <option value="attending">Attending</option>
+              <option value="not_attending">Not Attending</option>
+              <option value="pending">Pending</option>
+            </Select>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-dash-text">Search</label>
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by guest name..."
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-dash-text">Guest Group</label>
+            <Select
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+            >
+              <option value="all">All Groups</option>
+              {groups?.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </Select>
+          </div>
         </div>
-        <div className="sm:w-48">
-          <Select
-            label="Status"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          >
-            <option value="all">All</option>
-            <option value="attending">Attending</option>
-            <option value="not_attending">Not Attending</option>
-            <option value="pending">Pending</option>
-          </Select>
-        </div>
-        <div className="sm:w-48">
-          <Select
-            label="Guest Group"
-            value={groupFilter}
-            onChange={(e) => setGroupFilter(e.target.value)}
-          >
-            <option value="all">All Groups</option>
-            {groups?.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-      </div>
+      </Card>
 
-      {/* Empty state */}
-      {totalRsvps === 0 ? (
+      {/* Empty State */}
+      {filteredRsvps.length === 0 ? (
         <EmptyState
-          title="No RSVPs yet"
-          description="RSVP responses from your guests will appear here."
-        />
-      ) : filteredGroupedRsvps.size === 0 ? (
-        <EmptyState
-          title="No matching RSVPs"
-          description="Try adjusting your filters."
+          title={normalizedRsvps.length === 0 ? "No RSVPs yet" : "No RSVPs match your filters"}
+          description={
+            normalizedRsvps.length === 0
+              ? "RSVP responses from your guests will appear here."
+              : "Try adjusting your filters to see more results."
+          }
         />
       ) : (
         <div className="space-y-6">
-          {Array.from(filteredGroupedRsvps.entries()).map(([subEventId, items]) => {
-            const stats = subEventStats.get(subEventId);
-            return (
-              <Card key={subEventId ?? "general"}>
-                {/* Event header */}
-                <div className="mb-4 border-b border-dash-border pb-3">
-                  <h3 className="text-lg font-semibold text-dash-text">
-                    {getSubEventName(subEventId)}
-                  </h3>
-                  {getSubEventDateTime(subEventId) && (
-                    <p className="mt-1 text-sm text-dash-muted">
-                      {getSubEventDateTime(subEventId)}
-                    </p>
-                  )}
-                  {stats && (
-                    <div className="mt-2 flex gap-3">
-                      <Badge color="success">
-                        Attending: {stats.attending}
-                      </Badge>
-                      <Badge color="danger">
-                        Not Attending: {stats.notAttending}
-                      </Badge>
-                      <Badge color="warning">
-                        Pending: {stats.pending}
-                      </Badge>
-                    </div>
-                  )}
-                </div>
+          {eventGroups.map((group) => (
+            <Card key={group.subEventId}>
+              {/* Event Header */}
+              <div className="mb-4 border-b border-dash-border pb-3">
+                <h3 className="text-base font-semibold text-dash-text">{group.subEventName}</h3>
+                {group.date && (
+                  <p className="mt-1 text-sm text-dash-muted">
+                    {formatDate(group.date)}
+                    {group.time && ` · ${formatTime12(group.time)}`}
+                  </p>
+                )}
+              </div>
 
-                {/* Guest list */}
-                <div className="space-y-3">
-                  {items.map((rsvp) => {
-                    const guestName = rsvp.guest?.name || rsvp.guest_name || "Unknown Guest";
-                    const plusOneNames = rsvp.plus_one_names ?? [];
-                    return (
-                      <div
-                        key={rsvp.id}
-                        className="flex flex-col gap-2 rounded-md border border-dash-border p-3 sm:flex-row sm:items-start sm:justify-between"
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-dash-text">
-                              {guestName}
-                            </span>
-                            {statusBadge(rsvp.status)}
+              {/* RSVP Totals */}
+              <div className="mb-4 flex gap-3">
+                <Badge variant="success">Attending: {group.attending}</Badge>
+                <Badge variant="danger">Not Attending: {group.notAttending}</Badge>
+                <Badge variant="warning">Pending: {group.pending}</Badge>
+              </div>
+
+              {/* Guest Lists by Status */}
+              <div className="space-y-4">
+                {(["attending", "not_attending", "pending"] as const).map((status) => {
+                  const statusRsvps = group.rsvps.filter(
+                    (r) =>
+                      (status === "pending" && (!r.status || r.status === "pending")) ||
+                      r.status === status,
+                  );
+                  if (statusRsvps.length === 0) return null;
+                  return (
+                    <div key={status}>
+                      <h4 className="mb-2 text-sm font-semibold capitalize text-dash-muted">
+                        {status === "not_attending" ? "Not Attending" : status}
+                      </h4>
+                      <div className="space-y-2">
+                        {statusRsvps.map((rsvp) => (
+                          <div
+                            key={rsvp.id}
+                            className="rounded-md border border-dash-border bg-dash-surface p-3"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-dash-text">
+                                  {rsvp.guest_name}
+                                </span>
+                                {statusBadge(rsvp.status || "pending")}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {rsvp.plus_ones > 0 && (
+                                  <span className="text-xs text-dash-muted">
+                                    +{rsvp.plus_ones} plus one{rsvp.plus_ones > 1 ? "s" : ""}
+                                  </span>
+                                )}
+                                {rsvp.group_name && (
+                                  <Badge>{rsvp.group_name}</Badge>
+                                )}
+                              </div>
+                            </div>
+                            {/* Plus one names */}
+                            {rsvp.plus_one_names && rsvp.plus_one_names.length > 0 && (
+                              <ul className="mt-2 ml-4 list-disc text-sm text-dash-muted">
+                                {rsvp.plus_one_names.map((name, i) => (
+                                  <li key={i}>{name}</li>
+                                ))}
+                              </ul>
+                            )}
+                            {rsvp.dietary_notes && (
+                              <p className="mt-1 text-xs text-dash-muted">
+                                Dietary: {rsvp.dietary_notes}
+                              </p>
+                            )}
+                            {rsvp.message && (
+                              <p className="mt-1 text-xs italic text-dash-muted">
+                                "{rsvp.message}"
+                              </p>
+                            )}
                           </div>
-                          {(rsvp.plus_ones ?? 0) > 0 && (
-                            <p className="mt-1 text-sm text-dash-muted">
-                              Plus ones: {rsvp.plus_ones}
-                            </p>
-                          )}
-                          {plusOneNames.length > 0 && (
-                            <ul className="mt-1 list-inside list-disc text-sm text-dash-muted">
-                              {plusOneNames.map((name, idx) => (
-                                <li key={idx}>{name}</li>
-                              ))}
-                            </ul>
-                          )}
-                          {rsvp.dietary && (
-                            <p className="mt-1 text-sm text-dash-muted">
-                              Dietary: {rsvp.dietary}
-                            </p>
-                          )}
-                          {rsvp.message && (
-                            <p className="mt-1 text-sm text-dash-muted">
-                              "{rsvp.message}"
-                            </p>
-                          )}
-                        </div>
+                        ))}
                       </div>
-                    );
-                  })}
-                </div>
-              </Card>
-            );
-          })}
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          ))}
         </div>
       )}
     </div>

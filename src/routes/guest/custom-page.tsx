@@ -1,9 +1,9 @@
 import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { jsonToTheme } from "../../lib/theme";
-import { BlockRenderer, jsonToBlocks, type Block } from "./block-renderer";
+import { jsonToBlocks } from "../event/block-types";
+import { BlockRenderer, type Block } from "./block-renderer";
 
 export default function GuestCustomPage() {
   const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
@@ -11,7 +11,12 @@ export default function GuestCustomPage() {
   const { data: event, isLoading: eventLoading, error: eventError } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle();
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("slug", slug)
+        .eq("is_published", true)
+        .maybeSingle();
       if (error) throw error;
       return data as UserEvent | null;
     },
@@ -34,54 +39,52 @@ export default function GuestCustomPage() {
     enabled: !!event?.id && !!pageSlug,
   });
 
-  if (eventLoading || pageLoading) {
+  if (eventLoading || pageLoading)
     return (
       <div className="flex min-h-screen items-center justify-center bg-dash-bg">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
       </div>
     );
-  }
 
-  if (eventError || !event) {
+  if (eventError || !event)
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
         <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
+        <p className="text-dash-muted">This invitation website could not be found or is no longer available.</p>
         <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
-  }
 
-  if (pageError || !page) {
+  if (pageError || !page)
     return (
-      <EventThemeProvider theme={event.theme}>
-        <div className="guest-section flex min-h-screen flex-col items-center justify-center gap-4 text-center">
-          <h1 className="guest-title">Page Not Found</h1>
-          <p className="guest-subtitle mx-auto">The page you're looking for doesn't exist or has been removed.</p>
-          <Link to={`/e/${slug}/home`} className="event-btn-primary">Back to Home</Link>
-        </div>
-      </EventThemeProvider>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Page Not Found</h1>
+        <p className="text-dash-muted">This page could not be found or is no longer available.</p>
+        <Link to={`/e/${slug}/home`} className="text-dash-primary hover:underline">Back to invitation</Link>
+      </div>
     );
-  }
 
-  const blocks = jsonToBlocks(page.blocks);
-  const theme = jsonToTheme(event.theme);
+  const blocks = jsonToBlocks(page.blocks as Json) as unknown as Block[];
 
   return (
     <EventThemeProvider theme={event.theme}>
-      <div>
-        <section className="guest-section text-center">
-          <div className="mx-auto max-w-3xl">
-            <p className="guest-eyebrow">{event.name}</p>
+      <article className="guest-section">
+        <div className="mx-auto max-w-2xl">
+          <header className="mb-10 text-center">
+            <p className="guest-eyebrow">{page.nav_label || page.title}</p>
             <h1 className="guest-title">{page.title}</h1>
-          </div>
-        </section>
-        <BlockRenderer blocks={blocks} eventId={event.id} slug={slug!} />
-        <section className="guest-section-tight text-center">
-          <Link to={`/e/${slug}/home`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>
-            Back to Home
-          </Link>
-        </section>
-      </div>
+          </header>
+          {blocks.length > 0 ? (
+            <div className="space-y-6">
+              {blocks.map((block: Block) => (
+                <BlockRenderer key={block.id} block={block} />
+              ))}
+            </div>
+          ) : (
+            <p className="guest-subtitle text-center">This page has no content yet. Check back soon.</p>
+          )}
+        </div>
+      </article>
     </EventThemeProvider>
   );
 }

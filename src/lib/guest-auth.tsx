@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { supabase, type EventGuest } from "./supabase";
 
 const STORAGE_KEY = "mywedly-guest-auth";
@@ -18,21 +26,19 @@ interface GuestAuthContextValue {
 
 const GuestAuthContext = createContext<GuestAuthContextValue | null>(null);
 
-function getStoredAuth(): StoredAuth | null {
+function readStored(): StoredAuth | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.guestId === "string" && typeof parsed.eventId === "string") {
-      return parsed;
-    }
+    const parsed = JSON.parse(raw) as StoredAuth;
+    if (!parsed.guestId || !parsed.eventId) return null;
+    return parsed;
   } catch {
-    // ignore
+    return null;
   }
-  return null;
 }
 
-function setStoredAuth(auth: StoredAuth | null) {
+function writeStored(auth: StoredAuth | null): void {
   try {
     if (auth) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
@@ -40,27 +46,23 @@ function setStoredAuth(auth: StoredAuth | null) {
       localStorage.removeItem(STORAGE_KEY);
     }
   } catch {
-    // ignore
+    /* ignore */
   }
 }
 
-interface GuestAuthProviderProps {
-  children: React.ReactNode;
-}
-
-export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
+export function GuestAuthProvider({ children }: { children: ReactNode }) {
   const [guest, setGuest] = useState<EventGuest | null>(null);
   const [eventId, setEventId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = getStoredAuth();
-    if (!stored) {
-      setLoading(false);
-      return;
-    }
     let cancelled = false;
     (async () => {
+      const stored = readStored();
+      if (!stored) {
+        setLoading(false);
+        return;
+      }
       const { data, error } = await supabase
         .from("event_guests")
         .select("*")
@@ -72,7 +74,7 @@ export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
         setGuest(data as EventGuest);
         setEventId(stored.eventId);
       } else {
-        setStoredAuth(null);
+        writeStored(null);
       }
       setLoading(false);
     })();
@@ -81,47 +83,43 @@ export function GuestAuthProvider({ children }: GuestAuthProviderProps) {
     };
   }, []);
 
-  const signIn = useCallback(async (evId: string, username: string): Promise<{ error: string | null }> => {
-    if (!username.trim()) {
-      return { error: "Please enter your username" };
-    }
-    const { data, error } = await supabase
-      .from("event_guests")
-      .select("*")
-      .eq("event_id", evId)
-      .ilike("username", username.trim())
-      .maybeSingle();
-
-    if (error) {
-      return { error: error.message };
-    }
-    if (!data) {
-      return { error: "Guest not found. Please check your username." };
-    }
-    const guestData = data as EventGuest;
-    setGuest(guestData);
-    setEventId(evId);
-    setStoredAuth({ guestId: guestData.id, eventId: evId });
-    return { error: null };
-  }, []);
+  const signIn = useCallback(
+    async (evId: string, username: string): Promise<{ error: string | null }> => {
+      const { data, error } = await supabase
+        .from("event_guests")
+        .select("*")
+        .eq("event_id", evId)
+        .ilike("username", username)
+        .maybeSingle();
+      if (error) return { error: error.message };
+      if (!data) return { error: "Guest not found. Please check your username." };
+      const g = data as EventGuest;
+      setGuest(g);
+      setEventId(evId);
+      writeStored({ guestId: g.id, eventId: evId });
+      return { error: null };
+    },
+    [],
+  );
 
   const signOut = useCallback(() => {
     setGuest(null);
     setEventId(null);
-    setStoredAuth(null);
+    writeStored(null);
   }, []);
 
-  return (
-    <GuestAuthContext.Provider value={{ guest, eventId, loading, signIn, signOut }}>
-      {children}
-    </GuestAuthContext.Provider>
+  const value = useMemo<GuestAuthContextValue>(
+    () => ({ guest, eventId, loading, signIn, signOut }),
+    [guest, eventId, loading, signIn, signOut],
   );
+
+  return <GuestAuthContext.Provider value={value}>{children}</GuestAuthContext.Provider>;
 }
 
 export function useGuestAuth(): GuestAuthContextValue {
   const ctx = useContext(GuestAuthContext);
   if (!ctx) {
-    throw new Error("useGuestAuth must be used within GuestAuthProvider");
+    return { guest: null, eventId: null, loading: false, signIn: async () => ({ error: "No provider" }), signOut: () => {} };
   }
   return ctx;
 }

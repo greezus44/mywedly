@@ -1,10 +1,12 @@
-import React from "react";
+import { useMemo, type ReactNode } from "react";
+import { cn } from "./utils";
 
 const ALLOWED_TAGS = new Set([
-  "a", "abbr", "b", "blockquote", "br", "cite", "code", "dd", "del", "div",
-  "dl", "dt", "em", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "i", "img",
-  "ins", "kbd", "li", "mark", "ol", "p", "pre", "q", "s", "samp", "small",
-  "span", "strong", "sub", "sup", "u", "ul", "var",
+  "p", "br", "strong", "em", "u", "s", "sup", "sub",
+  "h1", "h2", "h3", "h4", "h5", "h6",
+  "ul", "ol", "li",
+  "a", "img", "blockquote", "hr",
+  "span", "div",
 ]);
 
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
@@ -20,88 +22,116 @@ const ALLOWED_ATTRS: Record<string, Set<string>> = {
   h5: new Set(["style", "class"]),
   h6: new Set(["style", "class"]),
   blockquote: new Set(["style", "class"]),
+  li: new Set(["style", "class"]),
   ul: new Set(["style", "class"]),
   ol: new Set(["style", "class"]),
-  li: new Set(["style", "class"]),
 };
 
 const ALLOWED_STYLE_PROPS = new Set([
-  "color", "background-color", "font-weight", "font-style", "text-decoration",
-  "text-align", "font-size", "line-height", "margin", "padding",
+  "color", "background-color", "font-weight", "font-style",
+  "text-decoration", "text-align", "font-size",
 ]);
 
-function sanitizeStyleValue(value: string): string {
-  return value.replace(/expression\s*\(|javascript:|url\s*\(/gi, "");
+function sanitizeStyleValue(prop: string, value: string): string {
+  const v = value.trim().toLowerCase();
+  if (prop === "color" || prop === "background-color") {
+    return /^(#[0-9a-f]{3,8}|rgb[a]?\([^)]*\)|[a-z]+)$/.test(v) ? v : "";
+  }
+  if (prop === "font-weight") {
+    return /^(normal|bold|[1-9]00)$/.test(v) ? v : "";
+  }
+  if (prop === "font-style") {
+    return /^(normal|italic)$/.test(v) ? v : "";
+  }
+  if (prop === "text-decoration") {
+    return /^(none|underline|line-through)$/.test(v) ? v : "";
+  }
+  if (prop === "text-align") {
+    return /^(left|center|right|justify)$/.test(v) ? v : "";
+  }
+  if (prop === "font-size") {
+    return /^(\d+(px|em|rem|%)|small|medium|large)$/.test(v) ? v : "";
+  }
+  return "";
 }
 
-export function sanitizeHtml(html: string): string {
-  if (!html) return "";
-  if (typeof window === "undefined") return html;
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-  const result = doc.body;
+function sanitizeStyle(styleStr: string): string {
+  const declarations = styleStr.split(";");
+  const clean: string[] = [];
+  for (const decl of declarations) {
+    const idx = decl.indexOf(":");
+    if (idx === -1) continue;
+    const prop = decl.slice(0, idx).trim().toLowerCase();
+    const val = decl.slice(idx + 1).trim();
+    if (!ALLOWED_STYLE_PROPS.has(prop)) continue;
+    const safe = sanitizeStyleValue(prop, val);
+    if (safe) clean.push(`${prop}: ${safe}`);
+  }
+  return clean.join("; ");
+}
 
-  function walk(node: Node): Node | null {
-    if (node.nodeType === Node.TEXT_NODE) return node.cloneNode(true);
-    if (node.nodeType !== Node.ELEMENT_NODE) return null;
-    const el = node as Element;
-    const tag = el.tagName.toLowerCase();
-    if (!ALLOWED_TAGS.has(tag)) return null;
-    const clone = document.createElement(tag);
-    const allowedAttrs = ALLOWED_ATTRS[tag] ?? new Set<string>();
+function processNode(node: Node, parent: Element): void {
+  if (node.nodeType === Node.TEXT_NODE) {
+    parent.appendChild(node.cloneNode(true));
+    return;
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) return;
+  const el = node as Element;
+  const tag = el.tagName.toLowerCase();
+  if (!ALLOWED_TAGS.has(tag)) return;
+  const clean = parent.ownerDocument!.createElement(tag);
+  const allowedAttrs = ALLOWED_ATTRS[tag];
+  if (allowedAttrs) {
     for (const attr of Array.from(el.attributes)) {
       const name = attr.name.toLowerCase();
       if (!allowedAttrs.has(name)) continue;
-      if (name === "href" || name === "src") {
+      if (name === "style") {
+        const s = sanitizeStyle(attr.value);
+        if (s) clean.setAttribute("style", s);
+      } else if (name === "href" || name === "src") {
         const val = attr.value.trim();
-        if (/^(javascript|data|vbscript):/i.test(val)) continue;
-        clone.setAttribute(name, val);
+        if (/^(https?:|mailto:|tel:|\/|#)/i.test(val) && !/^javascript:/i.test(val)) {
+          clean.setAttribute(name, val);
+        }
       } else if (name === "target") {
-        clone.setAttribute(name, attr.value);
-        if (attr.value === "_blank" && !clone.getAttribute("rel")) {
-          clone.setAttribute("rel", "noopener noreferrer");
+        if (attr.value === "_blank" || attr.value === "_self") {
+          clean.setAttribute(name, attr.value);
         }
-      } else if (name === "style") {
-        const style = el.getAttribute("style");
-        if (style) {
-          const cleaned = style
-            .split(";")
-            .map((decl) => {
-              const [prop, ...valParts] = decl.split(":");
-              if (!prop || valParts.length === 0) return "";
-              const p = prop.trim().toLowerCase();
-              const v = valParts.join(":").trim();
-              if (!ALLOWED_STYLE_PROPS.has(p)) return "";
-              return `${p}: ${sanitizeStyleValue(v)}`;
-            })
-            .filter(Boolean)
-            .join("; ");
-          if (cleaned) clone.setAttribute("style", cleaned);
+      } else if (name === "rel") {
+        if (/^(noopener|noreferrer|noopener noreferrer)$/.test(attr.value)) {
+          clean.setAttribute(name, attr.value);
         }
-      } else if (name === "class") {
-        const classes = attr.value
-          .split(/\s+/)
-          .filter((c) => c && !c.startsWith("event-") && !c.startsWith("dash-"));
-        if (classes.length) clone.setAttribute("class", classes.join(" "));
       } else {
-        clone.setAttribute(name, attr.value);
+        clean.setAttribute(name, attr.value);
       }
     }
-    for (const child of Array.from(el.childNodes)) {
-      const sanitized = walk(child);
-      if (sanitized) clone.appendChild(sanitized);
-    }
-    return clone;
   }
+  if (tag === "a" && clean.getAttribute("target") === "_blank" && !clean.getAttribute("rel")) {
+    clean.setAttribute("rel", "noopener noreferrer");
+  }
+  for (const child of Array.from(el.childNodes)) {
+    processNode(child, clean);
+  }
+  parent.appendChild(clean);
+}
 
-  const fragment = document.createDocumentFragment();
-  for (const child of Array.from(result.childNodes)) {
-    const sanitized = walk(child);
-    if (sanitized) fragment.appendChild(sanitized);
+export function sanitizeHtml(dirty: string): string {
+  if (!dirty) return "";
+  if (typeof window === "undefined" || typeof DOMParser === "undefined") {
+    return dirty;
   }
-  const tmp = document.createElement("div");
-  tmp.appendChild(fragment);
-  return tmp.innerHTML;
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(`<body>${dirty}</body>`, "text/html");
+    const body = doc.body;
+    const container = document.createElement("div");
+    for (const child of Array.from(body.childNodes)) {
+      processNode(child, container);
+    }
+    return container.innerHTML;
+  } catch {
+    return "";
+  }
 }
 
 interface RichTextContentProps {
@@ -109,12 +139,12 @@ interface RichTextContentProps {
   className?: string;
 }
 
-export function RichTextContent({ html, className }: RichTextContentProps) {
-  const sanitized = React.useMemo(() => sanitizeHtml(html), [html]);
+export function RichTextContent({ html, className }: RichTextContentProps): ReactNode {
+  const clean = useMemo(() => sanitizeHtml(html), [html]);
   return (
     <div
-      className={className ? `rich-content ${className}` : "rich-content"}
-      dangerouslySetInnerHTML={{ __html: sanitized }}
+      className={cn("rich-content", className)}
+      dangerouslySetInnerHTML={{ __html: clean }}
     />
   );
 }

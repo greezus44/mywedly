@@ -1,50 +1,37 @@
 import QRCode from "qrcode";
+import type { QRCodeToDataURLOptions, QRCodeToStringOptions } from "qrcode";
 
-export async function generateQrDataUrl(text: string, opts?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }): Promise<string> {
-  const qrOpts = {
-    width: opts?.width ?? 256,
-    margin: opts?.margin ?? 2,
-    color: {
-      dark: opts?.color?.dark ?? "#000000",
-      light: opts?.color?.light ?? "#ffffff",
-    },
-  };
-  return QRCode.toDataURL(text, qrOpts);
+export async function generateQrDataUrl(text: string, opts?: QRCodeToDataURLOptions): Promise<string> {
+  return QRCode.toDataURL(text, {
+    width: 256,
+    margin: 2,
+    color: { dark: "#000000", light: "#ffffff" },
+    ...opts,
+  });
 }
 
-export async function downloadQrCode(
-  text: string,
-  fileName: string = "qr-code.png",
-  opts?: { width?: number; margin?: number; color?: { dark?: string; light?: string } }
-): Promise<void> {
+export async function downloadQrCode(text: string, filename = "qr-code.png", opts?: QRCodeToDataURLOptions): Promise<void> {
   const dataUrl = await generateQrDataUrl(text, opts);
   const link = document.createElement("a");
   link.href = dataUrl;
-  link.download = fileName;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
 }
 
-export async function downloadQrSvg(
-  text: string,
-  fileName: string = "qr-code.svg",
-  opts?: { margin?: number; color?: { dark?: string; light?: string } }
-): Promise<void> {
-  const svgOpts = {
-    type: "svg" as const,
-    margin: opts?.margin ?? 2,
-    color: {
-      dark: opts?.color?.dark ?? "#000000",
-      light: opts?.color?.light ?? "#ffffff",
-    },
-  };
-  const svg = await QRCode.toString(text, svgOpts);
+export async function downloadQrSvg(text: string, filename = "qr-code.svg", opts?: QRCodeToStringOptions): Promise<void> {
+  const svg = await QRCode.toString(text, {
+    type: "svg",
+    margin: 2,
+    color: { dark: "#000000", light: "#ffffff" },
+    ...opts,
+  });
   const blob = new Blob([svg], { type: "image/svg+xml" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = fileName;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

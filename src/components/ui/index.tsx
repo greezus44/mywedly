@@ -1,66 +1,43 @@
-import React, { useState } from "react";
+import { useEffect, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
+import { Button } from "./Button";
+import { Input, Textarea, Select } from "./Input";
+import { DatePicker } from "./DatePicker";
+import { TimePicker } from "./TimePicker";
+import { DateTimePicker } from "./DateTimePicker";
 
-interface CardProps {
-  className?: string;
-  children: React.ReactNode;
-  onClick?: () => void;
-}
+export { Button };
+export { Input, Textarea, Select };
+export { DatePicker };
+export { TimePicker };
+export { DateTimePicker };
 
-export function Card({ className, children, onClick }: CardProps) {
+export function Card({ className, children, ...rest }: { className?: string; children: ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div
-      onClick={onClick}
-      className={cn(
-        "rounded-lg border border-dash-border bg-dash-surface p-5 shadow-sm",
-        onClick && "cursor-pointer transition-shadow hover:shadow-md",
-        className
-      )}
-    >
+    <div className={cn("rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm", className)} {...rest}>
       {children}
     </div>
   );
 }
 
-interface BadgeProps {
-  className?: string;
-  children: React.ReactNode;
-  color?: "default" | "primary" | "success" | "danger" | "warning";
-}
-
-const badgeColors: Record<NonNullable<BadgeProps["color"]>, string> = {
-  default: "bg-dash-bg text-dash-muted border-dash-border",
-  primary: "bg-dash-primary/10 text-dash-primary border-dash-primary/20",
-  success: "bg-green-50 text-green-700 border-green-200",
-  danger: "bg-red-50 text-red-700 border-red-200",
-  warning: "bg-amber-50 text-amber-700 border-amber-200",
-};
-
-export function Badge({ className, children, color = "default" }: BadgeProps) {
+export function Badge({ className, children, variant = "default" }: { className?: string; children: ReactNode; variant?: "default" | "success" | "warning" | "danger" | "primary" }) {
+  const variants: Record<string, string> = {
+    default: "bg-dash-bg text-dash-muted border-dash-border",
+    success: "bg-green-50 text-green-700 border-green-200",
+    warning: "bg-amber-50 text-amber-700 border-amber-200",
+    danger: "bg-red-50 text-red-700 border-red-200",
+    primary: "bg-sky-50 text-sky-700 border-sky-200",
+  };
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
-        badgeColors[color],
-        className
-      )}
-    >
+    <span className={cn("inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium", variants[variant], className)}>
       {children}
     </span>
   );
 }
 
-interface EmptyStateProps {
-  title: string;
-  description?: string;
-  icon?: React.ReactNode;
-  action?: React.ReactNode;
-  className?: string;
-}
-
-export function EmptyState({ title, description, icon, action, className }: EmptyStateProps) {
+export function EmptyState({ title, description, action, icon }: { title: string; description?: string; action?: ReactNode; icon?: ReactNode }) {
   return (
-    <div className={cn("flex flex-col items-center justify-center py-12 text-center", className)}>
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-dash-border p-12 text-center">
       {icon && <div className="mb-4 text-dash-muted">{icon}</div>}
       <h3 className="text-lg font-semibold text-dash-text">{title}</h3>
       {description && <p className="mt-1 max-w-sm text-sm text-dash-muted">{description}</p>}
@@ -69,82 +46,56 @@ export function EmptyState({ title, description, icon, action, className }: Empt
   );
 }
 
-interface ToggleProps {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  label?: string;
-  className?: string;
-}
-
-export function Toggle({ checked, onChange, label, className }: ToggleProps) {
+export function Toggle({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label?: string; disabled?: boolean }) {
   return (
-    <label className={cn("inline-flex cursor-pointer items-center gap-2", className)}>
+    <label className={cn("inline-flex items-center gap-2", disabled && "opacity-50 cursor-not-allowed")}>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-dash-primary focus-visible:ring-offset-2",
-          checked ? "bg-dash-primary" : "bg-dash-border"
+          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+          checked ? "bg-dash-primary" : "bg-dash-border",
         )}
       >
-        <span
-          className={cn(
-            "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
-            checked ? "translate-x-6" : "translate-x-1"
-          )}
-        />
+        <span className={cn("inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform", checked ? "translate-x-5" : "translate-x-0.5")} />
       </button>
       {label && <span className="text-sm text-dash-text">{label}</span>}
     </label>
   );
 }
 
-interface ColorInputProps {
-  label?: string;
-  value: string;
-  onChange: (value: string) => void;
-  className?: string;
-}
-
-export function ColorInput({ label, value, onChange, className }: ColorInputProps) {
+export function ColorInput({ value, onChange, label }: { value: string; onChange: (v: string) => void; label?: string }) {
   return (
-    <div className={cn("flex items-center gap-2", className)}>
-      {label && <span className="text-sm text-dash-text">{label}</span>}
-      <input
-        type="color"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-9 w-12 cursor-pointer rounded-md border border-dash-border bg-dash-surface p-1"
-      />
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-24 rounded-md border border-dash-border bg-dash-surface px-2 py-1.5 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/30"
-      />
+    <div className="space-y-1">
+      {label && <label className="block text-sm font-medium text-dash-text">{label}</label>}
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-9 w-12 cursor-pointer rounded border border-dash-border bg-dash-surface p-1"
+        />
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-32 rounded-md border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text focus:outline-none focus:ring-2 focus:ring-dash-primary/40"
+        />
+      </div>
     </div>
   );
 }
 
-interface RangeInputProps {
-  label?: string;
-  value: number;
-  onChange: (value: number) => void;
-  min?: number;
-  max?: number;
-  step?: number;
-  className?: string;
-}
-
-export function RangeInput({ label, value, onChange, min = 0, max = 100, step = 1, className }: RangeInputProps) {
+export function RangeInput({ value, min, max, step, onChange, label }: { value: number; min: number; max: number; step?: number; onChange: (v: number) => void; label?: string }) {
   return (
-    <div className={cn("w-full", className)}>
+    <div className="space-y-1">
       {label && (
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-sm text-dash-text">{label}</span>
-          <span className="text-sm font-medium text-dash-muted">{value}</span>
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-dash-text">{label}</label>
+          <span className="text-sm text-dash-muted">{value}</span>
         </div>
       )}
       <input
@@ -153,26 +104,24 @@ export function RangeInput({ label, value, onChange, min = 0, max = 100, step = 
         min={min}
         max={max}
         step={step}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
         className="w-full accent-dash-primary"
       />
     </div>
   );
 }
 
-interface FormFieldProps {
-  label?: string;
-  error?: string;
-  children: React.ReactNode;
-  className?: string;
-}
-
-export function FormField({ label, error, children, className }: FormFieldProps) {
+export function FormField({ label, error, required, children }: { label?: string; error?: string; required?: boolean; children: ReactNode }) {
   return (
-    <div className={cn("w-full", className)}>
-      {label && <label className="mb-1.5 block text-sm font-medium text-dash-text">{label}</label>}
+    <div className="space-y-1">
+      {label && (
+        <label className="block text-sm font-medium text-dash-text">
+          {label}
+          {required && <span className="text-dash-danger"> *</span>}
+        </label>
+      )}
       {children}
-      {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
+      {error && <p className="text-sm text-dash-danger">{error}</p>}
     </div>
   );
 }
@@ -181,30 +130,17 @@ export function Skeleton({ className }: { className?: string }) {
   return <div className={cn("animate-pulse rounded-md bg-dash-border", className)} />;
 }
 
-interface ErrorStateProps {
-  title?: string;
-  message?: string;
-  onRetry?: () => void;
-  className?: string;
-}
-
-export function ErrorState({ title = "Something went wrong", message, onRetry, className }: ErrorStateProps) {
+export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className={cn("flex flex-col items-center justify-center py-12 text-center", className)}>
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-dash-danger/10">
-        <svg className="h-6 w-6 text-dash-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
-        </svg>
-      </div>
-      <h3 className="text-lg font-semibold text-dash-text">{title}</h3>
-      {message && <p className="mt-1 max-w-sm text-sm text-dash-muted">{message}</p>}
+    <div className="flex flex-col items-center justify-center rounded-lg border border-dash-border bg-dash-surface p-8 text-center">
+      <svg className="mb-3 h-10 w-10 text-dash-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+      </svg>
+      <p className="text-sm text-dash-text">{message}</p>
       {onRetry && (
-        <button
-          onClick={onRetry}
-          className="mt-4 rounded-md border border-dash-border bg-dash-surface px-4 py-2 text-sm font-medium text-dash-text hover:bg-dash-bg"
-        >
+        <Button variant="secondary" size="sm" className="mt-4" onClick={onRetry}>
           Try again
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -212,69 +148,43 @@ export function ErrorState({ title = "Something went wrong", message, onRetry, c
 
 export function LoadingSpinner({ className }: { className?: string }) {
   return (
-    <svg
-      className={cn("h-6 w-6 animate-spin text-dash-primary", className)}
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
+    <svg className={cn("animate-spin h-5 w-5 text-dash-primary", className)} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
   );
 }
 
-interface ModalProps {
-  open: boolean;
-  onClose: () => void;
-  title?: string;
-  children: React.ReactNode;
-  className?: string;
-  size?: "sm" | "md" | "lg";
-}
+export function Modal({ open, onClose, title, children, className }: { open: boolean; onClose: () => void; title?: string; children: ReactNode; className?: string }) {
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    if (open) {
+      document.addEventListener("keydown", handleKey);
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.removeEventListener("keydown", handleKey);
+        document.body.style.overflow = "";
+      };
+    }
+  }, [open, onClose]);
 
-const modalSizes: Record<NonNullable<ModalProps["size"]>, string> = {
-  sm: "max-w-sm",
-  md: "max-w-md",
-  lg: "max-w-lg",
-};
-
-export function Modal({ open, onClose, title, children, className, size = "md" }: ModalProps) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
-      <div
-        className={cn(
-          "relative z-10 w-full rounded-lg border border-dash-border bg-dash-surface p-6 shadow-xl",
-          modalSizes[size],
-          className
-        )}
-      >
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className={cn("relative z-10 w-full max-w-lg rounded-lg border border-dash-border bg-dash-surface shadow-xl", className)}>
         {title && (
-          <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center justify-between border-b border-dash-border px-5 py-3">
             <h2 className="text-lg font-semibold text-dash-text">{title}</h2>
-            <button
-              onClick={onClose}
-              className="rounded-md p-1 text-dash-muted hover:bg-dash-bg hover:text-dash-text"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+            <button type="button" onClick={onClose} className="rounded p-1 text-dash-muted hover:bg-dash-bg hover:text-dash-text" aria-label="Close">
+              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" /></svg>
             </button>
           </div>
         )}
-        {children}
+        <div className="max-h-[70vh] overflow-y-auto p-5">{children}</div>
       </div>
     </div>
   );
 }
-
-// Re-export Input, Textarea, Select from ./Input
-export { Input, Textarea, Select } from "./Input";
-// Re-export Button from ./Button
-export { Button } from "./Button";
-// Re-export TimePicker, DatePicker, DateTimePicker
-export { TimePicker } from "./TimePicker";
-export { DatePicker } from "./DatePicker";
-export { DateTimePicker } from "./DateTimePicker";

@@ -1,29 +1,9 @@
-import React, { createContext, useContext } from "react";
-import { NavLink, Outlet, useParams, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useParams, useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
-import { Button } from "../../components/ui/Button";
-import { LoadingSpinner, ErrorState, Badge } from "../../components/ui";
 import { cn } from "../../lib/utils";
-
-// ─── Event Context ───────────────────────────────────────────────────────────
-
-interface EventContextValue {
-  event: UserEvent;
-  eventId: string;
-}
-
-const EventContext = createContext<EventContextValue | null>(null);
-
-export function useEventContext(): EventContextValue {
-  const ctx = useContext(EventContext);
-  if (!ctx) {
-    throw new Error("useEventContext must be used within EventLayout");
-  }
-  return ctx;
-}
-
-// ─── Nav Tabs ────────────────────────────────────────────────────────────────
+import { Button } from "../../components/ui/Button";
+import { LoadingSpinner, ErrorState } from "../../components/ui";
 
 const navTabs = [
   { label: "Cover", to: "" },
@@ -41,19 +21,20 @@ const navTabs = [
   { label: "Settings", to: "settings" },
 ];
 
-// ─── Event Layout ────────────────────────────────────────────────────────────
+export interface EventContextValue {
+  event: UserEvent;
+  eventId: string;
+}
+
+export function useEventContext(): EventContextValue {
+  return useOutletContext<EventContextValue>();
+}
 
 export function EventLayout() {
   const { eventId } = useParams<{ eventId: string }>();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const {
-    data: event,
-    isLoading,
-    isError,
-    refetch,
-  } = useQuery({
+  const { data: event, isLoading, isError, error } = useQuery({
     queryKey: ["event", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -71,9 +52,11 @@ export function EventLayout() {
   const publishMutation = useMutation({
     mutationFn: async () => {
       if (!event) throw new Error("No event loaded");
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("user_events")
         .update({
+          is_published: true,
+          published_at: new Date().toISOString(),
           name: event.draft_name ?? event.name,
           event_type: event.draft_event_type ?? event.event_type,
           event_date: event.draft_event_date ?? event.event_date,
@@ -89,129 +72,84 @@ export function EventLayout() {
           sharing_config: event.draft_sharing_config ?? event.sharing_config,
           slug: event.draft_slug ?? event.slug,
           rsvp_deadline: event.draft_rsvp_deadline ?? event.rsvp_deadline,
-          is_published: true,
-          published_at: new Date().toISOString(),
         })
-        .eq("id", event.id)
-        .select()
-        .maybeSingle();
+        .eq("id", event.id);
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["user-events"] });
     },
   });
 
-  // CRITICAL: While loading, render spinner and DO NOT render Outlet
+  // CRITICAL: Never render Outlet with null context
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <LoadingSpinner />
+      <div className="flex min-h-screen items-center justify-center">
+        <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
 
-  // CRITICAL: If error, render error message and DO NOT render Outlet
-  if (isError || !event || !eventId) {
+  if (isError || !event) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <ErrorState
-          title="Event not found"
-          message="This event could not be loaded."
-          onRetry={() => refetch()}
-        />
+      <div className="mx-auto max-w-4xl px-4 py-12">
+        <ErrorState message={error instanceof Error ? error.message : "Failed to load event"} />
       </div>
     );
   }
 
-  // CRITICAL: Only render Outlet with non-null context when event is loaded
   return (
-    <EventContext.Provider value={{ event, eventId }}>
-      <div className="min-h-screen bg-dash-bg">
-        {/* Header */}
-        <header className="sticky top-0 z-40 border-b border-dash-border bg-dash-surface/80 backdrop-blur">
-          <div className="mx-auto max-w-7xl px-4 py-3">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => navigate("/dashboard")}
-                  className="text-sm text-dash-muted hover:text-dash-text"
-                >
-                  ← Dashboard
-                </button>
-                <span className="text-dash-border">/</span>
-                <h1 className="text-lg font-semibold text-dash-text">
-                  {event.draft_name || event.name}
-                </h1>
-                {event.is_published ? (
-                  <Badge color="success">Published</Badge>
-                ) : (
-                  <Badge color="warning">Draft</Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    const slug = event.slug || event.draft_slug;
-                    if (slug) {
-                      window.open(`/${slug}`, "_blank");
-                    }
-                  }}
-                  disabled={!event.is_published}
-                >
-                  View Live
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => publishMutation.mutate()}
-                  loading={publishMutation.isPending}
-                  disabled={event.is_published && !publishMutation.isPending}
-                >
-                  {event.is_published ? "Republish" : "Publish"}
-                </Button>
-              </div>
+    <div className="min-h-screen bg-dash-bg">
+      <header className="border-b border-dash-border bg-dash-surface">
+        <div className="mx-auto max-w-7xl px-4">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center gap-3">
+              <h1 className="text-lg font-semibold text-dash-text">
+                {event.draft_name || event.name}
+              </h1>
+              {event.is_published ? (
+                <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                  Published
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                  Draft
+                </span>
+              )}
             </div>
+            <Button
+              size="sm"
+              loading={publishMutation.isPending}
+              onClick={() => publishMutation.mutate()}
+            >
+              {event.is_published ? "Update Published" : "Publish"}
+            </Button>
           </div>
-
-          {/* Nav Tabs */}
-          <nav className="mx-auto max-w-7xl overflow-x-auto px-4">
-            <div className="flex gap-1 pb-2">
-              {navTabs.map((tab) => {
-                const to =
-                  tab.to === ""
-                    ? `/event/${eventId}`
-                    : `/event/${eventId}/${tab.to}`;
-                return (
-                  <NavLink
-                    key={tab.label}
-                    to={to}
-                    end={tab.to === ""}
-                    className={({ isActive }) =>
-                      cn(
-                        "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                        isActive
-                          ? "bg-dash-primary/10 text-dash-primary"
-                          : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"
-                      )
-                    }
-                  >
-                    {tab.label}
-                  </NavLink>
-                );
-              })}
-            </div>
+          <nav className="flex gap-1 overflow-x-auto pb-1">
+            {navTabs.map((tab) => (
+              <NavLink
+                key={tab.label}
+                to={tab.to}
+                end={tab.to === ""}
+                className={({ isActive }) =>
+                  cn(
+                    "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-dash-primary text-dash-primary-fg"
+                      : "text-dash-muted hover:bg-dash-bg hover:text-dash-text",
+                  )
+                }
+              >
+                {tab.label}
+              </NavLink>
+            ))}
           </nav>
-        </header>
+        </div>
+      </header>
 
-        {/* Content */}
-        <main className="mx-auto max-w-7xl px-4 py-6">
-          <Outlet context={{ event, eventId: eventId! }} />
-        </main>
-      </div>
-    </EventContext.Provider>
+      <main className="mx-auto max-w-7xl px-4 py-6">
+        <Outlet context={{ event, eventId: eventId! }} />
+      </main>
+    </div>
   );
 }

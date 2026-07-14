@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME, themeToEventCssVars } from "../../lib/theme";
+import { jsonToTheme, themeToEventCssVars, RUSTY_THEME, type ThemeConfig as ThemeConfigType } from "../../lib/theme";
 import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
 import { cn } from "../../lib/utils";
 import { useGuestOutletContext, type GuestOutletContext } from "./guest-layout";
@@ -66,9 +66,11 @@ export default function RustyLayout() {
 
   if (!authLoading && !guest && event) { navigate(`/r/${slug}/signin`, { replace: true }); return null; }
   if (authLoading || eventLoading || (event && guest && eventId === event.id && invitationsLoading)) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
-  if (eventError || !event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
+  if (eventError || !event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
   if (!guest || eventId !== event.id) { navigate(`/r/${slug}/signin`, { replace: true }); return null; }
 
+  const theme = jsonToTheme(event.theme);
+  const rustyVars = themeToEventCssVars(RUSTY_THEME) as React.CSSProperties;
   const invitedIds = invitedSubEventIds ?? [];
   const hasInvitedEvents = invitedIds.length > 0;
   const headerPages = (customPages ?? []).filter((p) => !p.is_footer);
@@ -80,12 +82,11 @@ export default function RustyLayout() {
     { to: `/r/${slug}/contact`, label: "Contact" },
     ...headerPages.map((p) => ({ to: `/r/${slug}/p/${p.slug}`, label: p.nav_label || p.title })),
   ];
-  const contextValue: GuestOutletContext = { event, slug: slug!, theme: RUSTY_THEME, invitedSubEventIds: invitedIds };
-  const cssVars = themeToEventCssVars(RUSTY_THEME) as React.CSSProperties;
+  const contextValue: GuestOutletContext = { event, slug: slug!, theme, invitedSubEventIds: invitedIds };
 
   return (
-    <EventThemeProvider theme={null}>
-      <div className="min-h-screen" style={cssVars}>
+    <EventThemeProvider theme={event.theme}>
+      <div className="min-h-screen" style={rustyVars}>
         <div ref={menuRef} className="fixed left-4 top-4 z-50">
           <button onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle navigation menu" aria-expanded={menuOpen} aria-controls="rusty-nav-menu"
             className="flex h-11 w-11 items-center justify-center rounded-full transition-all duration-300 hover:scale-105 focus:outline-none focus-visible:ring-2"
@@ -97,7 +98,7 @@ export default function RustyLayout() {
             </div>
           </button>
           {menuOpen && (
-            <nav id="rusty-nav-menu" role="menu" aria-label="Guest navigation" className="absolute left-0 top-14 w-64 origin-top-left animate-scaleIn rounded-2xl py-2 shadow-xl" style={{ backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}>
+            <nav id="rusty-nav-menu" role="menu" aria-label="Rustic navigation" className="absolute left-0 top-14 w-64 origin-top-left animate-scaleIn rounded-2xl py-2 shadow-xl" style={{ backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}>
               {menuItems.map((item) => (
                 <NavLink key={item.to} to={item.to} role="menuitem" className={({ isActive }) => cn("block px-5 py-3 text-sm font-medium transition-colors", isActive && "font-semibold")}
                   style={({ isActive }) => ({ color: isActive ? "var(--event-primary)" : "var(--event-text)", backgroundColor: isActive ? "var(--event-surface-alt)" : "transparent" })}>{item.label}</NavLink>

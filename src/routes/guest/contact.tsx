@@ -1,126 +1,123 @@
 import { useGuestOutletContext } from "./guest-layout";
 
 interface ContactConfig {
-  phone?: string;
-  email?: string;
-  address?: string;
-  venue?: string;
-  mapUrl?: string;
-  contactName?: string;
-  extraInfo?: string;
+  phone?: string | null;
+  email?: string | null;
+  venue?: string | null;
+  address?: string | null;
+  mapUrl?: string | null;
+  mapQuery?: string | null;
+}
+
+function getMapEmbed(query: string): string {
+  const q = encodeURIComponent(query);
+  return `https://maps.google.com/maps?q=${q}&z=15&output=embed`;
 }
 
 export default function GuestContact() {
   const { event } = useGuestOutletContext();
-  const config = (event.content ?? {}) as Record<string, unknown>;
-  const contact = (config.contact ?? {}) as ContactConfig;
+  const config = (event.content ?? {}) as ContactConfig;
 
-  const sections: { eyebrow: string; title: string; items: { label: string; value: string }[] }[] = [];
-
-  if (contact.venue || contact.address) {
-    sections.push({
-      eyebrow: "Location",
-      title: contact.venue || "Venue",
-      items: contact.address ? [{ label: "Address", value: contact.address }] : [],
-    });
-  }
-
-  if (contact.phone || contact.email || contact.contactName) {
-    const items: { label: string; value: string }[] = [];
-    if (contact.contactName) items.push({ label: "Contact", value: contact.contactName });
-    if (contact.phone) items.push({ label: "Phone", value: contact.phone });
-    if (contact.email) items.push({ label: "Email", value: contact.email });
-    sections.push({ eyebrow: "Get in Touch", title: "Contact Details", items });
-  }
-
-  if (contact.extraInfo) {
-    sections.push({ eyebrow: "Additional Info", title: "Good to Know", items: [{ label: "", value: contact.extraInfo }] });
-  }
-
-  // Fallback to event-level fields if no contact config
-  if (sections.length === 0) {
-    const items: { label: string; value: string }[] = [];
-    if (event.venue) items.push({ label: "Venue", value: event.venue });
-    if (event.address) items.push({ label: "Address", value: event.address });
-    if (items.length > 0) {
-      sections.push({ eyebrow: "Location", title: event.venue || "Venue", items });
-    }
-  }
-
-  const mapUrl = contact.mapUrl || (event.address ? `https://maps.google.com/maps?q=${encodeURIComponent(event.address)}&output=embed` : "");
+  const phone = config.phone || null;
+  const email = config.email || null;
+  const venue = config.venue || event.venue || null;
+  const address = config.address || event.address || null;
+  const mapQuery = config.mapQuery || config.address || event.address || venue || "";
+  const hasMap = !!mapQuery;
 
   return (
-    <div>
-      {/* Header */}
-      <section className="guest-section text-center">
-        <div className="mx-auto max-w-2xl">
+    <div className="guest-section">
+      <div className="mx-auto max-w-3xl">
+        <header className="mb-12 text-center">
           <p className="guest-eyebrow">Contact</p>
-          <h1 className="guest-title">Get in Touch</h1>
+          <h1 className="guest-title">Get in touch</h1>
           <p className="guest-subtitle mx-auto">
-            Have questions about {event.name}? Here's everything you need to reach us.
+            Questions about the celebration? Reach out using the details below.
           </p>
+        </header>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          {(phone || email) && (
+            <section className="event-card">
+              <p className="guest-eyebrow mb-2">Direct</p>
+              <div className="space-y-3">
+                {phone && (
+                  <a
+                    href={`tel:${phone.replace(/\s+/g, "")}`}
+                    className="block transition-opacity hover:opacity-75"
+                    style={{ color: "var(--event-text)" }}
+                  >
+                    <span className="block text-xs uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>
+                      Phone
+                    </span>
+                    <span className="text-lg font-medium" style={{ color: "var(--event-heading)" }}>
+                      {phone}
+                    </span>
+                  </a>
+                )}
+                {email && (
+                  <a
+                    href={`mailto:${email}`}
+                    className="block transition-opacity hover:opacity-75"
+                    style={{ color: "var(--event-text)" }}
+                  >
+                    <span className="block text-xs uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>
+                      Email
+                    </span>
+                    <span className="text-lg font-medium" style={{ color: "var(--event-heading)" }}>
+                      {email}
+                    </span>
+                  </a>
+                )}
+              </div>
+            </section>
+          )}
+
+          {(venue || address) && (
+            <section className="event-card">
+              <p className="guest-eyebrow mb-2">Venue</p>
+              <div className="space-y-1">
+                {venue && (
+                  <p className="text-lg font-medium" style={{ color: "var(--event-heading)" }}>
+                    {venue}
+                  </p>
+                )}
+                {address && (
+                  <p className="text-sm leading-relaxed" style={{ color: "var(--event-text)" }}>
+                    {address}
+                  </p>
+                )}
+              </div>
+            </section>
+          )}
         </div>
-      </section>
 
-      {/* Contact Sections */}
-      {sections.length > 0 && (
-        <section className="px-6 pb-12">
-          <div className="mx-auto max-w-4xl space-y-8">
-            {sections.map((section, i) => (
-              <div key={i} className="animate-slideUpStagger" style={{ animationDelay: `${i * 100}ms` }}>
-                <p className="guest-eyebrow mb-2">{section.eyebrow}</p>
-                <h2 className="mb-4 text-xl font-semibold" style={{ color: "var(--event-heading)" }}>
-                  {section.title}
-                </h2>
-                <div className="event-card space-y-3">
-                  {section.items.map((item, j) => (
-                    <div key={j} className="flex flex-col gap-1 sm:flex-row sm:gap-4">
-                      {item.label && (
-                        <span className="text-sm font-medium shrink-0 sm:w-28" style={{ color: "var(--event-muted)" }}>
-                          {item.label}
-                        </span>
-                      )}
-                      <span className="text-sm" style={{ color: "var(--event-text)" }}>
-                        {item.value}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Map */}
-      {mapUrl && (
-        <section className="px-6 pb-16">
-          <div className="mx-auto max-w-4xl">
-            <p className="guest-eyebrow mb-2 text-center">Find Us</p>
-            <h2 className="mb-6 text-center text-xl font-semibold" style={{ color: "var(--event-heading)" }}>
-              Location Map
-            </h2>
-            <div className="overflow-hidden rounded-2xl" style={{ borderRadius: "var(--event-radius)", border: "1px solid var(--event-border)" }}>
-              <div className="relative w-full" style={{ paddingBottom: "45%" }}>
-                <iframe
-                  src={mapUrl}
-                  title="Location Map"
-                  className="absolute inset-0 h-full w-full"
-                  style={{ border: 0 }}
-                  loading="lazy"
-                  allowFullScreen
-                />
-              </div>
+        {hasMap && (
+          <section className="mt-8">
+            <p className="guest-eyebrow mb-3">Map</p>
+            <div
+              className="overflow-hidden"
+              style={{ borderRadius: "var(--event-radius)", border: "1px solid var(--event-border)" }}
+            >
+              <iframe
+                title="Venue map"
+                src={getMapEmbed(mapQuery)}
+                className="h-80 w-full"
+                style={{ border: 0, display: "block" }}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                allowFullScreen
+              />
             </div>
-          </div>
-        </section>
-      )}
+          </section>
+        )}
 
-      {sections.length === 0 && !mapUrl && (
-        <section className="px-6 pb-16 text-center">
-          <p className="guest-subtitle mx-auto">Contact details will be added soon. Check back later!</p>
-        </section>
-      )}
+        {!phone && !email && !venue && !address && (
+          <div className="event-card mx-auto max-w-md text-center">
+            <p className="guest-subtitle">Contact details haven't been shared yet. Check back soon.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

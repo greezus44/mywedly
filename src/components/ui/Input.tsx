@@ -1,100 +1,92 @@
-import React, { forwardRef } from "react";
+import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
-interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+const baseField =
+  "w-full rounded-md border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-dash-primary/40 focus:border-dash-primary disabled:opacity-50 disabled:cursor-not-allowed";
+
+export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, id, ...props }, ref) => {
-    const inputId = id || props.name;
+  ({ label, error, className, id, ...rest }, ref) => {
+    const inputId = id || rest.name;
     return (
-      <div className="w-full">
+      <div className="space-y-1">
         {label && (
-          <label htmlFor={inputId} className="mb-1.5 block text-sm font-medium text-dash-text">
+          <label htmlFor={inputId} className="block text-sm font-medium text-dash-text">
             {label}
           </label>
         )}
         <input
           ref={ref}
           id={inputId}
-          className={cn(
-            "w-full rounded-md border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted transition-colors focus:outline-none focus:ring-2 focus:ring-dash-primary/30",
-            error ? "border-dash-danger" : "border-dash-border",
-            className
-          )}
-          {...props}
+          className={cn(baseField, error ? "border-dash-danger" : "border-dash-border", className)}
+          {...rest}
         />
-        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
+        {error && <p className="text-sm text-dash-danger">{error}</p>}
       </div>
     );
-  }
+  },
 );
 Input.displayName = "Input";
 
-interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   error?: string;
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, label, error, id, ...props }, ref) => {
-    const textareaId = id || props.name;
+  ({ label, error, className, id, ...rest }, ref) => {
+    const inputId = id || rest.name;
     return (
-      <div className="w-full">
+      <div className="space-y-1">
         {label && (
-          <label htmlFor={textareaId} className="mb-1.5 block text-sm font-medium text-dash-text">
+          <label htmlFor={inputId} className="block text-sm font-medium text-dash-text">
             {label}
           </label>
         )}
         <textarea
           ref={ref}
-          id={textareaId}
-          className={cn(
-            "w-full rounded-md border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted transition-colors focus:outline-none focus:ring-2 focus:ring-dash-primary/30",
-            error ? "border-dash-danger" : "border-dash-border",
-            className
-          )}
-          {...props}
+          id={inputId}
+          className={cn(baseField, "min-h-[80px] resize-y", error ? "border-dash-danger" : "border-dash-border", className)}
+          {...rest}
         />
-        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
+        {error && <p className="text-sm text-dash-danger">{error}</p>}
       </div>
     );
-  }
+  },
 );
 Textarea.displayName = "Textarea";
 
-interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   error?: string;
+  children: ReactNode;
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, label, error, id, children, ...props }, ref) => {
-    const selectId = id || props.name;
+  ({ label, error, className, id, children, ...rest }, ref) => {
+    const inputId = id || rest.name;
     return (
-      <div className="w-full">
+      <div className="space-y-1">
         {label && (
-          <label htmlFor={selectId} className="mb-1.5 block text-sm font-medium text-dash-text">
+          <label htmlFor={inputId} className="block text-sm font-medium text-dash-text">
             {label}
           </label>
         )}
         <select
           ref={ref}
-          id={selectId}
-          className={cn(
-            "w-full rounded-md border bg-dash-surface px-3 py-2 text-sm text-dash-text transition-colors focus:outline-none focus:ring-2 focus:ring-dash-primary/30",
-            error ? "border-dash-danger" : "border-dash-border",
-            className
-          )}
-          {...props}
+          id={inputId}
+          className={cn(baseField, "cursor-pointer", error ? "border-dash-danger" : "border-dash-border", className)}
+          {...rest}
         >
           {children}
         </select>
-        {error && <p className="mt-1 text-xs text-dash-danger">{error}</p>}
+        {error && <p className="text-sm text-dash-danger">{error}</p>}
       </div>
     );
-  }
+  },
 );
 Select.displayName = "Select";

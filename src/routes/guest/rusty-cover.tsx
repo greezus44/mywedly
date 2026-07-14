@@ -1,8 +1,10 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
+import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME, themeToEventCssVars } from "../../lib/theme";
+import { RUSTY_THEME } from "../../lib/theme";
+import { themeToEventCssVars } from "../../lib/theme";
 
 interface LogoConfig { url?: string | null; size?: number; align?: string; }
 interface CoverConfig {
@@ -14,7 +16,6 @@ interface CoverConfig {
 export default function RustyCover() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-
   const { data: event, isLoading } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
@@ -26,38 +27,28 @@ export default function RustyCover() {
   });
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
-  if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
+  if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
 
   const coverConfig = (event.cover_config ?? {}) as CoverConfig;
   const logoConfig = (event.logo_config ?? {}) as LogoConfig;
   const bgConfig = coverConfig.background ?? {};
   const overlay = (coverConfig.overlayOpacity ?? 40) / 100;
-  const cssVars = themeToEventCssVars(RUSTY_THEME) as React.CSSProperties;
-
   const bgStyle: React.CSSProperties = {};
-  if (bgConfig.image) {
-    bgStyle.backgroundImage = `url(${bgConfig.image})`;
-    bgStyle.backgroundSize = bgConfig.fit === "fill" ? "100% 100%" : (bgConfig.fit as "cover" | "contain") || "cover";
-    bgStyle.backgroundPosition = bgConfig.position || "center";
-    bgStyle.backgroundRepeat = "no-repeat";
-  } else if (bgConfig.color) {
-    bgStyle.backgroundColor = bgConfig.color;
-  } else {
-    bgStyle.backgroundColor = RUSTY_THEME.colors.bg;
-  }
-
+  if (bgConfig.image) { bgStyle.backgroundImage = `url(${bgConfig.image})`; bgStyle.backgroundSize = bgConfig.fit === "fill" ? "100% 100%" : (bgConfig.fit as "cover" | "contain") || "cover"; bgStyle.backgroundPosition = bgConfig.position || "center"; bgStyle.backgroundRepeat = "no-repeat"; }
+  else if (bgConfig.color) bgStyle.backgroundColor = bgConfig.color;
   const logoSize = typeof logoConfig.size === "number" ? logoConfig.size : 120;
   const logoAlign = logoConfig.align || "center";
   const buttonText = coverConfig.ctaText || "Enter";
+  const rustyVars = themeToEventCssVars(RUSTY_THEME) as React.CSSProperties;
 
   return (
-    <EventThemeProvider theme={null}>
-      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden" style={{ ...cssVars, ...bgStyle }}>
+    <EventThemeProvider theme={event.theme}>
+      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden" style={{ ...rustyVars, ...bgStyle }}>
         {bgConfig.image && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />}
         <div className="relative z-10 flex w-full max-w-lg flex-col items-center px-6 py-16 text-center animate-fadeIn">
           {logoConfig.url && (
             <div className="mb-8 flex w-full" style={{ justifyContent: logoAlign === "left" ? "flex-start" : logoAlign === "right" ? "flex-end" : "center" }}>
-              <img src={logoConfig.url} alt="Logo" style={{ height: `${logoSize}px`, width: "auto", maxHeight: "40vh" }} className="object-contain" />
+              <img src={logoConfig.url} alt="Logo" style={{ height: `${logoSize}px`, width: "auto", maxHeight: "40vh", filter: "brightness(0) invert(1)", opacity: 0.9 }} className="object-contain" />
             </div>
           )}
           {coverConfig.eyebrow && <p className="guest-eyebrow mb-2">{coverConfig.eyebrow}</p>}

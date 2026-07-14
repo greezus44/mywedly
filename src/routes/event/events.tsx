@@ -1,37 +1,41 @@
-import React, { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type SubEvent } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Select, Toggle, FormField, Modal, Card, Badge, EmptyState, LoadingSpinner, ErrorState } from "../../components/ui";
+import { Input, Textarea, Select, FormField, Card, Modal, LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
 import { DateTimePicker } from "../../components/ui/DateTimePicker";
-import { InvitationManager } from "./invitation-manager";
 import { formatDate, formatTime12 } from "../../lib/utils";
+import { InvitationManager } from "./invitation-manager";
 
 interface SubEventFormData {
   name: string;
   date: string | null;
+  time: string | null;
+  venue: string | null;
+  address: string | null;
+  description: string | null;
+  dress_code: string | null;
+  rsvp_deadline: string | null;
+  rsvp_enabled: boolean;
+  display_order: number;
   start_time: string | null;
   end_time: string | null;
-  venue: string;
-  address: string;
-  description: string;
-  dress_code: string;
-  rsvp_enabled: boolean;
-  rsvp_deadline: string | null;
 }
 
 const emptyForm: SubEventFormData = {
   name: "",
   date: null,
+  time: null,
+  venue: null,
+  address: null,
+  description: null,
+  dress_code: null,
+  rsvp_deadline: null,
+  rsvp_enabled: true,
+  display_order: 0,
   start_time: null,
   end_time: null,
-  venue: "",
-  address: "",
-  description: "",
-  dress_code: "",
-  rsvp_enabled: true,
-  rsvp_deadline: null,
 };
 
 export function EventsPage() {
@@ -40,14 +44,8 @@ export function EventsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<SubEventFormData>(emptyForm);
-  const [managingId, setManagingId] = useState<string | null>(null);
 
-  const {
-    data: subEvents,
-    isLoading,
-    isError,
-    refetch,
-  } = useQuery({
+  const { data: subEvents, isLoading, isError, error } = useQuery({
     queryKey: ["sub-events", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -62,24 +60,24 @@ export function EventsPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (formData: SubEventFormData) => {
-      const nextOrder = subEvents?.length ?? 0;
+    mutationFn: async (data: SubEventFormData) => {
       const { error } = await supabase
         .from("sub_events")
         .insert({
           parent_event_id: eventId,
-          name: formData.name,
-          date: formData.date,
-          start_time: formData.start_time,
-          end_time: formData.end_time,
-          venue: formData.venue || null,
-          address: formData.address || null,
-          description: formData.description || null,
-          dress_code: formData.dress_code || null,
-          rsvp_enabled: formData.rsvp_enabled,
-          rsvp_deadline: formData.rsvp_deadline,
-          display_order: nextOrder,
-          order_index: nextOrder,
+          name: data.name,
+          date: data.date,
+          time: data.time,
+          venue: data.venue,
+          address: data.address,
+          description: data.description,
+          dress_code: data.dress_code,
+          rsvp_deadline: data.rsvp_deadline,
+          rsvp_enabled: data.rsvp_enabled,
+          display_order: data.display_order,
+          start_time: data.start_time,
+          end_time: data.end_time,
+          order_index: data.display_order,
         });
       if (error) throw error;
     },
@@ -91,20 +89,24 @@ export function EventsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, formData }: { id: string; formData: SubEventFormData }) => {
+    mutationFn: async ({ id, data }: { id: string; data: SubEventFormData }) => {
       const { error } = await supabase
         .from("sub_events")
         .update({
-          name: formData.name,
-          date: formData.date,
-          start_time: formData.start_time,
-          end_time: formData.end_time,
-          venue: formData.venue || null,
-          address: formData.address || null,
-          description: formData.description || null,
-          dress_code: formData.dress_code || null,
-          rsvp_enabled: formData.rsvp_enabled,
-          rsvp_deadline: formData.rsvp_deadline,
+          name: data.name,
+          date: data.date,
+          time: data.time,
+          venue: data.venue,
+          address: data.address,
+          description: data.description,
+          dress_code: data.dress_code,
+          rsvp_deadline: data.rsvp_deadline,
+          rsvp_enabled: data.rsvp_enabled,
+          display_order: data.display_order,
+          start_time: data.start_time,
+          end_time: data.end_time,
+          order_index: data.display_order,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", id);
       if (error) throw error;
@@ -130,134 +132,107 @@ export function EventsPage() {
     },
   });
 
-  const handleSubmit = () => {
-    if (!form.name.trim()) return;
-    if (editingId) {
-      updateMutation.mutate({ id: editingId, formData: form });
-    } else {
-      createMutation.mutate(form);
-    }
-  };
+  function openCreate() {
+    setForm({ ...emptyForm, display_order: subEvents?.length ?? 0 });
+    setEditingId(null);
+    setShowForm(true);
+  }
 
-  const handleEdit = (se: SubEvent) => {
-    setEditingId(se.id);
+  function openEdit(se: SubEvent) {
     setForm({
       name: se.name,
       date: se.date,
+      time: se.time,
+      venue: se.venue,
+      address: se.address,
+      description: se.description,
+      dress_code: se.dress_code,
+      rsvp_deadline: se.rsvp_deadline,
+      rsvp_enabled: se.rsvp_enabled,
+      display_order: se.display_order,
       start_time: se.start_time,
       end_time: se.end_time,
-      venue: se.venue ?? "",
-      address: se.address ?? "",
-      description: se.description ?? "",
-      dress_code: se.dress_code ?? "",
-      rsvp_enabled: se.rsvp_enabled,
-      rsvp_deadline: se.rsvp_deadline,
     });
+    setEditingId(se.id);
     setShowForm(true);
-  };
+  }
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: form });
+    } else {
+      createMutation.mutate(form);
+    }
+  }
 
   if (isLoading) {
     return (
-      <div className="flex justify-center py-12">
-        <LoadingSpinner />
+      <div className="flex items-center justify-center py-12">
+        <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
 
   if (isError) {
-    return <ErrorState onRetry={() => refetch()} />;
-  }
-
-  // If managing invitations for a sub-event, show the InvitationManager
-  if (managingId) {
-    const subEvent = subEvents?.find((s) => s.id === managingId);
-    if (subEvent) {
-      return (
-        <InvitationManager
-          subEvent={subEvent}
-          onBack={() => setManagingId(null)}
-        />
-      );
-    }
+    return <ErrorState message={error instanceof Error ? error.message : "Failed to load events"} />;
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-dash-text">Events</h2>
-        <Button
-          onClick={() => {
-            setForm(emptyForm);
-            setEditingId(null);
-            setShowForm(true);
-          }}
-        >
-          Add Event
-        </Button>
+        <div>
+          <h2 className="text-lg font-semibold text-dash-text">Events</h2>
+          <p className="mt-1 text-sm text-dash-muted">Manage individual events within your celebration</p>
+        </div>
+        <Button onClick={openCreate}>Add Event</Button>
       </div>
 
       {subEvents && subEvents.length === 0 ? (
         <EmptyState
-          title="No events"
-          description="Add events to your invitation website (e.g. Ceremony, Reception)."
-          action={
-            <Button
-              onClick={() => {
-                setForm(emptyForm);
-                setEditingId(null);
-                setShowForm(true);
-              }}
-            >
-              Add Event
-            </Button>
-          }
+          title="No events yet"
+          description="Add events like Ceremony, Reception, or Mehndi to organize your celebration."
+          action={<Button onClick={openCreate}>Add Event</Button>}
         />
       ) : (
         <div className="space-y-3">
           {subEvents?.map((se) => (
-            <Card key={se.id}>
+            <Card key={se.id} className="p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-semibold text-dash-text">
-                      {se.name}
-                    </h3>
-                    {se.rsvp_enabled && <Badge color="success">RSVP</Badge>}
+                    <h3 className="text-base font-semibold text-dash-text">{se.name}</h3>
+                    {se.rsvp_enabled ? (
+                      <Badge variant="success">RSVP On</Badge>
+                    ) : (
+                      <Badge variant="default">RSVP Off</Badge>
+                    )}
                   </div>
                   {se.date && (
-                    <p className="mt-1 text-sm text-dash-muted">
+                    <p className="mt-2 text-sm text-dash-muted">
                       {formatDate(se.date)}
-                      {se.start_time ? ` • ${formatTime12(se.start_time)}` : ""}
-                      {se.end_time ? ` – ${formatTime12(se.end_time)}` : ""}
+                      {se.time && ` · ${formatTime12(se.time)}`}
                     </p>
                   )}
-                  {se.venue && (
-                    <p className="mt-1 text-sm text-dash-muted">{se.venue}</p>
-                  )}
-                  {se.description && (
-                    <p className="mt-2 text-sm text-dash-text">{se.description}</p>
+                  {se.venue && <p className="mt-1 text-sm text-dash-muted">{se.venue}</p>}
+                  {se.description && <p className="mt-2 text-sm text-dash-text">{se.description}</p>}
+                  {se.dress_code && (
+                    <p className="mt-1 text-xs text-dash-muted">Dress code: {se.dress_code}</p>
                   )}
                 </div>
-                <div className="flex flex-col gap-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setManagingId(se.id)}
-                  >
-                    Invitations
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => handleEdit(se)}
-                  >
+                <div className="flex gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => openEdit(se)}>
                     Edit
                   </Button>
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => deleteMutation.mutate(se.id)}
                     loading={deleteMutation.isPending}
+                    onClick={() => {
+                      if (confirm(`Delete event "${se.name}"?`)) {
+                        deleteMutation.mutate(se.id);
+                      }
+                    }}
                   >
                     Delete
                   </Button>
@@ -268,99 +243,121 @@ export function EventsPage() {
         </div>
       )}
 
+      {/* Invitation Manager */}
+      {subEvents && subEvents.length > 0 && (
+        <Card className="p-4">
+          <InvitationManager eventId={eventId} subEvents={subEvents} />
+        </Card>
+      )}
+
+      {/* Form Modal */}
       <Modal
         open={showForm}
-        onClose={() => {
-          setShowForm(false);
-          setEditingId(null);
-        }}
+        onClose={() => setShowForm(false)}
         title={editingId ? "Edit Event" : "Add Event"}
-        size="lg"
+        className="max-w-2xl"
       >
-        <div className="space-y-4">
-          <Input
-            label="Event Name"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="e.g. Ceremony"
-          />
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <FormField label="Event Name" required>
+            <Input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+              placeholder="e.g. Ceremony"
+            />
+          </FormField>
+
           <DateTimePicker
             label="Date & Time"
-            value={form.date}
-            onChange={(v) => setForm({ ...form, date: v })}
+            date={form.date}
+            time={form.time}
+            onChange={(d, t) => setForm({ ...form, date: d, time: t })}
           />
-          <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Start Time"
-              type="time"
-              value={form.start_time ?? ""}
-              onChange={(e) => setForm({ ...form, start_time: e.target.value || null })}
-            />
-            <Input
-              label="End Time"
-              type="time"
-              value={form.end_time ?? ""}
-              onChange={(e) => setForm({ ...form, end_time: e.target.value || null })}
-            />
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Venue">
+              <Input
+                value={form.venue ?? ""}
+                onChange={(e) => setForm({ ...form, venue: e.target.value || null })}
+                placeholder="Venue name"
+              />
+            </FormField>
+            <FormField label="Address">
+              <Input
+                value={form.address ?? ""}
+                onChange={(e) => setForm({ ...form, address: e.target.value || null })}
+                placeholder="Full address"
+              />
+            </FormField>
           </div>
-          <Input
-            label="Venue"
-            value={form.venue}
-            onChange={(e) => setForm({ ...form, venue: e.target.value })}
-          />
-          <Textarea
-            label="Address"
-            value={form.address}
-            onChange={(e) => setForm({ ...form, address: e.target.value })}
-            rows={2}
-          />
-          <Textarea
-            label="Description"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            rows={3}
-          />
-          <Input
-            label="Dress Code"
-            value={form.dress_code}
-            onChange={(e) => setForm({ ...form, dress_code: e.target.value })}
-          />
-          <div className="flex items-center justify-between">
-            <Toggle
+
+          <FormField label="Description">
+            <Textarea
+              value={form.description ?? ""}
+              onChange={(e) => setForm({ ...form, description: e.target.value || null })}
+              rows={3}
+              placeholder="Event description..."
+            />
+          </FormField>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Dress Code">
+              <Input
+                value={form.dress_code ?? ""}
+                onChange={(e) => setForm({ ...form, dress_code: e.target.value || null })}
+                placeholder="e.g. Black tie"
+              />
+            </FormField>
+            <FormField label="RSVP Deadline">
+              <Input
+                type="date"
+                value={form.rsvp_deadline ?? ""}
+                onChange={(e) => setForm({ ...form, rsvp_deadline: e.target.value || null })}
+              />
+            </FormField>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-dash-text">
+            <input
+              type="checkbox"
               checked={form.rsvp_enabled}
-              onChange={(v) => setForm({ ...form, rsvp_enabled: v })}
-              label="RSVP Enabled"
+              onChange={(e) => setForm({ ...form, rsvp_enabled: e.target.checked })}
+              className="rounded"
             />
-          </div>
-          {form.rsvp_enabled && (
-            <DateTimePicker
-              label="RSVP Deadline"
-              value={form.rsvp_deadline}
-              onChange={(v) => setForm({ ...form, rsvp_deadline: v })}
+            Enable RSVP for this event
+          </label>
+
+          <FormField label="Display Order">
+            <Input
+              type="number"
+              value={form.display_order}
+              onChange={(e) => setForm({ ...form, display_order: parseInt(e.target.value) || 0 })}
             />
+          </FormField>
+
+          {createMutation.isError && (
+            <p className="text-sm text-dash-danger">
+              {createMutation.error instanceof Error ? createMutation.error.message : "Failed to create"}
+            </p>
           )}
-          {(createMutation.isError || updateMutation.isError) && (
-            <p className="text-sm text-red-600">Failed to save</p>
+          {updateMutation.isError && (
+            <p className="text-sm text-dash-danger">
+              {updateMutation.error instanceof Error ? updateMutation.error.message : "Failed to update"}
+            </p>
           )}
+
           <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setShowForm(false);
-                setEditingId(null);
-              }}
-            >
+            <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
               Cancel
             </Button>
             <Button
-              onClick={handleSubmit}
+              type="submit"
               loading={createMutation.isPending || updateMutation.isPending}
-              disabled={!form.name.trim()}
             >
               {editingId ? "Update" : "Add"}
             </Button>
           </div>
-        </div>
+        </form>
       </Modal>
     </div>
   );

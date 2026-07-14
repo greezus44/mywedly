@@ -21,7 +21,7 @@ export default function GuestHome() {
       {hasDetails && <section className="guest-section"><div className="mx-auto max-w-2xl"><RichTextContent html={content.details_html!} /></div></section>}
       {hasInvitedEvents && <section className="guest-section text-center"><button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">RSVP Now</button></section>}
       {!hasAnyContent && !hasInvitedEvents && <section className="guest-section text-center"><div className="mx-auto max-w-md"><p className="guest-subtitle">Welcome to {event.name}. Check back soon for updates.</p></div></section>}
-      {!hasAnyContent && hasInvitedEvents && <section className="guest-section text-center"><div className="mx-auto max-w-md"><p className="guest-subtitle mb-6">Welcome to {event.name}.</p><button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">RSVP Now</button></div></section>}
+      {!hasAnyContent && hasInvitedEvents && <section className="guest-section text-center"><div className="mx-auto max-w-md"><p className="guest-subtitle mb-6">Welcome to {event.name}.</p><button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">RSVP now</button></div></section>}
     </div>
   );
 }

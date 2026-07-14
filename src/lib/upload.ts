@@ -1,100 +1,81 @@
 import { supabase } from "./supabase";
 
-const MAX_WIDTH = 2000;
-const MAX_HEIGHT = 2000;
-const JPEG_QUALITY = 0.82;
+interface CompressOptions {
+  maxWidth?: number;
+  maxHeight?: number;
+  quality?: number;
+}
 
-function isSvgFile(file: File | Blob): boolean {
+function isSvg(file: File | Blob): boolean {
   if (file instanceof File) {
     return file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
   }
   return file.type === "image/svg+xml";
 }
 
-function hasAlphaChannel(canvas: HTMLCanvasElement): boolean {
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return false;
-  const { width, height } = canvas;
-  if (width === 0 || height === 0) return false;
-  const sample = Math.min(width * height, 4096);
-  const step = Math.max(1, Math.floor((width * height) / sample));
-  let checked = 0;
-  for (let y = 0; y < height; y += Math.floor(Math.sqrt(step))) {
-    for (let x = 0; x < width; x += Math.floor(Math.sqrt(step))) {
-      const pixel = ctx.getImageData(x, y, 1, 1).data;
-      if (pixel[3] < 255) return true;
-      checked++;
-      if (checked >= sample) break;
-    }
+function isPng(file: File | Blob): boolean {
+  if (file instanceof File) {
+    return file.type === "image/png" || file.name.toLowerCase().endsWith(".png");
   }
-  return false;
+  return file.type === "image/png";
 }
 
 export async function compressImage(
   file: File | Blob,
-  opts: { maxWidth?: number; maxHeight?: number; quality?: number } = {}
+  opts: CompressOptions = {},
 ): Promise<Blob> {
-  const maxWidth = opts.maxWidth ?? MAX_WIDTH;
-  const maxHeight = opts.maxHeight ?? MAX_HEIGHT;
-  const quality = opts.quality ?? JPEG_QUALITY;
+  const { maxWidth = 1920, maxHeight = 1920, quality = 0.82 } = opts;
 
-  // Bypass SVG entirely — return as-is
-  if (isSvgFile(file)) {
+  if (isSvg(file)) {
     return file;
   }
 
+  const hasAlpha = isPng(file);
+
   const bitmap = await loadImageBitmap(file);
   let { width, height } = bitmap;
-
-  const ratio = Math.min(maxWidth / width, maxHeight / height, 1);
-  width = Math.round(width * ratio);
-  height = Math.round(height * ratio);
-
+  if (width > maxWidth || height > maxHeight) {
+    const ratio = Math.min(maxWidth / width, maxHeight / height);
+    width = Math.round(width * ratio);
+    height = Math.round(height * ratio);
+  }
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext("2d");
   if (!ctx) return file;
-
-  ctx.drawImage(bitmap as CanvasImageSource, 0, 0, width, height);
-
-  const isPng = file instanceof File && file.type === "image/png";
-  const hasAlpha = isPng && hasAlphaChannel(canvas);
-
-  // Use PNG format for transparent images, JPEG for opaque
-  if (hasAlpha) {
-    return new Promise<Blob>((resolve) => {
-      canvas.toBlob(
-        (blob) => resolve(blob ?? file),
-        "image/png"
-      );
-    });
-  }
-
+  ctx.drawImage(bitmap, 0, 0, width, height);
   return new Promise<Blob>((resolve) => {
+    const type = hasAlpha ? "image/png" : "image/jpeg";
+    const q = hasAlpha ? undefined : quality;
     canvas.toBlob(
-      (blob) => resolve(blob ?? file),
-      "image/jpeg",
-      quality
+      (blob) => {
+        resolve(blob ?? file);
+      },
+      type,
+      q,
     );
   });
 }
 
-function loadImageBitmap(file: File | Blob): Promise<ImageBitmap> {
+function loadImageBitmap(file: File | Blob): Promise<ImageBitmap | HTMLImageElement> {
   if (typeof createImageBitmap === "function") {
-    return createImageBitmap(file);
+    return createImageBitmap(file).catch(() => loadImageElement(file));
   }
-  // Fallback for older browsers
+  return loadImageElement(file);
+}
+
+function loadImageElement(file: File | Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       URL.revokeObjectURL(url);
-      resolve(img as unknown as ImageBitmap);
+      resolve(img);
     };
-    img.onerror = (e) => {
+    img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(e);
+      reject(new Error("Failed to load image"));
     };
     img.src = url;
   });
@@ -103,41 +84,48 @@ function loadImageBitmap(file: File | Blob): Promise<ImageBitmap> {
 export async function uploadImage(
   file: File,
   bucket: string,
-  pathPrefix: string
+  path: string,
+  opts?: CompressOptions,
 ): Promise<{ url: string; path: string } | { error: string }> {
   try {
-    const compressed = await compressImage(file);
-    const ext = compressed.type === "image/png" ? "png" : "jpg";
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
-    const path = `${pathPrefix}/${fileName}`;
-
-    const { error } = await supabase.storage.from(bucket).upload(path, compressed, {
-      contentType: compressed.type,
-      upsert: false,
-    });
-
+    let blob: Blob = file;
+    if (!isSvg(file)) {
+      blob = await compressImage(file, opts);
+    }
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(path, blob, {
+        upsert: true,
+        contentType: blob.type || file.type,
+      });
     if (error) return { error: error.message };
-
-    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-    return { url: data.publicUrl, path };
+    const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(data.path);
+    return { url: urlData.publicUrl, path: data.path };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Upload failed" };
   }
 }
 
 export async function removeImage(bucket: string, path: string): Promise<{ error: string | null }> {
-  const { error } = await supabase.storage.from(bucket).remove([path]);
-  return { error: error?.message ?? null };
+  try {
+    const { error } = await supabase.storage.from(bucket).remove([path]);
+    if (error) return { error: error.message };
+    return { error: null };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Remove failed" };
+  }
 }
 
-export function extractPathFromUrl(url: string, bucket: string): string | null {
+export function extractPathFromUrl(url: string): string {
   try {
     const u = new URL(url);
-    const prefix = `/storage/v1/object/public/${bucket}/`;
-    const idx = u.pathname.indexOf(prefix);
-    if (idx === -1) return null;
-    return u.pathname.slice(idx + prefix.length);
+    const parts = u.pathname.split("/");
+    const objectPathIdx = parts.findIndex((p) => p === "object");
+    if (objectPathIdx !== -1) {
+      return parts.slice(objectPathIdx + 1).join("/");
+    }
+    return parts.slice(-1)[0] ?? "";
   } catch {
-    return null;
+    return url;
   }
 }
