@@ -1,14 +1,6 @@
-import { Input, Textarea, Select } from "../../components/ui/Input";
-import { Button } from "../../components/ui/Button";
-import { Toggle } from "../../components/ui";
+import { useState } from "react";
+import { Input, Textarea } from "../../components/ui/Input";
 import { ImageUpload } from "../../components/ui/ImageUpload";
-import { RichTextEditor } from "../../components/ui/RichTextEditor";
-import type { Json } from "../../lib/supabase";
-
-export interface BlockBase {
-  id: string;
-  type: string;
-}
 
 export type BlockType =
   | "heading" | "paragraph" | "image" | "spacer" | "divider"
@@ -16,54 +8,68 @@ export type BlockType =
   | "quote" | "countdown" | "map" | "rsvp-form" | "guest-list"
   | "schedule" | "venue" | "faq";
 
-export type Block = BlockBase & Record<string, any>;
-
-export const BLOCK_TYPES: { type: BlockType; label: string; icon: string }[] = [
-  { type: "heading", label: "Heading", icon: "H" },
-  { type: "paragraph", label: "Paragraph", icon: "¶" },
-  { type: "image", label: "Image", icon: "🖼" },
-  { type: "spacer", label: "Spacer", icon: "␣" },
-  { type: "divider", label: "Divider", icon: "—" },
-  { type: "gallery", label: "Gallery", icon: "▦" },
-  { type: "video", label: "Video", icon: "▶" },
-  { type: "button", label: "Button", icon: "⬚" },
-  { type: "columns", label: "Columns", icon: "⣿" },
-  { type: "list", label: "List", icon: "•" },
-  { type: "quote", label: "Quote", icon: "❝" },
-  { type: "countdown", label: "Countdown", icon: "⏳" },
-  { type: "map", label: "Map", icon: "📍" },
-  { type: "rsvp-form", label: "RSVP Form", icon: "✉" },
-  { type: "guest-list", label: "Guest List", icon: "👥" },
-  { type: "schedule", label: "Schedule", icon: "📅" },
-  { type: "venue", label: "Venue", icon: "🏛" },
-  { type: "faq", label: "FAQ", icon: "?" },
-];
-
-function genId(): string {
-  return `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+export interface Block {
+  id: string;
+  type: BlockType;
+  data: Record<string, unknown>;
 }
 
+interface BlockTypeMeta {
+  type: BlockType;
+  label: string;
+  icon: string;
+}
+
+export const BLOCK_TYPES: BlockTypeMeta[] = [
+  { type: "heading", label: "Heading", icon: "H" },
+  { type: "paragraph", label: "Paragraph", icon: "P" },
+  { type: "image", label: "Image", icon: "IMG" },
+  { type: "spacer", label: "Spacer", icon: "—" },
+  { type: "divider", label: "Divider", icon: "·" },
+  { type: "gallery", label: "Gallery", icon: "GAL" },
+  { type: "video", label: "Video", icon: "VID" },
+  { type: "button", label: "Button", icon: "BTN" },
+  { type: "columns", label: "Columns", icon: "COL" },
+  { type: "list", label: "List", icon: "LIST" },
+  { type: "quote", label: "Quote", icon: '"' },
+  { type: "countdown", label: "Countdown", icon: "CD" },
+  { type: "map", label: "Map", icon: "MAP" },
+  { type: "rsvp-form", label: "RSVP Form", icon: "RSVP" },
+  { type: "guest-list", label: "Guest List", icon: "GL" },
+  { type: "schedule", label: "Schedule", icon: "SCH" },
+  { type: "venue", label: "Venue", icon: "VEN" },
+  { type: "faq", label: "FAQ", icon: "FAQ" },
+];
+
 export function createBlock(type: BlockType): Block {
-  const base = { id: genId(), type };
+  return {
+    id: crypto.randomUUID(),
+    type,
+    data: defaultBlockData(type),
+  };
+}
+
+function defaultBlockData(type: BlockType): Record<string, unknown> {
   switch (type) {
-    case "heading": return { ...base, text: "", level: 2 };
-    case "paragraph": return { ...base, text: "" };
-    case "image": return { ...base, url: "", alt: "" };
-    case "spacer": return { ...base, height: 40 };
-    case "divider": return { ...base };
-    case "gallery": return { ...base, images: [], columns: 3 };
-    case "video": return { ...base, url: "" };
-    case "button": return { ...base, text: "Click here", url: "", style: "primary" };
-    case "columns": return { ...base, columns: ["", ""] };
-    case "list": return { ...base, items: [""], ordered: false };
-    case "quote": return { ...base, text: "", author: "" };
-    case "countdown": return { ...base, targetDate: "" };
-    case "map": return { ...base, address: "", zoom: 14 };
-    case "rsvp-form": return { ...base, heading: "RSVP" };
-    case "guest-list": return { ...base, heading: "Guests" };
-    case "schedule": return { ...base, heading: "Schedule" };
-    case "venue": return { ...base, heading: "Venue" };
-    case "faq": return { ...base, items: [{ question: "", answer: "" }] };
+    case "heading": return { text: "New Heading", level: "h2" };
+    case "paragraph": return { text: "" };
+    case "image": return { url: "", alt: "", caption: "" };
+    case "spacer": return { height: 40 };
+    case "divider": return {};
+    case "gallery": return { images: [] };
+    case "video": return { url: "", caption: "" };
+    case "button": return { text: "Click Here", url: "" };
+    case "columns": return { left: "", right: "" };
+    case "list": return { items: [] };
+    case "quote": return { text: "", author: "" };
+    case "countdown": return { targetDate: "" };
+    case "map": return { address: "", zoom: 15 };
+    case "rsvp-form": return {};
+    case "guest-list": return {};
+    case "schedule": return {};
+    case "venue": return { name: "", address: "" };
+    case "faq": return { items: [] };
+    default: return {};
   }
 }
 
@@ -76,171 +82,229 @@ export function BlockContent({
   eventId: string;
   onUpdate: (updates: Partial<Block>) => void;
 }) {
+  const data = block.data;
+  const set = (patch: Record<string, unknown>) => onUpdate({ data: { ...data, ...patch } });
+
   switch (block.type) {
     case "heading":
       return (
         <div className="space-y-2">
-          <Select label="Level" value={String(block.level ?? 2)}
-            onChange={(e) => onUpdate({ level: Number(e.target.value) })}>
-            <option value="1">H1</option><option value="2">H2</option>
-            <option value="3">H3</option><option value="4">H4</option>
-          </Select>
-          <Input label="Text" value={block.text} placeholder="Heading text..."
-            onChange={(e) => onUpdate({ text: e.target.value })} />
+          <Input
+            label="Text"
+            value={(data.text as string) || ""}
+            onChange={(e) => set({ text: e.target.value })}
+          />
+          <div>
+            <span className="mb-1 block text-sm font-medium text-dash-text">Level</span>
+            <select
+              value={(data.level as string) || "h2"}
+              onChange={(e) => set({ level: e.target.value })}
+              className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
+            >
+              <option value="h1">H1</option>
+              <option value="h2">H2</option>
+              <option value="h3">H3</option>
+            </select>
+          </div>
         </div>
       );
+
     case "paragraph":
       return (
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-dash-text">Content</label>
-          <RichTextEditor value={block.text} placeholder="Write your paragraph..."
-            onChange={(text) => onUpdate({ text })} />
-        </div>
+        <Textarea
+          label="Text"
+          rows={4}
+          value={(data.text as string) || ""}
+          onChange={(e) => set({ text: e.target.value })}
+        />
       );
+
     case "image":
       return (
         <div className="space-y-2">
-          <ImageUpload label="Image" value={block.url || null} eventId={eventId}
-            onChange={(url) => onUpdate({ url: url ?? "" })} />
-          <Input label="Alt Text" value={block.alt} placeholder="Describe the image..."
-            onChange={(e) => onUpdate({ alt: e.target.value })} />
+          <ImageUpload
+            label="Image"
+            value={(data.url as string) || null}
+            onChange={(url) => set({ url: url ?? "" })}
+            eventId={eventId}
+          />
+          <Input
+            label="Alt Text"
+            value={(data.alt as string) || ""}
+            onChange={(e) => set({ alt: e.target.value })}
+          />
+          <Input
+            label="Caption"
+            value={(data.caption as string) || ""}
+            onChange={(e) => set({ caption: e.target.value })}
+          />
         </div>
       );
+
     case "spacer":
-      return <Input label="Height (px)" type="number" value={block.height} min={0}
-        onChange={(e) => onUpdate({ height: Number(e.target.value) })} />;
+      return (
+        <div>
+          <span className="mb-1 block text-sm font-medium text-dash-text">Height (px)</span>
+          <input
+            type="number"
+            value={(data.height as number) || 40}
+            onChange={(e) => set({ height: parseInt(e.target.value) || 40 })}
+            className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
+          />
+        </div>
+      );
+
     case "divider":
       return <p className="text-sm text-dash-muted">A horizontal divider line.</p>;
-    case "gallery":
+
+    case "video":
       return (
         <div className="space-y-2">
-          <Select label="Columns" value={String(block.columns)}
-            onChange={(e) => onUpdate({ columns: Number(e.target.value) })}>
-            <option value="2">2 columns</option><option value="3">3 columns</option>
-            <option value="4">4 columns</option>
-          </Select>
-          {block.images.map((url: string, i: number) => (
-            <div key={i} className="flex items-center gap-2">
-              <ImageUpload value={url || null} eventId={eventId} aspect="aspect-video"
-                onChange={(newUrl) => {
-                  const images = [...block.images]; images[i] = newUrl ?? "";
-                  onUpdate({ images });
-                }} />
-              <Button size="sm" variant="ghost" onClick={() => {
-                onUpdate({ images: block.images.filter((_: number, idx: number) => idx !== i) });
-              }}>Remove</Button>
-            </div>
-          ))}
-          <Button size="sm" variant="secondary" onClick={() => {
-            onUpdate({ images: [...block.images, ""] });
-          }}>Add Image</Button>
+          <Input
+            label="Video URL"
+            value={(data.url as string) || ""}
+            onChange={(e) => set({ url: e.target.value })}
+          />
+          <Input
+            label="Caption"
+            value={(data.caption as string) || ""}
+            onChange={(e) => set({ caption: e.target.value })}
+          />
         </div>
       );
-    case "video":
-      return <Input label="Video URL" value={block.url} placeholder="https://youtube.com/..."
-        onChange={(e) => onUpdate({ url: e.target.value })} />;
+
     case "button":
       return (
-        <div className="grid grid-cols-2 gap-2">
-          <Input label="Button Text" value={block.text}
-            onChange={(e) => onUpdate({ text: e.target.value })} />
-          <Input label="Link URL" value={block.url}
-            onChange={(e) => onUpdate({ url: e.target.value })} />
+        <div className="space-y-2">
+          <Input
+            label="Button Text"
+            value={(data.text as string) || ""}
+            onChange={(e) => set({ text: e.target.value })}
+          />
+          <Input
+            label="Link URL"
+            value={(data.url as string) || ""}
+            onChange={(e) => set({ url: e.target.value })}
+          />
         </div>
       );
+
     case "columns":
       return (
-        <div className="space-y-2">
-          {block.columns.map((col: string, i: number) => (
-            <div key={i}>
-              <label className="mb-1 block text-xs font-medium text-dash-muted">Column {i + 1}</label>
-              <RichTextEditor value={col} placeholder={`Column ${i + 1} content...`}
-                onChange={(html) => {
-                  const columns = [...block.columns]; columns[i] = html;
-                  onUpdate({ columns });
-                }} />
-            </div>
-          ))}
-          <Button size="sm" variant="secondary" onClick={() => {
-            onUpdate({ columns: [...block.columns, ""] });
-          }}>Add Column</Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Textarea
+            label="Left Column"
+            rows={3}
+            value={(data.left as string) || ""}
+            onChange={(e) => set({ left: e.target.value })}
+          />
+          <Textarea
+            label="Right Column"
+            rows={3}
+            value={(data.right as string) || ""}
+            onChange={(e) => set({ right: e.target.value })}
+          />
         </div>
       );
+
     case "list":
       return (
-        <div className="space-y-2">
-          <Toggle checked={block.ordered} label="Ordered list"
-            onChange={(v) => onUpdate({ ordered: v })} />
-          {block.items.map((item: string, i: number) => (
-            <div key={i} className="flex items-center gap-2">
-              <Input value={item} placeholder={`Item ${i + 1}`}
-                onChange={(e) => {
-                  const items = [...block.items]; items[i] = e.target.value;
-                  onUpdate({ items });
-                }} />
-              <Button size="sm" variant="ghost" onClick={() => {
-                onUpdate({ items: block.items.filter((_: number, idx: number) => idx !== i) });
-              }}>Remove</Button>
-            </div>
-          ))}
-          <Button size="sm" variant="secondary" onClick={() => {
-            onUpdate({ items: [...block.items, ""] });
-          }}>Add Item</Button>
-        </div>
+        <Textarea
+          label="Items (one per line)"
+          rows={5}
+          value={Array.isArray(data.items) ? (data.items as string[]).join("\n") : ""}
+          onChange={(e) => set({ items: e.target.value.split("\n").filter(Boolean) })}
+        />
       );
+
     case "quote":
       return (
         <div className="space-y-2">
-          <Textarea label="Quote" value={block.text} placeholder="Quote text..."
-            onChange={(e) => onUpdate({ text: e.target.value })} />
-          <Input label="Author" value={block.author} placeholder="Author name..."
-            onChange={(e) => onUpdate({ author: e.target.value })} />
+          <Textarea
+            label="Quote"
+            rows={3}
+            value={(data.text as string) || ""}
+            onChange={(e) => set({ text: e.target.value })}
+          />
+          <Input
+            label="Author"
+            value={(data.author as string) || ""}
+            onChange={(e) => set({ author: e.target.value })}
+          />
         </div>
       );
+
     case "countdown":
-      return <Input label="Target Date" type="datetime-local" value={block.targetDate}
-        onChange={(e) => onUpdate({ targetDate: e.target.value })} />;
+      return (
+        <Input
+          label="Target Date"
+          type="date"
+          value={(data.targetDate as string) || ""}
+          onChange={(e) => set({ targetDate: e.target.value })}
+        />
+      );
+
     case "map":
       return (
-        <div className="grid grid-cols-2 gap-2">
-          <Input label="Address" value={block.address} placeholder="123 Main Street, City"
-            onChange={(e) => onUpdate({ address: e.target.value })} />
-          <Input label="Zoom Level" type="number" value={block.zoom} min={0} max={20}
-            onChange={(e) => onUpdate({ zoom: Number(e.target.value) })} />
+        <div className="space-y-2">
+          <Input
+            label="Address"
+            value={(data.address as string) || ""}
+            onChange={(e) => set({ address: e.target.value })}
+          />
+          <div>
+            <span className="mb-1 block text-sm font-medium text-dash-text">Zoom</span>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={(data.zoom as number) || 15}
+              onChange={(e) => set({ zoom: parseInt(e.target.value) || 15 })}
+              className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
+            />
+          </div>
         </div>
       );
+
     case "rsvp-form":
+      return <p className="text-sm text-dash-muted">Displays the RSVP form for the current guest.</p>;
+
     case "guest-list":
+      return <p className="text-sm text-dash-muted">Displays the guest list for this event.</p>;
+
     case "schedule":
+      return <p className="text-sm text-dash-muted">Displays the event schedule.</p>;
+
     case "venue":
-      return <Input label="Heading" value={block.heading}
-        onChange={(e) => onUpdate({ heading: e.target.value })} />;
+      return (
+        <div className="space-y-2">
+          <Input
+            label="Venue Name"
+            value={(data.name as string) || ""}
+            onChange={(e) => set({ name: e.target.value })}
+          />
+          <Input
+            label="Address"
+            value={(data.address as string) || ""}
+            onChange={(e) => set({ address: e.target.value })}
+          />
+        </div>
+      );
+
     case "faq":
       return (
-        <div className="space-y-3">
-          {block.items.map((item: { question: string; answer: string }, i: number) => (
-            <div key={i} className="space-y-2 rounded-md border border-dash-border p-3">
-              <Input label="Question" value={item.question} placeholder="Question..."
-                onChange={(e) => {
-                  const items = [...block.items]; items[i] = { ...items[i], question: e.target.value };
-                  onUpdate({ items });
-                }} />
-              <Textarea label="Answer" value={item.answer} placeholder="Answer..."
-                onChange={(e) => {
-                  const items = [...block.items]; items[i] = { ...items[i], answer: e.target.value };
-                  onUpdate({ items });
-                }} />
-              <Button size="sm" variant="ghost" onClick={() => {
-                onUpdate({ items: block.items.filter((_: number, idx: number) => idx !== i) });
-              }}>Remove FAQ</Button>
-            </div>
-          ))}
-          <Button size="sm" variant="secondary" onClick={() => {
-            onUpdate({ items: [...block.items, { question: "", answer: "" }] });
-          }}>Add FAQ Item</Button>
-        </div>
+        <Textarea
+          label="FAQ Items (Q: question\nA: answer, one per pair)"
+          rows={6}
+          value={Array.isArray(data.items) ? (data.items as string[]).join("\n") : ""}
+          onChange={(e) => set({ items: e.target.value.split("\n").filter(Boolean) })}
+        />
       );
+
+    case "gallery":
+      return <p className="text-sm text-dash-muted">Gallery block — add images via the page builder.</p>;
+
+    default:
+      return null;
   }
 }
-
-export type { Json };

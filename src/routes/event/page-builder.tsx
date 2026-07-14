@@ -47,7 +47,7 @@ export default function PageBuilder() {
     setNavLabel(page.nav_label ?? page.title);
     setShowInNav(page.show_in_nav);
     setIsPublished(page.is_published);
-    setBlocks((page.blocks as Block[]) ?? []);
+    setBlocks((page.blocks as unknown as Block[]) ?? []);
     setInitialized(true);
   }
 
