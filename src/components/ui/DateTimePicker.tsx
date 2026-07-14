@@ -1,33 +1,42 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { cn } from "../../lib/utils";
 import { DatePicker } from "./DatePicker";
 import { TimePicker } from "./TimePicker";
 
 interface DateTimePickerProps {
-  date: string | null;
-  time: string | null;
-  onChange: (date: string | null, time: string | null) => void;
-  label?: string;
+  date?: string | null;
+  time?: string | null;
+  onDateChange: (date: string | null) => void;
+  onTimeChange: (time: string | null) => void;
   className?: string;
-  min?: string;
-  max?: string;
+  minDate?: string;
+  maxDate?: string;
 }
 
 type Tab = "date" | "time";
 
-export function DateTimePicker({ date, time, onChange, label, className, min, max }: DateTimePickerProps) {
+export function DateTimePicker({
+  date,
+  time,
+  onDateChange,
+  onTimeChange,
+  className,
+  minDate,
+  maxDate,
+}: DateTimePickerProps) {
   const [tab, setTab] = useState<Tab>("date");
 
   return (
-    <div className={cn("space-y-2", className)}>
-      {label && <label className="block text-sm font-medium text-dash-text">{label}</label>}
-      <div className="inline-flex rounded-md border border-dash-border bg-dash-surface p-0.5">
+    <div className={cn("rounded-lg border border-dash-border bg-dash-surface", className)}>
+      <div className="flex border-b border-dash-border">
         <button
           type="button"
           onClick={() => setTab("date")}
           className={cn(
-            "rounded px-3 py-1 text-sm font-medium transition-colors",
-            tab === "date" ? "bg-dash-primary text-dash-primary-fg" : "text-dash-muted hover:text-dash-text",
+            "flex-1 px-4 py-2 text-sm font-medium transition-colors",
+            tab === "date"
+              ? "border-b-2 border-dash-primary text-dash-primary"
+              : "text-dash-muted hover:text-dash-text"
           )}
         >
           Date
@@ -36,22 +45,26 @@ export function DateTimePicker({ date, time, onChange, label, className, min, ma
           type="button"
           onClick={() => setTab("time")}
           className={cn(
-            "rounded px-3 py-1 text-sm font-medium transition-colors",
-            tab === "time" ? "bg-dash-primary text-dash-primary-fg" : "text-dash-muted hover:text-dash-text",
+            "flex-1 px-4 py-2 text-sm font-medium transition-colors",
+            tab === "time"
+              ? "border-b-2 border-dash-primary text-dash-primary"
+              : "text-dash-muted hover:text-dash-text"
           )}
         >
           Time
         </button>
       </div>
-      {tab === "date" ? (
-        <DatePicker value={date} onChange={(d) => onChange(d, time)} min={min} max={max} />
-      ) : (
-        <TimePicker value={time} onChange={(t) => onChange(date, t)} />
-      )}
-      <div className="text-xs text-dash-muted">
-        {date && `Date: ${date}`}
-        {date && time && " · "}
-        {time && `Time: ${time}`}
+      <div className="p-3">
+        {tab === "date" ? (
+          <DatePicker
+            value={date}
+            onChange={onDateChange}
+            minDate={minDate}
+            maxDate={maxDate}
+          />
+        ) : (
+          <TimePicker value={time} onChange={onTimeChange} />
+        )}
       </div>
     </div>
   );

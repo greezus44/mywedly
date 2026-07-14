@@ -1,14 +1,22 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type Json, type CustomPage } from "../../lib/supabase";
+import { supabase, type CustomPage, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
+import {
+  Block,
+  BlockType,
+  BLOCK_TYPES,
+  createBlock,
+  blocksToJson,
+  jsonToBlocks,
+} from "./block-types";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, Select, FormField, Card } from "../../components/ui";
+import { Input, Textarea } from "../../components/ui/Input";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
+import { Card, LoadingSpinner, ErrorState } from "../../components/ui";
 import { cn } from "../../lib/utils";
-import { BLOCK_TYPES, createBlock, jsonToBlocks, blocksToJson, type Block, type BlockType } from "./block-types";
 
 export function PageBuilder() {
   const { eventId } = useEventContext();
@@ -16,152 +24,179 @@ export function PageBuilder() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const { data: page, isLoading, error } = useQuery({
-    queryKey: ["custom-page", pageId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("custom_pages")
-        .select("*")
-        .eq("id", pageId)
-        .maybeSingle();
-      if (error) throw error;
-      return data as CustomPage | null;
-    },
-    enabled: !!pageId,
-  });
-
+  const [blocks, setBlocks] = useState<Block[]>([]);
   const [title, setTitle] = useState("");
   const [navLabel, setNavLabel] = useState("");
-  const [blocks, setBlocks] = useState<Block[]>([]);
-  const [showInNav, setShowInNav] = useState(false);
-  const [savedMsg, setSavedMsg] = useState(false);
+  const [showInNav, setShowInNav] = useState(true);
+  const [coverImage, setCoverImage] = useState<string | null>(null);
+
+  const {
+    data: page,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["custom-page", pageId],
+    enabled: !!pageId,
+    queryFn: async () => {
+      const { data, error: queryError } = await supabase
+        .from("custom_pages")
+        .select("*")
+        .eq("id", pageId!)
+        .maybeSingle();
+      if (queryError) throw queryError;
+      if (!data) throw new Error("Page not found");
+      return data as CustomPage;
+    },
+  });
 
   useEffect(() => {
-    if (!page) return;
-    setTitle(page.title);
-    setNavLabel(page.nav_label ?? "");
-    setBlocks(jsonToBlocks(page.blocks));
-    setShowInNav(page.show_in_nav);
+    if (page) {
+      setTitle(page.title);
+      setNavLabel(page.nav_label ?? "");
+      setShowInNav(page.show_in_nav);
+      setCoverImage(page.cover_image_url);
+      setBlocks(jsonToBlocks(page.blocks));
+    }
   }, [page]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!page) throw new Error("Page not loaded");
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from("custom_pages")
         .update({
           title,
-          nav_label: navLabel || null,
-          blocks: blocksToJson(blocks),
+          nav_label: navLabel || title,
           show_in_nav: showInNav,
+          cover_image_url: coverImage,
+          blocks: blocksToJson(blocks),
           updated_at: new Date().toISOString(),
         })
-        .eq("id", page.id);
-      if (error) throw error;
+        .eq("id", pageId!);
+      if (updateError) throw updateError;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] });
       queryClient.invalidateQueries({ queryKey: ["custom-page", pageId] });
-      setSavedMsg(true);
-      setTimeout(() => setSavedMsg(false), 2000);
+      queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] });
     },
   });
 
-  function addBlock(type: BlockType) {
+  const addBlock = (type: BlockType) => {
     setBlocks((prev) => [...prev, createBlock(type)]);
-  }
+  };
 
-  function updateBlock(id: string, content: Partial<typeof blocks[number]["content"]>) {
+  const updateBlock = (id: string, data: Record<string, unknown>) => {
     setBlocks((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, content: { ...b.content, ...content } } : b)),
+      prev.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...data } } : b))
     );
-  }
+  };
 
-  function removeBlock(id: string) {
+  const removeBlock = (id: string) => {
     setBlocks((prev) => prev.filter((b) => b.id !== id));
-  }
+  };
 
-  function moveBlock(id: string, dir: "up" | "down") {
+  const moveBlock = (id: string, dir: "up" | "down") => {
     setBlocks((prev) => {
       const idx = prev.findIndex((b) => b.id === id);
       if (idx === -1) return prev;
       const newIdx = dir === "up" ? idx - 1 : idx + 1;
       if (newIdx < 0 || newIdx >= prev.length) return prev;
-      const copy = [...prev];
-      [copy[idx], copy[newIdx]] = [copy[newIdx], copy[idx]];
-      return copy;
+      const newBlocks = [...prev];
+      [newBlocks[idx], newBlocks[newIdx]] = [newBlocks[newIdx], newBlocks[idx]];
+      return newBlocks;
     });
-  }
+  };
 
   if (isLoading) {
-    return <div className="flex items-center justify-center py-20"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
-  }
-
-  if (error || !page) {
     return (
-      <div className="py-20 text-center">
-        <p className="text-dash-muted">Page not found.</p>
-        <Button variant="secondary" onClick={() => navigate(`/event/${eventId}/pages`)} className="mt-4">Back to Pages</Button>
+      <div className="flex justify-center py-20">
+        <LoadingSpinner className="h-8 w-8" />
       </div>
     );
   }
 
+  if (isError) {
+    return <ErrorState message={error instanceof Error ? error.message : "Failed to load"} />;
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-4xl space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-dash-text">Page Builder</h2>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => navigate(`/event/${eventId}/pages`)}>
-            ← Back to Pages
-          </Button>
-          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-            Save Page
-          </Button>
+        <div>
+          <button
+            onClick={() => navigate(`/event/${eventId}/pages`)}
+            className="text-sm text-dash-muted hover:text-dash-text"
+          >
+            ← Pages
+          </button>
+          <h2 className="mt-1 text-xl font-semibold text-dash-text">Page Builder</h2>
         </div>
+        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
+          Save Page
+        </Button>
       </div>
 
-      {savedMsg && <span className="text-sm text-green-600">Saved!</span>}
       {saveMutation.isError && (
         <p className="text-sm text-dash-danger">
           {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
         </p>
       )}
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-green-600">Page saved!</p>
+      )}
 
-      {/* Page Settings */}
+      {/* Page settings */}
       <Card>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Page Title" required>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} />
-          </FormField>
-          <FormField label="Nav Label">
-            <Input
-              value={navLabel}
-              onChange={(e) => setNavLabel(e.target.value)}
-              placeholder="Label shown in navigation"
-            />
-          </FormField>
-        </div>
-        <label className="mt-3 flex items-center gap-2 text-sm text-dash-text">
-          <input
-            type="checkbox"
-            checked={showInNav}
-            onChange={(e) => setShowInNav(e.target.checked)}
-            className="rounded"
+        <h3 className="text-sm font-medium text-dash-text">Page Settings</h3>
+        <div className="mt-4 space-y-4">
+          <Input
+            label="Title"
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
           />
-          Show in navigation
-        </label>
+          <Input
+            label="Nav Label"
+            type="text"
+            value={navLabel}
+            onChange={(e) => setNavLabel(e.target.value)}
+            placeholder="Label shown in navigation"
+          />
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={showInNav}
+              onChange={(e) => setShowInNav(e.target.checked)}
+              className="h-4 w-4 rounded border-dash-border"
+            />
+            <span className="text-sm text-dash-text">Show in navigation</span>
+          </label>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-dash-text">Cover Image</label>
+            <ImageUpload
+              bucket="event-assets"
+              path={`${eventId}/pages/${pageId}/cover`}
+              value={coverImage}
+              onUpload={setCoverImage}
+              onRemove={() => setCoverImage(null)}
+              aspectRatio="wide"
+            />
+          </div>
+        </div>
       </Card>
 
-      {/* Block Types */}
+      {/* Block types */}
       <Card>
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Add Block</h3>
-        <div className="flex flex-wrap gap-2">
+        <h3 className="text-sm font-medium text-dash-text">Add Block</h3>
+        <div className="mt-3 flex flex-wrap gap-2">
           {BLOCK_TYPES.map((bt) => (
             <button
               key={bt.type}
               type="button"
               onClick={() => addBlock(bt.type)}
-              className="flex items-center gap-2 rounded-md border border-dash-border px-3 py-1.5 text-sm font-medium text-dash-text transition-colors hover:bg-dash-bg"
+              className="flex items-center gap-2 rounded-lg border border-dash-border px-3 py-2 text-sm text-dash-text transition-colors hover:bg-dash-bg"
+              title={bt.description}
             >
               <span>{bt.icon}</span>
               <span>{bt.label}</span>
@@ -172,204 +207,217 @@ export function PageBuilder() {
 
       {/* Blocks */}
       <div className="space-y-4">
-        {blocks.length === 0 && (
-          <div className="rounded-lg border border-dashed border-dash-border p-8 text-center text-sm text-dash-muted">
-            No blocks yet. Add a block above to start building your page.
-          </div>
-        )}
-        {blocks.map((block, idx) => (
-          <Card key={block.id} className="p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-sm font-semibold text-dash-muted">
-                {idx + 1}. {block.type}
-              </span>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" onClick={() => moveBlock(block.id, "up")} disabled={idx === 0}>
-                  ↑
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => moveBlock(block.id, "down")} disabled={idx === blocks.length - 1}>
-                  ↓
-                </Button>
-                <Button variant="danger" size="sm" onClick={() => removeBlock(block.id)}>
-                  Delete
-                </Button>
-              </div>
-            </div>
-            <BlockEditor block={block} eventId={eventId} onChange={(c) => updateBlock(block.id, c)} />
+        {blocks.length === 0 ? (
+          <Card>
+            <p className="text-center text-sm text-dash-muted">
+              No blocks yet. Add a block above to start building your page.
+            </p>
           </Card>
-        ))}
+        ) : (
+          blocks.map((block, index) => (
+            <Card key={block.id}>
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-sm font-medium text-dash-text capitalize">
+                  {block.type}
+                </span>
+                <div className="flex gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={index === 0}
+                    onClick={() => moveBlock(block.id, "up")}
+                  >
+                    ↑
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={index === blocks.length - 1}
+                    onClick={() => moveBlock(block.id, "down")}
+                  >
+                    ↓
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => removeBlock(block.id)}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+              <BlockEditor block={block} onChange={(data) => updateBlock(block.id, data)} eventId={eventId} pageId={pageId!} />
+            </Card>
+          ))
+        )}
       </div>
     </div>
   );
 }
 
-function BlockEditor({
-  block,
-  eventId,
-  onChange,
-}: {
+interface BlockEditorProps {
   block: Block;
+  onChange: (data: Record<string, unknown>) => void;
   eventId: string;
-  onChange: (content: Block["content"]) => void;
-}) {
+  pageId: string;
+}
+
+function BlockEditor({ block, onChange, eventId, pageId }: BlockEditorProps) {
   switch (block.type) {
     case "heading":
       return (
         <div className="space-y-3">
           <Input
-            value={block.content.text ?? ""}
+            type="text"
+            value={(block.data.text as string) ?? ""}
             onChange={(e) => onChange({ text: e.target.value })}
             placeholder="Heading text"
           />
           <div className="flex gap-2">
-            <Select
-              value={String(block.content.level ?? 2)}
-              onChange={(e) => onChange({ level: Number(e.target.value) as 1 | 2 | 3 })}
+            <select
+              value={(block.data.level as string) ?? "h2"}
+              onChange={(e) => onChange({ level: e.target.value })}
+              className="rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm"
             >
-              <option value="1">H1</option>
-              <option value="2">H2</option>
-              <option value="3">H3</option>
-            </Select>
-            <Select
-              value={block.content.align ?? "left"}
-              onChange={(e) => onChange({ align: e.target.value as "left" | "center" | "right" })}
+              <option value="h1">H1</option>
+              <option value="h2">H2</option>
+              <option value="h3">H3</option>
+            </select>
+            <select
+              value={(block.data.align as string) ?? "left"}
+              onChange={(e) => onChange({ align: e.target.value })}
+              className="rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm"
             >
               <option value="left">Left</option>
               <option value="center">Center</option>
               <option value="right">Right</option>
-            </Select>
+            </select>
           </div>
         </div>
       );
     case "paragraph":
       return (
-        <div className="space-y-3">
-          <RichTextEditor
-            value={block.content.text ?? ""}
-            onChange={(html) => onChange({ text: html })}
-            placeholder="Write your paragraph..."
-          />
-          <Select
-            value={block.content.align ?? "left"}
-            onChange={(e) => onChange({ align: e.target.value as "left" | "center" | "right" })}
-          >
-            <option value="left">Left</option>
-            <option value="center">Center</option>
-            <option value="right">Right</option>
-          </Select>
-        </div>
+        <RichTextEditor
+          value={(block.data.html as string) ?? ""}
+          onChange={(html) => onChange({ html })}
+          placeholder="Write your text..."
+        />
       );
     case "image":
       return (
         <div className="space-y-3">
           <ImageUpload
             bucket="event-assets"
-            path={`events/${eventId}/pages/${block.id}`}
-            value={block.content.src ?? null}
-            onChange={(url) => onChange({ src: url ?? "" })}
+            path={`${eventId}/pages/${pageId}/${block.id}`}
+            value={(block.data.url as string) || null}
+            onUpload={(url) => onChange({ url })}
+            onRemove={() => onChange({ url: "" })}
+            aspectRatio="auto"
           />
           <Input
-            value={block.content.alt ?? ""}
+            type="text"
+            value={(block.data.caption as string) ?? ""}
+            onChange={(e) => onChange({ caption: e.target.value })}
+            placeholder="Caption (optional)"
+          />
+          <Input
+            type="text"
+            value={(block.data.alt as string) ?? ""}
             onChange={(e) => onChange({ alt: e.target.value })}
-            placeholder="Alt text"
+            placeholder="Alt text (optional)"
           />
         </div>
       );
     case "gallery":
       return (
         <div className="space-y-2">
-          <p className="text-sm text-dash-muted">Gallery images (add one at a time):</p>
-          <ImageUpload
-            bucket="event-assets"
-            path={`events/${eventId}/pages/${block.id}/${Date.now()}`}
-            value={null}
-            onChange={(url) => {
-              if (url) {
-                onChange({ images: [...(block.content.images ?? []), url] });
-              }
-            }}
-          />
-          {(block.content.images ?? []).length > 0 && (
-            <div className="grid grid-cols-4 gap-2">
-              {(block.content.images ?? []).map((img, i) => (
-                <div key={i} className="relative">
-                  <img src={img} alt="" className="h-20 w-full rounded object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const imgs = [...(block.content.images ?? [])];
-                      imgs.splice(i, 1);
-                      onChange({ images: imgs });
-                    }}
-                    className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <p className="text-sm text-dash-muted">Gallery images (add up to 6)</p>
+          <div className="grid grid-cols-3 gap-2">
+            {((block.data.images as string[]) ?? []).map((img, i) => (
+              <div key={i} className="relative">
+                <img src={img} alt="" className="aspect-square rounded-lg object-cover" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const imgs = (block.data.images as string[]) ?? [];
+                    onChange({ images: imgs.filter((_, idx) => idx !== i) });
+                  }}
+                  className="absolute right-1 top-1 rounded bg-black/50 px-1 text-xs text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {((block.data.images as string[]) ?? []).length < 6 && (
+              <ImageUpload
+                bucket="event-assets"
+                path={`${eventId}/pages/${pageId}/${block.id}-${Date.now()}`}
+                value={null}
+                onUpload={(url) => {
+                  const imgs = (block.data.images as string[]) ?? [];
+                  onChange({ images: [...imgs, url] });
+                }}
+                aspectRatio="square"
+              />
+            )}
+          </div>
         </div>
       );
     case "button":
       return (
         <div className="space-y-3">
           <Input
-            value={block.content.label ?? ""}
-            onChange={(e) => onChange({ label: e.target.value })}
-            placeholder="Button label"
+            type="text"
+            value={(block.data.text as string) ?? ""}
+            onChange={(e) => onChange({ text: e.target.value })}
+            placeholder="Button text"
           />
           <Input
-            value={block.content.url ?? ""}
+            type="text"
+            value={(block.data.url as string) ?? ""}
             onChange={(e) => onChange({ url: e.target.value })}
             placeholder="https://..."
           />
+          <select
+            value={(block.data.align as string) ?? "center"}
+            onChange={(e) => onChange({ align: e.target.value })}
+            className="rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm"
+          >
+            <option value="left">Left</option>
+            <option value="center">Center</option>
+            <option value="right">Right</option>
+          </select>
         </div>
-      );
-    case "spacer":
-      return (
-        <FormField label={`Height: ${block.content.height ?? 40}px`}>
-          <input
-            type="range"
-            min={10}
-            max={200}
-            step={5}
-            value={block.content.height ?? 40}
-            onChange={(e) => onChange({ height: Number(e.target.value) })}
-            className="w-full"
-          />
-        </FormField>
-      );
-    case "video":
-      return (
-        <Input
-          value={block.content.videoUrl ?? ""}
-          onChange={(e) => onChange({ videoUrl: e.target.value })}
-          placeholder="Video embed URL"
-        />
       );
     case "quote":
       return (
-        <Textarea
-          value={block.content.text ?? ""}
-          onChange={(e) => onChange({ text: e.target.value })}
-          placeholder="Quote text"
-          rows={3}
-        />
-      );
-    case "list":
-      return (
-        <div className="space-y-2">
-          <p className="text-sm text-dash-muted">One item per line:</p>
+        <div className="space-y-3">
           <Textarea
-            value={(block.content.items ?? []).join("\n")}
-            onChange={(e) => onChange({ items: e.target.value.split("\n").filter(Boolean) })}
-            rows={5}
+            value={(block.data.text as string) ?? ""}
+            onChange={(e) => onChange({ text: e.target.value })}
+            placeholder="Quote text"
+          />
+          <Input
+            type="text"
+            value={(block.data.author as string) ?? ""}
+            onChange={(e) => onChange({ author: e.target.value })}
+            placeholder="Author (optional)"
           />
         </div>
       );
     case "divider":
-      return <p className="text-sm text-dash-muted">A horizontal divider line.</p>;
+      return <hr className="border-dash-border" />;
+    case "spacer":
+      return (
+        <div>
+          <Input
+            type="number"
+            value={(block.data.height as number) ?? 40}
+            onChange={(e) => onChange({ height: Number(e.target.value) })}
+            label="Height (px)"
+          />
+        </div>
+      );
     default:
       return null;
   }

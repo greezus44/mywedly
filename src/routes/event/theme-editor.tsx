@@ -1,139 +1,141 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
-import { Button } from "../../components/ui/Button";
-import { ColorInput, FormField, Select } from "../../components/ui";
+import { SplitEditor } from "../../components/preview/SplitEditor";
+import { EventThemeProvider } from "../../lib/theme-context";
 import {
   THEME_PRESETS,
   HEADING_FONT_OPTIONS,
   RICH_FONT_OPTIONS,
   type ThemeConfig,
+  type SimplifiedThemeConfig,
+  fullToSimplifiedTheme,
+  simplifiedToFullTheme,
 } from "../../lib/theme";
+import { Button } from "../../components/ui/Button";
+import { Select } from "../../components/ui/Input";
+import { ColorInput, RangeInput } from "../../components/ui";
 import { cn } from "../../lib/utils";
 
-const presetNames = Object.keys(THEME_PRESETS);
+const PRESET_NAMES = Object.keys(THEME_PRESETS);
 
-const colorFields: { key: keyof ThemeConfig["colors"]; label: string }[] = [
+const COLOR_FIELDS: { key: keyof ThemeConfig["colors"]; label: string }[] = [
   { key: "bg", label: "Background" },
   { key: "surface", label: "Surface" },
   { key: "primary", label: "Primary" },
+  { key: "primaryHover", label: "Primary Hover" },
   { key: "accent", label: "Accent" },
-  { key: "text", label: "Text" },
-  { key: "heading", label: "Heading" },
+  { key: "heading", label: "Heading Text" },
 ];
 
 export function ThemeEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const draftTheme = (event.draft_theme as ThemeConfig | null) ?? null;
-  const initial: ThemeConfig = draftTheme ?? THEME_PRESETS.default;
+  const draftTheme = event.draft_theme ?? event.theme;
+  const initialFull = simplifiedToFullTheme(
+    fullToSimplifiedTheme(draftTheme as ThemeConfig | null)
+  );
 
-  const [theme, setTheme] = useState<ThemeConfig>(initial);
-  const [savedMsg, setSavedMsg] = useState(false);
+  const [theme, setTheme] = useState<ThemeConfig>(initialFull);
 
   useEffect(() => {
-    const dt = (event.draft_theme as ThemeConfig | null) ?? null;
-    setTheme(dt ?? THEME_PRESETS.default);
-  }, [event]);
-
-  const updateColor = (key: keyof ThemeConfig["colors"], value: string) => {
-    setTheme((t) => ({ ...t, colors: { ...t.colors, [key]: value } }));
-  };
-
-  const updateFont = (key: keyof ThemeConfig["fonts"], value: string) => {
-    setTheme((t) => ({ ...t, fonts: { ...t.fonts, [key]: value } }));
-  };
-
-  const applyPreset = (presetName: string) => {
-    const preset = THEME_PRESETS[presetName];
-    if (preset) setTheme(preset);
-  };
+    setTheme(
+      simplifiedToFullTheme(
+        fullToSimplifiedTheme(draftTheme as ThemeConfig | null)
+      )
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.updated_at]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      const simplified: SimplifiedThemeConfig = fullToSimplifiedTheme(theme);
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_theme: theme as unknown as Json })
+        .update({
+          draft_theme: simplified as unknown as Json,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSavedMsg(true);
-      setTimeout(() => setSavedMsg(false), 2000);
     },
   });
 
+  const applyPreset = (presetName: string) => {
+    setTheme(THEME_PRESETS[presetName]);
+  };
+
+  const updateColor = (key: keyof ThemeConfig["colors"], value: string) => {
+    setTheme((prev) => ({
+      ...prev,
+      colors: { ...prev.colors, [key]: value },
+    }));
+  };
+
+  const updateFont = (key: keyof ThemeConfig["fonts"], value: string) => {
+    setTheme((prev) => ({
+      ...prev,
+      fonts: { ...prev.fonts, [key]: value },
+    }));
+  };
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-dash-text">Theme Editor</h2>
-        <p className="mt-1 text-sm text-dash-muted">
-          Choose a preset or customize colors and fonts for your invitation website.
-        </p>
-      </div>
+    <SplitEditor
+      editor={
+        <div className="space-y-6">
+          <h2 className="text-lg font-semibold text-dash-text">Theme Editor</h2>
 
-      {/* Presets */}
-      <div>
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Theme Presets</h3>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
-          {presetNames.map((name) => {
-            const preset = THEME_PRESETS[name];
-            const isActive =
-              theme.colors.bg === preset.colors.bg &&
-              theme.colors.primary === preset.colors.primary &&
-              theme.colors.surface === preset.colors.surface;
-            return (
-              <button
-                key={name}
-                type="button"
-                onClick={() => applyPreset(name)}
-                className={cn(
-                  "rounded-lg border-2 p-3 text-left transition-all",
-                  isActive
-                    ? "border-dash-primary ring-2 ring-dash-primary/30"
-                    : "border-dash-border hover:border-dash-primary/50",
-                )}
-              >
-                <div
-                  className="mb-2 flex h-12 items-center justify-center rounded"
-                  style={{ backgroundColor: preset.colors.bg }}
+          {/* Presets */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-dash-text">Theme Presets</p>
+            <div className="grid grid-cols-2 gap-2">
+              {PRESET_NAMES.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => applyPreset(name)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm capitalize transition-colors",
+                    theme.colors.bg === THEME_PRESETS[name].colors.bg
+                      ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
+                      : "border-dash-border text-dash-text hover:bg-dash-bg"
+                  )}
                 >
-                  <div
-                    className="h-6 w-6 rounded-full"
-                    style={{ backgroundColor: preset.colors.primary }}
+                  <span
+                    className="h-4 w-4 rounded-full border border-dash-border"
+                    style={{ backgroundColor: THEME_PRESETS[name].colors.primary }}
                   />
-                </div>
-                <span className="text-xs font-medium capitalize text-dash-text">{name}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+                  {name}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      {/* Colors */}
-      <div className="border-t border-dash-border pt-4">
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Colors</h3>
-        <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-          {colorFields.map((field) => (
-            <ColorInput
-              key={field.key}
-              label={field.label}
-              value={theme.colors[field.key]}
-              onChange={(v) => updateColor(field.key, v)}
-            />
-          ))}
-        </div>
-      </div>
+          {/* Colors */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-dash-text">Colors</p>
+            <div className="grid grid-cols-2 gap-3">
+              {COLOR_FIELDS.map((field) => (
+                <ColorInput
+                  key={field.key}
+                  label={field.label}
+                  value={theme.colors[field.key]}
+                  onChange={(v) => updateColor(field.key, v)}
+                />
+              ))}
+            </div>
+          </div>
 
-      {/* Fonts */}
-      <div className="border-t border-dash-border pt-4">
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Fonts</h3>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Heading Font">
+          {/* Fonts */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-dash-text">Fonts</p>
             <Select
+              label="Heading Font"
               value={theme.fonts.heading}
               onChange={(e) => updateFont("heading", e.target.value)}
             >
@@ -143,12 +145,10 @@ export function ThemeEditor() {
                 </option>
               ))}
             </Select>
-          </FormField>
-
-          <FormField label="Body / Rich Text Font">
             <Select
-              value={theme.fonts.rich}
-              onChange={(e) => updateFont("rich", e.target.value)}
+              label="Body Font"
+              value={theme.fonts.body}
+              onChange={(e) => updateFont("body", e.target.value)}
             >
               {RICH_FONT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -156,60 +156,61 @@ export function ThemeEditor() {
                 </option>
               ))}
             </Select>
-          </FormField>
-        </div>
-      </div>
+          </div>
 
-      {/* Preview swatch */}
-      <div className="border-t border-dash-border pt-4">
-        <h3 className="mb-3 text-sm font-semibold text-dash-text">Preview</h3>
-        <div
-          className="rounded-lg border p-6"
-          style={{
-            backgroundColor: theme.colors.bg,
-            borderColor: theme.colors.border,
-            color: theme.colors.text,
-            fontFamily: theme.fonts.body,
-          }}
-        >
-          <h4
-            style={{
-              color: theme.colors.heading,
-              fontFamily: theme.fonts.heading,
-              fontSize: "1.5rem",
-              fontWeight: 700,
-            }}
-          >
-            Sample Heading
-          </h4>
-          <p className="mt-2" style={{ color: theme.colors.muted }}>
-            This is how your body text will look on the invitation website.
-          </p>
-          <button
-            type="button"
-            className="mt-3 rounded-md px-4 py-2 text-sm font-medium"
-            style={{
-              backgroundColor: theme.colors.primary,
-              color: theme.colors.primaryFg,
-            }}
-          >
-            Sample Button
-          </button>
-        </div>
-      </div>
+          {/* Radius */}
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-dash-text">Corner Radius</p>
+            <RangeInput
+              label="Radius"
+              min={0}
+              max={20}
+              value={parseFloat(theme.radius) || 0}
+              onChange={(v) => setTheme((p) => ({ ...p, radius: `${v}px` }))}
+            />
+          </div>
 
-      {/* Save */}
-      <div className="flex items-center gap-3 border-t border-dash-border pt-4">
-        <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-          Save Theme
-        </Button>
-        {savedMsg && <span className="text-sm text-green-600">Saved!</span>}
-        {saveMutation.isError && (
-          <span className="text-sm text-dash-danger">
-            {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
-          </span>
-        )}
-      </div>
-    </div>
+          <Button
+            onClick={() => saveMutation.mutate()}
+            loading={saveMutation.isPending}
+            className="w-full"
+          >
+            Save Theme
+          </Button>
+          {saveMutation.isError && (
+            <p className="text-sm text-dash-danger">
+              {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+            </p>
+          )}
+          {saveMutation.isSuccess && (
+            <p className="text-sm text-green-600">Theme saved!</p>
+          )}
+        </div>
+      }
+      preview={
+        <EventThemeProvider theme={theme as unknown as Json}>
+          <div className="space-y-6 p-4">
+            <h1 className="guest-title">Preview</h1>
+            <p className="guest-subtitle">
+              This is how your invitation website will look with the selected theme.
+            </p>
+            <button type="button" className="event-btn-primary">
+              Primary Button
+            </button>
+            <button type="button" className="event-btn-secondary">
+              Secondary Button
+            </button>
+            <div className="event-card">
+              <h2>Sample Card</h2>
+              <p>
+                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do
+                eiusmod tempor incididunt ut labore.
+              </p>
+            </div>
+            <div className="event-input">Input field preview</div>
+          </div>
+        </EventThemeProvider>
+      }
+    />
   );
 }

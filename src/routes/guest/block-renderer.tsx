@@ -1,278 +1,300 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type SubEvent, type EventSchedule, type EventRsvp } from "../../lib/supabase";
+import { supabase, type EventSchedule, type EventGuest } from "../../lib/supabase";
 import { resolveTypography } from "../../lib/typography";
-import { useGuestOutletContext } from "./guest-layout";
-import { getCountdown, formatDate, formatTime12, cn } from "../../lib/utils";
+import { RichTextContent } from "../../lib/sanitize";
+import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
 
-/* Relaxed block types — the guest renderer supports more block types than the
-   editor's BlockType union (countdown, map, rsvp-form, guest-list, schedule,
-   venue, faq, columns), so we widen the types here. */
-interface GuestBlockContent { [key: string]: unknown }
-export interface Block { id: string; type: string; content: GuestBlockContent }
+interface Block {
+  id: string;
+  type: string;
+  data: Record<string, unknown>;
+}
 
-/* ---------- typed accessors ---------- */
+interface BlockRendererProps {
+  block: Block;
+  eventId: string;
+  slug: string;
+  guest: EventGuest | null;
+}
 
-const str = (v: unknown, fallback = ""): string => typeof v === "string" ? v : fallback;
-const num = (v: unknown, fallback = 0): number => typeof v === "number" ? v : fallback;
-const align = (v: unknown): string | undefined => v === "left" || v === "right" || v === "center" ? v : undefined;
-const alignClass = (v: unknown): string => align(v) === "left" ? "text-left" : align(v) === "right" ? "text-right" : "text-center";
-const strArr = (v: unknown): string[] => Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
-const getYouTubeEmbed = (url: string) => { const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{11})/); return m ? `https://www.youtube.com/embed/${m[1]}` : null; };
-const getVimeoEmbed = (url: string) => { const m = url.match(/vimeo\.com\/(\d+)/); return m ? `https://player.vimeo.com/video/${m[1]}` : null; };
+export function BlockRenderer({ block, eventId, slug, guest }: BlockRendererProps) {
+  switch (block.type) {
+    case "heading": return <HeadingBlock data={block.data} />;
+    case "paragraph": return <ParagraphBlock data={block.data} />;
+    case "image": return <ImageBlock data={block.data} />;
+    case "spacer": return <SpacerBlock data={block.data} />;
+    case "divider": return <DividerBlock />;
+    case "gallery": return <GalleryBlock data={block.data} />;
+    case "video": return <VideoBlock data={block.data} />;
+    case "button": return <ButtonBlock data={block.data} />;
+    case "columns": return <ColumnsBlock data={block.data} />;
+    case "list": return <ListBlock data={block.data} />;
+    case "quote": return <QuoteBlock data={block.data} />;
+    case "countdown": return <CountdownBlock data={block.data} />;
+    case "map": return <MapBlock data={block.data} />;
+    case "rsvp-form": return <RsvpFormBlock eventId={eventId} slug={slug} guest={guest} />;
+    case "guest-list": return <GuestListBlock eventId={eventId} />;
+    case "schedule": return <ScheduleBlock eventId={eventId} />;
+    case "venue": return <VenueBlock data={block.data} />;
+    case "faq": return <FaqBlock data={block.data} />;
+    default: return null;
+  }
+}
 
-/* ---------- countdown ---------- */
-
-function CountdownBlock({ target }: { target?: string }) {
-  const [, setNow] = useState(Date.now());
-  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(id); }, []);
-  const c = getCountdown(target);
-  if (c.isPast) return <p className="guest-subtitle text-center">The countdown has passed.</p>;
-  const items = [{ label: "Days", value: c.days }, { label: "Hours", value: c.hours }, { label: "Minutes", value: c.minutes }, { label: "Seconds", value: c.seconds }];
+function HeadingBlock({ data }: { data: Record<string, unknown> }) {
+  const { text, style } = resolveTypography(data.text, "");
+  const level = (data.level as string) || "h2";
+  const align = (data.align as string) || "left";
+  const Tag = (level === "h1" ? "h1" : level === "h3" ? "h3" : "h2") as keyof JSX.IntrinsicElements;
   return (
-    <div className="grid grid-cols-4 gap-3 text-center">
-      {items.map((it) => (
-        <div key={it.label} className="event-card py-4">
-          <div className="text-3xl font-bold" style={{ color: "var(--event-heading)" }}>{String(it.value).padStart(2, "0")}</div>
-          <div className="mt-1 text-xs uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>{it.label}</div>
-        </div>
+    <div className="mx-auto max-w-3xl">
+      <Tag style={{ ...style, textAlign: align as "left" | "center" | "right", color: "var(--event-heading)" }}>{text}</Tag>
+    </div>
+  );
+}
+
+function ParagraphBlock({ data }: { data: Record<string, unknown> }) {
+  const html = (data.html as string) ?? "";
+  const align = (data.align as string) || "left";
+  return <div className="mx-auto max-w-3xl" style={{ textAlign: align as "left" | "center" | "right" }}><RichTextContent html={html} /></div>;
+}
+
+function ImageBlock({ data }: { data: Record<string, unknown> }) {
+  const url = (data.url as string) ?? "";
+  const caption = (data.caption as string) ?? "";
+  const alt = (data.alt as string) ?? "";
+  if (!url) return null;
+  return (
+    <figure className="mx-auto max-w-3xl">
+      <img src={url} alt={alt} className="w-full" style={{ borderRadius: "var(--event-radius)" }} />
+      {caption && <figcaption className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{caption}</figcaption>}
+    </figure>
+  );
+}
+
+function SpacerBlock({ data }: { data: Record<string, unknown> }) {
+  const height = (data.height as number) ?? 40;
+  return <div style={{ height: `${height}px` }} />;
+}
+
+function DividerBlock() {
+  return <hr className="mx-auto my-6 max-w-3xl" style={{ borderColor: "var(--event-border)" }} />;
+}
+
+function GalleryBlock({ data }: { data: Record<string, unknown> }) {
+  const images = (data.images as string[]) ?? [];
+  if (images.length === 0) return null;
+  return (
+    <div className="mx-auto grid max-w-4xl grid-cols-2 gap-3 sm:grid-cols-3">
+      {images.map((img, i) => (
+        <img key={i} src={img} alt="" className="aspect-square w-full object-cover" style={{ borderRadius: "var(--event-radius)" }} />
       ))}
     </div>
   );
 }
 
-/* ---------- schedule ---------- */
-
-function ScheduleBlock() {
-  const { event } = useGuestOutletContext();
-  const { data, isLoading } = useQuery({
-    queryKey: ["guest-schedule-block", event.id],
-    queryFn: async () => { const { data, error } = await supabase.from("event_schedules").select("*").eq("event_id", event.id).order("order_index", { ascending: true }); if (error) throw error; return (data ?? []) as EventSchedule[]; },
-    enabled: !!event.id,
-  });
-  if (isLoading) return <div className="flex justify-center py-6"><div className="h-6 w-6 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
-  const items = data ?? [];
-  if (items.length === 0) return <p className="guest-subtitle text-center">No schedule has been shared yet.</p>;
+function VideoBlock({ data }: { data: Record<string, unknown> }) {
+  const url = (data.url as string) ?? "";
+  if (!url) return null;
+  const isYouTube = /youtube\.com|youtu\.be/.test(url);
+  const embedUrl = isYouTube
+    ? `https://www.youtube.com/embed/${url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)?.[1] ?? ""}`
+    : url;
   return (
-    <ol className="space-y-4">
-      {items.map((s, i) => (
-        <li key={s.id} className="event-card flex gap-4 animate-slideUpStagger" style={{ animationDelay: `${i * 60}ms` }}>
-          <div className="flex-shrink-0 text-center" style={{ minWidth: "4rem" }}>
-            {s.start_time && <div className="text-sm font-semibold" style={{ color: "var(--event-heading)" }}>{formatTime12(s.start_time)}</div>}
-            {s.schedule_date && <div className="text-xs" style={{ color: "var(--event-muted)" }}>{formatDate(s.schedule_date, { month: "short", day: "numeric" })}</div>}
-          </div>
-          <div className="flex-1">
-            <h3 className="font-semibold" style={{ color: "var(--event-heading)" }}>{s.title}</h3>
-            {s.venue && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{s.venue}</p>}
-            {s.description && <p className="mt-1 text-sm" style={{ color: "var(--event-text)" }}>{s.description}</p>}
-          </div>
-        </li>
-      ))}
-    </ol>
+    <div className="mx-auto max-w-3xl">
+      <div className="relative w-full overflow-hidden" style={{ borderRadius: "var(--event-radius)", paddingTop: "56.25%" }}>
+        <iframe src={embedUrl} className="absolute inset-0 h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="Video" />
+      </div>
+    </div>
   );
 }
 
-/* ---------- venue ---------- */
-
-function VenueBlock() {
-  const { event } = useGuestOutletContext();
-  const venue = event.venue;
-  const address = event.address;
-  const query = address || venue || "";
-  if (!venue && !address) return <p className="guest-subtitle text-center">Venue details coming soon.</p>;
+function ButtonBlock({ data }: { data: Record<string, unknown> }) {
+  const text = (data.text as string) ?? "";
+  const url = (data.url as string) ?? "";
+  const align = (data.align as string) || "center";
+  if (!text) return null;
+  const justify = align === "left" ? "justify-start" : align === "right" ? "justify-end" : "justify-center";
+  const isInternal = url.startsWith("/");
   return (
-    <div className="event-card">
-      {venue && <h3 className="mb-1 text-xl font-semibold" style={{ color: "var(--event-heading)" }}>{venue}</h3>}
-      {address && <p className="mb-4 text-sm" style={{ color: "var(--event-text)" }}>{address}</p>}
-      {query && (
-        <div className="overflow-hidden" style={{ borderRadius: "var(--event-radius)" }}>
-          <iframe title="Venue map" src={`https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=15&output=embed`} className="h-64 w-full" style={{ border: 0 }} loading="lazy" allowFullScreen />
+    <div className={`mx-auto flex max-w-3xl ${justify}`}>
+      <a href={url} {...(isInternal ? {} : { target: "_blank", rel: "noopener noreferrer" })} className="event-btn-primary inline-block">{text}</a>
+    </div>
+  );
+}
+
+function ColumnsBlock({ data }: { data: Record<string, unknown> }) {
+  const columns = (data.columns as Array<{ html?: string }>) ?? [];
+  if (columns.length === 0) return null;
+  return (
+    <div className="mx-auto grid max-w-4xl gap-6 sm:grid-cols-2">
+      {columns.map((col, i) => <div key={i}><RichTextContent html={col.html ?? ""} /></div>)}
+    </div>
+  );
+}
+
+function ListBlock({ data }: { data: Record<string, unknown> }) {
+  const items = (data.items as string[]) ?? [];
+  const ordered = (data.ordered as boolean) ?? false;
+  if (items.length === 0) return null;
+  const Tag = ordered ? "ol" : "ul";
+  return (
+    <div className="mx-auto max-w-3xl">
+      <Tag className="space-y-2 pl-6" style={{ color: "var(--event-text)" }}>
+        {items.map((item, i) => <li key={i}>{item}</li>)}
+      </Tag>
+    </div>
+  );
+}
+
+function QuoteBlock({ data }: { data: Record<string, unknown> }) {
+  const { text } = resolveTypography(data.text, "");
+  const { text: author } = resolveTypography(data.author, "");
+  if (!text) return null;
+  return (
+    <blockquote className="mx-auto max-w-2xl border-l-4 pl-6 italic" style={{ borderColor: "var(--event-primary)", color: "var(--event-muted)" }}>
+      <p className="text-lg">{text}</p>
+      {author && <footer className="mt-2 text-sm not-italic" style={{ color: "var(--event-muted)" }}>— {author}</footer>}
+    </blockquote>
+  );
+}
+
+function CountdownBlock({ data }: { data: Record<string, unknown> }) {
+  const target = (data.target as string) ?? "";
+  const { text: label } = resolveTypography(data.label, "Countdown");
+  const [countdown, setCountdown] = useState(() => getCountdown(target));
+  useEffect(() => {
+    const interval = setInterval(() => setCountdown(getCountdown(target)), 1000);
+    return () => clearInterval(interval);
+  }, [target]);
+  if (countdown.expired) return (
+    <div className="mx-auto max-w-2xl text-center">
+      {label && <p className="guest-eyebrow">{label}</p>}
+      <p className="guest-subtitle">The moment has arrived!</p>
+    </div>
+  );
+  const units = [
+    { value: countdown.days, label: "Days" },
+    { value: countdown.hours, label: "Hours" },
+    { value: countdown.minutes, label: "Minutes" },
+    { value: countdown.seconds, label: "Seconds" },
+  ];
+  return (
+    <div className="mx-auto max-w-2xl text-center">
+      {label && <p className="guest-eyebrow mb-4">{label}</p>}
+      <div className="flex justify-center gap-4">
+        {units.map((u) => (
+          <div key={u.label} className="event-card text-center" style={{ padding: "1.25rem 1rem", minWidth: "5rem" }}>
+            <div className="text-3xl font-bold" style={{ color: "var(--event-primary)" }}>{String(u.value).padStart(2, "0")}</div>
+            <div className="mt-1 text-xs uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>{u.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MapBlock({ data }: { data: Record<string, unknown> }) {
+  const address = (data.address as string) ?? "";
+  const query = (data.query as string) ?? address;
+  if (!query) return null;
+  const src = `https://maps.google.com/maps?q=${encodeURIComponent(query)}&output=embed`;
+  return (
+    <div className="mx-auto max-w-3xl overflow-hidden" style={{ borderRadius: "var(--event-radius)", border: "1px solid var(--event-border)" }}>
+      <iframe src={src} className="h-72 w-full" loading="lazy" title="Map" />
+    </div>
+  );
+}
+
+function VenueBlock({ data }: { data: Record<string, unknown> }) {
+  const { text: name } = resolveTypography(data.name, "");
+  const { text: address } = resolveTypography(data.address, "");
+  const mapQuery = (data.mapQuery as string) ?? address ?? name;
+  return (
+    <div className="mx-auto max-w-3xl space-y-4">
+      {(name || address) && (
+        <div className="text-center">
+          {name && <h3 className="text-xl font-semibold" style={{ color: "var(--event-heading)" }}>{name}</h3>}
+          {address && <p className="mt-1" style={{ color: "var(--event-muted)" }}>{address}</p>}
         </div>
       )}
+      {mapQuery && <MapBlock data={{ address: mapQuery }} />}
     </div>
   );
 }
 
-/* ---------- faq ---------- */
-
-interface FaqItem { q?: string; a?: string }
-function FaqBlock({ items }: { items?: FaqItem[] }) {
-  const list = Array.isArray(items) ? items : [];
-  if (list.length === 0) return <p className="guest-subtitle text-center">No questions have been added yet.</p>;
+function FaqBlock({ data }: { data: Record<string, unknown> }) {
+  const faqs = (data.items as Array<{ question?: string; answer?: string }>) ?? [];
+  if (faqs.length === 0) return null;
   return (
-    <div className="space-y-3">
-      {list.map((f, i) => (
-        <details key={i} className="event-card group" style={{ cursor: "pointer" }}>
-          <summary className="flex items-center justify-between font-semibold" style={{ color: "var(--event-heading)" }}>
-            <span>{f.q || "Question"}</span>
-            <span className="ml-2 transition-transform group-open:rotate-45" style={{ color: "var(--event-muted)" }}>+</span>
-          </summary>
-          {f.a && <p className="mt-3 text-sm leading-relaxed" style={{ color: "var(--event-text)" }}>{f.a}</p>}
+    <div className="mx-auto max-w-2xl space-y-3">
+      {faqs.map((faq, i) => (
+        <details key={i} className="event-card" style={{ padding: "1.25rem" }}>
+          <summary className="cursor-pointer font-semibold" style={{ color: "var(--event-heading)" }}>{faq.question ?? ""}</summary>
+          <p className="mt-2 text-sm" style={{ color: "var(--event-text)" }}>{faq.answer ?? ""}</p>
         </details>
       ))}
     </div>
   );
 }
 
-/* ---------- rsvp-form ---------- */
-
-function RsvpFormBlock() {
-  const { event, slug, invitedSubEventIds } = useGuestOutletContext();
-  const { data, isLoading } = useQuery({
-    queryKey: ["rsvp-form-block", event.id, invitedSubEventIds],
-    queryFn: async () => { if (invitedSubEventIds.length === 0) return []; const { data, error } = await supabase.from("sub_events").select("*").in("id", invitedSubEventIds).order("display_order", { ascending: true }); if (error) throw error; return (data ?? []) as SubEvent[]; },
-    enabled: invitedSubEventIds.length > 0,
-  });
-  if (isLoading) return <div className="flex justify-center py-6"><div className="h-6 w-6 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
-  const events = data ?? [];
-  if (events.length === 0) return <p className="guest-subtitle text-center">You haven't been invited to any events yet.</p>;
+function RsvpFormBlock({ slug }: { eventId: string; slug: string; guest: EventGuest | null }) {
+  const navigate = useNavigate();
   return (
-    <div className="space-y-4 text-center">
-      <p className="guest-subtitle">You've been invited to {events.length} {events.length === 1 ? "event" : "events"}.</p>
-      <Link to={`/e/${slug}/rsvp`} className="event-btn-primary inline-block">Go to RSVP</Link>
+    <div className="mx-auto max-w-2xl text-center">
+      <p className="guest-subtitle mb-6">Let us know if you can make it.</p>
+      <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">Go to RSVP</button>
     </div>
   );
 }
 
-/* ---------- guest-list ---------- */
-
-function GuestListBlock() {
-  const { event } = useGuestOutletContext();
-  const { data, isLoading } = useQuery({
-    queryKey: ["guest-list-block", event.id],
-    queryFn: async () => { const { data, error } = await supabase.from("event_rsvps").select("*").eq("event_id", event.id).eq("status", "attending"); if (error) throw error; return (data ?? []) as EventRsvp[]; },
-    enabled: !!event.id,
+function GuestListBlock({ eventId }: { eventId: string }) {
+  const { data: guests, isLoading } = useQuery({
+    queryKey: ["block-guest-list", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("event_guests").select("name").eq("event_id", eventId).order("name", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as Pick<EventGuest, "name">[];
+    },
   });
-  if (isLoading) return <div className="flex justify-center py-6"><div className="h-6 w-6 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
-  const rsvps = data ?? [];
-  if (rsvps.length === 0) return <p className="guest-subtitle text-center">No guests have confirmed yet.</p>;
+  if (isLoading) return <div className="mx-auto max-w-2xl text-center"><p style={{ color: "var(--event-muted)" }}>Loading…</p></div>;
+  const names = (guests ?? []).map((g) => g.name);
+  if (names.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-2">
-      {rsvps.map((r) => (
-        <span key={r.id} className="event-card px-4 py-2 text-sm font-medium" style={{ color: "var(--event-heading)" }}>
-          {r.guest_name}
-        </span>
+    <div className="mx-auto max-w-2xl text-center">
+      <p className="guest-eyebrow mb-4">Who's Coming</p>
+      <p style={{ color: "var(--event-text)" }}>{names.join(" · ")}</p>
+    </div>
+  );
+}
+
+function ScheduleBlock({ eventId }: { eventId: string }) {
+  const { data: schedule, isLoading } = useQuery({
+    queryKey: ["block-schedule", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("event_schedules").select("*").eq("event_id", eventId).order("order_index", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as EventSchedule[];
+    },
+  });
+  if (isLoading) return <div className="mx-auto max-w-2xl text-center"><p style={{ color: "var(--event-muted)" }}>Loading…</p></div>;
+  const items = schedule ?? [];
+  if (items.length === 0) return null;
+  return (
+    <div className="mx-auto max-w-2xl space-y-4">
+      {items.map((item, i) => (
+        <div key={item.id ?? i} className="event-card animate-slideUpStagger" style={{ animationDelay: `${i * 60}ms`, padding: "1.5rem" }}>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="font-semibold" style={{ color: "var(--event-heading)" }}>{item.title}</h3>
+            {item.start_time && <span className="text-sm" style={{ color: "var(--event-muted)" }}>{formatTime12(item.start_time)}</span>}
+          </div>
+          {item.schedule_date && <p className="mt-1 text-sm" style={{ color: "var(--event-muted)" }}>{formatDate(item.schedule_date)}</p>}
+          {item.venue && <p className="mt-1 text-sm" style={{ color: "var(--event-muted)" }}>{item.venue}</p>}
+          {item.description && <p className="mt-2 text-sm" style={{ color: "var(--event-text)" }}>{item.description}</p>}
+        </div>
       ))}
     </div>
   );
-}
-
-/* ---------- map ---------- */
-
-function MapBlock({ query }: { query?: string }) {
-  if (!query) return <p className="guest-subtitle text-center">No location provided.</p>;
-  return (
-    <div className="overflow-hidden" style={{ borderRadius: "var(--event-radius)", border: "1px solid var(--event-border)" }}>
-      <iframe title="Map" src={`https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=15&output=embed`} className="h-72 w-full" style={{ border: 0 }} loading="lazy" allowFullScreen />
-    </div>
-  );
-}
-
-/* ---------- main renderer ---------- */
-
-export function BlockRenderer({ block }: { block: Block }) {
-  const c = block.content ?? {};
-  const { event } = useGuestOutletContext();
-
-  switch (block.type) {
-    case "heading": {
-      const t = resolveTypography(c, "Heading");
-      const lvl = num(c.level, 2);
-      const Tag = (`h${Math.min(Math.max(lvl, 1), 6)}`) as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
-      return <Tag className={cn("font-bold", alignClass(c.align))} style={{ color: "var(--event-heading)", ...t.style }}>{t.text}</Tag>;
-    }
-    case "paragraph": {
-      const t = resolveTypography(c, "");
-      return <p className={cn("leading-relaxed", alignClass(c.align))} style={{ color: "var(--event-text)", ...t.style }}>{t.text}</p>;
-    }
-    case "image":
-      return c.src ? (
-        <div className={alignClass(c.align)}>
-          <img src={str(c.src)} alt={str(c.alt)} className="inline-block max-w-full" style={{ borderRadius: "var(--event-radius)" }} />
-        </div>
-      ) : null;
-    case "spacer":
-      return <div style={{ height: `${num(c.height, 40)}px` }} />;
-    case "divider":
-      return <hr style={{ borderColor: "var(--event-border)" }} />;
-    case "gallery": {
-      const imgs = strArr(c.images);
-      if (imgs.length === 0) return null;
-      return (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {imgs.map((src, i) => (
-            <img key={i} src={src} alt="" className="aspect-square w-full object-cover" style={{ borderRadius: "var(--event-radius)" }} />
-          ))}
-        </div>
-      );
-    }
-    case "video": {
-      const url = str(c.videoUrl);
-      const embed = getYouTubeEmbed(url) || getVimeoEmbed(url);
-      if (!embed) return <p className="guest-subtitle text-center">Video unavailable.</p>;
-      return (
-        <div className="overflow-hidden" style={{ borderRadius: "var(--event-radius)" }}>
-          <iframe src={embed} className="aspect-video w-full" style={{ border: 0 }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen title="Video" />
-        </div>
-      );
-    }
-    case "button":
-      return c.url ? (
-        <div className={alignClass(c.align)}>
-          <a href={str(c.url)} target="_blank" rel="noopener noreferrer" className="event-btn-primary inline-block">{str(c.label, "Click here")}</a>
-        </div>
-      ) : null;
-    case "columns": {
-      const cols = Array.isArray(c.columns) ? c.columns : [];
-      return (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {cols.map((col: unknown, i: number) => {
-            const items = Array.isArray((col as { items?: unknown[] })?.items) ? (col as { items: unknown[] }).items : [];
-            return (
-              <div key={i} className="event-card space-y-2">
-                {items.map((item: unknown, j: number) => {
-                  const t = resolveTypography(item, "");
-                  return <p key={j} style={{ color: "var(--event-text)", ...t.style }}>{t.text}</p>;
-                })}
-              </div>
-            );
-          })}
-        </div>
-      );
-    }
-    case "list": {
-      const items = Array.isArray(c.items) ? c.items : [];
-      if (items.length === 0) return null;
-      return (
-        <ul className={cn("list-disc space-y-1 pl-6", alignClass(c.align))} style={{ color: "var(--event-text)" }}>
-          {items.map((it: unknown, i: number) => <li key={i}>{typeof it === "string" ? it : resolveTypography(it, "").text}</li>)}
-        </ul>
-      );
-    }
-    case "quote": {
-      const t = resolveTypography(c, "");
-      return (
-        <blockquote className="event-card border-l-4 pl-4 text-center" style={{ borderColor: "var(--event-primary)", color: "var(--event-text)", fontStyle: "italic", ...t.style }}>
-          {t.text}
-        </blockquote>
-      );
-    }
-    case "countdown":
-      return <CountdownBlock target={str(c.targetDate) || str(c.date) || (event.event_date ?? undefined)} />;
-    case "map":
-      return <MapBlock query={str(c.query) || str(c.location) || str(c.address) || undefined} />;
-    case "rsvp-form":
-      return <RsvpFormBlock />;
-    case "guest-list":
-      return <GuestListBlock />;
-    case "schedule":
-      return <ScheduleBlock />;
-    case "venue":
-      return <VenueBlock />;
-    case "faq":
-      return <FaqBlock items={c.items as FaqItem[] | undefined} />;
-    default:
-      return null;
-  }
 }

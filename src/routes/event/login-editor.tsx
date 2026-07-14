@@ -1,141 +1,131 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { LoginPreview } from "../../components/preview/PreviewRenderers";
 import { Button } from "../../components/ui/Button";
-import { Input, Textarea, FormField, Toggle } from "../../components/ui";
+import { Input } from "../../components/ui/Input";
 
-interface LoginConfig {
-  title?: string;
-  subtitle?: string;
-  show_guest_login?: boolean;
-  guest_login_label?: string;
-  background_image?: string | null;
+interface LoginField {
+  text: string;
+  align?: string;
+  color?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: number;
 }
 
-const DEFAULT_CONFIG: LoginConfig = {
-  title: "",
-  subtitle: "Enter your username to access your invitation",
-  show_guest_login: true,
-  guest_login_label: "View My Invitation",
-  background_image: null,
-};
+interface LoginConfig {
+  heading?: LoginField;
+  subheading?: LoginField;
+  inputLabel?: LoginField;
+  buttonText?: LoginField;
+}
+
+function toField(value: unknown): LoginField {
+  if (typeof value === "string") return { text: value };
+  if (value && typeof value === "object") return value as LoginField;
+  return { text: "" };
+}
 
 export function LoginEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const existing = (event.draft_login_config as LoginConfig | null) ?? {};
-  const merged: LoginConfig = { ...DEFAULT_CONFIG, ...existing };
+  const initial = (event.draft_login_config ?? event.login_config) as LoginConfig | null;
 
-  const [title, setTitle] = useState(merged.title ?? "");
-  const [subtitle, setSubtitle] = useState(merged.subtitle ?? "");
-  const [showGuestLogin, setShowGuestLogin] = useState(merged.show_guest_login ?? true);
-  const [guestLoginLabel, setGuestLoginLabel] = useState(merged.guest_login_label ?? "View My Invitation");
-  const [savedMsg, setSavedMsg] = useState(false);
+  const [config, setConfig] = useState<LoginConfig>({
+    heading: initial?.heading,
+    subheading: initial?.subheading,
+    inputLabel: initial?.inputLabel,
+    buttonText: initial?.buttonText,
+  });
 
   useEffect(() => {
-    const cfg = (event.draft_login_config as LoginConfig | null) ?? {};
-    const m: LoginConfig = { ...DEFAULT_CONFIG, ...cfg };
-    setTitle(m.title ?? "");
-    setSubtitle(m.subtitle ?? "");
-    setShowGuestLogin(m.show_guest_login ?? true);
-    setGuestLoginLabel(m.guest_login_label ?? "View My Invitation");
-  }, [event]);
+    setConfig({
+      heading: initial?.heading,
+      subheading: initial?.subheading,
+      inputLabel: initial?.inputLabel,
+      buttonText: initial?.buttonText,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.updated_at]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const config: LoginConfig = {
-        title,
-        subtitle,
-        show_guest_login: showGuestLogin,
-        guest_login_label: guestLoginLabel,
-        background_image: merged.background_image,
-      };
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_login_config: config as unknown as Json })
+        .update({
+          draft_login_config: config as unknown as Json,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSavedMsg(true);
-      setTimeout(() => setSavedMsg(false), 2000);
     },
   });
 
-  const previewEvent = {
-    ...event,
-    login_title: title || event.name,
-    login_subtitle: subtitle,
+  const updateField = (key: keyof LoginConfig, patch: Partial<LoginField>) => {
+    setConfig((prev) => ({
+      ...prev,
+      [key]: { ...toField(prev[key]), ...patch },
+    }));
+  };
+
+  const renderField = (key: keyof LoginConfig, label: string, placeholder: string) => {
+    const field = toField(config[key]);
+    return (
+      <Input
+        key={key}
+        label={label}
+        type="text"
+        value={field.text}
+        onChange={(e) => updateField(key, { text: e.target.value })}
+        placeholder={placeholder}
+      />
+    );
   };
 
   return (
     <SplitEditor
       editor={
-        <div className="space-y-6">
-          <div>
-            <h2 className="mb-4 text-lg font-semibold text-dash-text">Login Page Editor</h2>
-            <p className="mb-4 text-sm text-dash-muted">
-              Customize the login page that guests see when they visit your invitation website.
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-dash-text">Login Page Editor</h2>
+          <p className="text-sm text-dash-muted">
+            Customize the text shown on the guest login page.
+          </p>
+
+          {renderField("heading", "Heading", "Welcome")}
+          {renderField("subheading", "Subheading", "Please sign in to view the event")}
+          {renderField("inputLabel", "Input Label", "Enter your username")}
+          {renderField("buttonText", "Button Text", "Sign In")}
+
+          <Button
+            onClick={() => saveMutation.mutate()}
+            loading={saveMutation.isPending}
+            className="w-full"
+          >
+            Save Changes
+          </Button>
+          {saveMutation.isError && (
+            <p className="text-sm text-dash-danger">
+              {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
             </p>
-          </div>
-
-          <FormField label="Login Title">
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={event.name}
-            />
-            <p className="text-xs text-dash-muted">Leave empty to use the event name</p>
-          </FormField>
-
-          <FormField label="Subtitle">
-            <Textarea
-              value={subtitle}
-              onChange={(e) => setSubtitle(e.target.value)}
-              placeholder="Enter your username to access your invitation"
-              rows={2}
-            />
-          </FormField>
-
-          <div className="border-t border-dash-border pt-4">
-            <Toggle
-              checked={showGuestLogin}
-              onChange={setShowGuestLogin}
-              label="Show guest login form"
-            />
-          </div>
-
-          {showGuestLogin && (
-            <FormField label="Guest Login Button Label">
-              <Input
-                value={guestLoginLabel}
-                onChange={(e) => setGuestLoginLabel(e.target.value)}
-                placeholder="View My Invitation"
-              />
-            </FormField>
           )}
-
-          <div className="flex items-center gap-3 border-t border-dash-border pt-4">
-            <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-              Save Changes
-            </Button>
-            {savedMsg && <span className="text-sm text-green-600">Saved!</span>}
-            {saveMutation.isError && (
-              <span className="text-sm text-dash-danger">
-                {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
-              </span>
-            )}
-          </div>
+          {saveMutation.isSuccess && (
+            <p className="text-sm text-green-600">Saved successfully!</p>
+          )}
         </div>
       }
       preview={
-        <div className="p-4">
-          <LoginPreview event={previewEvent} />
+        <div className="event-themed min-h-[500px]">
+          <LoginPreview
+            loginConfig={config as unknown as Json}
+            eventName={event.draft_name || event.name}
+          />
         </div>
       }
     />

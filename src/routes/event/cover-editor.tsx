@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type Json } from "../../lib/supabase";
 import { useEventContext } from "./event-layout";
@@ -6,193 +6,251 @@ import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview } from "../../components/preview/PreviewRenderers";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { Button } from "../../components/ui/Button";
-import { RangeInput, FormField } from "../../components/ui";
+import { Input, Textarea } from "../../components/ui/Input";
+import { RangeInput } from "../../components/ui";
 import { cn } from "../../lib/utils";
 
 interface LogoConfig {
-  src?: string | null;
-  size?: number;
-  align?: "left" | "center" | "right";
+  url: string | null;
+  width: number;
+  align: "left" | "center" | "right";
+}
+
+interface CoverField {
+  text: string;
+  align?: string;
+  color?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: number;
 }
 
 interface CoverConfig {
-  overlay?: number;
-  layout?: string;
+  title?: CoverField;
+  subtitle?: CoverField;
+  date?: CoverField;
+  time?: CoverField;
+  venue?: CoverField;
+}
+
+function toField(value: unknown): CoverField {
+  if (typeof value === "string") return { text: value };
+  if (value && typeof value === "object") return value as CoverField;
+  return { text: "" };
 }
 
 export function CoverEditor() {
   const { event, eventId } = useEventContext();
   const queryClient = useQueryClient();
 
-  const logoConfig = (event.draft_logo_config as LogoConfig | null) ?? {};
-  const coverConfig = (event.draft_cover_config as CoverConfig | null) ?? {};
+  const initialLogo = (event.draft_logo_config ?? event.logo_config) as LogoConfig | null;
+  const initialCover = (event.draft_cover_config ?? event.cover_config) as CoverConfig | null;
 
-  const [logoSrc, setLogoSrc] = useState<string | null>(logoConfig.src ?? null);
-  const [logoSize, setLogoSize] = useState<number>(logoConfig.size ?? 120);
-  const [logoAlign, setLogoAlign] = useState<"left" | "center" | "right">(logoConfig.align ?? "center");
-  const [coverImage, setCoverImage] = useState<string | null>(event.draft_cover_image ?? null);
-  const [overlay, setOverlay] = useState<number>(coverConfig.overlay ?? 0.3);
-  const [savedMsg, setSavedMsg] = useState(false);
+  const [logoConfig, setLogoConfig] = useState<LogoConfig>({
+    url: initialLogo?.url ?? null,
+    width: initialLogo?.width ?? 120,
+    align: initialLogo?.align ?? "center",
+  });
+  const [coverImage, setCoverImage] = useState<string | null>(
+    event.draft_cover_image ?? event.cover_image
+  );
+  const [coverConfig, setCoverConfig] = useState<CoverConfig>({
+    title: initialCover?.title,
+    subtitle: initialCover?.subtitle,
+    date: initialCover?.date,
+    time: initialCover?.time,
+    venue: initialCover?.venue,
+  });
 
   useEffect(() => {
-    const lc = (event.draft_logo_config as LogoConfig | null) ?? {};
-    setLogoSrc(lc.src ?? null);
-    setLogoSize(lc.size ?? 120);
-    setLogoAlign(lc.align ?? "center");
-    setCoverImage(event.draft_cover_image ?? null);
-    const cc = (event.draft_cover_config as CoverConfig | null) ?? {};
-    setOverlay(cc.overlay ?? 0.3);
-  }, [event]);
+    setLogoConfig({
+      url: initialLogo?.url ?? null,
+      width: initialLogo?.width ?? 120,
+      align: initialLogo?.align ?? "center",
+    });
+    setCoverImage(event.draft_cover_image ?? event.cover_image);
+    setCoverConfig({
+      title: initialCover?.title,
+      subtitle: initialCover?.subtitle,
+      date: initialCover?.date,
+      time: initialCover?.time,
+      venue: initialCover?.venue,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.updated_at]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase
         .from("user_events")
         .update({
-          draft_logo_config: { src: logoSrc, size: logoSize, align: logoAlign } as unknown as Json,
+          draft_logo_config: logoConfig as unknown as Json,
           draft_cover_image: coverImage,
-          draft_cover_config: { overlay, layout: "standard" } as unknown as Json,
+          draft_cover_config: coverConfig as unknown as Json,
+          updated_at: new Date().toISOString(),
         })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSavedMsg(true);
-      setTimeout(() => setSavedMsg(false), 2000);
     },
   });
 
-  const previewEvent = {
-    ...event,
-    draft_cover_image: coverImage,
-    draft_cover_config: { overlay, layout: "standard" },
-    cover_image: coverImage,
-    cover_config: { overlay, layout: "standard" },
+  const updateField = (key: keyof CoverConfig, patch: Partial<CoverField>) => {
+    setCoverConfig((prev) => ({
+      ...prev,
+      [key]: { ...toField(prev[key]), ...patch },
+    }));
   };
 
-  const alignOptions: { value: "left" | "center" | "right"; label: string }[] = [
-    { value: "left", label: "Left" },
-    { value: "center", label: "Center" },
-    { value: "right", label: "Right" },
-  ];
+  const renderFieldEditor = (key: keyof CoverConfig, label: string) => {
+    const field = toField(coverConfig[key]);
+    return (
+      <div key={key} className="space-y-2 rounded-lg border border-dash-border p-3">
+        <p className="text-sm font-medium text-dash-text">{label}</p>
+        <Input
+          type="text"
+          value={field.text}
+          onChange={(e) => updateField(key, { text: e.target.value })}
+          placeholder={`${label} text`}
+        />
+        <div className="flex gap-2">
+          <select
+            value={field.align ?? "center"}
+            onChange={(e) => updateField(key, { align: e.target.value })}
+            className="rounded-lg border border-dash-border bg-dash-surface px-2 py-1.5 text-sm"
+          >
+            <option value="left">Left</option>
+            <option value="center">Center</option>
+            <option value="right">Right</option>
+          </select>
+          <Input
+            type="number"
+            value={field.fontSize ?? 16}
+            onChange={(e) => updateField(key, { fontSize: Number(e.target.value) })}
+            placeholder="Size (px)"
+            className="w-28"
+          />
+        </div>
+      </div>
+    );
+  };
 
   return (
     <SplitEditor
       editor={
-        <div className="space-y-6">
-          <div>
-            <h2 className="mb-4 text-lg font-semibold text-dash-text">Cover Editor</h2>
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-dash-text">Cover Editor</h2>
 
-            <div className="space-y-4">
-              <FormField label="Cover Image">
-                <ImageUpload
-                  bucket="event-assets"
-                  path={`events/${eventId}/cover`}
-                  value={coverImage}
-                  onChange={setCoverImage}
-                />
-              </FormField>
-
-              <FormField label="Overlay Darkness">
+          {/* Logo section */}
+          <div className="space-y-3 rounded-lg border border-dash-border p-3">
+            <p className="text-sm font-medium text-dash-text">Logo</p>
+            <ImageUpload
+              bucket="event-assets"
+              path={`${eventId}/logo`}
+              value={logoConfig.url}
+              onUpload={(url) => setLogoConfig((p) => ({ ...p, url }))}
+              onRemove={() => setLogoConfig((p) => ({ ...p, url: null }))}
+              aspectRatio="square"
+            />
+            {logoConfig.url && (
+              <>
                 <RangeInput
-                  value={overlay}
-                  min={0}
-                  max={0.8}
-                  step={0.05}
-                  onChange={setOverlay}
-                />
-                <p className="text-xs text-dash-muted">
-                  Controls how dark the overlay is over the cover image (0 = none, 0.8 = very dark)
-                </p>
-              </FormField>
-            </div>
-          </div>
-
-          <div className="border-t border-dash-border pt-6">
-            <h3 className="mb-4 text-lg font-semibold text-dash-text">Logo</h3>
-
-            <div className="space-y-4">
-              <FormField label="Logo Image">
-                <ImageUpload
-                  bucket="event-assets"
-                  path={`events/${eventId}/logo`}
-                  value={logoSrc}
-                  onChange={setLogoSrc}
-                  maxWidth={500}
-                  maxHeight={500}
-                />
-              </FormField>
-
-              <FormField label={`Logo Size: ${logoSize}px`}>
-                <RangeInput
-                  value={logoSize}
+                  label="Size"
                   min={40}
                   max={300}
-                  step={5}
-                  onChange={setLogoSize}
+                  value={logoConfig.width}
+                  onChange={(v) => setLogoConfig((p) => ({ ...p, width: v }))}
                 />
-              </FormField>
-
-              <FormField label="Logo Alignment">
                 <div className="flex gap-2">
-                  {alignOptions.map((opt) => (
+                  {(["left", "center", "right"] as const).map((align) => (
                     <button
-                      key={opt.value}
+                      key={align}
                       type="button"
-                      onClick={() => setLogoAlign(opt.value)}
+                      onClick={() => setLogoConfig((p) => ({ ...p, align }))}
                       className={cn(
-                        "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
-                        logoAlign === opt.value
-                          ? "border-dash-primary bg-dash-primary text-dash-primary-fg"
-                          : "border-dash-border text-dash-text hover:bg-dash-bg",
+                        "flex-1 rounded-md border px-3 py-1.5 text-sm capitalize transition-colors",
+                        logoConfig.align === align
+                          ? "border-dash-primary bg-dash-primary/10 text-dash-primary"
+                          : "border-dash-border text-dash-muted hover:text-dash-text"
                       )}
                     >
-                      {opt.label}
+                      {align}
                     </button>
                   ))}
                 </div>
-              </FormField>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 border-t border-dash-border pt-4">
-            <Button
-              onClick={() => saveMutation.mutate()}
-              loading={saveMutation.isPending}
-            >
-              Save Changes
-            </Button>
-            {savedMsg && <span className="text-sm text-green-600">Saved!</span>}
-            {saveMutation.isError && (
-              <span className="text-sm text-dash-danger">
-                {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
-              </span>
+              </>
             )}
           </div>
+
+          {/* Cover image */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-dash-text">Cover Image</p>
+            <ImageUpload
+              bucket="event-assets"
+              path={`${eventId}/cover`}
+              value={coverImage}
+              onUpload={setCoverImage}
+              onRemove={() => setCoverImage(null)}
+              aspectRatio="wide"
+            />
+          </div>
+
+          {/* Text fields */}
+          {renderFieldEditor("title", "Title")}
+          {renderFieldEditor("subtitle", "Subtitle")}
+          {renderFieldEditor("date", "Date")}
+          {renderFieldEditor("time", "Time")}
+          {renderFieldEditor("venue", "Venue")}
+
+          <Button
+            onClick={() => saveMutation.mutate()}
+            loading={saveMutation.isPending}
+            className="w-full"
+          >
+            Save Changes
+          </Button>
+          {saveMutation.isError && (
+            <p className="text-sm text-dash-danger">
+              {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}
+            </p>
+          )}
+          {saveMutation.isSuccess && (
+            <p className="text-sm text-green-600">Saved successfully!</p>
+          )}
         </div>
       }
       preview={
-        <div className="p-4">
-          <div className="mb-4">
-            {logoSrc && (
-              <div
-                className={cn(
-                  "mb-4",
-                  logoAlign === "left" && "text-left",
-                  logoAlign === "center" && "text-center",
-                  logoAlign === "right" && "text-right",
-                )}
-              >
-                <img
-                  src={logoSrc}
-                  alt="Logo"
-                  style={{ width: `${logoSize}px`, height: "auto", display: "inline-block" }}
-                />
-              </div>
-            )}
-          </div>
-          <CoverPreview event={previewEvent} />
+        <div className="space-y-4">
+          {logoConfig.url && (
+            <div
+              className="flex"
+              style={{
+                justifyContent:
+                  logoConfig.align === "left"
+                    ? "flex-start"
+                    : logoConfig.align === "right"
+                    ? "flex-end"
+                    : "center",
+              }}
+            >
+              <img
+                src={logoConfig.url}
+                alt="Logo"
+                style={{ width: `${logoConfig.width}px` }}
+                className="h-auto"
+              />
+            </div>
+          )}
+          <CoverPreview
+            coverConfig={coverConfig as unknown as Json}
+            eventName={event.draft_name || event.name}
+            eventDate={event.draft_event_date}
+            eventTime={event.draft_event_time}
+            venue={event.draft_venue}
+            coverImage={coverImage}
+          />
         </div>
       }
     />

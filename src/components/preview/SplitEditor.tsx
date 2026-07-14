@@ -1,27 +1,43 @@
-import { type ReactNode } from "react";
+import React from "react";
 import { cn } from "../../lib/utils";
 
 interface SplitEditorProps {
-  editor: ReactNode;
-  preview: ReactNode;
+  editor: React.ReactNode;
+  preview: React.ReactNode;
   previewClassName?: string;
   editorRatio?: number;
 }
 
-export function SplitEditor({ editor, preview, previewClassName, editorRatio = 0.4 }: SplitEditorProps) {
-  const editorWidth = `${editorRatio * 100}%`;
-  const previewWidth = `${(1 - editorRatio) * 100}%`;
+export function SplitEditor({
+  editor,
+  preview,
+  previewClassName,
+  editorRatio = 0.4,
+}: SplitEditorProps) {
+  const editorStyle: React.CSSProperties = {
+    flexBasis: `${editorRatio * 100}%`,
+  };
+  const previewStyle: React.CSSProperties = {
+    flexBasis: `${(1 - editorRatio) * 100}%`,
+  };
+
   return (
-    <div className="flex h-full min-h-0 w-full flex-col md:flex-row">
+    <div className="flex h-full w-full flex-col gap-4 lg:flex-row">
       <div
-        className="min-h-0 shrink-0 overflow-y-auto border-b border-dash-border md:border-b-0 md:border-r"
-        style={{ width: editorWidth }}
+        className={cn(
+          "min-h-0 overflow-y-auto rounded-lg border border-dash-border bg-dash-surface p-4 scrollbar-thin",
+          "lg:max-h-full"
+        )}
+        style={editorStyle}
       >
-        <div className="p-4">{editor}</div>
+        {editor}
       </div>
       <div
-        className={cn("min-h-0 flex-1 overflow-y-auto bg-dash-bg", previewClassName)}
-        style={{ width: previewWidth }}
+        className={cn(
+          "min-h-0 overflow-y-auto rounded-lg border border-dash-border bg-dash-bg p-4 scrollbar-thin",
+          previewClassName
+        )}
+        style={previewStyle}
       >
         {preview}
       </div>

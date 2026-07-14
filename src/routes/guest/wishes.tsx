@@ -1,169 +1,143 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type EventMessage } from "../../lib/supabase";
-import { useGuestAuth } from "../../lib/guest-auth";
 import { useGuestOutletContext } from "./guest-layout";
-import { cn } from "../../lib/utils";
-
-const PAGE_SIZE = 12;
+import { useGuestAuth } from "../../lib/guest-auth";
 
 export default function GuestWishes() {
-  const { event, slug } = useGuestOutletContext();
+  const { event } = useGuestOutletContext();
   const { guest } = useGuestAuth();
   const queryClient = useQueryClient();
-  const [name, setName] = useState("");
   const [message, setMessage] = useState("");
-  const [page, setPage] = useState(0);
-  const sentinelRef = useRef<HTMLDivElement>(null);
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (guest?.name) setName(guest.name);
-  }, [guest?.name]);
-
-  const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["guest-wishes", event.id, PAGE_SIZE],
+  const { data: messages, isLoading } = useQuery({
+    queryKey: ["guest-wishes", event.id],
     queryFn: async () => {
-      const { data: rows, error } = await supabase
+      const { data, error } = await supabase
         .from("event_messages")
         .select("*")
         .eq("event_id", event.id)
-        .order("created_at", { ascending: false })
-        .limit(PAGE_SIZE * (page + 1));
+        .order("created_at", { ascending: false });
       if (error) throw error;
-      return (rows ?? []) as EventMessage[];
+      return (data ?? []) as EventMessage[];
     },
-    enabled: !!event.id,
   });
 
-  const messages = data ?? [];
-  const hasMore = messages.length === PAGE_SIZE * (page + 1);
-
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || !hasMore) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !isFetching) setPage((p) => p + 1);
-      },
-      { rootMargin: "200px" },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [hasMore, isFetching]);
-
-  const submitMutation = useMutation({
+  const mutation = useMutation({
     mutationFn: async () => {
-      const trimmed = message.trim();
-      if (!trimmed) throw new Error("Please write a message.");
+      const guestName = name.trim() || guest?.name || "Anonymous";
       const { error } = await supabase.from("event_messages").insert({
         event_id: event.id,
-        guest_name: name.trim() || "Anonymous",
-        message: trimmed,
+        guest_name: guestName,
+        message: message.trim(),
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guest-wishes", event.id, PAGE_SIZE] });
+      queryClient.invalidateQueries({ queryKey: ["guest-wishes", event.id] });
       setMessage("");
-      setPage(0);
+      setError(null);
+    },
+    onError: (err: unknown) => {
+      setError(err instanceof Error ? err.message : "Failed to post your wish.");
     },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    submitMutation.mutate();
+    if (!message.trim()) return;
+    mutation.mutate();
   };
 
   return (
     <div className="guest-section">
       <div className="mx-auto max-w-2xl">
-        <header className="mb-10 text-center">
+        {/* Header */}
+        <div className="mb-10 text-center">
           <p className="guest-eyebrow">Wishes</p>
-          <h1 className="guest-title">Send your love</h1>
-          <p className="guest-subtitle mx-auto">Share a message, blessing, or fond memory for {event.name}.</p>
-        </header>
+          <h1 className="guest-title">Share Your Wishes</h1>
+          <p className="guest-subtitle mx-auto">
+            Leave a heartfelt message for {event.name} to cherish.
+          </p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="event-card mb-12 space-y-4">
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="event-card mb-10 space-y-4">
+          {!guest && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
+                Your Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="event-input"
+                placeholder="Enter your name"
+                required
+              />
+            </div>
+          )}
           <div>
             <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
-              Your name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="event-input"
-              placeholder="Your name"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
-              Your wish
+              Your Message
             </label>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               className="event-input"
               rows={4}
-              placeholder="Write a heartfelt message..."
+              placeholder="Write your wishes here..."
               required
             />
           </div>
-          {submitMutation.isError && (
+          {error && (
             <p className="text-sm font-medium" style={{ color: "var(--event-primary)" }}>
-              {submitMutation.error instanceof Error ? submitMutation.error.message : "Failed to post your wish."}
-            </p>
-          )}
-          {submitMutation.isSuccess && (
-            <p className="text-sm font-medium animate-fadeIn" style={{ color: "var(--event-primary)" }}>
-              Thank you! Your wish has been shared.
+              {error}
             </p>
           )}
           <button
             type="submit"
-            disabled={submitMutation.isPending}
+            disabled={mutation.isPending}
             className="event-btn-primary w-full"
-            style={{ opacity: submitMutation.isPending ? 0.6 : 1 }}
+            style={{ opacity: mutation.isPending ? 0.6 : 1 }}
           >
-            {submitMutation.isPending ? "Posting..." : "Share your wish"}
+            {mutation.isPending ? "Posting..." : "Post Wish"}
           </button>
+          {mutation.isSuccess && (
+            <p className="animate-fadeIn text-center text-sm font-medium" style={{ color: "var(--event-primary)" }}>
+              Thank you! Your wish has been shared.
+            </p>
+          )}
         </form>
 
+        {/* Messages */}
         {isLoading ? (
           <div className="flex justify-center py-12">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
           </div>
-        ) : messages.length === 0 ? (
-          <div className="event-card mx-auto max-w-md text-center">
-            <p className="guest-subtitle">No wishes yet. Be the first to share your love.</p>
+        ) : (messages ?? []).length === 0 ? (
+          <div className="text-center">
+            <p className="guest-subtitle mx-auto">
+              No wishes yet. Be the first to leave a message!
+            </p>
           </div>
         ) : (
-          <div className="columns-1 gap-5 sm:columns-2 lg:columns-3">
-            {messages.map((msg, i) => (
+          <div className="space-y-5">
+            {(messages ?? []).map((msg, index) => (
               <div
                 key={msg.id}
-                className={cn(
-                  "event-card mb-5 break-inside-avoid animate-slideUpStagger",
-                )}
-                style={{ animationDelay: `${Math.min(i, 8) * 70}ms` }}
+                className="event-card animate-slideUpStagger"
+                style={{ animationDelay: `${index * 80}ms` }}
               >
-                <p className="mb-3 whitespace-pre-line" style={{ color: "var(--event-text)" }}>
-                  {msg.message}
-                </p>
-                <p className="text-sm font-semibold" style={{ color: "var(--event-heading)" }}>
+                <p className="mb-3" style={{ color: "var(--event-text)" }}>{msg.message}</p>
+                <p className="text-sm font-medium" style={{ color: "var(--event-muted)" }}>
                   — {msg.guest_name}
-                </p>
-                <p className="mt-1 text-xs" style={{ color: "var(--event-muted)" }}>
-                  {new Date(msg.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
                 </p>
               </div>
             ))}
-          </div>
-        )}
-        <div ref={sentinelRef} className="h-4" />
-        {isFetching && !isLoading && (
-          <div className="flex justify-center py-6">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
           </div>
         )}
       </div>

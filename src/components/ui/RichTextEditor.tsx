@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef } from "react";
 import { cn } from "../../lib/utils";
-import { sanitizeHtml } from "../../lib/sanitize";
 
 interface RichTextEditorProps {
   value: string;
@@ -9,126 +8,121 @@ interface RichTextEditorProps {
   className?: string;
 }
 
-type Cmd = "bold" | "italic" | "underline" | "strikeThrough" | "h1" | "h2" | "h3" | "insertUnorderedList" | "insertOrderedList" | "formatBlock" | "createLink" | "insertImage";
-
-function exec(cmd: Cmd, value?: string) {
-  document.execCommand(cmd, false, value);
-}
-
-export function RichTextEditor({ value, onChange, placeholder = "Write something...", className }: RichTextEditorProps) {
+export function RichTextEditor({
+  value,
+  onChange,
+  placeholder,
+  className,
+}: RichTextEditorProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const [active, setActive] = useState<Set<string>>(new Set());
-  const lastValue = useRef<string>(value);
 
-  useEffect(() => {
-    if (ref.current && value !== lastValue.current) {
-      ref.current.innerHTML = value;
-      lastValue.current = value;
-    }
-  }, [value]);
-
-  useEffect(() => {
-    if (ref.current) {
-      ref.current.innerHTML = value;
-      lastValue.current = value;
-    }
-  }, []);
-
-  const updateActive = useCallback(() => {
-    const s = new Set<string>();
-    if (document.queryCommandState("bold")) s.add("bold");
-    if (document.queryCommandState("italic")) s.add("italic");
-    if (document.queryCommandState("underline")) s.add("underline");
-    if (document.queryCommandState("strikeThrough")) s.add("strikeThrough");
-    const block = document.queryCommandValue("formatBlock").toLowerCase();
-    if (block === "h1") s.add("h1");
-    if (block === "h2") s.add("h2");
-    if (block === "h3") s.add("h3");
-    setActive(s);
-  }, []);
-
-  function handleInput() {
-    if (ref.current) {
-      const html = ref.current.innerHTML;
-      lastValue.current = html;
-      onChange(html);
-    }
-  }
-
-  function handleBlur() {
-    if (ref.current) {
-      const clean = sanitizeHtml(ref.current.innerHTML);
-      ref.current.innerHTML = clean;
-      lastValue.current = clean;
-      onChange(clean);
-    }
-  }
-
-  function run(cmd: Cmd, value?: string) {
-    ref.current?.focus();
-    exec(cmd, value);
-    handleInput();
-    updateActive();
-  }
-
-  function handleHeading(tag: string) {
-    run("formatBlock", tag);
-  }
-
-  function handleLink() {
-    const url = window.prompt("Enter URL:");
-    if (url) run("createLink", url);
-  }
-
-  function handleImage() {
-    const url = window.prompt("Enter image URL:");
-    if (url) run("insertImage", url);
-  }
-
-  const ToolButton = ({ cmd: _cmd, onClick, label, isActive }: { cmd: string; onClick: () => void; label: string; isActive?: boolean }) => (
-    <button
-      type="button"
-      onMouseDown={(e) => { e.preventDefault(); onClick(); }}
-      className={cn(
-        "rounded px-2 py-1 text-sm font-medium transition-colors",
-        isActive ? "bg-dash-primary text-dash-primary-fg" : "text-dash-text hover:bg-dash-bg",
-      )}
-    >
-      {label}
-    </button>
+  const exec = useCallback(
+    (command: string, val?: string) => {
+      document.execCommand(command, false, val);
+      if (ref.current) onChange(ref.current.innerHTML);
+    },
+    [onChange]
   );
 
+  const handleInput = useCallback(() => {
+    if (ref.current) onChange(ref.current.innerHTML);
+  }, [onChange]);
+
+  const tools = [
+    { label: "B", command: "bold", style: "font-bold" },
+    { label: "I", command: "italic", style: "italic" },
+    { label: "U", command: "underline", style: "underline" },
+  ];
+
   return (
-    <div className={cn("rounded-lg border border-dash-border bg-dash-surface", className)}>
+    <div
+      className={cn(
+        "rounded-lg border border-dash-border bg-dash-surface",
+        className
+      )}
+    >
       <div className="flex flex-wrap items-center gap-1 border-b border-dash-border p-2">
-        <ToolButton cmd="bold" onClick={() => run("bold")} label="B" isActive={active.has("bold")} />
-        <ToolButton cmd="italic" onClick={() => run("italic")} label="I" isActive={active.has("italic")} />
-        <ToolButton cmd="underline" onClick={() => run("underline")} label="U" isActive={active.has("underline")} />
-        <ToolButton cmd="strikeThrough" onClick={() => run("strikeThrough")} label="S" isActive={active.has("strikeThrough")} />
+        {tools.map((t) => (
+          <button
+            key={t.command}
+            type="button"
+            onClick={() => exec(t.command)}
+            className={cn(
+              "rounded px-2 py-1 text-sm hover:bg-dash-bg",
+              t.style
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
         <div className="mx-1 h-5 w-px bg-dash-border" />
-        <ToolButton cmd="h1" onClick={() => handleHeading("h1")} label="H1" isActive={active.has("h1")} />
-        <ToolButton cmd="h2" onClick={() => handleHeading("h2")} label="H2" isActive={active.has("h2")} />
-        <ToolButton cmd="h3" onClick={() => handleHeading("h3")} label="H3" isActive={active.has("h3")} />
+        <button
+          type="button"
+          onClick={() => exec("formatBlock", "<h2>")}
+          className="rounded px-2 py-1 text-sm hover:bg-dash-bg"
+        >
+          H2
+        </button>
+        <button
+          type="button"
+          onClick={() => exec("formatBlock", "<h3>")}
+          className="rounded px-2 py-1 text-sm hover:bg-dash-bg"
+        >
+          H3
+        </button>
+        <button
+          type="button"
+          onClick={() => exec("formatBlock", "<p>")}
+          className="rounded px-2 py-1 text-sm hover:bg-dash-bg"
+        >
+          P
+        </button>
         <div className="mx-1 h-5 w-px bg-dash-border" />
-        <ToolButton cmd="ul" onClick={() => run("insertUnorderedList")} label="• List" />
-        <ToolButton cmd="ol" onClick={() => run("insertOrderedList")} label="1. List" />
+        <button
+          type="button"
+          onClick={() => exec("insertUnorderedList")}
+          className="rounded px-2 py-1 text-sm hover:bg-dash-bg"
+        >
+          • List
+        </button>
+        <button
+          type="button"
+          onClick={() => exec("insertOrderedList")}
+          className="rounded px-2 py-1 text-sm hover:bg-dash-bg"
+        >
+          1. List
+        </button>
         <div className="mx-1 h-5 w-px bg-dash-border" />
-        <ToolButton cmd="link" onClick={handleLink} label="Link" />
-        <ToolButton cmd="image" onClick={handleImage} label="Image" />
+        <button
+          type="button"
+          onClick={() => {
+            const url = window.prompt("Enter URL:");
+            if (url) exec("createLink", url);
+          }}
+          className="rounded px-2 py-1 text-sm hover:bg-dash-bg"
+        >
+          Link
+        </button>
+        <button
+          type="button"
+          onClick={() => exec("removeFormat")}
+          className="rounded px-2 py-1 text-sm hover:bg-dash-bg"
+        >
+          Clear
+        </button>
       </div>
       <div
         ref={ref}
         contentEditable
         suppressContentEditableWarning
         onInput={handleInput}
-        onBlur={handleBlur}
-        onMouseUp={updateActive}
-        onKeyUp={updateActive}
         data-placeholder={placeholder}
         className={cn(
-          "min-h-[120px] max-w-full overflow-y-auto p-3 text-sm text-dash-text focus:outline-none",
-          "[&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-dash-muted/60",
+          "rich-content min-h-[120px] p-3 focus:outline-none",
+          "[&[data-placeholder]:empty]:before:content-[attr(data-placeholder)]",
+          "[&[data-placeholder]:empty]:before:text-dash-muted/60"
         )}
+        dangerouslySetInnerHTML={{ __html: value }}
       />
     </div>
   );

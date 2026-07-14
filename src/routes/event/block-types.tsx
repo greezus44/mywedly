@@ -4,32 +4,16 @@ export type BlockType =
   | "heading"
   | "paragraph"
   | "image"
-  | "gallery"
-  | "button"
   | "divider"
   | "spacer"
-  | "video"
-  | "quote"
-  | "list";
-
-export interface BlockContent {
-  text?: string;
-  level?: 1 | 2 | 3;
-  src?: string;
-  alt?: string;
-  images?: string[];
-  url?: string;
-  label?: string;
-  height?: number;
-  align?: "left" | "center" | "right";
-  items?: string[];
-  videoUrl?: string;
-}
+  | "button"
+  | "gallery"
+  | "quote";
 
 export interface Block {
   id: string;
   type: BlockType;
-  content: BlockContent;
+  data: Record<string, unknown>;
 }
 
 export interface BlockTypeMeta {
@@ -37,7 +21,6 @@ export interface BlockTypeMeta {
   label: string;
   icon: string;
   description: string;
-  defaultContent: BlockContent;
 }
 
 export const BLOCK_TYPES: BlockTypeMeta[] = [
@@ -45,80 +28,71 @@ export const BLOCK_TYPES: BlockTypeMeta[] = [
     type: "heading",
     label: "Heading",
     icon: "H",
-    description: "A section heading",
-    defaultContent: { text: "New Heading", level: 2, align: "left" },
+    description: "A section heading or title.",
   },
   {
     type: "paragraph",
-    label: "Paragraph",
+    label: "Text",
     icon: "¶",
-    description: "A block of text",
-    defaultContent: { text: "Write something here...", align: "left" },
+    description: "A block of rich text content.",
   },
   {
     type: "image",
     label: "Image",
-    icon: "🖼",
-    description: "A single image",
-    defaultContent: { src: "", alt: "", align: "center" },
+    icon: "🖼️",
+    description: "A single image with optional caption.",
   },
   {
     type: "gallery",
     label: "Gallery",
-    icon: "▦",
-    description: "Multiple images in a grid",
-    defaultContent: { images: [], align: "center" },
+    icon: "📷",
+    description: "A grid of multiple images.",
   },
   {
     type: "button",
     label: "Button",
-    icon: "◉",
-    description: "A clickable button link",
-    defaultContent: { label: "Click Here", url: "", align: "center" },
-  },
-  {
-    type: "divider",
-    label: "Divider",
-    icon: "—",
-    description: "A horizontal line",
-    defaultContent: {},
-  },
-  {
-    type: "spacer",
-    label: "Spacer",
-    icon: "⇕",
-    description: "Vertical spacing",
-    defaultContent: { height: 40 },
-  },
-  {
-    type: "video",
-    label: "Video",
-    icon: "▶",
-    description: "Embed a video URL",
-    defaultContent: { videoUrl: "", align: "center" },
+    icon: "🔘",
+    description: "A clickable button with a link.",
   },
   {
     type: "quote",
     label: "Quote",
     icon: "❝",
-    description: "A styled quote block",
-    defaultContent: { text: "A memorable quote", align: "center" },
+    description: "A styled blockquote.",
   },
   {
-    type: "list",
-    label: "List",
-    icon: "☰",
-    description: "A bulleted list",
-    defaultContent: { items: ["First item", "Second item"], align: "left" },
+    type: "divider",
+    label: "Divider",
+    icon: "—",
+    description: "A horizontal line separator.",
+  },
+  {
+    type: "spacer",
+    label: "Spacer",
+    icon: "␣",
+    description: "Empty vertical space.",
   },
 ];
 
+let blockIdCounter = 0;
+
 export function createBlock(type: BlockType): Block {
-  const meta = BLOCK_TYPES.find((b) => b.type === type);
+  blockIdCounter += 1;
+  const id = `block-${Date.now()}-${blockIdCounter}`;
+  const defaultData: Record<BlockType, Record<string, unknown>> = {
+    heading: { text: "New Heading", level: "h2", align: "left" },
+    paragraph: { html: "" },
+    image: { url: "", caption: "", alt: "" },
+    gallery: { images: [] as string[] },
+    button: { text: "Click Here", url: "", align: "center" },
+    quote: { text: "", author: "" },
+    divider: {},
+    spacer: { height: 40 },
+  };
   return {
-    id: `block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id,
     type,
-    content: { ...(meta?.defaultContent ?? {}) },
+    data: { ...defaultData[type] },
   };
 }
 
@@ -128,5 +102,9 @@ export function blocksToJson(blocks: Block[]): Json {
 
 export function jsonToBlocks(json: Json | null | undefined): Block[] {
   if (!json || !Array.isArray(json)) return [];
-  return json as unknown as Block[];
+  return (json as unknown as Block[]).filter(
+    (b) => b && typeof b === "object" && "id" in b && "type" in b && "data" in b
+  );
 }
+
+export type BlockContent = Block["data"];

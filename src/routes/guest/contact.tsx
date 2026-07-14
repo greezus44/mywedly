@@ -1,120 +1,110 @@
 import { useGuestOutletContext } from "./guest-layout";
 
 interface ContactConfig {
-  phone?: string | null;
-  email?: string | null;
-  venue?: string | null;
-  address?: string | null;
-  mapUrl?: string | null;
-  mapQuery?: string | null;
-}
-
-function getMapEmbed(query: string): string {
-  const q = encodeURIComponent(query);
-  return `https://maps.google.com/maps?q=${q}&z=15&output=embed`;
+  phone?: string;
+  email?: string;
+  venue?: string;
+  address?: string;
+  mapQuery?: string;
 }
 
 export default function GuestContact() {
   const { event } = useGuestOutletContext();
-  const config = (event.content ?? {}) as ContactConfig;
 
-  const phone = config.phone || null;
-  const email = config.email || null;
-  const venue = config.venue || event.venue || null;
-  const address = config.address || event.address || null;
-  const mapQuery = config.mapQuery || config.address || event.address || venue || "";
-  const hasMap = !!mapQuery;
+  const sharingConfig = (event.sharing_config ?? {}) as ContactConfig;
+  const contact: ContactConfig = {
+    phone: sharingConfig.phone ?? undefined,
+    email: sharingConfig.email ?? undefined,
+    venue: sharingConfig.venue ?? event.venue ?? undefined,
+    address: sharingConfig.address ?? event.address ?? undefined,
+    mapQuery: sharingConfig.mapQuery ?? sharingConfig.address ?? event.address ?? event.venue ?? undefined,
+  };
+
+  const hasVenue = !!contact.venue;
+  const hasAddress = !!contact.address;
+  const hasPhone = !!contact.phone;
+  const hasEmail = !!contact.email;
+  const hasMap = !!contact.mapQuery;
 
   return (
     <div className="guest-section">
       <div className="mx-auto max-w-3xl">
-        <header className="mb-12 text-center">
+        {/* Header */}
+        <div className="mb-12 text-center">
           <p className="guest-eyebrow">Contact</p>
-          <h1 className="guest-title">Get in touch</h1>
+          <h1 className="guest-title">Get in Touch</h1>
           <p className="guest-subtitle mx-auto">
-            Questions about the celebration? Reach out using the details below.
+            Have questions? Here's how to reach us.
           </p>
-        </header>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          {(phone || email) && (
-            <section className="event-card">
-              <p className="guest-eyebrow mb-2">Direct</p>
-              <div className="space-y-3">
-                {phone && (
-                  <a
-                    href={`tel:${phone.replace(/\s+/g, "")}`}
-                    className="block transition-opacity hover:opacity-75"
-                    style={{ color: "var(--event-text)" }}
-                  >
-                    <span className="block text-xs uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>
-                      Phone
-                    </span>
-                    <span className="text-lg font-medium" style={{ color: "var(--event-heading)" }}>
-                      {phone}
-                    </span>
-                  </a>
-                )}
-                {email && (
-                  <a
-                    href={`mailto:${email}`}
-                    className="block transition-opacity hover:opacity-75"
-                    style={{ color: "var(--event-text)" }}
-                  >
-                    <span className="block text-xs uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>
-                      Email
-                    </span>
-                    <span className="text-lg font-medium" style={{ color: "var(--event-heading)" }}>
-                      {email}
-                    </span>
-                  </a>
-                )}
-              </div>
-            </section>
-          )}
-
-          {(venue || address) && (
-            <section className="event-card">
-              <p className="guest-eyebrow mb-2">Venue</p>
-              <div className="space-y-1">
-                {venue && (
-                  <p className="text-lg font-medium" style={{ color: "var(--event-heading)" }}>
-                    {venue}
-                  </p>
-                )}
-                {address && (
-                  <p className="text-sm leading-relaxed" style={{ color: "var(--event-text)" }}>
-                    {address}
-                  </p>
-                )}
-              </div>
-            </section>
-          )}
         </div>
 
+        {/* Venue & Address */}
+        {(hasVenue || hasAddress) && (
+          <section className="mb-10">
+            <p className="guest-eyebrow mb-3">Venue</p>
+            <div className="event-card">
+              {hasVenue && (
+                <h2 className="mb-1 text-lg font-semibold" style={{ color: "var(--event-heading)" }}>
+                  {contact.venue}
+                </h2>
+              )}
+              {hasAddress && (
+                <p style={{ color: "var(--event-muted)" }}>{contact.address}</p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Phone & Email */}
+        {(hasPhone || hasEmail) && (
+          <section className="mb-10">
+            <p className="guest-eyebrow mb-3">Reach Us</p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {hasPhone && (
+                <div className="event-card">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>
+                    Phone
+                  </p>
+                  <a href={`tel:${contact.phone}`} className="font-medium hover:underline" style={{ color: "var(--event-primary)" }}>
+                    {contact.phone}
+                  </a>
+                </div>
+              )}
+              {hasEmail && (
+                <div className="event-card">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--event-muted)" }}>
+                    Email
+                  </p>
+                  <a href={`mailto:${contact.email}`} className="font-medium hover:underline break-all" style={{ color: "var(--event-primary)" }}>
+                    {contact.email}
+                  </a>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Map */}
         {hasMap && (
-          <section className="mt-8">
-            <p className="guest-eyebrow mb-3">Map</p>
-            <div
-              className="overflow-hidden"
-              style={{ borderRadius: "var(--event-radius)", border: "1px solid var(--event-border)" }}
-            >
+          <section>
+            <p className="guest-eyebrow mb-3">Location</p>
+            <div className="overflow-hidden" style={{ borderRadius: "var(--event-radius)", border: "1px solid var(--event-border)" }}>
               <iframe
-                title="Venue map"
-                src={getMapEmbed(mapQuery)}
-                className="h-80 w-full"
-                style={{ border: 0, display: "block" }}
+                src={`https://maps.google.com/maps?q=${encodeURIComponent(contact.mapQuery!)}&output=embed`}
+                className="h-72 w-full"
                 loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-                allowFullScreen
+                title="Event location map"
               />
             </div>
           </section>
         )}
 
-        {!phone && !email && !venue && !address && (
-          <div className="event-card mx-auto max-w-md text-center">
-            <p className="guest-subtitle">Contact details haven't been shared yet. Check back soon.</p>
+        {/* Fallback */}
+        {!hasVenue && !hasAddress && !hasPhone && !hasEmail && !hasMap && (
+          <div className="text-center">
+            <p className="guest-subtitle mx-auto">
+              Contact information will be available soon. Please check back later.
+            </p>
           </div>
         )}
       </div>

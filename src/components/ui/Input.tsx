@@ -1,92 +1,100 @@
-import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes, type SelectHTMLAttributes, type ReactNode } from "react";
+import React, { forwardRef } from "react";
 import { cn } from "../../lib/utils";
 
-const baseField =
-  "w-full rounded-md border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted/60 transition-colors focus:outline-none focus:ring-2 focus:ring-dash-primary/40 focus:border-dash-primary disabled:opacity-50 disabled:cursor-not-allowed";
-
-export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+interface BaseFieldProps {
   label?: string;
   error?: string;
+}
+
+interface InputProps
+  extends React.InputHTMLAttributes<HTMLInputElement>,
+    BaseFieldProps {}
+
+interface TextareaProps
+  extends React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+    BaseFieldProps {}
+
+interface SelectProps
+  extends React.SelectHTMLAttributes<HTMLSelectElement>,
+    BaseFieldProps {}
+
+const fieldBase =
+  "w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text placeholder:text-dash-muted/60 focus:outline-none focus:ring-2 focus:ring-dash-primary/40 focus:border-dash-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
+
+const errorBorder = "border-dash-danger focus:ring-dash-danger/40 focus:border-dash-danger";
+
+function Label({ label, htmlFor }: { label?: string; htmlFor?: string }) {
+  if (!label) return null;
+  return (
+    <label
+      htmlFor={htmlFor}
+      className="mb-1.5 block text-sm font-medium text-dash-text"
+    >
+      {label}
+    </label>
+  );
+}
+
+function ErrorText({ error }: { error?: string }) {
+  if (!error) return null;
+  return <p className="mt-1 text-sm text-dash-danger">{error}</p>;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, className, id, ...rest }, ref) => {
-    const inputId = id || rest.name;
+  ({ label, error, className, id, ...props }, ref) => {
+    const inputId = id || props.name;
     return (
-      <div className="space-y-1">
-        {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-dash-text">
-            {label}
-          </label>
-        )}
+      <div>
+        <Label label={label} htmlFor={inputId} />
         <input
           ref={ref}
           id={inputId}
-          className={cn(baseField, error ? "border-dash-danger" : "border-dash-border", className)}
-          {...rest}
+          className={cn(fieldBase, error && errorBorder, className)}
+          {...props}
         />
-        {error && <p className="text-sm text-dash-danger">{error}</p>}
+        <ErrorText error={error} />
       </div>
     );
-  },
+  }
 );
 Input.displayName = "Input";
 
-export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
-  label?: string;
-  error?: string;
-}
-
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ label, error, className, id, ...rest }, ref) => {
-    const inputId = id || rest.name;
+  ({ label, error, className, id, ...props }, ref) => {
+    const inputId = id || props.name;
     return (
-      <div className="space-y-1">
-        {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-dash-text">
-            {label}
-          </label>
-        )}
+      <div>
+        <Label label={label} htmlFor={inputId} />
         <textarea
           ref={ref}
           id={inputId}
-          className={cn(baseField, "min-h-[80px] resize-y", error ? "border-dash-danger" : "border-dash-border", className)}
-          {...rest}
+          className={cn(fieldBase, "resize-y min-h-[80px]", error && errorBorder, className)}
+          {...props}
         />
-        {error && <p className="text-sm text-dash-danger">{error}</p>}
+        <ErrorText error={error} />
       </div>
     );
-  },
+  }
 );
 Textarea.displayName = "Textarea";
 
-export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
-  label?: string;
-  error?: string;
-  children: ReactNode;
-}
-
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, error, className, id, children, ...rest }, ref) => {
-    const inputId = id || rest.name;
+  ({ label, error, className, id, children, ...props }, ref) => {
+    const inputId = id || props.name;
     return (
-      <div className="space-y-1">
-        {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-dash-text">
-            {label}
-          </label>
-        )}
+      <div>
+        <Label label={label} htmlFor={inputId} />
         <select
           ref={ref}
           id={inputId}
-          className={cn(baseField, "cursor-pointer", error ? "border-dash-danger" : "border-dash-border", className)}
-          {...rest}
+          className={cn(fieldBase, "cursor-pointer", error && errorBorder, className)}
+          {...props}
         >
           {children}
         </select>
-        {error && <p className="text-sm text-dash-danger">{error}</p>}
+        <ErrorText error={error} />
       </div>
     );
-  },
+  }
 );
 Select.displayName = "Select";

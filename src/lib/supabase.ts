@@ -1,9 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export type Json =
   | string
@@ -13,12 +11,15 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[];
 
+export type SupaClient = SupabaseClient;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
 export interface Profile {
   id: string;
-  email: string;
+  email: string | null;
   full_name: string | null;
   avatar_url: string | null;
-  plan: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -198,7 +199,7 @@ export interface GuestInvitationOverride {
 export interface SharingEvent {
   id: string;
   event_id: string;
-  event_type: string;
+  event_type: string | null;
   guest_id: string | null;
   source: string | null;
   device_type: string | null;
