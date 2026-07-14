@@ -1,32 +1,32 @@
-import { NavLink, useOutletContext, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { cn } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, Badge } from "../../components/ui";
 
-const TABS = [
+const NAV_TABS = [
   { label: "Cover", to: "", end: true },
-  { label: "Login", to: "login" },
-  { label: "Home", to: "home" },
-  { label: "Events", to: "events" },
-  { label: "Guests", to: "guests" },
-  { label: "Guest Groups", to: "groups" },
-  { label: "RSVP", to: "rsvp" },
-  { label: "Schedule", to: "timeline" },
-  { label: "Pages", to: "pages" },
-  { label: "Theme", to: "theme" },
-  { label: "Sharing", to: "sharing" },
-  { label: "Analytics", to: "analytics" },
-  { label: "Settings", to: "settings" },
+  { label: "Login", to: "login", end: false },
+  { label: "Home", to: "home", end: false },
+  { label: "Events", to: "events", end: false },
+  { label: "Guests", to: "guests", end: false },
+  { label: "Guest Groups", to: "groups", end: false },
+  { label: "RSVP", to: "rsvp", end: false },
+  { label: "Schedule", to: "schedule", end: false },
+  { label: "Pages", to: "pages", end: false },
+  { label: "Theme", to: "theme", end: false },
+  { label: "Sharing", to: "sharing", end: false },
+  { label: "Analytics", to: "analytics", end: false },
+  { label: "Settings", to: "settings", end: false },
 ];
 
 export default function EventLayout() {
+  const { eventId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { eventId } = useOutletContext<{ eventId: string }>();
 
-  const { data: event, isLoading, isError, error } = useQuery({
+  const { data: event, isLoading, isError } = useQuery({
     queryKey: ["event", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -35,33 +35,34 @@ export default function EventLayout() {
         .eq("id", eventId)
         .maybeSingle();
       if (error) throw error;
-      if (!data) throw new Error("Event not found");
       return data as UserEvent;
     },
+    enabled: !!eventId,
   });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
+      if (!event) throw new Error("Event not loaded");
       const { data, error } = await supabase
         .from("user_events")
         .update({
+          name: event.draft_name ?? event.name,
+          event_type: event.draft_event_type ?? event.event_type,
+          event_date: event.draft_event_date ?? event.event_date,
+          event_time: event.draft_event_time ?? event.event_time,
+          venue: event.draft_venue ?? event.venue,
+          address: event.draft_address ?? event.address,
+          cover_image: event.draft_cover_image ?? event.cover_image,
+          cover_config: event.draft_cover_config ?? event.cover_config,
+          login_config: event.draft_login_config ?? event.login_config,
+          theme: event.draft_theme ?? event.theme,
+          logo_config: event.draft_logo_config ?? event.logo_config,
+          content: event.draft_content ?? event.content,
+          sharing_config: event.draft_sharing_config ?? event.sharing_config,
+          slug: event.draft_slug ?? event.slug,
+          rsvp_deadline: event.draft_rsvp_deadline ?? event.rsvp_deadline,
           is_published: true,
           published_at: new Date().toISOString(),
-          name: event!.draft_name ?? event!.name,
-          event_type: event!.draft_event_type ?? event!.event_type,
-          event_date: event!.draft_event_date ?? event!.event_date,
-          event_time: event!.draft_event_time ?? event!.event_time,
-          venue: event!.draft_venue ?? event!.venue,
-          address: event!.draft_address ?? event!.address,
-          cover_image: event!.draft_cover_image ?? event!.cover_image,
-          cover_config: event!.draft_cover_config ?? event!.cover_config,
-          login_config: event!.draft_login_config ?? event!.login_config,
-          theme: event!.draft_theme ?? event!.theme,
-          logo_config: event!.draft_logo_config ?? event!.logo_config,
-          content: event!.draft_content ?? event!.content,
-          sharing_config: event!.draft_sharing_config ?? event!.sharing_config,
-          slug: event!.draft_slug ?? event!.slug,
-          rsvp_deadline: event!.draft_rsvp_deadline ?? event!.rsvp_deadline,
         })
         .eq("id", eventId)
         .select()
@@ -71,22 +72,26 @@ export default function EventLayout() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["user-events"] });
     },
   });
 
+  // CRITICAL: Do NOT render Outlet while loading or on error.
+  // This prevents child routes from receiving a null outlet context.
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <LoadingSpinner size="lg" />
+        <LoadingSpinner />
       </div>
     );
   }
 
   if (isError || !event) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center px-4">
         <ErrorState
-          message={error?.message ?? "Event not found"}
+          title="Event not found"
+          description="This website may have been deleted or you don't have access."
           onRetry={() => navigate("/dashboard")}
         />
       </div>
@@ -94,73 +99,68 @@ export default function EventLayout() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-dash-bg">
-      {/* Top bar */}
-      <header className="sticky top-0 z-40 border-b border-dash-border bg-dash-surface/95 backdrop-blur-sm">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate("/dashboard")}
-              className="text-sm text-dash-muted hover:text-dash-text"
+    <div className="min-h-screen bg-dash-bg">
+      {/* Header */}
+      <div className="border-b border-border bg-surface">
+        <div className="mx-auto max-w-6xl px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => navigate("/dashboard")}
+                  className="text-muted hover:text-foreground"
+                >
+                  ← Dashboard
+                </button>
+                <span className="text-muted">/</span>
+                <h1 className="text-lg font-semibold text-foreground">
+                  {event.draft_name ?? event.name}
+                </h1>
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <Badge variant={event.is_published ? "success" : "warning"}>
+                  {event.is_published ? "Published" : "Draft"}
+                </Badge>
+                {event.slug && (
+                  <span className="text-xs text-muted">/{event.slug}</span>
+                )}
+              </div>
+            </div>
+            <Button
+              onClick={() => publishMutation.mutate()}
+              loading={publishMutation.isPending}
             >
-              ← Dashboard
-            </button>
-            <span className="text-dash-border">/</span>
-            <h1 className="text-sm font-semibold text-dash-text">{event.name}</h1>
-            {event.is_published ? (
-              <Badge variant="success">Published</Badge>
-            ) : (
-              <Badge variant="warning">Draft</Badge>
-            )}
+              Publish
+            </Button>
           </div>
-          <Button
-            size="sm"
-            onClick={() => publishMutation.mutate()}
-            loading={publishMutation.isPending}
-          >
-            Publish
-          </Button>
-        </div>
-      </header>
 
-      {/* Nav tabs */}
-      <nav className="sticky top-14 z-30 border-b border-dash-border bg-dash-surface/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 py-2 scrollbar-thin">
-          {TABS.map((tab) => (
-            <NavLink
-              key={tab.to}
-              to={tab.to}
-              end={tab.end}
-              className={({ isActive }) =>
-                cn(
-                  "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-dash-primary text-dash-primary-fg"
-                    : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"
-                )
-              }
-            >
-              {tab.label}
-            </NavLink>
-          ))}
+          {/* Nav tabs */}
+          <nav className="mt-4 flex flex-wrap gap-1">
+            {NAV_TABS.map((tab) => (
+              <NavLink
+                key={tab.label}
+                to={tab.to}
+                end={tab.end}
+                className={({ isActive }) =>
+                  cn(
+                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted hover:bg-muted/20 hover:text-foreground"
+                  )
+                }
+              >
+                {tab.label}
+              </NavLink>
+            ))}
+          </nav>
         </div>
-      </nav>
+      </div>
 
-      {/* Content */}
-      <main className="flex-1">
-        <Outlet context={{ event, eventId }} />
-      </main>
-
-      {publishMutation.isError && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 shadow-lg">
-          Failed to publish: {publishMutation.error instanceof Error ? publishMutation.error.message : "Unknown error"}
-        </div>
-      )}
-      {publishMutation.isSuccess && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-700 shadow-lg">
-          Published successfully!
-        </div>
-      )}
+      {/* Outlet — context is always valid here */}
+      <div className="mx-auto max-w-6xl px-4 py-6">
+        <Outlet context={{ event, eventId: eventId! }} />
+      </div>
     </div>
   );
 }

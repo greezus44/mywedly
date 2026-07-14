@@ -1,190 +1,267 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/supabase";
-import { EventThemeProvider } from "../../lib/theme-context";
-import { DEFAULT_THEME, jsonToTheme, type ThemeConfig } from "../../lib/theme";
 import { RichTextContent } from "../../lib/sanitize";
-import { cn, formatDate, formatTime12, getCountdown } from "../../lib/utils";
+import { LoadingSpinner } from "../../components/ui";
+import { formatDate, formatTime12, getCountdown } from "../../lib/utils";
 
-interface Block { id: string; type: string; [key: string]: any; }
-
-export default function GuestCustomPage() {
-  const { slug = "", pageSlug = "" } = useParams<{ slug: string; pageSlug: string }>();
-  const navigate = useNavigate();
-
-  const { data: event, isLoading: eventLoading } = useQuery({
-    queryKey: ["guest-event", slug],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*")
-        .eq("slug", slug).eq("is_published", true).maybeSingle();
-      if (error) throw error;
-      return data as UserEvent | null;
-    },
-  });
-
-  const { data: page, isLoading: pageLoading } = useQuery({
-    queryKey: ["guest-custom-page", slug, pageSlug], enabled: !!event,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("custom_pages").select("*")
-        .eq("slug", pageSlug).eq("event_id", event!.id).eq("is_published", true).maybeSingle();
-      if (error) throw error;
-      return data as CustomPage | null;
-    },
-  });
-
-  if (eventLoading || pageLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="animate-spin h-8 w-8 rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
-  if (!event) return <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4 text-center"><p className="max-w-md text-dash-muted">This invitation website could not be found or is no longer available.</p></div>;
-  if (!page) return <div className="flex min-h-screen items-center justify-center bg-dash-bg px-4 text-center"><p className="max-w-md text-dash-muted">This page could not be found.</p></div>;
-
-  const theme: ThemeConfig = jsonToTheme(event.theme as Json | null) ?? DEFAULT_THEME;
-  const blocks = (page.blocks as Block[]) ?? [];
-
-  return (
-    <EventThemeProvider initialTheme={theme}>
-      <div className="event-themed min-h-screen">
-        <header className="border-b border-event-border bg-event-surface/95">
-          <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-            <button onClick={() => navigate(`/e/${slug}/home`)} className="text-sm text-event-muted hover:text-event-heading">← {event.name}</button>
-            <span className="font-event text-base font-semibold text-event-heading">{page.title}</span>
-          </div>
-        </header>
-        <main className="mx-auto max-w-3xl px-4 py-10">
-          {blocks.length === 0 ? <p className="text-sm text-event-muted">No content yet.</p> : (
-            <div className="space-y-6">{blocks.map((block) => <BlockRenderer key={block.id} block={block} event={event} />)}</div>
-          )}
-        </main>
-      </div>
-    </EventThemeProvider>
-  );
+interface Block {
+  id: string;
+  type: string;
+  data: Record<string, unknown>;
 }
 
-function BlockRenderer({ block, event }: { block: Block; event: UserEvent }) {
+function jsonToBlocks(json: Json | null | undefined): Block[] {
+  if (!json || !Array.isArray(json)) return [];
+  return json as unknown as Block[];
+}
+
+function BlockRenderer({ block }: { block: Block }) {
   switch (block.type) {
     case "heading": {
-      const level = Math.min(Math.max(Number(block.level ?? 2), 1), 6);
-      const Tag = `h${level}` as keyof JSX.IntrinsicElements;
-      return <Tag className="text-event-heading font-semibold">{block.text}</Tag>;
+      const level = (block.data.level as string) ?? "h2";
+      const text = (block.data.text as string) ?? "";
+      const Tag = level as "h1" | "h2" | "h3";
+      return <Tag className="font-bold text-event-heading">{text}</Tag>;
     }
-    case "paragraph": return <RichTextContent html={block.text ?? ""} />;
-    case "image": return block.url ? <img src={block.url} alt={block.alt ?? ""} className="w-full rounded-lg border border-event-border" /> : null;
-    case "spacer": return <div style={{ height: `${block.height ?? 40}px` }} />;
-    case "divider": return <hr className="border-event-border" />;
-    case "gallery": return (
-      <div className={cn("grid gap-2")} style={{ gridTemplateColumns: `repeat(${block.columns ?? 3}, minmax(0, 1fr))` }}>
-        {(block.images ?? []).filter((u: string) => !!u).map((url: string, i: number) => (
-          <img key={i} src={url} alt="" className="aspect-square w-full rounded-lg border border-event-border object-cover" />
-        ))}
-      </div>
-    );
+    case "paragraph":
+      return (
+        <RichTextContent
+          html={(block.data.text as string) ?? ""}
+          className="text-event-text"
+        />
+      );
+    case "image": {
+      const url = block.data.url as string;
+      const alt = (block.data.alt as string) ?? "";
+      return url ? (
+        <img src={url} alt={alt} className="max-w-full rounded-lg" />
+      ) : null;
+    }
+    case "spacer":
+      return <div style={{ height: (block.data.height as number) ?? 40 }} />;
+    case "divider":
+      return <hr className="border-event-border" />;
+    case "gallery": {
+      const images = (block.data.images as string[]) ?? [];
+      return images.length > 0 ? (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {images.map((img, i) => (
+            <img
+              key={i}
+              src={img}
+              alt={`Gallery ${i + 1}`}
+              className="h-24 w-full rounded-md object-cover"
+            />
+          ))}
+        </div>
+      ) : null;
+    }
     case "video": {
-      const url = block.url ?? "";
-      const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
-      const embed = m ? `https://www.youtube.com/embed/${m[1]}` : url;
-      return url ? <div className="aspect-video w-full overflow-hidden rounded-lg border border-event-border"><iframe src={embed} className="h-full w-full" allowFullScreen /></div> : null;
+      const url = block.data.url as string;
+      return url ? (
+        <div className="aspect-video overflow-hidden rounded-lg">
+          <iframe src={url} className="h-full w-full" title="Video" allowFullScreen />
+        </div>
+      ) : null;
     }
-    case "button": return block.url ? (
-      <a href={block.url} target="_blank" rel="noopener noreferrer" className="event-btn-primary inline-block">{block.text ?? "Click here"}</a>
-    ) : null;
-    case "columns": return (
-      <div className="grid gap-4 sm:grid-cols-2">
-        {(block.columns ?? []).map((col: string, i: number) => <RichTextContent key={i} html={col ?? ""} />)}
-      </div>
-    );
-    case "list": {
-      const items = block.items ?? [];
-      return block.ordered ? (
-        <ol className="list-decimal space-y-1 pl-6 text-event-text">{items.map((item: string, i: number) => <li key={i}>{item}</li>)}</ol>
-      ) : (
-        <ul className="list-disc space-y-1 pl-6 text-event-text">{items.map((item: string, i: number) => <li key={i}>{item}</li>)}</ul>
+    case "button": {
+      const text = (block.data.text as string) ?? "Button";
+      const url = (block.data.url as string) ?? "#";
+      return (
+        <a href={url} className="event-btn-primary inline-block">
+          {text}
+        </a>
       );
     }
-    case "quote": return (
-      <blockquote className="border-l-4 border-event-border pl-4 italic text-event-muted">
-        <p>{block.text}</p>{block.author && <footer className="mt-1 text-sm not-italic">— {block.author}</footer>}
-      </blockquote>
-    );
-    case "countdown": {
-      const c = getCountdown(block.targetDate);
-      if (c.isPast) return <p className="text-event-muted">This moment has arrived.</p>;
+    case "columns": {
+      const columns = (block.data.columns as { text: string }[]) ?? [];
       return (
-        <div className="event-card flex justify-center gap-6 text-center">
-          {(["days", "hours", "minutes", "seconds"] as const).map((u) => (
-            <div key={u} className="flex flex-col items-center">
-              <span className="text-2xl font-bold text-event-heading">{c[u].toString().padStart(2, "0")}</span>
-              <span className="text-xs uppercase text-event-muted">{u}</span>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {columns.map((col, i) => (
+            <div key={i} className="text-sm text-event-text">{col.text}</div>
+          ))}
+        </div>
+      );
+    }
+    case "list": {
+      const items = (block.data.items as string[]) ?? [];
+      return (
+        <ul className="list-disc pl-5 text-sm text-event-text">
+          {items.map((item, i) => <li key={i}>{item}</li>)}
+        </ul>
+      );
+    }
+    case "quote": {
+      const text = (block.data.text as string) ?? "";
+      const author = (block.data.author as string) ?? "";
+      return (
+        <blockquote className="border-l-4 border-event-primary pl-4 italic text-event-text">
+          <p>{text}</p>
+          {author && <p className="mt-1 text-sm text-event-muted">— {author}</p>}
+        </blockquote>
+      );
+    }
+    case "countdown": {
+      const target = block.data.target as string;
+      const cd = target ? getCountdown(target) : null;
+      if (!cd || cd.done) return null;
+      return (
+        <div className="flex items-center justify-center gap-4 rounded-lg bg-event-surface-alt p-6">
+          {(["days", "hours", "minutes", "seconds"] as const).map((unit) => (
+            <div key={unit} className="flex flex-col items-center">
+              <span className="text-3xl font-bold text-event-primary">
+                {String(cd[unit]).padStart(2, "0")}
+              </span>
+              <span className="text-xs uppercase text-event-muted">{unit}</span>
             </div>
           ))}
         </div>
       );
     }
     case "map": {
-      const addr = block.address ?? event.address ?? "";
-      const link = addr ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}` : null;
+      const address = (block.data.address as string) ?? "";
+      return address ? (
+        <div className="overflow-hidden rounded-lg">
+          <iframe
+            src={`https://maps.google.com/maps?q=${encodeURIComponent(address)}&z=14&output=embed`}
+            className="h-64 w-full"
+            title="Map"
+          />
+        </div>
+      ) : null;
+    }
+    case "rsvp-form":
       return (
-        <div className="event-card space-y-2">
-          {block.heading && <h3 className="text-lg font-semibold text-event-heading">{block.heading}</h3>}
-          {addr && <p className="text-event-text">{addr}</p>}
-          {link && <a href={link} target="_blank" rel="noopener noreferrer" className="event-btn-secondary inline-block">📍 View on map</a>}
+        <div className="event-card text-center text-event-muted">
+          Please visit the RSVP page to submit your response.
+        </div>
+      );
+    case "guest-list":
+      return (
+        <div className="event-card text-center text-event-muted">
+          Guest list is not publicly available.
+        </div>
+      );
+    case "schedule":
+      return (
+        <div className="event-card text-center text-event-muted">
+          Schedule details will be announced soon.
+        </div>
+      );
+    case "venue": {
+      const name = (block.data.name as string) ?? "";
+      const address = (block.data.address as string) ?? "";
+      return (
+        <div className="event-card">
+          {name && <h4 className="font-semibold text-event-heading">{name}</h4>}
+          {address && <p className="text-sm text-event-muted">{address}</p>}
         </div>
       );
     }
-    case "schedule": return (
-      <div className="event-card">
-        {block.heading && <h3 className="mb-3 text-lg font-semibold text-event-heading">{block.heading}</h3>}
-        <ScheduleBlock eventId={event.id} />
-      </div>
-    );
-    case "venue": return (
-      <div className="event-card">
-        {block.heading && <h3 className="mb-3 text-lg font-semibold text-event-heading">{block.heading}</h3>}
-        {event.venue && <p className="text-event-text">{event.venue}</p>}
-        {event.address && <p className="text-event-text">{event.address}</p>}
-      </div>
-    );
-    case "faq": return (
-      <div className="space-y-3">
-        {(block.items ?? []).map((item: { question: string; answer: string }, i: number) => (
-          <div key={i} className="event-card">
-            <h3 className="font-semibold text-event-heading">{item.question}</h3>
-            <p className="mt-1 text-event-text">{item.answer}</p>
-          </div>
-        ))}
-      </div>
-    );
-    case "rsvp-form":
-    case "guest-list": return (
-      <div className="event-card text-center">
-        {block.heading && <h3 className="mb-2 text-lg font-semibold text-event-heading">{block.heading}</h3>}
-        <a href={`#/e/${event.slug ?? ""}/rsvp`} className="event-btn-primary inline-block">Go to RSVP</a>
-      </div>
-    );
-    default: return null;
+    case "faq": {
+      const items = (block.data.items as { question: string; answer: string }[]) ?? [];
+      return (
+        <div className="flex flex-col gap-3">
+          {items.map((item, i) => (
+            <div key={i} className="event-card">
+              <p className="font-medium text-event-heading">{item.question}</p>
+              <p className="mt-1 text-sm text-event-muted">{item.answer}</p>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    default:
+      return null;
   }
 }
 
-function ScheduleBlock({ eventId }: { eventId: string }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ["guest-schedule", eventId],
+export default function CustomPage() {
+  const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
+
+  const { data: event, isLoading: eventLoading } = useQuery({
+    queryKey: ["public-event", slug],
     queryFn: async () => {
-      const { data, error } = await supabase.from("event_schedule").select("*")
-        .eq("event_id", eventId).order("order_index", { ascending: true });
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*")
+        .eq("slug", slug)
+        .eq("is_published", true)
+        .maybeSingle();
       if (error) throw error;
-      return data;
+      return data as UserEvent | null;
     },
+    enabled: !!slug,
   });
-  if (isLoading) return <div className="flex justify-center py-4"><div className="animate-spin h-5 w-5 rounded-full border-2 border-event-primary border-t-transparent" /></div>;
-  if (!data || data.length === 0) return <p className="text-sm text-event-muted">No schedule items.</p>;
+
+  const { data: page, isLoading: pageLoading, isError } = useQuery({
+    queryKey: ["guest-custom-page", event?.id, pageSlug],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("custom_pages")
+        .select("*")
+        .eq("event_id", event!.id)
+        .eq("slug", pageSlug)
+        .eq("is_published", true)
+        .maybeSingle();
+      if (error) throw error;
+      return data as CustomPage | null;
+    },
+    enabled: !!event?.id && !!pageSlug,
+  });
+
+  if (eventLoading || pageLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (isError || !page) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+        <h1 className="text-2xl font-semibold text-event-heading">
+          This page could not be found.
+        </h1>
+        <Link to={`/e/${slug}/home`} className="text-event-primary underline">
+          Back to home
+        </Link>
+      </div>
+    );
+  }
+
+  const blocks = jsonToBlocks(page.blocks);
+
   return (
-    <div className="space-y-2">
-      {data.map((item) => (
-        <div key={item.id} className="border-l-2 border-event-border pl-3">
-          <p className="font-medium text-event-heading">{item.title}</p>
-          <p className="text-xs text-event-muted">
-            {formatDate(item.schedule_date)}{item.start_time && ` · ${formatTime12(item.start_time)}`}{item.venue && ` · ${item.venue}`}
-          </p>
-          {item.description && <p className="mt-1 text-sm text-event-text">{item.description}</p>}
+    <div className="flex flex-col gap-6">
+      {page.cover_image_url && (
+        <img
+          src={page.cover_image_url}
+          alt={page.title}
+          className="max-h-64 w-full rounded-lg object-cover"
+        />
+      )}
+      <header className="text-center">
+        <h1
+          className="text-3xl font-bold text-event-heading"
+          style={{ fontFamily: "var(--event-font-heading)" }}
+        >
+          {page.title}
+        </h1>
+      </header>
+      {blocks.length > 0 ? (
+        <div className="flex flex-col gap-4">
+          {blocks.map((block) => (
+            <BlockRenderer key={block.id} block={block} />
+          ))}
         </div>
-      ))}
+      ) : page.body ? (
+        <RichTextContent html={page.body} className="text-event-text" />
+      ) : (
+        <p className="text-center text-event-muted">No content yet.</p>
+      )}
     </div>
   );
 }

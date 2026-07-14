@@ -18,24 +18,21 @@ export function SplitEditor({
   const previewWidth = `${(1 - editorRatio) * 100}%`;
 
   return (
-    <div className="flex h-full w-full overflow-hidden rounded-lg border border-dash-border bg-dash-surface">
+    <div className="flex h-full w-full overflow-hidden rounded-lg border border-border">
       <div
-        className="flex flex-col overflow-y-auto scrollbar-thin border-r border-dash-border"
-        style={{ width: editorWidth, minWidth: editorWidth }}
+        className="flex flex-col overflow-y-auto border-r border-border bg-surface-alt"
+        style={{ width: editorWidth }}
       >
-        <div className="sticky top-0 z-10 border-b border-dash-border bg-dash-bg/80 px-4 py-2 backdrop-blur-sm">
-          <h3 className="text-sm font-semibold text-dash-text">Editor</h3>
-        </div>
-        <div className="flex-1 p-4">{editor}</div>
+        {editor}
       </div>
       <div
-        className={cn("flex flex-col overflow-y-auto scrollbar-thin", previewClassName)}
-        style={{ width: previewWidth, minWidth: previewWidth }}
+        className={cn(
+          "flex flex-col overflow-y-auto bg-surface",
+          previewClassName
+        )}
+        style={{ width: previewWidth }}
       >
-        <div className="sticky top-0 z-10 border-b border-dash-border bg-dash-bg/80 px-4 py-2 backdrop-blur-sm">
-          <h3 className="text-sm font-semibold text-dash-text">Preview</h3>
-        </div>
-        <div className="flex-1 p-4">{preview}</div>
+        {preview}
       </div>
     </div>
   );

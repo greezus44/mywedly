@@ -1,17 +1,31 @@
-import { useMemo, type CSSProperties } from "react";
-import { cn } from "./utils";
+import { useMemo, type ReactNode } from "react";
 
 const ALLOWED_TAGS = new Set([
-  "p", "br", "strong", "b", "em", "i", "u", "s", "del", "ins",
-  "h1", "h2", "h3", "h4", "h5", "h6",
-  "ul", "ol", "li",
-  "a", "img", "blockquote", "hr",
-  "span", "div", "figure", "figcaption",
-  "table", "thead", "tbody", "tr", "th", "td",
+  "p",
+  "br",
+  "strong",
+  "em",
+  "u",
+  "s",
+  "ol",
+  "ul",
+  "li",
+  "a",
+  "span",
+  "div",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "blockquote",
+  "img",
+  "hr",
 ]);
 
 const ALLOWED_ATTRS: Record<string, Set<string>> = {
-  a: new Set(["href", "title", "target", "rel"]),
+  a: new Set(["href", "target", "rel", "title"]),
   img: new Set(["src", "alt", "width", "height", "style"]),
   span: new Set(["style", "class"]),
   div: new Set(["style", "class"]),
@@ -22,93 +36,81 @@ const ALLOWED_ATTRS: Record<string, Set<string>> = {
   h4: new Set(["style", "class"]),
   h5: new Set(["style", "class"]),
   h6: new Set(["style", "class"]),
-  td: new Set(["style", "class"]),
-  th: new Set(["style", "class"]),
-  figure: new Set(["style", "class"]),
-  figcaption: new Set(["style", "class"]),
   blockquote: new Set(["style", "class"]),
 };
 
 const ALLOWED_STYLE_PROPS = new Set([
-  "color", "background-color", "font-size", "font-family",
-  "font-weight", "font-style", "text-align", "text-decoration",
-  "line-height", "margin", "padding", "border",
+  "color",
+  "background-color",
+  "font-size",
+  "font-weight",
+  "font-style",
+  "text-align",
+  "text-decoration",
+  "line-height",
+  "margin",
+  "padding",
+  "font-family",
 ]);
 
+function sanitizeStyle(styleValue: string): string {
+  return styleValue
+    .split(";")
+    .map((decl) => decl.trim())
+    .filter((decl) => {
+      if (!decl) return false;
+      const [prop] = decl.split(":");
+      return prop && ALLOWED_STYLE_PROPS.has(prop.trim().toLowerCase());
+    })
+    .join("; ");
+}
+
 export function sanitizeHtml(html: string): string {
-  if (!html) return "";
+  if (typeof document === "undefined") return html;
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_ELEMENT);
 
-  function cleanNode(node: Node): void {
-    if (node.nodeType === Node.TEXT_NODE) return;
-    if (node.nodeType !== Node.ELEMENT_NODE) {
-      node.parentNode?.removeChild(node);
-      return;
-    }
-    const el = node as Element;
-    const tag = el.tagName.toLowerCase();
+  const toRemove: Element[] = [];
 
+  let node = walker.currentNode as Element;
+  while (node) {
+    const tag = node.tagName.toLowerCase();
     if (!ALLOWED_TAGS.has(tag)) {
-      const parent = el.parentNode;
+      toRemove.push(node);
+    } else {
+      const allowedAttrs = ALLOWED_ATTRS[tag] ?? new Set<string>();
+      const attrs = Array.from(node.attributes);
+      for (const attr of attrs) {
+        if (!allowedAttrs.has(attr.name.toLowerCase())) {
+          node.removeAttribute(attr.name);
+        } else if (attr.name.toLowerCase() === "style") {
+          node.setAttribute("style", sanitizeStyle(attr.value));
+        } else if (attr.name.toLowerCase() === "href") {
+          const href = attr.value;
+          if (!/^(https?:|mailto:|tel:|#|\/)/i.test(href)) {
+            node.removeAttribute(attr.name);
+          }
+        }
+      }
+      if (tag === "a") {
+        node.setAttribute("rel", "noopener noreferrer");
+        if (node.getAttribute("target") === "_blank") {
+          // keep rel
+        }
+      }
+    }
+    node = walker.nextNode() as Element;
+  }
+
+  for (const el of toRemove) {
+    const parent = el.parentNode;
+    if (parent) {
       while (el.firstChild) {
-        parent?.insertBefore(el.firstChild, el);
+        parent.insertBefore(el.firstChild, el);
       }
-      parent?.removeChild(el);
-      return;
+      parent.removeChild(el);
     }
-
-    const allowedAttrs = ALLOWED_ATTRS[tag] ?? new Set<string>();
-    const attrs = Array.from(el.attributes);
-    for (const attr of attrs) {
-      if (!allowedAttrs.has(attr.name)) {
-        el.removeAttribute(attr.name);
-        continue;
-      }
-      if (attr.name === "href" || attr.name === "src") {
-        const val = attr.value;
-        if (val.startsWith("javascript:") || val.startsWith("data:text/html")) {
-          el.removeAttribute(attr.name);
-        }
-      }
-      if (attr.name === "style") {
-        const cleaned = cleanStyle(attr.value);
-        if (cleaned) {
-          el.setAttribute("style", cleaned);
-        } else {
-          el.removeAttribute("style");
-        }
-      }
-    }
-
-    if (tag === "a") {
-      el.setAttribute("target", "_blank");
-      el.setAttribute("rel", "noopener noreferrer");
-    }
-
-    const children = Array.from(el.childNodes);
-    for (const child of children) {
-      cleanNode(child);
-    }
-  }
-
-  function cleanStyle(styleStr: string): string {
-    const decls = styleStr.split(";");
-    const valid: string[] = [];
-    for (const decl of decls) {
-      const [prop, ...valParts] = decl.split(":");
-      const p = prop?.trim().toLowerCase();
-      const v = valParts.join(":").trim();
-      if (p && v && ALLOWED_STYLE_PROPS.has(p)) {
-        valid.push(`${p}: ${v}`);
-      }
-    }
-    return valid.join("; ");
-  }
-
-  const bodyChildren = Array.from(doc.body.childNodes);
-  for (const child of bodyChildren) {
-    cleanNode(child);
   }
 
   return doc.body.innerHTML;
@@ -121,12 +123,14 @@ interface RichTextContentProps {
 
 export function RichTextContent({ html, className }: RichTextContentProps) {
   const sanitized = useMemo(() => sanitizeHtml(html ?? ""), [html]);
-  const style: CSSProperties = {};
   return (
     <div
-      className={cn("rich-content", className)}
-      style={style}
+      className={className}
       dangerouslySetInnerHTML={{ __html: sanitized }}
     />
   );
+}
+
+export function RichTextBlock({ children }: { children: ReactNode }) {
+  return <div className="rich-text-block">{children}</div>;
 }

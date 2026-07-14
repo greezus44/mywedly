@@ -4,80 +4,85 @@ import { DatePicker } from "./DatePicker";
 import { TimePicker } from "./TimePicker";
 
 interface DateTimePickerProps {
-  date: string | null;
-  time: string | null;
-  onChange: (date: string, time: string) => void;
+  value: string | null;
+  onChange: (isoDateTime: string | null) => void;
   className?: string;
   label?: string;
-  min?: string;
-  max?: string;
 }
 
 type Tab = "date" | "time";
 
+function combine(date: string | null, time: string | null): string | null {
+  if (!date) return null;
+  const t = time ?? "00:00";
+  return `${date}T${t}`;
+}
+
+function splitValue(value: string | null): {
+  date: string | null;
+  time: string | null;
+} {
+  if (!value) return { date: null, time: null };
+  if (value.includes("T")) {
+    const [d, t] = value.split("T");
+    return { date: d, time: t };
+  }
+  return { date: value, time: null };
+}
+
 export function DateTimePicker({
-  date,
-  time,
+  value,
   onChange,
   className,
   label,
-  min,
-  max,
 }: DateTimePickerProps) {
+  const { date: initialDate, time: initialTime } = splitValue(value);
   const [tab, setTab] = useState<Tab>("date");
+  const [date, setDate] = useState<string | null>(initialDate);
+  const [time, setTime] = useState<string | null>(initialTime ?? "09:00");
+
+  const handleDate = (d: string | null) => {
+    setDate(d);
+    onChange(combine(d, time));
+  };
+
+  const handleTime = (t: string) => {
+    setTime(t);
+    onChange(combine(date, t));
+  };
 
   return (
-    <div className={cn("w-full", className)}>
-      {label && <label className="block text-sm font-medium text-dash-text mb-1.5">{label}</label>}
-      <div className="rounded-lg border border-dash-border bg-dash-surface overflow-hidden">
-        <div className="flex border-b border-dash-border">
+    <div className={cn("flex flex-col gap-1.5", className)}>
+      {label && (
+        <span className="text-sm font-medium text-foreground">{label}</span>
+      )}
+      <div className="flex gap-1 border-b border-border">
+        {(["date", "time"] as const).map((t) => (
           <button
+            key={t}
             type="button"
-            onClick={() => setTab("date")}
+            onClick={() => setTab(t)}
             className={cn(
-              "flex-1 px-4 py-2 text-sm font-medium transition-colors",
-              tab === "date"
-                ? "bg-dash-primary text-dash-primary-fg"
-                : "text-dash-text hover:bg-dash-bg"
+              "px-3 py-1.5 text-sm font-medium capitalize",
+              tab === t
+                ? "border-b-2 border-primary text-primary"
+                : "text-muted hover:text-foreground"
             )}
           >
-            📅 Date
+            {t}
           </button>
-          <button
-            type="button"
-            onClick={() => setTab("time")}
-            className={cn(
-              "flex-1 px-4 py-2 text-sm font-medium transition-colors",
-              tab === "time"
-                ? "bg-dash-primary text-dash-primary-fg"
-                : "text-dash-text hover:bg-dash-bg"
-            )}
-          >
-            🕐 Time
-          </button>
-        </div>
-        <div className="p-3">
-          {tab === "date" ? (
-            <DatePicker
-              value={date}
-              onChange={(d) => onChange(d, time ?? "")}
-              min={min}
-              max={max}
-            />
-          ) : (
-            <TimePicker
-              value={time}
-              onChange={(t) => onChange(date ?? "", t)}
-            />
-          )}
-        </div>
-        <div className="border-t border-dash-border px-3 py-2 text-xs text-dash-muted">
-          {date && <span>📅 {date}</span>}
-          {date && time && <span className="mx-1">•</span>}
-          {time && <span>🕐 {time}</span>}
-          {!date && !time && <span>No date or time selected</span>}
-        </div>
+        ))}
       </div>
+      {tab === "date" ? (
+        <DatePicker value={date} onChange={handleDate} />
+      ) : (
+        <TimePicker value={time} onChange={handleTime} />
+      )}
+      {value && (
+        <p className="text-xs text-muted">
+          {date ?? "No date"} {time ? `at ${time}` : ""}
+        </p>
+      )}
     </div>
   );
 }

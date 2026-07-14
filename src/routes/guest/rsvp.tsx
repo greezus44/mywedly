@@ -1,179 +1,238 @@
-import { useMemo, useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useState, type FormEvent } from "react";
+import { useParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  supabase, type UserEvent, type SubEvent, type EventRsvp,
-  type SubEventGroupAssignment, type GuestInvitationOverride, type Json,
+  supabase,
+  type UserEvent,
+  type SubEvent,
+  type EventGuest,
 } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { LoadingSpinner, ErrorState } from "../../components/ui";
 import { formatDate, formatTime12, isRsvpClosed } from "../../lib/utils";
 
-interface RsvpFormState { status: string; plus_ones: number; dietary: string; message: string; }
+interface RsvpFormState {
+  status: "attending" | "declined" | "pending";
+  plus_ones: number;
+  dietary: string;
+  message: string;
+}
 
-export default function GuestRsvpPage() {
-  const { event } = useOutletContext<{ event: UserEvent }>();
-  const auth = useGuestAuth();
+export default function Rsvp() {
+  const { slug } = useParams<{ slug: string }>();
+  const { guestId } = useGuestAuth();
   const queryClient = useQueryClient();
-  const guestId = auth.guestId ?? "";
-  const guestName = auth.guestName ?? "";
   const [forms, setForms] = useState<Record<string, RsvpFormState>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
-  const rsvpClosed = isRsvpClosed(event.rsvp_deadline);
+  const [submitStatus, setSubmitStatus] = useState<Record<string, "ok" | "err" | null>>({});
 
-  const { data: subEvents, isLoading } = useQuery({
-    queryKey: ["guest-sub-events", event.id],
+  const { data: event, isLoading, isError } = useQuery({
+    queryKey: ["public-event", slug],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_events")
+        .select("*").eq("slug", slug).eq("is_published", true).maybeSingle();
+      if (error) throw error;
+      return data as UserEvent | null;
+    },
+    enabled: !!slug,
+  });
+
+  const { data: guest } = useQuery({
+    queryKey: ["guest-rsvp-guest", guestId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_guests").select("*").eq("id", guestId).maybeSingle();
+      if (error) throw error;
+      return data as EventGuest | null;
+    },
+    enabled: !!guestId,
+  });
+
+  const { data: subEvents } = useQuery({
+    queryKey: ["guest-sub-events", event?.id],
     queryFn: async () => {
       const { data, error } = await supabase.from("sub_events").select("*")
-        .eq("parent_event_id", event.id).order("display_order", { ascending: true });
+        .eq("parent_event_id", event!.id).eq("rsvp_enabled", true)
+        .order("display_order", { ascending: true });
       if (error) throw error;
       return data as SubEvent[];
     },
+    enabled: !!event?.id,
   });
 
-  const { data: guestGroups } = useQuery({
-    queryKey: ["guest-groups-for-guest", guestId], enabled: !!guestId,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("guest_group_members")
-        .select("group_id").eq("guest_id", guestId);
-      if (error) throw error;
-      return data.map((d) => d.group_id) as string[];
-    },
-  });
+  const subEventIds = (subEvents ?? []).map((s) => s.id);
 
   const { data: assignments } = useQuery({
-    queryKey: ["guest-sub-event-assignments", event.id],
-    enabled: !!subEvents && subEvents.length > 0,
+    queryKey: ["guest-group-assignments", event?.id],
     queryFn: async () => {
       const { data, error } = await supabase.from("sub_event_group_assignments")
-        .select("*, sub_events!inner(parent_event_id)").eq("sub_events.parent_event_id", event.id);
+        .select("*").in("sub_event_id", subEventIds);
       if (error) throw error;
-      return data as (SubEventGroupAssignment & { sub_events: { parent_event_id: string } })[];
+      return data;
     },
+    enabled: subEventIds.length > 0,
   });
 
   const { data: overrides } = useQuery({
-    queryKey: ["guest-overrides", guestId], enabled: !!guestId,
+    queryKey: ["guest-invitation-overrides", event?.id, guestId],
     queryFn: async () => {
       const { data, error } = await supabase.from("guest_invitation_overrides")
-        .select("*").eq("guest_id", guestId);
+        .select("*").in("sub_event_id", subEventIds).eq("guest_id", guestId!);
       if (error) throw error;
-      return data as GuestInvitationOverride[];
+      return data;
     },
+    enabled: subEventIds.length > 0 && !!guestId,
   });
 
   const { data: existingRsvps } = useQuery({
-    queryKey: ["guest-rsvps", guestId, event.id], enabled: !!guestId,
+    queryKey: ["guest-existing-rsvps", event?.id, guestId],
     queryFn: async () => {
       const { data, error } = await supabase.from("event_rsvps").select("*")
-        .eq("guest_id", guestId).eq("event_id", event.id);
+        .eq("guest_id", guestId!).in("sub_event_id", subEventIds);
       if (error) throw error;
-      return data as EventRsvp[];
+      return data;
     },
+    enabled: subEventIds.length > 0 && !!guestId,
   });
 
-  const invitedSubEvents = useMemo(() => {
-    if (!subEvents) return [];
-    return subEvents.filter((sub) => {
-      const override = overrides?.find((o) => o.sub_event_id === sub.id);
-      if (override) return override.is_invited;
-      const assignedGroupIds = (assignments ?? []).filter((a) => a.sub_event_id === sub.id).map((a) => a.group_id);
-      if (assignedGroupIds.length === 0) return true;
-      return (guestGroups ?? []).some((gid) => assignedGroupIds.includes(gid));
-    });
-  }, [subEvents, overrides, assignments, guestGroups]);
-
-  function getForm(subEventId: string): RsvpFormState {
-    if (forms[subEventId]) return forms[subEventId];
-    const existing = existingRsvps?.find((r) => r.sub_event_id === subEventId || (!r.sub_event_id && subEventId === "__main__"));
-    return { status: existing?.status ?? "pending", plus_ones: existing?.plus_ones ?? 0, dietary: existing?.dietary ?? "", message: existing?.message ?? "" };
-  }
-  function updateForm(subEventId: string, updates: Partial<RsvpFormState>) {
-    setForms((prev) => ({ ...prev, [subEventId]: { ...getForm(subEventId), ...updates } }));
-  }
-
   const upsertMutation = useMutation({
-    mutationFn: async (toSubmit: { subEventId: string; form: RsvpFormState }[]) => {
-      const rows = toSubmit.map(({ subEventId, form }) => ({
-        event_id: event.id, guest_id: guestId, guest_name: guestName,
-        status: form.status, plus_ones: form.plus_ones, dietary: form.dietary || null,
-        message: form.message || null, answers: {} as Json,
-        submitted_at: new Date().toISOString(), sub_event_id: subEventId === "__main__" ? null : subEventId,
-      }));
-      for (const row of rows) {
-        const { error } = await supabase.from("event_rsvps").upsert(row, { onConflict: "event_id,guest_id,sub_event_id" });
+    mutationFn: async ({ subEvent, formState }: { subEvent: SubEvent; formState: RsvpFormState }) => {
+      const existing = existingRsvps?.find((r) => r.sub_event_id === subEvent.id);
+      const payload = {
+        event_id: event!.id, guest_id: guestId!, guest_name: guest?.name ?? "Guest",
+        status: formState.status, plus_ones: formState.plus_ones,
+        dietary: formState.dietary || null, message: formState.message || null,
+        sub_event_id: subEvent.id,
+      };
+      if (existing) {
+        const { error } = await supabase.from("event_rsvps").update(payload).eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("event_rsvps").insert(payload);
         if (error) throw error;
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["guest-rsvps", guestId, event.id] });
-      setSubmitted(true); setSubmitError(null);
+    onSuccess: (_d, v) => {
+      queryClient.invalidateQueries({ queryKey: ["guest-existing-rsvps"] });
+      setSubmitStatus((p) => ({ ...p, [v.subEvent.id]: "ok" }));
     },
-    onError: (err) => setSubmitError(err instanceof Error ? err.message : "Failed to submit RSVP."),
+    onError: (_e, v) => setSubmitStatus((p) => ({ ...p, [v.subEvent.id]: "err" })),
   });
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); setSubmitError(null);
-    const toSubmit: { subEventId: string; form: RsvpFormState }[] = [
-      { subEventId: "__main__", form: getForm("__main__") },
-    ];
-    for (const sub of invitedSubEvents) if (sub.rsvp_enabled) toSubmit.push({ subEventId: sub.id, form: getForm(sub.id) });
-    upsertMutation.mutate(toSubmit);
+  if (isLoading) {
+    return <div className="flex h-64 items-center justify-center"><LoadingSpinner /></div>;
+  }
+  if (isError || !event) {
+    return <ErrorState title="This invitation website could not be found or is no longer available." />;
   }
 
-  if (isLoading) return <div className="flex justify-center py-20"><div className="animate-spin h-8 w-8 rounded-full border-2 border-event-primary border-t-transparent" /></div>;
+  const assignedGroupIds = new Set(assignments?.map((a) => a.group_id) ?? []);
+  const overrideMap = new Map(overrides?.map((o) => [o.sub_event_id, o.is_invited]) ?? []);
+  const invitedSubEvents = (subEvents ?? []).filter((sub) => {
+    if (overrideMap.has(sub.id)) return overrideMap.get(sub.id);
+    return guest?.group_id ? assignedGroupIds.has(guest.group_id) : true;
+  });
+
+  const getFormState = (id: string): RsvpFormState => {
+    if (forms[id]) return forms[id];
+    const ex = existingRsvps?.find((r) => r.sub_event_id === id);
+    return {
+      status: (ex?.status as RsvpFormState["status"]) ?? "pending",
+      plus_ones: ex?.plus_ones ?? 0, dietary: ex?.dietary ?? "", message: ex?.message ?? "",
+    };
+  };
+  const setField = (id: string, field: keyof RsvpFormState, value: string | number) =>
+    setForms((p) => ({ ...p, [id]: { ...getFormState(id), [field]: value } }));
+
+  const handleSubmit = (e: FormEvent, sub: SubEvent) => {
+    e.preventDefault();
+    setSubmitStatus((p) => ({ ...p, [sub.id]: null }));
+    upsertMutation.mutate({ subEvent: sub, formState: getFormState(sub.id) });
+  };
+
+  if (isRsvpClosed(event.rsvp_deadline)) {
+    return (
+      <div className="flex flex-col gap-6">
+        <header className="text-center"><h2 className="text-2xl font-bold text-event-heading">RSVP</h2></header>
+        <div className="event-card text-center text-event-muted">RSVP is now closed. Thank you!</div>
+      </div>
+    );
+  }
+  if (invitedSubEvents.length === 0) {
+    return (
+      <div className="flex flex-col gap-6">
+        <header className="text-center"><h2 className="text-2xl font-bold text-event-heading">RSVP</h2></header>
+        <div className="event-card text-center text-event-muted">
+          You are not invited to any specific events with RSVP enabled.
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10">
-      <h1 className="mb-2 text-3xl font-semibold text-event-heading">RSVP</h1>
-      <p className="mb-6 text-event-muted">
-        {event.event_date && formatDate(event.event_date)}{event.event_time && ` at ${formatTime12(event.event_time)}`}
-      </p>
-      {rsvpClosed && <div className="event-card mb-6 border-l-4 border-red-400 bg-red-50/50"><p className="text-sm text-red-700">RSVP for this event is now closed.</p></div>}
-      {submitted && <div className="event-card mb-6 border-l-4 border-green-400 bg-green-50/50"><p className="text-sm text-green-700">Thank you! Your RSVP has been submitted.</p></div>}
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <RsvpCard title={event.name} subtitle="Main event" form={getForm("__main__")} disabled={rsvpClosed} onChange={(u) => updateForm("__main__", u)} />
-        {invitedSubEvents.filter((s) => s.rsvp_enabled).map((sub) => (
-          <RsvpCard key={sub.id} title={sub.name} subtitle={sub.date ? `${formatDate(sub.date)}${sub.start_time ? ` at ${formatTime12(sub.start_time)}` : ""}` : undefined}
-            form={getForm(sub.id)} disabled={rsvpClosed} onChange={(u) => updateForm(sub.id, u)} />
-        ))}
-        {submitError && <p className="text-sm text-red-600" role="alert">{submitError}</p>}
-        <button type="submit" disabled={rsvpClosed || upsertMutation.isPending} className="event-btn-primary w-full disabled:opacity-60">
-          {upsertMutation.isPending ? "Submitting…" : "Submit RSVP"}
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function RsvpCard({ title, subtitle, form, disabled, onChange }: {
-  title: string; subtitle?: string; form: RsvpFormState; disabled?: boolean;
-  onChange: (updates: Partial<RsvpFormState>) => void;
-}) {
-  return (
-    <div className="event-card space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold text-event-heading">{title}</h2>
-        {subtitle && <p className="text-sm text-event-muted">{subtitle}</p>}
-      </div>
-      <div className="flex gap-2">
-        <button type="button" disabled={disabled} onClick={() => onChange({ status: "attending" })}
-          className={`flex-1 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-60 ${form.status === "attending" ? "border-event-primary bg-event-primary text-event-primary-fg" : "border-event-border text-event-text hover:bg-event-surface-alt"}`}>✓ Accept</button>
-        <button type="button" disabled={disabled} onClick={() => onChange({ status: "not_attending" })}
-          className={`flex-1 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:opacity-60 ${form.status === "not_attending" ? "border-red-500 bg-red-500 text-white" : "border-event-border text-event-text hover:bg-event-surface-alt"}`}>✗ Decline</button>
-      </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-event-text">Plus ones</label>
-        <input type="number" min={0} value={form.plus_ones} disabled={disabled} onChange={(e) => onChange({ plus_ones: Number(e.target.value) })} className="event-input" />
-      </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-event-text">Dietary requirements</label>
-        <textarea value={form.dietary} disabled={disabled} onChange={(e) => onChange({ dietary: e.target.value })} className="event-input min-h-[60px]" placeholder="Any dietary needs…" />
-      </div>
-      <div>
-        <label className="mb-1 block text-sm font-medium text-event-text">Message</label>
-        <textarea value={form.message} disabled={disabled} onChange={(e) => onChange({ message: e.target.value })} className="event-input min-h-[60px]" placeholder="Leave a message…" />
-      </div>
+    <div className="flex flex-col gap-6">
+      <header className="text-center">
+        <h2 className="text-2xl font-bold text-event-heading" style={{ fontFamily: "var(--event-font-heading)" }}>RSVP</h2>
+        <p className="mt-1 text-sm text-event-muted">{event.name}</p>
+      </header>
+      {invitedSubEvents.map((sub) => {
+        const fs = getFormState(sub.id);
+        const status = submitStatus[sub.id];
+        const subClosed = isRsvpClosed(sub.rsvp_deadline);
+        return (
+          <form key={sub.id} onSubmit={(e) => handleSubmit(e, sub)} className="event-card flex flex-col gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-event-heading">{sub.name}</h3>
+              <div className="mt-1 flex flex-wrap gap-3 text-xs text-event-muted">
+                {sub.date && <span>📅 {formatDate(sub.date)}</span>}
+                {sub.time && <span>⏰ {formatTime12(sub.time)}</span>}
+                {sub.venue && <span>📍 {sub.venue}</span>}
+              </div>
+            </div>
+            {subClosed ? (
+              <p className="text-sm text-event-muted">RSVP is closed for this event.</p>
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  {(["attending", "declined"] as const).map((opt) => (
+                    <button key={opt} type="button" onClick={() => setField(sub.id, "status", opt)}
+                      className={fs.status === opt ? "event-btn-primary flex-1" : "event-btn-secondary flex-1"}>
+                      {opt === "attending" ? "Accept" : "Decline"}
+                    </button>
+                  ))}
+                </div>
+                {fs.status === "attending" && (
+                  <>
+                    <div>
+                      <label className="text-sm font-medium text-event-text">Number of plus ones</label>
+                      <input type="number" min={0} value={fs.plus_ones}
+                        onChange={(e) => setField(sub.id, "plus_ones", parseInt(e.target.value) || 0)}
+                        className="event-input mt-1" />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-event-text">Dietary requirements</label>
+                      <textarea rows={2} value={fs.dietary}
+                        onChange={(e) => setField(sub.id, "dietary", e.target.value)}
+                        className="event-input mt-1" placeholder="Any dietary needs..." />
+                    </div>
+                  </>
+                )}
+                <div>
+                  <label className="text-sm font-medium text-event-text">Message</label>
+                  <textarea rows={3} value={fs.message}
+                    onChange={(e) => setField(sub.id, "message", e.target.value)}
+                    className="event-input mt-1" placeholder="Leave a message for the hosts..." />
+                </div>
+                {status === "ok" && <p className="text-sm text-green-600">RSVP submitted successfully!</p>}
+                {status === "err" && <p className="text-sm text-red-600">Failed to submit. Please try again.</p>}
+                <button type="submit" disabled={upsertMutation.isPending} className="event-btn-primary">
+                  {upsertMutation.isPending ? "Submitting..." : "Submit RSVP"}
+                </button>
+              </>
+            )}
+          </form>
+        );
+      })}
     </div>
   );
 }

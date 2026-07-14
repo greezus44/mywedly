@@ -3,13 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export type Json =
   | string
@@ -150,7 +144,7 @@ export interface EventSchedule {
   venue: string | null;
   address: string | null;
   dress_code: string | null;
-  category: string;
+  category: string | null;
   cover_image: string | null;
   order_index: number;
   created_at: string;
@@ -171,7 +165,7 @@ export interface CustomPage {
   event_id: string | null;
   slug: string;
   title: string;
-  body: string;
+  body: string | null;
   cover_image_url: string | null;
   inline_image_url: string | null;
   sort_order: number;
@@ -205,7 +199,7 @@ export interface SharingEvent {
   wedding_id: string;
   event_type: string;
   guest_id: string | null;
-  source: string;
+  source: string | null;
   device_type: string | null;
   metadata: Json;
   created_at: string;

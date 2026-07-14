@@ -1,56 +1,37 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../lib/supabase";
 import { slugify } from "../lib/theme";
-import { formatDate } from "../lib/utils";
+import { cn, formatDateShort } from "../lib/utils";
 import { Button } from "../components/ui/Button";
-import { Input, Select } from "../components/ui/Input";
+import { Input } from "../components/ui/Input";
 import {
-  Card,
-  Modal,
-  Badge,
-  EmptyState,
   LoadingSpinner,
   ErrorState,
+  EmptyState,
+  Modal,
+  Badge,
 } from "../components/ui";
 
-const EVENT_TYPES = [
-  "Wedding",
-  "Birthday",
-  "Anniversary",
-  "Engagement",
-  "Bridal Shower",
-  "Baby Shower",
-  "Corporate Event",
-  "Other",
-];
-
-export default function DashboardPage() {
+export default function Dashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState("Wedding");
-  const [newDate, setNewDate] = useState("");
 
-  const { data: user } = useQuery({
-    queryKey: ["auth-user"],
+  const { data: events, isLoading, isError } = useQuery({
+    queryKey: ["user-events"],
     queryFn: async () => {
-      const { data, error } = await supabase.auth.getUser();
-      if (error) throw error;
-      return data.user;
-    },
-  });
-
-  const { data: events, isLoading, isError, error } = useQuery({
-    queryKey: ["user-events", user?.id],
-    enabled: !!user?.id,
-    queryFn: async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
       const { data, error } = await supabase
         .from("user_events")
         .select("*")
-        .eq("creator_id", user!.id)
+        .eq("creator_id", user.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as UserEvent[];
@@ -59,19 +40,21 @@ export default function DashboardPage() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const slug = slugify(newName);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      const slug = slugify(newName) || "my-event";
       const { data, error } = await supabase
         .from("user_events")
         .insert({
-          creator_id: user!.id,
+          creator_id: user.id,
           name: newName,
+          draft_name: newName,
           event_type: newType,
-          event_date: newDate || null,
+          draft_event_type: newType,
           slug,
           draft_slug: slug,
-          draft_name: newName,
-          draft_event_type: newType,
-          draft_event_date: newDate || null,
           is_published: false,
         })
         .select()
@@ -84,150 +67,139 @@ export default function DashboardPage() {
       setShowCreate(false);
       setNewName("");
       setNewType("Wedding");
-      setNewDate("");
       navigate(`/event/${event.id}`);
     },
   });
 
-  function handleCreate(e: React.FormEvent) {
+  const handleCreate = (e: FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
     createMutation.mutate();
-  }
+  };
 
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <LoadingSpinner size="lg" />
+        <LoadingSpinner />
       </div>
     );
   }
 
   if (isError) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <ErrorState message={error?.message} />
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <ErrorState
+          title="Failed to load your websites"
+          description="Please try again or sign in."
+        />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-dash-bg">
-      {/* Header */}
-      <header className="border-b border-dash-border bg-dash-surface">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-dash-primary text-dash-primary-fg">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 15.546c-.523 0-1.046.151-1.5.454a2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.704 2.704 0 00-3 0 2.704 2.704 0 01-3 0 2.701 2.701 0 00-1.5-.454M9 6v6m3 0v6m3-6v6m3-6v6M3 21h18M3 10h18M3 7l9-4 9 4" />
-              </svg>
-            </div>
-            <span className="text-xl font-bold text-dash-text">MyWedly</span>
-          </Link>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={async () => {
-              await supabase.auth.signOut();
-              navigate("/");
-            }}
-          >
-            Sign out
-          </Button>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-6xl px-4 py-8">
-        <div className="mb-6 flex items-center justify-between">
+      <div className="mx-auto max-w-6xl px-4 py-10">
+        <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-dash-text">Your Websites</h1>
-            <p className="mt-1 text-sm text-dash-muted">
-              Manage your event invitation websites.
+            <h1 className="text-2xl font-bold text-foreground">
+              Your Websites
+            </h1>
+            <p className="mt-1 text-sm text-muted">
+              Manage and edit your invitation websites.
             </p>
           </div>
           <Button onClick={() => setShowCreate(true)}>Create Website</Button>
         </div>
 
-        {events && events.length === 0 ? (
-          <EmptyState
-            title="No websites yet"
-            description="Create your first event invitation website to get started."
-            action={<Button onClick={() => setShowCreate(true)}>Create Website</Button>}
-          />
-        ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {events?.map((event) => (
-              <Link key={event.id} to={`/event/${event.id}`}>
-                <Card className="overflow-hidden transition-shadow hover:shadow-md">
-                  <div className="aspect-video bg-dash-bg">
-                    {event.cover_image ? (
-                      <img
-                        src={event.cover_image}
-                        alt={event.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-dash-muted">
-                        <svg className="h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <div className="mb-1 flex items-center gap-2">
-                      <h3 className="text-lg font-semibold text-dash-text">{event.name}</h3>
-                      {event.is_published ? (
-                        <Badge variant="success">Published</Badge>
-                      ) : (
-                        <Badge variant="warning">Draft</Badge>
-                      )}
+        {events && events.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {events.map((event) => (
+              <button
+                key={event.id}
+                onClick={() => navigate(`/event/${event.id}`)}
+                className={cn(
+                  "group flex flex-col overflow-hidden rounded-lg border border-border bg-surface text-left shadow-sm transition-all hover:shadow-md"
+                )}
+              >
+                <div className="relative h-40 overflow-hidden bg-surface-alt">
+                  {event.cover_image ? (
+                    <img
+                      src={event.cover_image}
+                      alt={event.name}
+                      className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-muted">
+                      <span className="text-3xl">🎉</span>
                     </div>
-                    <p className="text-sm text-dash-muted">{event.event_type}</p>
-                    {event.event_date && (
-                      <p className="mt-1 text-sm text-dash-muted">
-                        {formatDate(event.event_date)}
-                      </p>
+                  )}
+                  <div className="absolute right-2 top-2">
+                    {event.is_published ? (
+                      <Badge variant="success">Published</Badge>
+                    ) : (
+                      <Badge variant="warning">Draft</Badge>
                     )}
                   </div>
-                </Card>
-              </Link>
+                </div>
+                <div className="flex flex-col gap-1 p-4">
+                  <h3 className="font-semibold text-foreground">
+                    {event.name}
+                  </h3>
+                  <p className="text-xs text-muted">{event.event_type}</p>
+                  {event.event_date && (
+                    <p className="text-xs text-muted">
+                      {formatDateShort(event.event_date)}
+                    </p>
+                  )}
+                  {event.venue && (
+                    <p className="text-xs text-muted">{event.venue}</p>
+                  )}
+                </div>
+              </button>
             ))}
           </div>
+        ) : (
+          <EmptyState
+            title="No websites yet"
+            description="Create your first invitation website to get started."
+            action={<Button onClick={() => setShowCreate(true)}>Create Website</Button>}
+          />
         )}
       </div>
 
-      {/* Create Modal */}
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Website">
-        <form onSubmit={handleCreate} className="space-y-4">
+      <Modal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        title="Create Website"
+      >
+        <form onSubmit={handleCreate} className="flex flex-col gap-4">
           <Input
-            label="Event Name"
+            label="Website name"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="e.g. Sarah & John's Wedding"
+            placeholder="e.g. John & Jane's Wedding"
             required
             autoFocus
           />
-          <Select label="Event Type" value={newType} onChange={(e) => setNewType(e.target.value)}>
-            {EVENT_TYPES.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </Select>
           <Input
-            label="Event Date"
-            type="date"
-            value={newDate}
-            onChange={(e) => setNewDate(e.target.value)}
+            label="Event type"
+            value={newType}
+            onChange={(e) => setNewType(e.target.value)}
+            placeholder="e.g. Wedding, Birthday, Anniversary"
           />
           {createMutation.isError && (
-            <p className="text-sm text-red-600">
+            <p className="text-sm text-danger">
               {createMutation.error instanceof Error
                 ? createMutation.error.message
-                : "Failed to create website."}
+                : "Failed to create website"}
             </p>
           )}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setShowCreate(false)}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowCreate(false)}
+            >
               Cancel
             </Button>
             <Button type="submit" loading={createMutation.isPending}>

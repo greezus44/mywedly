@@ -1,32 +1,25 @@
-import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventRsvp } from "../../lib/supabase";
-import { Input, Select } from "../../components/ui/Input";
+import { formatDateShort, formatTime12 } from "../../lib/utils";
 import { Button } from "../../components/ui/Button";
 import {
   Card,
-  Badge,
-  EmptyState,
   LoadingSpinner,
   ErrorState,
+  EmptyState,
+  Badge,
+  IconButton,
+  Modal,
 } from "../../components/ui";
-import { formatDateTime, cn } from "../../lib/utils";
+import { useState } from "react";
 
-const STATUS_CONFIG: Record<string, { label: string; variant: "success" | "danger" | "warning" | "default" }> = {
-  attending: { label: "Attending", variant: "success" },
-  not_attending: { label: "Not Attending", variant: "danger" },
-  maybe: { label: "Maybe", variant: "warning" },
-  pending: { label: "Pending", variant: "default" },
-};
-
-export default function RsvpPage() {
-  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
+export default function Rsvp() {
+  const { eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedRsvp, setSelectedRsvp] = useState<EventRsvp | null>(null);
 
-  const { data: rsvps, isLoading, isError, error } = useQuery({
+  const { data: rsvps, isLoading, isError } = useQuery({
     queryKey: ["rsvps", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -37,11 +30,15 @@ export default function RsvpPage() {
       if (error) throw error;
       return data as EventRsvp[];
     },
+    enabled: !!eventId,
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("event_rsvps").delete().eq("id", id);
+      const { error } = await supabase
+        .from("event_rsvps")
+        .delete()
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -49,138 +46,185 @@ export default function RsvpPage() {
     },
   });
 
-  const stats = {
-    total: rsvps?.length ?? 0,
-    attending: rsvps?.filter((r) => r.status === "attending").length ?? 0,
-    notAttending: rsvps?.filter((r) => r.status === "not_attending").length ?? 0,
-    maybe: rsvps?.filter((r) => r.status === "maybe").length ?? 0,
-    totalPlusOnes: rsvps?.reduce((sum, r) => sum + (r.plus_ones ?? 0), 0) ?? 0,
-  };
-
-  const filtered = rsvps?.filter((r) => {
-    const matchSearch = !search ||
-      r.guest_name.toLowerCase().includes(search.toLowerCase()) ||
-      (r.message ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "all" || r.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
-
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <LoadingSpinner size="lg" />
+      <div className="flex h-64 items-center justify-center">
+        <LoadingSpinner />
       </div>
     );
   }
 
   if (isError) {
-    return (
-      <div className="py-20">
-        <ErrorState message={error?.message} />
-      </div>
-    );
+    return <ErrorState title="Failed to load RSVPs" />;
   }
 
-  const statCards = [
-    { label: "Total RSVPs", value: stats.total, color: "text-dash-text" },
-    { label: "Attending", value: stats.attending, color: "text-green-600" },
-    { label: "Not Attending", value: stats.notAttending, color: "text-red-600" },
-    { label: "Maybe", value: stats.maybe, color: "text-amber-600" },
-    { label: "Plus Ones", value: stats.totalPlusOnes, color: "text-dash-primary" },
+  const total = rsvps?.length ?? 0;
+  const attending = rsvps?.filter((r) => r.status === "attending").length ?? 0;
+  const declined = rsvps?.filter((r) => r.status === "declined").length ?? 0;
+  const pending = rsvps?.filter((r) => r.status === "pending").length ?? 0;
+  const totalPlusOnes =
+    rsvps?.reduce((sum, r) => sum + (r.plus_ones || 0), 0) ?? 0;
+
+  const stats = [
+    { label: "Total RSVPs", value: total, variant: "info" as const },
+    { label: "Attending", value: attending, variant: "success" as const },
+    { label: "Declined", value: declined, variant: "danger" as const },
+    { label: "Pending", value: pending, variant: "warning" as const },
+    { label: "Plus Ones", value: totalPlusOnes, variant: "default" as const },
   ];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4">
+    <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-lg font-semibold text-dash-text">RSVP Responses</h2>
-        <p className="mt-1 text-sm text-dash-muted">
-          View and manage RSVP responses for {event.name}.
+        <h2 className="text-lg font-semibold text-foreground">RSVP Responses</h2>
+        <p className="text-sm text-muted">
+          View and manage RSVP submissions from your guests.
         </p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        {statCards.map((stat) => (
-          <Card key={stat.label} className="p-4 text-center">
-            <p className={cn("text-2xl font-bold", stat.color)}>{stat.value}</p>
-            <p className="mt-1 text-xs text-dash-muted">{stat.label}</p>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+        {stats.map((stat) => (
+          <Card key={stat.label}>
+            <div className="flex flex-col">
+              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+              <Badge variant={stat.variant} className="mt-1 w-fit">
+                {stat.label}
+              </Badge>
+            </div>
           </Card>
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input
-          placeholder="Search by name or message..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="flex-1"
-        />
-        <Select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="sm:w-40"
-        >
-          <option value="all">All statuses</option>
-          <option value="attending">Attending</option>
-          <option value="not_attending">Not Attending</option>
-          <option value="maybe">Maybe</option>
-          <option value="pending">Pending</option>
-        </Select>
-      </div>
-
-      {/* List */}
-      {filtered && filtered.length === 0 ? (
-        <EmptyState
-          title={rsvps && rsvps.length > 0 ? "No matching RSVPs" : "No RSVPs yet"}
-          description={
-            rsvps && rsvps.length > 0
-              ? "Try adjusting your search or filter."
-              : "RSVP responses will appear here once guests submit them."
-          }
-        />
-      ) : (
-        <div className="space-y-3">
-          {filtered?.map((rsvp) => {
-            const statusCfg = STATUS_CONFIG[rsvp.status] ?? STATUS_CONFIG.pending;
-            return (
-              <Card key={rsvp.id} className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="mb-1 flex items-center gap-2">
-                      <h3 className="text-base font-semibold text-dash-text">{rsvp.guest_name}</h3>
-                      <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
-                      {rsvp.plus_ones > 0 && (
-                        <Badge variant="info">+{rsvp.plus_ones} guests</Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-dash-muted">
-                      Submitted: {formatDateTime(rsvp.submitted_at)}
-                    </p>
-                    {rsvp.dietary && (
-                      <p className="mt-2 text-sm text-dash-text">
-                        <span className="font-medium">Dietary:</span> {rsvp.dietary}
-                      </p>
-                    )}
-                    {rsvp.message && (
-                      <p className="mt-1 text-sm text-dash-text">
-                        <span className="font-medium">Message:</span> {rsvp.message}
-                      </p>
+      {/* RSVP list */}
+      {rsvps && rsvps.length > 0 ? (
+        <Card>
+          <div className="flex flex-col gap-2">
+            {rsvps.map((rsvp) => (
+              <div
+                key={rsvp.id}
+                className="flex items-center justify-between rounded-md border border-border bg-surface-alt px-3 py-3"
+              >
+                <div className="flex flex-1 flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-foreground">
+                      {rsvp.guest_name}
+                    </span>
+                    <Badge
+                      variant={
+                        rsvp.status === "attending"
+                          ? "success"
+                          : rsvp.status === "declined"
+                          ? "danger"
+                          : "warning"
+                      }
+                    >
+                      {rsvp.status}
+                    </Badge>
+                    {rsvp.plus_ones > 0 && (
+                      <span className="text-xs text-muted">
+                        +{rsvp.plus_ones} guest{rsvp.plus_ones > 1 ? "s" : ""}
+                      </span>
                     )}
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => deleteMutation.mutate(rsvp.id)}
-                  >
-                    Delete
-                  </Button>
+                  {rsvp.dietary && (
+                    <p className="text-xs text-muted">
+                      🍽 Dietary: {rsvp.dietary}
+                    </p>
+                  )}
+                  {rsvp.message && (
+                    <p className="text-xs text-muted">💬 {rsvp.message}</p>
+                  )}
+                  <span className="text-xs text-muted">
+                    {formatDateShort(rsvp.submitted_at)}{" "}
+                    {formatTime12(
+                      rsvp.submitted_at.split("T")[1]?.slice(0, 5) ?? null
+                    )}
+                  </span>
                 </div>
-              </Card>
-            );
-          })}
-        </div>
+                <div className="flex gap-1">
+                  <IconButton
+                    onClick={() => setSelectedRsvp(rsvp)}
+                    title="View details"
+                  >
+                    👁
+                  </IconButton>
+                  <IconButton
+                    onClick={() => deleteMutation.mutate(rsvp.id)}
+                    title="Delete"
+                    className="hover:text-danger"
+                  >
+                    🗑
+                  </IconButton>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : (
+        <EmptyState
+          title="No RSVPs yet"
+          description="RSVP responses from your guests will appear here."
+        />
       )}
+
+      {/* Detail modal */}
+      <Modal
+        open={!!selectedRsvp}
+        onClose={() => setSelectedRsvp(null)}
+        title="RSVP Details"
+        size="md"
+      >
+        {selectedRsvp && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <span className="text-xs text-muted">Guest</span>
+              <p className="font-medium text-foreground">{selectedRsvp.guest_name}</p>
+            </div>
+            <div>
+              <span className="text-xs text-muted">Status</span>
+              <p>
+                <Badge
+                  variant={
+                    selectedRsvp.status === "attending"
+                      ? "success"
+                      : selectedRsvp.status === "declined"
+                      ? "danger"
+                      : "warning"
+                  }
+                >
+                  {selectedRsvp.status}
+                </Badge>
+              </p>
+            </div>
+            <div>
+              <span className="text-xs text-muted">Plus Ones</span>
+              <p className="text-sm text-foreground">{selectedRsvp.plus_ones}</p>
+            </div>
+            {selectedRsvp.dietary && (
+              <div>
+                <span className="text-xs text-muted">Dietary Requirements</span>
+                <p className="text-sm text-foreground">{selectedRsvp.dietary}</p>
+              </div>
+            )}
+            {selectedRsvp.message && (
+              <div>
+                <span className="text-xs text-muted">Message</span>
+                <p className="text-sm text-foreground">{selectedRsvp.message}</p>
+              </div>
+            )}
+            <div>
+              <span className="text-xs text-muted">Submitted</span>
+              <p className="text-sm text-foreground">
+                {formatDateShort(selectedRsvp.submitted_at)}{" "}
+                {formatTime12(
+                  selectedRsvp.submitted_at.split("T")[1]?.slice(0, 5) ?? null
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

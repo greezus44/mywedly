@@ -1,194 +1,169 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { cn } from "../../lib/utils";
-import { Button } from "./Button";
 
 interface RichTextEditorProps {
   value: string;
-  onChange: (value: string) => void;
+  onChange: (html: string) => void;
   className?: string;
   placeholder?: string;
 }
 
-type Cmd =
-  | "bold" | "italic" | "underline" | "strikeThrough"
-  | "insertUnorderedList" | "insertOrderedList"
-  | "justifyLeft" | "justifyCenter" | "justifyRight"
-  | "removeFormat" | "createLink" | "insertImage"
-  | "fontSize" | "foreColor";
+type Command =
+  | "bold"
+  | "italic"
+  | "underline"
+  | "strikeThrough"
+  | "insertUnorderedList"
+  | "insertOrderedList"
+  | "formatBlock-h1"
+  | "formatBlock-h2"
+  | "formatBlock-h3"
+  | "formatBlock-p"
+  | "formatBlock-blockquote"
+  | "createLink"
+  | "insertImage";
 
-const FONT_SIZES = [
-  { label: "Small", value: "2" },
-  { label: "Normal", value: "3" },
-  { label: "Large", value: "5" },
-  { label: "Huge", value: "6" },
-];
-
-const COLORS = [
-  "#000000", "#374151", "#6b7280", "#9ca3af",
-  "#ef4444", "#f97316", "#f59e0b", "#eab308",
-  "#22c55e", "#10b981", "#06b6d4", "#3b82f6",
-  "#6366f1", "#8b5cf6", "#ec4899", "#f43f5e",
-];
+const ToolbarButton = ({
+  onClick,
+  active,
+  children,
+  title,
+}: {
+  onClick: () => void;
+  active?: boolean;
+  children: React.ReactNode;
+  title: string;
+}) => (
+  <button
+    type="button"
+    title={title}
+    onMouseDown={(e) => e.preventDefault()}
+    onClick={onClick}
+    className={cn(
+      "flex h-8 w-8 items-center justify-center rounded text-sm hover:bg-muted/20",
+      active && "bg-primary/15 text-primary"
+    )}
+  >
+    {children}
+  </button>
+);
 
 export function RichTextEditor({
   value,
   onChange,
   className,
-  placeholder = "Start typing...",
+  placeholder,
 }: RichTextEditorProps) {
-  const editorRef = useRef<HTMLDivElement>(null);
-  const [showLink, setShowLink] = useState(false);
-  const [linkUrl, setLinkUrl] = useState("");
-  const [showImage, setShowImage] = useState(false);
-  const [imageUrl, setImageUrl] = useState("");
-  const lastValueRef = useRef(value);
+  const ref = useRef<HTMLDivElement>(null);
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
-    if (editorRef.current && value !== lastValueRef.current) {
-      editorRef.current.innerHTML = value || "";
-      lastValueRef.current = value;
+    if (ref.current && !focused && ref.current.innerHTML !== value) {
+      ref.current.innerHTML = value || "";
     }
-  }, [value]);
+  }, [value, focused]);
 
-  const exec = useCallback((cmd: Cmd, val?: string) => {
-    document.execCommand(cmd, false, val);
-    if (editorRef.current) {
-      lastValueRef.current = editorRef.current.innerHTML;
-      onChange(editorRef.current.innerHTML);
+  const exec = useCallback((command: Command, arg?: string) => {
+    if (command.startsWith("formatBlock-")) {
+      const block = command.split("-")[1];
+      document.execCommand("formatBlock", false, block);
+    } else if (command === "createLink") {
+      const url = window.prompt("Enter URL");
+      if (url) document.execCommand("createLink", false, url);
+    } else if (command === "insertImage") {
+      const url = window.prompt("Enter image URL");
+      if (url) document.execCommand("insertImage", false, url);
+    } else {
+      document.execCommand(command, false, arg);
     }
+    if (ref.current) onChange(ref.current.innerHTML);
   }, [onChange]);
 
   const handleInput = useCallback(() => {
-    if (editorRef.current) {
-      lastValueRef.current = editorRef.current.innerHTML;
-      onChange(editorRef.current.innerHTML);
-    }
+    if (ref.current) onChange(ref.current.innerHTML);
   }, [onChange]);
 
-  const insertLink = useCallback(() => {
-    if (linkUrl) {
-      exec("createLink", linkUrl);
-      setLinkUrl("");
-      setShowLink(false);
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+      e.preventDefault();
+      exec("bold");
     }
-  }, [linkUrl, exec]);
-
-  const insertImage = useCallback(() => {
-    if (imageUrl) {
-      exec("insertImage", imageUrl);
-      setImageUrl("");
-      setShowImage(false);
+    if ((e.metaKey || e.ctrlKey) && e.key === "i") {
+      e.preventDefault();
+      exec("italic");
     }
-  }, [imageUrl, exec]);
-
-  const clearFormatting = useCallback(() => {
-    exec("removeFormat");
-    if (editorRef.current) {
-      editorRef.current.innerHTML = editorRef.current.textContent || "";
-      lastValueRef.current = editorRef.current.innerHTML;
-      onChange(editorRef.current.innerHTML);
-    }
-  }, [exec, onChange]);
-
-  const toolbarBtn = "px-2 py-1 text-sm rounded hover:bg-dash-bg text-dash-text transition-colors";
+  }, [exec]);
 
   return (
-    <div className={cn("rounded-lg border border-dash-border bg-dash-surface overflow-hidden", className)}>
-      <div className="flex flex-wrap items-center gap-1 border-b border-dash-border bg-dash-bg/50 px-2 py-1.5">
-        <button type="button" className={cn(toolbarBtn, "font-bold")} onClick={() => exec("bold")} title="Bold">
-          B
-        </button>
-        <button type="button" className={cn(toolbarBtn, "italic")} onClick={() => exec("italic")} title="Italic">
-          I
-        </button>
-        <button type="button" className={cn(toolbarBtn, "underline")} onClick={() => exec("underline")} title="Underline">
-          U
-        </button>
-        <button type="button" className={cn(toolbarBtn, "line-through")} onClick={() => exec("strikeThrough")} title="Strikethrough">
-          S
-        </button>
-        <div className="mx-1 h-5 w-px bg-dash-border" />
-        <button type="button" className={toolbarBtn} onClick={() => exec("insertUnorderedList")} title="Bullet list">
-          • List
-        </button>
-        <button type="button" className={toolbarBtn} onClick={() => exec("insertOrderedList")} title="Numbered list">
-          1. List
-        </button>
-        <div className="mx-1 h-5 w-px bg-dash-border" />
-        <button type="button" className={toolbarBtn} onClick={() => exec("justifyLeft")} title="Align left">
-          Left
-        </button>
-        <button type="button" className={toolbarBtn} onClick={() => exec("justifyCenter")} title="Align center">
-          Center
-        </button>
-        <button type="button" className={toolbarBtn} onClick={() => exec("justifyRight")} title="Align right">
-          Right
-        </button>
-        <div className="mx-1 h-5 w-px bg-dash-border" />
-        <select
-          className="rounded border border-dash-border bg-dash-surface px-1 py-1 text-xs text-dash-text"
-          onChange={(e) => exec("fontSize", e.target.value)}
-          defaultValue=""
-          title="Font size"
-        >
-          <option value="" disabled>Size</option>
-          {FONT_SIZES.map((s) => (
-            <option key={s.value} value={s.value}>{s.label}</option>
-          ))}
-        </select>
-        <label className="flex items-center gap-1 rounded border border-dash-border bg-dash-surface px-1 py-1 text-xs" title="Text color">
-          <span className="text-dash-muted">A</span>
-          <input
-            type="color"
-            className="h-4 w-5 cursor-pointer rounded border-0 p-0"
-            onChange={(e) => exec("foreColor", e.target.value)}
-          />
-        </label>
-        <div className="mx-1 h-5 w-px bg-dash-border" />
-        <button type="button" className={toolbarBtn} onClick={() => setShowLink(!showLink)} title="Insert link">
-          Link
-        </button>
-        <button type="button" className={toolbarBtn} onClick={() => setShowImage(!showImage)} title="Insert image">
-          Image
-        </button>
-        <button type="button" className={cn(toolbarBtn, "text-red-600")} onClick={clearFormatting} title="Clear formatting">
-          Clear
-        </button>
+    <div
+      className={cn(
+        "overflow-hidden rounded-md border border-border bg-surface",
+        className
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-0.5 border-b border-border bg-surface-alt px-2 py-1">
+        <ToolbarButton title="Bold" onClick={() => exec("bold")}>
+          <strong>B</strong>
+        </ToolbarButton>
+        <ToolbarButton title="Italic" onClick={() => exec("italic")}>
+          <em>I</em>
+        </ToolbarButton>
+        <ToolbarButton title="Underline" onClick={() => exec("underline")}>
+          <u>U</u>
+        </ToolbarButton>
+        <ToolbarButton title="Strikethrough" onClick={() => exec("strikeThrough")}>
+          <s>S</s>
+        </ToolbarButton>
+        <div className="mx-1 h-5 w-px bg-border" />
+        <ToolbarButton title="Heading 1" onClick={() => exec("formatBlock-h1")}>
+          H1
+        </ToolbarButton>
+        <ToolbarButton title="Heading 2" onClick={() => exec("formatBlock-h2")}>
+          H2
+        </ToolbarButton>
+        <ToolbarButton title="Heading 3" onClick={() => exec("formatBlock-h3")}>
+          H3
+        </ToolbarButton>
+        <ToolbarButton title="Paragraph" onClick={() => exec("formatBlock-p")}>
+          P
+        </ToolbarButton>
+        <ToolbarButton title="Quote" onClick={() => exec("formatBlock-blockquote")}>
+          “
+        </ToolbarButton>
+        <div className="mx-1 h-5 w-px bg-border" />
+        <ToolbarButton title="Bullet list" onClick={() => exec("insertUnorderedList")}>
+          •
+        </ToolbarButton>
+        <ToolbarButton title="Numbered list" onClick={() => exec("insertOrderedList")}>
+          1.
+        </ToolbarButton>
+        <div className="mx-1 h-5 w-px bg-border" />
+        <ToolbarButton title="Link" onClick={() => exec("createLink")}>
+          🔗
+        </ToolbarButton>
+        <ToolbarButton title="Image" onClick={() => exec("insertImage")}>
+          🖼
+        </ToolbarButton>
       </div>
-
-      {showLink && (
-        <div className="flex items-center gap-2 border-b border-dash-border px-2 py-1.5">
-          <input
-            type="url"
-            placeholder="https://example.com"
-            value={linkUrl}
-            onChange={(e) => setLinkUrl(e.target.value)}
-            className="flex-1 rounded border border-dash-border bg-dash-surface px-2 py-1 text-sm"
-          />
-          <Button size="sm" onClick={insertLink}>Insert</Button>
-        </div>
-      )}
-
-      {showImage && (
-        <div className="flex items-center gap-2 border-b border-dash-border px-2 py-1.5">
-          <input
-            type="url"
-            placeholder="https://example.com/image.jpg"
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            className="flex-1 rounded border border-dash-border bg-dash-surface px-2 py-1 text-sm"
-          />
-          <Button size="sm" onClick={insertImage}>Insert</Button>
-        </div>
-      )}
-
       <div
-        ref={editorRef}
+        ref={ref}
         contentEditable
         suppressContentEditableWarning
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         onInput={handleInput}
+        onKeyDown={handleKeyDown}
         data-placeholder={placeholder}
-        className="rich-content min-h-[200px] w-full px-4 py-3 text-sm text-dash-text focus:outline-none [&:empty:before]:text-dash-muted [&:empty:before]:content-[attr(data-placeholder)]"
+        className={cn(
+          "rich-text-editor min-h-[120px] px-3 py-2 text-sm text-foreground focus:outline-none",
+          "[&:empty]:before:content-[attr(data-placeholder)] [&:empty]:before:text-muted"
+        )}
       />
     </div>
   );

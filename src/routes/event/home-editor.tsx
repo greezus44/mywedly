@@ -1,106 +1,123 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
+import { Button } from "../../components/ui/Button";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { HomePreview } from "../../components/preview/PreviewRenderers";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
-import { Button } from "../../components/ui/Button";
 
-interface ContentConfig {
-  story?: string;
-  schedule?: string;
-  venue?: string;
+interface HomeContent {
+  section1?: string;
+  section2?: string;
+  section3?: string;
+}
+
+function jsonToContent(json: Json | null | undefined): HomeContent {
+  if (!json || typeof json !== "object") return {};
+  return json as HomeContent;
 }
 
 export default function HomeEditor() {
   const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
   const queryClient = useQueryClient();
 
-  const config = (event.draft_content ?? event.content ?? {}) as ContentConfig;
+  const content = jsonToContent(event.draft_content ?? event.content);
+  const [section1, setSection1] = useState<string>(content.section1 ?? "");
+  const [section2, setSection2] = useState<string>(content.section2 ?? "");
+  const [section3, setSection3] = useState<string>(content.section3 ?? "");
 
-  const [story, setStory] = useState(config.story ?? "");
-  const [schedule, setSchedule] = useState(config.schedule ?? "");
-  const [venue, setVenue] = useState(config.venue ?? "");
-  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    const c = jsonToContent(event.draft_content ?? event.content);
+    setSection1(c.section1 ?? "");
+    setSection2(c.section2 ?? "");
+    setSection3(c.section3 ?? "");
+  }, [event]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const newConfig: ContentConfig = { story, schedule, venue };
+      const newContent: HomeContent = { section1, section2, section3 };
       const { error } = await supabase
         .from("user_events")
-        .update({ draft_content: newConfig as unknown as Json })
+        .update({ draft_content: newContent as unknown as Json })
         .eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
     },
   });
 
   const previewEvent: Partial<UserEvent> = {
     ...event,
-    content: { story, schedule, venue },
+    draft_content: { section1, section2, section3 } as unknown as Json,
   };
 
   return (
-    <div className="mx-auto max-w-7xl p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-dash-text">Home Editor</h2>
-        <div className="flex items-center gap-2">
-          {saved && <span className="text-sm text-green-600">Saved!</span>}
-          <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
-            Save Changes
-          </Button>
+    <div className="flex h-[calc(100vh-180px)] flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">Home Editor</h2>
+          <p className="text-sm text-muted">
+            Edit the content sections for your home page.
+          </p>
         </div>
+        <Button
+          onClick={() => saveMutation.mutate()}
+          loading={saveMutation.isPending}
+        >
+          Save Changes
+        </Button>
       </div>
 
-      <div className="h-[calc(100vh-200px)]">
-        <SplitEditor
-          editor={
-            <div className="space-y-4">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-dash-text">
-                  Our Story
-                </label>
-                <RichTextEditor
-                  value={story}
-                  onChange={setStory}
-                  placeholder="Tell your story..."
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-dash-text">
-                  Schedule Info
-                </label>
-                <RichTextEditor
-                  value={schedule}
-                  onChange={setSchedule}
-                  placeholder="Add schedule details..."
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-dash-text">
-                  Venue Info
-                </label>
-                <RichTextEditor
-                  value={venue}
-                  onChange={setVenue}
-                  placeholder="Add venue details..."
-                />
-              </div>
-              {saveMutation.isError && (
-                <p className="text-sm text-red-600">
-                  {saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed."}
-                </p>
-              )}
+      {saveMutation.isError && (
+        <p className="text-sm text-danger">
+          {saveMutation.error instanceof Error
+            ? saveMutation.error.message
+            : "Failed to save"}
+        </p>
+      )}
+      {saveMutation.isSuccess && (
+        <p className="text-sm text-success">Saved successfully!</p>
+      )}
+
+      <SplitEditor
+        editor={
+          <div className="flex flex-col gap-4 p-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Our Story
+              </label>
+              <RichTextEditor
+                value={section1}
+                onChange={setSection1}
+                placeholder="Tell your story..."
+              />
             </div>
-          }
-          preview={<HomePreview event={previewEvent} />}
-        />
-      </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Event Details
+              </label>
+              <RichTextEditor
+                value={section2}
+                onChange={setSection2}
+                placeholder="Share details about your event..."
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Travel & Accommodation
+              </label>
+              <RichTextEditor
+                value={section3}
+                onChange={setSection3}
+                placeholder="Share travel and accommodation info..."
+              />
+            </div>
+          </div>
+        }
+        preview={<HomePreview event={previewEvent} />}
+      />
     </div>
   );
 }

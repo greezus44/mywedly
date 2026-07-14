@@ -1,100 +1,68 @@
-import { useMemo } from "react";
 import type { UserEvent } from "../../lib/supabase";
 import { RichTextContent } from "../../lib/sanitize";
-import { cn, formatDate, formatTime12, getCountdown, to12Hour } from "../../lib/utils";
+import {
+  formatDate,
+  formatTime12,
+  getCountdown,
+  cn,
+} from "../../lib/utils";
 
-interface CoverConfig {
-  headline?: string;
-  subheadline?: string;
-  showDate?: boolean;
-  showVenue?: boolean;
-  showCountdown?: boolean;
-  layout?: string;
+interface CoverPreviewProps {
+  event: Partial<UserEvent>;
+  className?: string;
 }
 
-interface LoginConfig {
-  heading?: string;
-  subtitle?: string;
-  placeholder?: string;
-  buttonText?: string;
-  requireName?: boolean;
-  requireCode?: boolean;
-}
+export function CoverPreview({ event, className }: CoverPreviewProps) {
+  const coverImage =
+    (event.draft_cover_image as string | undefined) ??
+    event.cover_image ??
+    null;
+  const name = event.draft_name ?? event.name ?? "Our Wedding";
+  const date = event.draft_event_date ?? event.event_date ?? null;
+  const venue = event.draft_venue ?? event.venue ?? null;
 
-interface ContentConfig {
-  story?: string;
-  schedule?: string;
-  venue?: string;
-  rsvp?: string;
-  gallery?: string;
-}
-
-function parseConfig<T>(json: unknown, defaults: T): T {
-  if (!json || typeof json !== "object") return defaults;
-  return { ...defaults, ...(json as object) } as T;
-}
-
-const defaultCover: CoverConfig = {
-  headline: "",
-  subheadline: "",
-  showDate: true,
-  showVenue: true,
-  showCountdown: true,
-};
-
-const defaultLogin: LoginConfig = {
-  heading: "Enter your invite code",
-  subtitle: "Please enter the code from your invitation",
-  placeholder: "Enter code",
-  buttonText: "Continue",
-  requireName: true,
-  requireCode: true,
-};
-
-const defaultContent: ContentConfig = {
-  story: "",
-  schedule: "",
-  venue: "",
-  rsvp: "",
-  gallery: "",
-};
-
-export function CoverPreview({ event }: { event: Partial<UserEvent> }) {
-  const config = parseConfig(event.cover_config, defaultCover);
-  const countdown = useMemo(() => getCountdown(event.event_date), [event.event_date]);
-
-  const headline = config.headline || event.name || "Your Event Name";
-  const subheadline = config.subheadline || "";
+  const countdown = getCountdown(date ? `${date}T00:00:00` : null);
 
   return (
-    <div className="relative flex min-h-[400px] flex-col items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-amber-50 to-orange-50">
-      {event.cover_image && (
+    <div
+      className={cn(
+        "relative flex h-full w-full flex-col items-center justify-center overflow-hidden bg-surface-alt text-center",
+        className
+      )}
+    >
+      {coverImage && (
         <img
-          src={event.cover_image}
+          src={coverImage}
           alt="Cover"
           className="absolute inset-0 h-full w-full object-cover"
         />
       )}
-      <div className="absolute inset-0 bg-black/30" />
-      <div className="relative z-10 px-6 py-12 text-center text-white">
-        {subheadline && (
-          <p className="mb-2 text-sm uppercase tracking-widest opacity-90">{subheadline}</p>
+      <div className="relative z-10 flex flex-col items-center gap-3 p-6 text-event-primary">
+        <p className="text-sm uppercase tracking-[0.3em] text-event-accent">
+          We're getting married
+        </p>
+        <h1
+          className="text-4xl font-bold md:text-5xl"
+          style={{ fontFamily: "var(--event-font-heading)" }}
+        >
+          {name}
+        </h1>
+        {date && (
+          <p className="text-base text-event-text">
+            {formatDate(date)}
+            {venue ? ` · ${venue}` : ""}
+          </p>
         )}
-        <h1 className="mb-4 text-4xl font-bold md:text-5xl">{headline}</h1>
-        {config.showDate && event.event_date && (
-          <p className="mb-1 text-lg opacity-95">{formatDate(event.event_date)}</p>
-        )}
-        {config.showVenue && event.venue && (
-          <p className="mb-4 text-base opacity-90">{event.venue}</p>
-        )}
-        {config.showCountdown && !countdown.isPast && (
-          <div className="mt-6 flex justify-center gap-4">
+        {!countdown.done && (
+          <div className="mt-2 flex gap-4">
             {(["days", "hours", "minutes", "seconds"] as const).map((unit) => (
               <div key={unit} className="flex flex-col items-center">
-                <span className="text-2xl font-bold">
-                  {countdown[unit].toString().padStart(2, "0")}
+                <span className="text-2xl font-bold text-event-primary">
+                  {String(countdown[unit]).padStart(2, "0")}
                 </span>
-                <span className="text-xs uppercase tracking-wide opacity-80">{unit}</span>
+                <span className="text-xs uppercase text-event-muted">
+                  {unit}
+                </span>
               </div>
             ))}
           </div>
@@ -104,119 +72,177 @@ export function CoverPreview({ event }: { event: Partial<UserEvent> }) {
   );
 }
 
-export function LoginPreview({ event }: { event: Partial<UserEvent> }) {
-  const config = parseConfig(event.login_config, defaultLogin);
+interface LoginPreviewProps {
+  event: Partial<UserEvent>;
+  className?: string;
+}
+
+export function LoginPreview({ event, className }: LoginPreviewProps) {
+  const name = event.draft_name ?? event.name ?? "Our Wedding";
+  return (
+    <div
+      className={cn(
+        "flex h-full w-full flex-col items-center justify-center gap-4 bg-surface p-6",
+        className
+      )}
+    >
+      <h2
+        className="text-2xl font-bold text-event-heading"
+        style={{ fontFamily: "var(--event-font-heading)" }}
+      >
+        {name}
+      </h2>
+      <p className="text-sm text-event-muted">Enter your name to continue</p>
+      <input
+        type="text"
+        placeholder="Your name"
+        className="h-10 w-full max-w-xs rounded-md border border-event-border bg-event-surface px-3 text-sm text-event-text focus:border-event-primary focus:outline-none"
+      />
+      <button
+        type="button"
+        className="h-10 w-full max-w-xs rounded-md bg-event-primary px-4 text-sm font-medium text-event-primary-fg hover:bg-event-primary-hover"
+      >
+        Enter
+      </button>
+    </div>
+  );
+}
+
+interface HomePreviewProps {
+  event: Partial<UserEvent>;
+  className?: string;
+}
+
+export function HomePreview({ event, className }: HomePreviewProps) {
+  const name = event.draft_name ?? event.name ?? "Our Wedding";
+  const date = event.draft_event_date ?? event.event_date ?? null;
+  const time = event.draft_event_time ?? event.event_time ?? null;
+  const venue = event.draft_venue ?? event.venue ?? null;
+  const address = event.draft_address ?? event.address ?? null;
+  const content = (event.draft_content as string | undefined) ??
+    (event.content as string | undefined) ??
+    "";
 
   return (
-    <div className="flex min-h-[400px] items-center justify-center rounded-lg bg-dash-bg p-6">
-      <div className="w-full max-w-sm rounded-lg border border-dash-border bg-dash-surface p-6 shadow-sm">
-        <h2 className="mb-2 text-center text-2xl font-bold text-dash-text">
-          {config.heading}
+    <div className={cn("flex h-full w-full flex-col gap-6 bg-event-bg p-6", className)}>
+      <header className="text-center">
+        <h1
+          className="text-3xl font-bold text-event-heading"
+          style={{ fontFamily: "var(--event-font-heading)" }}
+        >
+          {name}
+        </h1>
+        {date && (
+          <p className="mt-1 text-sm text-event-muted">{formatDate(date)}</p>
+        )}
+      </header>
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {date && (
+          <div className="rounded-lg border border-event-border bg-event-surface p-4">
+            <h3 className="text-xs uppercase text-event-muted">Date</h3>
+            <p className="mt-1 text-sm text-event-text">{formatDate(date)}</p>
+          </div>
+        )}
+        {time && (
+          <div className="rounded-lg border border-event-border bg-event-surface p-4">
+            <h3 className="text-xs uppercase text-event-muted">Time</h3>
+            <p className="mt-1 text-sm text-event-text">{formatTime12(time)}</p>
+          </div>
+        )}
+        {venue && (
+          <div className="rounded-lg border border-event-border bg-event-surface p-4">
+            <h3 className="text-xs uppercase text-event-muted">Venue</h3>
+            <p className="mt-1 text-sm text-event-text">{venue}</p>
+          </div>
+        )}
+        {address && (
+          <div className="rounded-lg border border-event-border bg-event-surface p-4">
+            <h3 className="text-xs uppercase text-event-muted">Address</h3>
+            <p className="mt-1 text-sm text-event-text">{address}</p>
+          </div>
+        )}
+      </section>
+      {content && (
+        <section className="prose prose-sm max-w-none text-event-text">
+          <RichTextContent
+            html={content}
+            className="text-event-text"
+          />
+        </section>
+      )}
+    </div>
+  );
+}
+
+interface RsvpPreviewProps {
+  event: Partial<UserEvent>;
+  className?: string;
+}
+
+export function RsvpPreview({ event, className }: RsvpPreviewProps) {
+  const name = event.draft_name ?? event.name ?? "Our Wedding";
+  const deadline = event.draft_rsvp_deadline ?? event.rsvp_deadline ?? null;
+  const closed = deadline ? new Date(deadline).getTime() < Date.now() : false;
+
+  return (
+    <div className={cn("flex h-full w-full flex-col gap-4 bg-event-bg p-6", className)}>
+      <header className="text-center">
+        <h2
+          className="text-2xl font-bold text-event-heading"
+          style={{ fontFamily: "var(--event-font-heading)" }}
+        >
+          RSVP
         </h2>
-        <p className="mb-6 text-center text-sm text-dash-muted">
-          {config.subtitle}
-        </p>
-        <div className="space-y-3">
-          {config.requireName && (
-            <input
-              type="text"
-              placeholder="Your name"
-              className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-              readOnly
-            />
-          )}
-          {config.requireCode && (
-            <input
-              type="text"
-              placeholder={config.placeholder}
-              className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-              readOnly
-            />
-          )}
+        <p className="mt-1 text-sm text-event-muted">{name}</p>
+      </header>
+      {closed ? (
+        <div className="rounded-lg border border-event-border bg-event-surface p-4 text-center text-sm text-event-muted">
+          RSVP is now closed.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-2">
+            {(["Attending", "Decline"] as const).map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                className="flex-1 rounded-md border border-event-border bg-event-surface px-4 py-2 text-sm text-event-text hover:border-event-primary"
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+          <label className="text-sm font-medium text-event-foreground">
+            Number of guests
+          </label>
+          <input
+            type="number"
+            defaultValue={1}
+            min={0}
+            className="h-10 w-full rounded-md border border-event-border bg-event-surface px-3 text-sm text-event-text focus:border-event-primary focus:outline-none"
+          />
+          <label className="text-sm font-medium text-event-foreground">
+            Dietary requirements
+          </label>
+          <textarea
+            rows={2}
+            className="w-full rounded-md border border-event-border bg-event-surface px-3 py-2 text-sm text-event-text focus:border-event-primary focus:outline-none"
+          />
+          <label className="text-sm font-medium text-event-foreground">
+            Message
+          </label>
+          <textarea
+            rows={3}
+            className="w-full rounded-md border border-event-border bg-event-surface px-3 py-2 text-sm text-event-text focus:border-event-primary focus:outline-none"
+          />
           <button
             type="button"
-            className="w-full rounded-md bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg"
+            className="h-10 rounded-md bg-event-primary px-4 text-sm font-medium text-event-primary-fg hover:bg-event-primary-hover"
           >
-            {config.buttonText}
+            Submit RSVP
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-export function HomePreview({ event }: { event: Partial<UserEvent> }) {
-  const config = parseConfig(event.content, defaultContent);
-
-  return (
-    <div className="rounded-lg bg-dash-surface p-6">
-      {event.cover_image && (
-        <img
-          src={event.cover_image}
-          alt="Cover"
-          className="mb-6 h-48 w-full rounded-lg object-cover"
-        />
       )}
-      <h1 className="mb-2 text-3xl font-bold text-dash-text">{event.name || "Event Name"}</h1>
-      {event.event_date && (
-        <p className="mb-1 text-sm text-dash-muted">
-          {formatDate(event.event_date)}
-          {event.event_time && ` at ${to12Hour(event.event_time)}`}
-        </p>
-      )}
-      {event.venue && (
-        <p className="mb-4 text-sm text-dash-muted">{event.venue}</p>
-      )}
-      {config.story && (
-        <div className="mt-4">
-          <h2 className="mb-2 text-xl font-semibold text-dash-text">Our Story</h2>
-          <RichTextContent html={config.story} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function RsvpPreview({ event }: { event: Partial<UserEvent> }) {
-  return (
-    <div className="rounded-lg bg-dash-surface p-6">
-      <h2 className="mb-4 text-2xl font-bold text-dash-text">RSVP</h2>
-      <p className="mb-4 text-sm text-dash-muted">
-        {event.event_date && formatDate(event.event_date)}
-        {event.event_time && ` at ${formatTime12(event.event_time)}`}
-      </p>
-      <div className="space-y-3">
-        <div className="flex gap-2">
-          <button type="button" className="flex-1 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white">
-            ✓ Attending
-          </button>
-          <button type="button" className="flex-1 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white">
-            ✗ Not Attending
-          </button>
-        </div>
-        <input
-          type="number"
-          placeholder="Number of guests"
-          className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-          readOnly
-        />
-        <textarea
-          placeholder="Dietary requirements"
-          className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-          readOnly
-        />
-        <textarea
-          placeholder="Leave a message"
-          className="w-full rounded-md border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text"
-          readOnly
-        />
-        <button
-          type="button"
-          className="w-full rounded-md bg-dash-primary px-4 py-2 text-sm font-medium text-dash-primary-fg"
-        >
-          Submit RSVP
-        </button>
-      </div>
     </div>
   );
 }

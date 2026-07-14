@@ -1,83 +1,66 @@
 import { supabase } from "./supabase";
 
 const BUCKET = "event-images";
-
-export function extractPathFromUrl(url: string): string | null {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    const parts = u.pathname.split(`/${BUCKET}/`);
-    if (parts.length > 1) {
-      return decodeURIComponent(parts[parts.length - 1]);
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
+const MAX_WIDTH = 1600;
+const MAX_HEIGHT = 1600;
+const QUALITY = 0.82;
 
 export async function compressImage(
   file: File,
-  maxWidth: number = 1920,
-  quality: number = 0.85
+  options: { maxWidth?: number; maxHeight?: number; quality?: number } = {}
 ): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          reject(new Error("Could not get canvas context"));
-          return;
-        }
-        ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob(
-          (blob) => {
-            if (blob) resolve(blob);
-            else reject(new Error("Compression failed"));
-          },
-          "image/jpeg",
-          quality
-        );
-      };
-      img.onerror = () => reject(new Error("Could not load image"));
-      img.src = e.target?.result as string;
-    };
-    reader.onerror = () => reject(new Error("Could not read file"));
-    reader.readAsDataURL(file);
+  const { maxWidth = MAX_WIDTH, maxHeight = MAX_HEIGHT, quality = QUALITY } =
+    options;
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(
+    1,
+    maxWidth / bitmap.width,
+    maxHeight / bitmap.height
+  );
+  const width = Math.round(bitmap.width * scale);
+  const height = Math.round(bitmap.height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas context unavailable");
+  ctx.drawImage(bitmap, 0, 0, width, height);
+
+  const isPng = file.type === "image/png";
+  const blob: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("Compression failed"))),
+      isPng ? "image/png" : "image/jpeg",
+      quality
+    );
   });
+
+  return blob;
 }
 
 export async function uploadImage(
   file: File,
-  eventId: string
+  eventId: string,
+  options: { maxWidth?: number; maxHeight?: number; quality?: number } = {}
 ): Promise<string> {
-  const compressed = await compressImage(file);
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-  const fileName = `${eventId}/${Date.now()}-${Math.random()
+  const compressed = await compressImage(file, options);
+  const ext = file.type === "image/png" ? "png" : "jpg";
+  const fileName = `${Date.now()}-${Math.random()
     .toString(36)
-    .slice(2)}.${ext}`;
+    .slice(2, 8)}.${ext}`;
+  const path = `${eventId}/${fileName}`;
 
   const { error } = await supabase.storage
     .from(BUCKET)
-    .upload(fileName, compressed, {
-      contentType: "image/jpeg",
-      cacheControl: "3600",
+    .upload(path, compressed, {
+      contentType: compressed.type,
       upsert: false,
     });
 
   if (error) throw error;
 
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(fileName);
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
 
@@ -86,4 +69,16 @@ export async function removeImage(url: string): Promise<void> {
   if (!path) return;
   const { error } = await supabase.storage.from(BUCKET).remove([path]);
   if (error) throw error;
+}
+
+export function extractPathFromUrl(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split("/");
+    const bucketIndex = parts.indexOf(BUCKET);
+    if (bucketIndex === -1) return null;
+    return parts.slice(bucketIndex + 1).join("/");
+  } catch {
+    return null;
+  }
 }

@@ -2,233 +2,280 @@ import { useState, useMemo } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventGuest, type GuestGroup } from "../../lib/supabase";
-import { Input, Select } from "../../components/ui/Input";
-import { Button } from "../../components/ui/Button";
-import { Card, Modal, EmptyState, LoadingSpinner, ErrorState, Badge } from "../../components/ui";
 import { cn } from "../../lib/utils";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
 import {
-  emptyForm, RsvpBadge, GuestFormFields, guestToForm,
-  type GuestForm,
+  Modal,
+  LoadingSpinner,
+  ErrorState,
+  EmptyState,
+  IconButton,
+} from "../../components/ui";
+import {
+  GuestForm,
+  guestToForm,
+  RsvpBadge,
+  type GuestFormState,
 } from "./guest-form";
 
-export default function GuestsPage() {
-  const { event, eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
+export default function Guests() {
+  const { eventId } = useOutletContext<{ event: UserEvent; eventId: string }>();
   const queryClient = useQueryClient();
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState<EventGuest | null>(null);
-  const [form, setForm] = useState<GuestForm>(emptyForm);
-  const [search, setSearch] = useState("");
-  const [filterGroupId, setFilterGroupId] = useState("all");
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-  const [usernameError, setUsernameError] = useState<string | null>(null);
 
-  const { data: guests, isLoading, isError, error } = useQuery({
-    queryKey: ["event-guests", eventId],
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [filterGroup, setFilterGroup] = useState<string>("");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const { data: guests, isLoading, isError } = useQuery({
+    queryKey: ["guests", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("event_guests").select("*").eq("event_id", eventId)
+        .from("event_guests")
+        .select("*")
+        .eq("event_id", eventId)
         .order("name", { ascending: true });
       if (error) throw error;
       return data as EventGuest[];
     },
+    enabled: !!eventId,
   });
 
   const { data: groups } = useQuery({
-    queryKey: ["guest-groups", eventId],
+    queryKey: ["groups", eventId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("guest_groups").select("*").eq("event_id", eventId)
+        .from("guest_groups")
+        .select("*")
+        .eq("event_id", eventId)
         .order("sort_order", { ascending: true });
       if (error) throw error;
       return data as GuestGroup[];
     },
+    enabled: !!eventId,
   });
 
-  const groupMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    groups?.forEach((g) => { map[g.id] = g.name; });
-    return map;
-  }, [groups]);
-
-  function getGroupName(guest: EventGuest): string {
-    if (guest.group_id && groupMap[guest.group_id]) return groupMap[guest.group_id];
-    return guest.group_name ?? "Ungrouped";
-  }
-
-  const filtered = useMemo(() => {
-    if (!guests) return [];
-    return guests.filter((g) => {
-      const matchSearch = !search ||
-        g.name.toLowerCase().includes(search.toLowerCase()) ||
-        (g.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
-        (g.username ?? "").toLowerCase().includes(search.toLowerCase());
-      const matchGroup = filterGroupId === "all" || g.group_id === filterGroupId;
-      return matchSearch && matchGroup;
-    });
-  }, [guests, search, filterGroupId]);
-
-  const grouped = useMemo(() => {
-    const map: Record<string, EventGuest[]> = {};
-    filtered.forEach((g) => {
-      const key = g.group_id ?? "ungrouped";
-      if (!map[key]) map[key] = [];
-      map[key].push(g);
-    });
-    return map;
-  }, [filtered]);
-
-  const createMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("event_guests").insert({
-        event_id: eventId, name: form.name,
-        username: form.username || null, email: form.email || null,
-        phone: form.phone || null, group_id: form.group_id,
-        group_name: form.group_id ? (groupMap[form.group_id] ?? form.group_name) : (form.group_name || null),
-        side: form.side || null, plus_ones: form.plus_ones,
-        rsvp_status: "pending", token: crypto.randomUUID(),
-      });
-      if (error) throw error;
+  const saveMutation = useMutation({
+    mutationFn: async (form: GuestFormState) => {
+      const payload = {
+        event_id: eventId,
+        name: form.name,
+        username: form.username || null,
+        email: form.email || null,
+        phone: form.phone || null,
+        group_id: form.group_id || null,
+        group_name: form.group_name || null,
+        side: form.side || null,
+        plus_ones: form.plus_ones,
+        dietary: form.dietary || null,
+        message: form.message || null,
+        rsvp_status: form.rsvp_status,
+        table_number: form.table_number ? Number(form.table_number) : null,
+      };
+      if (editingId) {
+        const { error } = await supabase
+          .from("event_guests")
+          .update(payload)
+          .eq("id", editingId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("event_guests").insert(payload);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
       setShowModal(false);
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("event_guests").update({
-        name: form.name, username: form.username || null,
-        email: form.email || null, phone: form.phone || null,
-        group_id: form.group_id,
-        group_name: form.group_id ? (groupMap[form.group_id] ?? form.group_name) : (form.group_name || null),
-        side: form.side || null, plus_ones: form.plus_ones,
-      }).eq("id", editing!.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
-      setShowModal(false);
+      setEditingId(null);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("event_guests").delete().eq("id", id);
+      const { error } = await supabase
+        .from("event_guests")
+        .delete()
+        .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guests", eventId] });
+    },
   });
 
-  async function checkUsernameUnique(username: string): Promise<boolean> {
-    if (!username) return true;
-    const { data, error } = await supabase
-      .from("event_guests").select("id").eq("event_id", eventId)
-      .eq("username", username).neq("id", editing?.id ?? "").maybeSingle();
-    if (error) return true;
-    return !data;
-  }
+  const isUsernameTaken = (username: string, excludeId?: string) => {
+    if (!guests) return false;
+    return guests.some(
+      (g) => g.username === username && g.id !== excludeId
+    );
+  };
 
-  function openCreate() {
-    setEditing(null); setForm(emptyForm); setUsernameError(null); setShowModal(true);
-  }
+  const filteredGuests = useMemo(() => {
+    if (!guests) return [];
+    return guests.filter((g) => {
+      const matchesSearch =
+        !search ||
+        g.name.toLowerCase().includes(search.toLowerCase()) ||
+        (g.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
+        (g.username ?? "").toLowerCase().includes(search.toLowerCase());
+      const matchesGroup =
+        !filterGroup || g.group_id === filterGroup;
+      return matchesSearch && matchesGroup;
+    });
+  }, [guests, search, filterGroup]);
 
-  function openEdit(guest: EventGuest) {
-    setEditing(guest); setForm(guestToForm(guest)); setUsernameError(null); setShowModal(true);
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (form.username) {
-      const isUnique = await checkUsernameUnique(form.username);
-      if (!isUnique) { setUsernameError("This username is already taken."); return; }
+  const groupedGuests = useMemo(() => {
+    const map = new Map<string, { group: GuestGroup | null; guests: EventGuest[] }>();
+    for (const g of filteredGuests) {
+      const key = g.group_id ?? "__ungrouped__";
+      if (!map.has(key)) {
+        const group = groups?.find((gr) => gr.id === g.group_id) ?? null;
+        map.set(key, { group, guests: [] });
+      }
+      map.get(key)!.guests.push(g);
     }
-    setUsernameError(null);
-    if (editing) updateMutation.mutate(); else createMutation.mutate();
+    return Array.from(map.entries()).sort((a, b) => {
+      const aOrder = a[1].group?.sort_order ?? 999;
+      const bOrder = b[1].group?.sort_order ?? 999;
+      return aOrder - bOrder;
+    });
+  }, [filteredGuests, groups]);
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const openCreate = () => {
+    setEditingId(null);
+    setShowModal(true);
+  };
+
+  const openEdit = (guest: EventGuest) => {
+    setEditingId(guest.id);
+    setShowModal(true);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <LoadingSpinner />
+      </div>
+    );
   }
 
-  const saving = createMutation.isPending || updateMutation.isPending;
-  const saveError = editing ? updateMutation.error : createMutation.error;
-
-  if (isLoading) return <div className="flex items-center justify-center py-20"><LoadingSpinner size="lg" /></div>;
-  if (isError) return <div className="py-20"><ErrorState message={error?.message} /></div>;
-
-  const groupEntries = Object.entries(grouped).sort(([a], [b]) => {
-    if (a === "ungrouped") return 1;
-    if (b === "ungrouped") return -1;
-    return (groupMap[a] ?? "").localeCompare(groupMap[b] ?? "");
-  });
+  if (isError) {
+    return <ErrorState title="Failed to load guests" />;
+  }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-4">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-dash-text">Guests</h2>
-          <p className="mt-1 text-sm text-dash-muted">
-            {guests?.length ?? 0} total guests for {event.name}.
+          <h2 className="text-lg font-semibold text-foreground">Guests</h2>
+          <p className="text-sm text-muted">
+            Manage your guest list. {guests?.length ?? 0} total guests.
           </p>
         </div>
         <Button onClick={openCreate}>Add Guest</Button>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input placeholder="Search by name, email, or username..." value={search}
-          onChange={(e) => setSearch(e.target.value)} className="flex-1" />
-        <Select value={filterGroupId} onChange={(e) => setFilterGroupId(e.target.value)} className="sm:w-48">
-          <option value="all">All groups</option>
-          {groups?.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-          <option value="ungrouped">Ungrouped</option>
-        </Select>
+      {/* Search & filter */}
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex-1">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, email, or username..."
+          />
+        </div>
+        <div className="sm:w-56">
+          <select
+            value={filterGroup}
+            onChange={(e) => setFilterGroup(e.target.value)}
+            className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm text-foreground focus:border-primary focus:outline-none"
+          >
+            <option value="">All Groups</option>
+            {groups?.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {filtered.length === 0 ? (
-        <EmptyState
-          title={guests && guests.length > 0 ? "No matching guests" : "No guests yet"}
-          description={guests && guests.length > 0
-            ? "Try adjusting your search or filter."
-            : "Add guests to your event and organize them into groups."}
-          action={guests && guests.length === 0 ? <Button onClick={openCreate}>Add Guest</Button> : undefined}
-        />
-      ) : (
-        <div className="space-y-4">
-          {groupEntries.map(([groupId, groupGuests]) => {
-            const groupName = groupId === "ungrouped" ? "Ungrouped" : (groupMap[groupId] ?? "Unknown");
-            const isCollapsed = collapsedGroups[groupId] ?? false;
+      {/* Guest list grouped by group */}
+      {filteredGuests.length > 0 ? (
+        <div className="flex flex-col gap-4">
+          {groupedGuests.map(([key, { group, guests: groupGuests }]) => {
+            const isCollapsed = collapsedGroups.has(key);
             return (
-              <div key={groupId}>
+              <div
+                key={key}
+                className="overflow-hidden rounded-lg border border-border bg-surface"
+              >
                 <button
-                  onClick={() => setCollapsedGroups({ ...collapsedGroups, [groupId]: !isCollapsed })}
-                  className="mb-2 flex w-full items-center gap-2 text-sm font-semibold text-dash-text">
-                  <svg className={cn("h-4 w-4 transition-transform", isCollapsed ? "" : "rotate-90")}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                  {groupName}
-                  <Badge variant="default">{groupGuests.length}</Badge>
+                  onClick={() => toggleGroup(key)}
+                  className="flex w-full items-center justify-between bg-surface-alt px-4 py-3 text-left hover:bg-muted/10"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">
+                      {isCollapsed ? "▶" : "▼"}
+                    </span>
+                    <span className="font-semibold text-foreground">
+                      {group?.name ?? "Ungrouped"}
+                    </span>
+                    <span className="text-xs text-muted">
+                      ({groupGuests.length})
+                    </span>
+                  </div>
                 </button>
                 {!isCollapsed && (
-                  <div className="space-y-2">
+                  <div className="divide-y divide-border">
                     {groupGuests.map((guest) => (
-                      <Card key={guest.id} className="flex items-center justify-between p-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-dash-bg text-sm font-medium text-dash-muted">
-                            {guest.name.charAt(0).toUpperCase()}
+                      <div
+                        key={guest.id}
+                        className="flex items-center justify-between px-4 py-3"
+                      >
+                        <div className="flex flex-1 flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-foreground">
+                              {guest.name}
+                            </span>
+                            <RsvpBadge status={guest.rsvp_status} />
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-dash-text">{guest.name}</p>
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-dash-muted">
-                              {guest.username && <span>@{guest.username}</span>}
-                              {guest.email && <span>{guest.email}</span>}
-                              {guest.plus_ones > 0 && <span>+{guest.plus_ones} guests</span>}
-                            </div>
+                          <div className="flex flex-wrap gap-3 text-xs text-muted">
+                            {guest.email && <span>✉ {guest.email}</span>}
+                            {guest.phone && <span>📞 {guest.phone}</span>}
+                            {guest.username && <span>@{guest.username}</span>}
+                            {guest.plus_ones > 0 && (
+                              <span>+{guest.plus_ones} guest{guest.plus_ones > 1 ? "s" : ""}</span>
+                            )}
+                            {guest.table_number !== null && (
+                              <span>🪑 Table {guest.table_number}</span>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <RsvpBadge status={guest.rsvp_status} />
-                          <Button size="sm" variant="ghost" onClick={() => openEdit(guest)}>Edit</Button>
-                          <Button size="sm" variant="ghost" onClick={() => deleteMutation.mutate(guest.id)}>Delete</Button>
+                        <div className="flex gap-1">
+                          <IconButton onClick={() => openEdit(guest)} title="Edit">
+                            ✏️
+                          </IconButton>
+                          <IconButton
+                            onClick={() => deleteMutation.mutate(guest.id)}
+                            title="Delete"
+                            className="hover:text-danger"
+                          >
+                            🗑
+                          </IconButton>
                         </div>
-                      </Card>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -236,23 +283,44 @@ export default function GuestsPage() {
             );
           })}
         </div>
+      ) : (
+        <EmptyState
+          title="No guests found"
+          description={
+            search || filterGroup
+              ? "Try adjusting your search or filter."
+              : "Add guests to your list to get started."
+          }
+          action={
+            !search && !filterGroup ? (
+              <Button onClick={openCreate}>Add Guest</Button>
+            ) : undefined
+          }
+        />
       )}
 
-      <Modal open={showModal} onClose={() => setShowModal(false)}
-        title={editing ? "Edit Guest" : "Add Guest"} size="lg">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <GuestFormFields form={form} setForm={setForm} groups={groups ?? []}
-            groupMap={groupMap} usernameError={usernameError} setUsernameError={setUsernameError} />
-          {saveError && (
-            <p className="text-sm text-red-600">
-              {saveError instanceof Error ? saveError.message : "Save failed."}
-            </p>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
-            <Button type="submit" loading={saving}>{editing ? "Update" : "Add"}</Button>
-          </div>
-        </form>
+      <Modal
+        open={showModal}
+        onClose={() => setShowModal(false)}
+        title={editingId ? "Edit Guest" : "Add Guest"}
+        size="lg"
+      >
+        <GuestForm
+          initial={guestToForm(guests?.find((g) => g.id === editingId) ?? null)}
+          groups={groups ?? []}
+          onSubmit={(form) => saveMutation.mutate(form)}
+          onCancel={() => setShowModal(false)}
+          loading={saveMutation.isPending}
+          error={
+            saveMutation.isError
+              ? saveMutation.error instanceof Error
+                ? saveMutation.error.message
+                : "Failed to save"
+              : null
+          }
+          isUsernameTaken={isUsernameTaken}
+          editingId={editingId}
+        />
       </Modal>
     </div>
   );

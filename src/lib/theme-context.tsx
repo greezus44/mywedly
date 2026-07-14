@@ -1,4 +1,10 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useMemo,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import {
   DEFAULT_THEME,
   themeToEventCssVars,
@@ -7,36 +13,42 @@ import {
 
 interface EventThemeContextValue {
   theme: ThemeConfig;
-  setTheme: (theme: ThemeConfig) => void;
 }
 
-const EventThemeContext = createContext<EventThemeContextValue | null>(null);
+const EventThemeContext = createContext<EventThemeContextValue>({
+  theme: DEFAULT_THEME,
+});
+
+export function useEventTheme(): EventThemeContextValue {
+  return useContext(EventThemeContext);
+}
 
 interface EventThemeProviderProps {
   children: ReactNode;
   initialTheme?: ThemeConfig;
 }
 
-export function EventThemeProvider({ children, initialTheme }: EventThemeProviderProps) {
-  const [theme, setTheme] = useState<ThemeConfig>(initialTheme ?? DEFAULT_THEME);
+export function EventThemeProvider({
+  children,
+  initialTheme,
+}: EventThemeProviderProps) {
+  const theme = useMemo(() => initialTheme ?? DEFAULT_THEME, [initialTheme]);
 
-  const cssVars = useMemo(() => themeToEventCssVars(theme), [theme]);
-
-  const value = useMemo(() => ({ theme, setTheme }), [theme]);
+  const style = useMemo(() => {
+    const vars = themeToEventCssVars(theme);
+    const cssVars = vars as CSSProperties as Record<string, string>;
+    const result: CSSProperties = {};
+    for (const [key, value] of Object.entries(cssVars)) {
+      (result as Record<string, string>)[key] = value;
+    }
+    return result;
+  }, [theme]);
 
   return (
-    <EventThemeContext.Provider value={value}>
-      <div className="event-themed" style={cssVars as React.CSSProperties}>
+    <EventThemeContext.Provider value={{ theme }}>
+      <div className="event-themed" style={style}>
         {children}
       </div>
     </EventThemeContext.Provider>
   );
-}
-
-export function useEventTheme(): EventThemeContextValue {
-  const ctx = useContext(EventThemeContext);
-  if (!ctx) {
-    throw new Error("useEventTheme must be used within an EventThemeProvider");
-  }
-  return ctx;
 }

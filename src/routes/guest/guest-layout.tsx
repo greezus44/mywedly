@@ -1,26 +1,20 @@
-import { NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
+import { useEffect } from "react";
+import { NavLink, Outlet, useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { DEFAULT_THEME, jsonToTheme, type ThemeConfig } from "../../lib/theme";
+import { jsonToTheme, DEFAULT_THEME } from "../../lib/theme";
+import { LoadingSpinner } from "../../components/ui";
 import { cn } from "../../lib/utils";
 
-const BASE_NAV = [
-  { label: "Home", to: "home", end: false },
-  { label: "Events", to: "events", end: false },
-  { label: "RSVP", to: "rsvp", end: false },
-  { label: "Wishes", to: "wishes", end: false },
-  { label: "Contact", to: "contact", end: false },
-];
-
 export default function GuestLayout() {
-  const { slug = "" } = useParams<{ slug: string }>();
+  const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const auth = useGuestAuth();
+  const { eventId, guestId } = useGuestAuth();
 
   const { data: event, isLoading, isError } = useQuery({
-    queryKey: ["guest-event", slug],
+    queryKey: ["public-event", slug],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_events")
@@ -31,11 +25,11 @@ export default function GuestLayout() {
       if (error) throw error;
       return data as UserEvent | null;
     },
+    enabled: !!slug,
   });
 
   const { data: navPages } = useQuery({
     queryKey: ["guest-nav-pages", event?.id],
-    enabled: !!event,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
@@ -47,11 +41,11 @@ export default function GuestLayout() {
       if (error) throw error;
       return data as CustomPage[];
     },
+    enabled: !!event?.id,
   });
 
   const { data: footerPages } = useQuery({
     queryKey: ["guest-footer-pages", event?.id],
-    enabled: !!event,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("custom_pages")
@@ -63,90 +57,110 @@ export default function GuestLayout() {
       if (error) throw error;
       return data as CustomPage[];
     },
+    enabled: !!event?.id,
   });
 
-  // Auth gate: must be signed in AND for this event
-  if (!isLoading && event && (!auth.isAuthenticated || auth.eventId !== event.id)) {
-    navigate(`/e/${slug}`, { replace: true });
-  }
+  // Redirect to cover if not signed in for this event
+  useEffect(() => {
+    if (!isLoading && !isError && event && eventId !== event.id) {
+      navigate(`/e/${slug}`, { replace: true });
+    }
+    if (!isLoading && !isError && event && eventId === event.id && !guestId) {
+      navigate(`/e/${slug}`, { replace: true });
+    }
+  }, [isLoading, isError, event, eventId, guestId, slug, navigate]);
+
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
-        <div className="animate-spin h-8 w-8 rounded-full border-2 border-dash-primary border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center">
+        <LoadingSpinner />
       </div>
     );
   }
 
   if (isError || !event) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
-        <p className="max-w-md text-dash-muted">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
+        <h1 className="text-2xl font-semibold text-dash-text">
           This invitation website could not be found or is no longer available.
-        </p>
+        </h1>
       </div>
     );
   }
 
-  const theme: ThemeConfig = jsonToTheme(event.theme as Json | null) ?? DEFAULT_THEME;
-  const customNav = (navPages ?? []).map((p) => ({
-    label: p.nav_label ?? p.title,
-    to: `p/${p.slug}`,
-    end: false,
-  }));
-  const navItems = [...BASE_NAV, ...customNav];
+  // Guard: if not authenticated for this event, don't render content
+  if (eventId !== event.id || !guestId) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  const theme = jsonToTheme(event.theme) ?? DEFAULT_THEME;
+
+  const navItems = [
+    { label: "Home", to: `/e/${slug}/home`, end: false },
+    { label: "Events", to: `/e/${slug}/events`, end: false },
+    { label: "RSVP", to: `/e/${slug}/rsvp`, end: false },
+    { label: "Wishes", to: `/e/${slug}/wishes`, end: false },
+    { label: "Contact", to: `/e/${slug}/contact`, end: false },
+    ...((navPages ?? []).map((p) => ({
+      label: p.nav_label ?? p.title,
+      to: `/e/${slug}/p/${p.slug}`,
+      end: false,
+    }))),
+  ];
 
   return (
     <EventThemeProvider initialTheme={theme}>
-      <div className="event-themed flex min-h-screen flex-col">
-        <header className="sticky top-0 z-40 border-b border-event-border bg-event-surface/95 backdrop-blur-sm">
-          <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
-            <span className="font-event text-base font-semibold text-event-heading">
-              {event.name}
-            </span>
-            <nav className="flex items-center gap-1 overflow-x-auto scrollbar-thin">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  className={({ isActive }) =>
-                    cn(
-                      "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-event-primary text-event-primary-fg"
-                        : "text-event-muted hover:bg-event-surface-alt hover:text-event-heading"
-                    )
-                  }
-                >
-                  {item.label}
-                </NavLink>
-              ))}
-            </nav>
-          </div>
+      <div className="flex min-h-screen flex-col">
+        {/* Navigation */}
+        <header className="sticky top-0 z-30 border-b border-event-border bg-event-surface/95 backdrop-blur">
+          <nav className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-1 px-4 py-3">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  cn(
+                    "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-event-primary text-event-primary-fg"
+                      : "text-event-muted hover:bg-event-surface-alt hover:text-event-text"
+                  )
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
         </header>
 
+        {/* Page content */}
         <main className="flex-1">
-          <Outlet context={{ event }} />
+          <div className="mx-auto max-w-3xl px-4 py-8">
+            <Outlet />
+          </div>
         </main>
 
-        <footer className="border-t border-event-border bg-event-surface/60">
-          <div className="mx-auto max-w-5xl px-4 py-6 text-center text-sm text-event-muted">
-            {footerPages && footerPages.length > 0 && (
-              <div className="mb-3 flex flex-wrap justify-center gap-3">
-                {footerPages.map((p) => (
-                  <NavLink
-                    key={p.id}
-                    to={`p/${p.slug}`}
-                    className="hover:text-event-primary"
-                  >
-                    {p.nav_label ?? p.title}
-                  </NavLink>
-                ))}
-              </div>
-            )}
-            <p>© {new Date().getFullYear()} {event.name}</p>
-          </div>
-        </footer>
+        {/* Footer */}
+        {footerPages && footerPages.length > 0 && (
+          <footer className="border-t border-event-border bg-event-surface-alt">
+            <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-4 px-4 py-4">
+              {footerPages.map((page) => (
+                <NavLink
+                  key={page.id}
+                  to={`/e/${slug}/p/${page.slug}`}
+                  className="text-sm text-event-muted hover:text-event-text"
+                >
+                  {page.nav_label ?? page.title}
+                </NavLink>
+              ))}
+            </div>
+          </footer>
+        )}
       </div>
     </EventThemeProvider>
   );
