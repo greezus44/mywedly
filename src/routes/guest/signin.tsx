@@ -9,7 +9,7 @@ export default function GuestSignIn() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { guest, eventId, signIn } = useGuestAuth();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -28,6 +28,7 @@ export default function GuestSignIn() {
     enabled: !!slug,
   });
 
+  // If already signed in for this event, redirect to home
   useEffect(() => {
     if (event && guest && eventId === event.id) {
       navigate(`/e/${slug}/home`, { replace: true });
@@ -39,7 +40,8 @@ export default function GuestSignIn() {
     if (!event) return;
     setError(null);
     setSubmitting(true);
-    const result = await signIn(event.id, email.trim());
+    // signIn uses username (not email) — validated against host-assigned username
+    const result = await signIn(event.id, username.trim());
     setSubmitting(false);
     if (result.error) {
       setError(result.error);
@@ -71,20 +73,39 @@ export default function GuestSignIn() {
         <div className="w-full max-w-md">
           <div className="mb-8 text-center">
             <h1 className="guest-title mb-2">{event.name}</h1>
-            <p className="guest-subtitle">Sign in to view your invitation</p>
+            <p className="guest-subtitle">Enter your username to view your invitation</p>
           </div>
           <form onSubmit={handleSubmit} className="event-card space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>Email Address</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="event-input" placeholder="your@email.com" required autoFocus />
+              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
+                Username
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="event-input"
+                placeholder="Your assigned username"
+                required
+                autoFocus
+              />
             </div>
-            {error && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
-            <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1 }}>
+            {error && (
+              <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>
+            )}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="event-btn-primary w-full"
+              style={{ opacity: submitting ? 0.6 : 1 }}
+            >
               {submitting ? "Signing in..." : "Sign In"}
             </button>
           </form>
           <div className="mt-6 text-center">
-            <Link to={`/e/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>Back to cover</Link>
+            <Link to={`/e/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>
+              Back to cover
+            </Link>
           </div>
         </div>
       </div>

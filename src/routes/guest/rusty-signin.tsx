@@ -4,13 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME } from "../../lib/theme";
+import { RUSTY_THEME, themeToEventCssVars } from "../../lib/theme";
 
 export default function RustySignIn() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { guest, eventId, signIn } = useGuestAuth();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -29,6 +29,7 @@ export default function RustySignIn() {
     enabled: !!slug,
   });
 
+  // If already signed in for this event, redirect to home
   useEffect(() => {
     if (event && guest && eventId === event.id) {
       navigate(`/r/${slug}/home`, { replace: true });
@@ -40,7 +41,7 @@ export default function RustySignIn() {
     if (!event) return;
     setError(null);
     setSubmitting(true);
-    const result = await signIn(event.id, email.trim());
+    const result = await signIn(event.id, username.trim());
     setSubmitting(false);
     if (result.error) {
       setError(result.error);
@@ -51,41 +52,62 @@ export default function RustySignIn() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: RUSTY_THEME.colors.bg }}>
-        <div className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: RUSTY_THEME.colors.primary, borderTopColor: "transparent" }} />
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
       </div>
     );
   }
 
   if (!event) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center" style={{ backgroundColor: RUSTY_THEME.colors.bg }}>
-        <h1 className="text-2xl font-bold" style={{ color: RUSTY_THEME.colors.heading }}>Invitation Not Found</h1>
-        <Link to="/" className="hover:underline" style={{ color: RUSTY_THEME.colors.primary }}>Return home</Link>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
 
+  const rustyVars = themeToEventCssVars(RUSTY_THEME) as React.CSSProperties;
+
   return (
-    <EventThemeProvider theme={RUSTY_THEME as unknown as import("../../lib/supabase").Json}>
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
+    <EventThemeProvider theme={event.theme}>
+      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16" style={rustyVars}>
         <div className="w-full max-w-md">
           <div className="mb-8 text-center">
             <h1 className="guest-title mb-2">{event.name}</h1>
-            <p className="guest-subtitle">Sign in to view your invitation</p>
+            <p className="guest-subtitle">Enter your username to view your invitation</p>
           </div>
           <form onSubmit={handleSubmit} className="event-card space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>Email Address</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="event-input" placeholder="your@email.com" required autoFocus />
+              <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)" }}>
+                Username
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="event-input"
+                placeholder="Your assigned username"
+                required
+                autoFocus
+              />
             </div>
-            {error && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
-            <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1 }}>
+            {error && (
+              <p className="text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>
+            )}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="event-btn-primary w-full"
+              style={{ opacity: submitting ? 0.6 : 1 }}
+            >
               {submitting ? "Signing in..." : "Sign In"}
             </button>
           </form>
           <div className="mt-6 text-center">
-            <Link to={`/r/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>Back to cover</Link>
+            <Link to={`/r/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>
+              Back to cover
+            </Link>
           </div>
         </div>
       </div>

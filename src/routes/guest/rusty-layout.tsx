@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, NavLink, Link, Outlet, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { RUSTY_THEME, type ThemeConfig as ThemeConfigType } from "../../lib/theme";
+import { RUSTY_THEME, themeToEventCssVars, jsonToTheme } from "../../lib/theme";
 import { resolveGuestInvitations, getInvitedSubEventIds } from "../../lib/invitations";
 import { cn } from "../../lib/utils";
-import { useGuestOutletContext, type GuestOutletContext } from "./guest-layout";
+import { type GuestOutletContext, useGuestOutletContext } from "./guest-layout";
 
 // Re-export so rusty child routes can import from ./rusty-layout
 export { useGuestOutletContext };
@@ -56,8 +56,8 @@ export default function RustyLayout() {
     queryKey: ["guest-invitations", event?.id, guest?.id],
     queryFn: async () => {
       if (!event || !guest) return [];
-      const invitations = await resolveGuestInvitations(supabase, guest.id, event.id);
-      return getInvitedSubEventIds(invitations);
+      const result = await resolveGuestInvitations(supabase, guest.id, event.id);
+      return getInvitedSubEventIds(result.invitations);
     },
     enabled: !!event?.id && !!guest?.id,
   });
@@ -80,7 +80,6 @@ export default function RustyLayout() {
     return () => document.removeEventListener("keydown", handler);
   }, [menuOpen]);
 
-  // Redirect to rusty sign-in if not authenticated
   if (!authLoading && !guest && event) {
     navigate(`/r/${slug}/signin`, { replace: true });
     return null;
@@ -88,17 +87,17 @@ export default function RustyLayout() {
 
   if (authLoading || eventLoading || (event && guest && eventId === event.id && invitationsLoading)) {
     return (
-      <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: RUSTY_THEME.colors.bg }}>
-        <div className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: RUSTY_THEME.colors.primary, borderTopColor: "transparent" }} />
+      <div className="flex min-h-screen items-center justify-center bg-dash-bg">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" />
       </div>
     );
   }
 
   if (eventError || !event) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center" style={{ backgroundColor: RUSTY_THEME.colors.bg }}>
-        <h1 className="text-2xl font-bold" style={{ color: RUSTY_THEME.colors.heading }}>Invitation Not Found</h1>
-        <Link to="/" className="hover:underline" style={{ color: RUSTY_THEME.colors.primary }}>Return home</Link>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
+        <h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1>
+        <Link to="/" className="text-dash-primary hover:underline">Return home</Link>
       </div>
     );
   }
@@ -108,7 +107,7 @@ export default function RustyLayout() {
     return null;
   }
 
-  const theme: ThemeConfigType = RUSTY_THEME;
+  const theme = jsonToTheme(event.theme);
   const invitedIds = invitedSubEventIds ?? [];
   const hasInvitedEvents = invitedIds.length > 0;
   const headerPages = (customPages ?? []).filter((p) => !p.is_footer);
@@ -123,10 +122,11 @@ export default function RustyLayout() {
   ];
 
   const contextValue: GuestOutletContext = { event, slug: slug!, theme, invitedSubEventIds: invitedIds };
+  const rustyVars = themeToEventCssVars(RUSTY_THEME) as React.CSSProperties;
 
   return (
-    <EventThemeProvider theme={RUSTY_THEME as unknown as Json}>
-      <div className="min-h-screen">
+    <EventThemeProvider theme={event.theme}>
+      <div className="min-h-screen" style={rustyVars}>
         {/* Hamburger Menu — top-left corner */}
         <div ref={menuRef} className="fixed left-4 top-4 z-50">
           <button
@@ -153,7 +153,7 @@ export default function RustyLayout() {
             <nav
               id="rusty-nav-menu"
               role="menu"
-              aria-label="Guest navigation"
+              aria-label="Rustic guest navigation"
               className="absolute left-0 top-14 w-64 origin-top-left animate-scaleIn rounded-2xl py-2 shadow-xl"
               style={{ backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}
             >
@@ -175,12 +175,10 @@ export default function RustyLayout() {
           )}
         </div>
 
-        {/* Main Content */}
         <main>
           <Outlet context={contextValue} />
         </main>
 
-        {/* Footer */}
         {footerPages.length > 0 && (
           <footer className="border-t px-4 py-6" style={{ borderColor: "var(--event-border)" }}>
             <div className="mx-auto flex max-w-5xl flex-wrap gap-4">

@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
@@ -42,11 +41,7 @@ export default function GuestCover() {
     enabled: !!slug,
   });
 
-  useEffect(() => {
-    if (event && guest && eventId === event.id) {
-      navigate(`/e/${slug}/home`, { replace: true });
-    }
-  }, [event, guest, eventId, slug, navigate]);
+  // FIX: Do NOT auto-redirect to sign-in. The guest must intentionally click the Enter button.
 
   if (isLoading) {
     return (
@@ -87,7 +82,8 @@ export default function GuestCover() {
   const logoSize = typeof logoConfig.size === "number" ? logoConfig.size : 120;
   const logoAlign = logoConfig.align || "center";
   const titleText = coverConfig.heading || event.name;
-  const buttonText = coverConfig.ctaText || "Open Invitation";
+  // Use the button text configured in the Cover Editor, defaulting to "Enter"
+  const buttonText = coverConfig.ctaText || "Enter";
 
   return (
     <EventThemeProvider theme={event.theme}>
@@ -107,7 +103,10 @@ export default function GuestCover() {
           {coverConfig.bodyHtml && (
             <div className="rich-content mb-8 max-w-md" dangerouslySetInnerHTML={{ __html: coverConfig.bodyHtml }} />
           )}
-          <button onClick={() => navigate(`/e/${slug}/signin`)} className="event-btn-primary">{buttonText}</button>
+          {/* The Enter button — guest must intentionally click to proceed to sign-in */}
+          <button onClick={() => navigate(`/e/${slug}/signin`)} className="event-btn-primary">
+            {buttonText}
+          </button>
         </div>
       </div>
     </EventThemeProvider>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, NavLink, Link, Outlet, useOutletContext, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
@@ -42,7 +42,6 @@ export default function GuestLayout() {
     enabled: !!slug,
   });
 
-  // Fetch published custom pages for navigation — respects is_published and show_in_nav
   const { data: customPages } = useQuery({
     queryKey: ["guest-custom-pages", event?.id],
     queryFn: async () => {
@@ -59,45 +58,34 @@ export default function GuestLayout() {
     enabled: !!event?.id,
   });
 
-  // Resolve guest invitations
   const { data: invitedSubEventIds, isLoading: invitationsLoading } = useQuery({
     queryKey: ["guest-invitations", event?.id, guest?.id],
     queryFn: async () => {
       if (!event || !guest) return [];
-      const invitations = await resolveGuestInvitations(supabase, guest.id, event.id);
-      return getInvitedSubEventIds(invitations);
+      const result = await resolveGuestInvitations(supabase, guest.id, event.id);
+      return getInvitedSubEventIds(result.invitations);
     },
     enabled: !!event?.id && !!guest?.id,
   });
 
-  // Close menu on route change
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [location.pathname]);
+  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
 
-  // Close menu on outside click
   useEffect(() => {
     if (!menuOpen) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen]);
 
-  // Close menu on Escape key
   useEffect(() => {
     if (!menuOpen) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [menuOpen]);
 
-  // Redirect to sign-in if not authenticated
   if (!authLoading && !guest && event) {
     navigate(`/e/${slug}/signin`, { replace: true });
     return null;
@@ -131,7 +119,7 @@ export default function GuestLayout() {
   const headerPages = (customPages ?? []).filter((p) => !p.is_footer);
   const footerPages = (customPages ?? []).filter((p) => p.is_footer);
 
-  // Menu items: Home, RSVP (if invited), Custom Pages — NO Events page
+  // Menu items: Home, RSVP (if invited), Wishes, Contact, Custom Pages — NO Events page
   const menuItems = [
     { to: `/e/${slug}/home`, label: "Home" },
     ...(hasInvitedEvents ? [{ to: `/e/${slug}/rsvp`, label: "RSVP" }] : []),
@@ -147,7 +135,6 @@ export default function GuestLayout() {
       <div className="min-h-screen">
         {/* Hamburger Menu — top-left corner */}
         <div ref={menuRef} className="fixed left-4 top-4 z-50">
-          {/* Hamburger Button */}
           <button
             onClick={() => setMenuOpen(!menuOpen)}
             aria-label="Toggle navigation menu"
@@ -162,41 +149,26 @@ export default function GuestLayout() {
             }}
           >
             <div className="flex h-5 w-5 flex-col items-center justify-center gap-[5px]">
-              <span
-                className="block h-[2px] w-5 rounded-full transition-all duration-300"
-                style={{ backgroundColor: "var(--event-text)", transform: menuOpen ? "translateY(7px) rotate(45deg)" : "none" }}
-              />
-              <span
-                className="block h-[2px] w-5 rounded-full transition-all duration-300"
-                style={{ backgroundColor: "var(--event-text)", opacity: menuOpen ? 0 : 1 }}
-              />
-              <span
-                className="block h-[2px] w-5 rounded-full transition-all duration-300"
-                style={{ backgroundColor: "var(--event-text)", transform: menuOpen ? "translateY(-7px) rotate(-45deg)" : "none" }}
-              />
+              <span className="block h-[2px] w-5 rounded-full transition-all duration-300" style={{ backgroundColor: "var(--event-text)", transform: menuOpen ? "translateY(7px) rotate(45deg)" : "none" }} />
+              <span className="block h-[2px] w-5 rounded-full transition-all duration-300" style={{ backgroundColor: "var(--event-text)", opacity: menuOpen ? 0 : 1 }} />
+              <span className="block h-[2px] w-5 rounded-full transition-all duration-300" style={{ backgroundColor: "var(--event-text)", transform: menuOpen ? "translateY(-7px) rotate(-45deg)" : "none" }} />
             </div>
           </button>
 
-          {/* Slide-down Menu Panel */}
           {menuOpen && (
             <nav
               id="guest-nav-menu"
               role="menu"
               aria-label="Guest navigation"
               className="absolute left-0 top-14 w-64 origin-top-left animate-scaleIn rounded-2xl py-2 shadow-xl"
-              style={{
-                backgroundColor: "var(--event-surface)",
-                border: "1px solid var(--event-border)",
-              }}
+              style={{ backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}
             >
               {menuItems.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   role="menuitem"
-                  className={({ isActive }) =>
-                    cn("block px-5 py-3 text-sm font-medium transition-colors", isActive && "font-semibold")
-                  }
+                  className={({ isActive }) => cn("block px-5 py-3 text-sm font-medium transition-colors", isActive && "font-semibold")}
                   style={({ isActive }) => ({
                     color: isActive ? "var(--event-primary)" : "var(--event-text)",
                     backgroundColor: isActive ? "var(--event-surface-alt)" : "transparent",
@@ -209,12 +181,10 @@ export default function GuestLayout() {
           )}
         </div>
 
-        {/* Main Content */}
         <main>
           <Outlet context={contextValue} />
         </main>
 
-        {/* Footer */}
         {footerPages.length > 0 && (
           <footer className="border-t px-4 py-6" style={{ borderColor: "var(--event-border)" }}>
             <div className="mx-auto flex max-w-5xl flex-wrap gap-4">

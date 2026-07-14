@@ -46,7 +46,7 @@ export default function GuestHome() {
         </section>
       )}
 
-      {/* RSVP button — always visible if guest has invited events */}
+      {/* ONE RSVP button — only shown if guest has invited events */}
       {hasInvitedEvents && (
         <section className="guest-section text-center">
           <button
