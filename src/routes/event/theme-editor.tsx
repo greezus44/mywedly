@@ -50,16 +50,16 @@ export function ThemeEditor() {
   };
 
   const colorFields: Array<{ key: keyof ThemeConfig["colors"]; label: string }> = [
-    { key: "bg", label: "Background" },
-    { key: "surface", label: "Surface" },
-    { key: "border", label: "Border" },
-    { key: "text", label: "Text" },
-    { key: "heading", label: "Heading" },
-    { key: "muted", label: "Muted Text" },
-    { key: "primary", label: "Primary" },
-    { key: "primaryHover", label: "Primary Hover" },
-    { key: "primaryFg", label: "Primary Foreground" },
-    { key: "accent", label: "Accent" },
+    { key: "bg", label: "Page Background" },
+    { key: "surface", label: "Card Background" },
+    { key: "border", label: "Border Colour" },
+    { key: "text", label: "Body Text Colour" },
+    { key: "heading", label: "Heading Text Colour" },
+    { key: "muted", label: "Subtle Text Colour" },
+    { key: "primary", label: "Main Colour" },
+    { key: "primaryHover", label: "Button Hover Colour" },
+    { key: "primaryFg", label: "Button Text Colour" },
+    { key: "accent", label: "Accent Colour" },
   ];
 
   return (
