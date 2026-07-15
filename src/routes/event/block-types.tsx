@@ -83,5 +83,13 @@ export function blocksToJson(blocks: Block[]): Json {
 
 export function jsonToBlocks(json: Json | null | undefined): Block[] {
   if (!json || !Array.isArray(json)) return [];
-  return json as unknown as Block[];
+  return (json as unknown as Record<string, unknown>[]).map((raw) => {
+    const id = typeof raw.id === "string" ? raw.id : crypto.randomUUID();
+    const type = typeof raw.type === "string" ? raw.type as BlockType : "paragraph";
+    if (raw.content && typeof raw.content === "object" && !Array.isArray(raw.content)) {
+      return { id, type, content: raw.content as BlockContent };
+    }
+    const { id: _id, type: _type, ...content } = raw;
+    return { id, type, content: content as unknown as BlockContent };
+  });
 }

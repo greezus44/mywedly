@@ -73,7 +73,7 @@ export interface CustomPage {
   id: string; wedding_id: string | null; event_id: string | null; slug: string; title: string;
   body: string; cover_image_url: string | null; inline_image_url: string | null;
   sort_order: number; is_published: boolean; created_at: string; updated_at: string;
-  nav_label: string | null; icon: string | null; show_in_nav: boolean; blocks: Json; content: Json;
+  nav_label: string | null; icon: string | null; show_in_nav: boolean; blocks: Json; is_footer: boolean;
 }
 
 export interface SubEventGroupAssignment { id: string; sub_event_id: string; group_id: string; created_at: string; }

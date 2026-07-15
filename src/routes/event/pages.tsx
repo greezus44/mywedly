@@ -34,7 +34,7 @@ export function PagesPage() {
       const finalSlug = slug || slugify(title);
       const { error } = await supabase.from("custom_pages").insert({
         event_id: eventId, title: title.trim(), slug: finalSlug,
-        body: "", blocks: [], content: {}, is_published: false,
+        body: "", blocks: [], is_published: false,
         show_in_nav: showInNav, sort_order: (pages?.length ?? 0),
       });
       if (error) throw error;
