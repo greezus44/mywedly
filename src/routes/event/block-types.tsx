@@ -24,6 +24,15 @@ export interface BlockContent {
   questions?: { question: string; answer: string }[];
   title?: string;
   description?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: number;
+  color?: string;
+  align?: string;
+  italic?: boolean;
+  underline?: boolean;
+  lineHeight?: number;
+  letterSpacing?: number;
 }
 
 export interface Block {

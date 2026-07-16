@@ -2,10 +2,19 @@ import { useEffect, useState } from "react";
 import type { Block } from "../event/block-types";
 import { getCountdown, formatDate, formatTime12 } from "../../lib/utils";
 import { supabase } from "../../lib/supabase";
+import { getTypographyStyle } from "../../lib/typography";
 
 interface BlockRendererProps {
   block: Block;
   eventId?: string;
+}
+
+function blockTypoStyle(c: Block["content"]): React.CSSProperties {
+  return getTypographyStyle({
+    text: c.text, fontFamily: c.fontFamily, fontSize: c.fontSize, fontWeight: c.fontWeight,
+    color: c.color, align: c.align, italic: c.italic, underline: c.underline,
+    lineHeight: c.lineHeight, letterSpacing: c.letterSpacing,
+  });
 }
 
 export function BlockRenderer({ block, eventId }: BlockRendererProps) {
@@ -13,10 +22,10 @@ export function BlockRenderer({ block, eventId }: BlockRendererProps) {
   switch (block.type) {
     case "heading": {
       const Tag = (`h${c.level ?? 2}`) as "h1" | "h2" | "h3";
-      return <Tag className="guest-title" style={{ fontSize: c.level === 1 ? "2.5rem" : c.level === 2 ? "2rem" : "1.5rem" }}>{c.text ?? ""}</Tag>;
+      return <Tag className="guest-title" style={{ fontSize: c.level === 1 ? "2.5rem" : c.level === 2 ? "2rem" : "1.5rem", ...blockTypoStyle(c) }}>{c.text ?? ""}</Tag>;
     }
     case "paragraph":
-      return <p className="rich-content">{c.text ?? ""}</p>;
+      return <p className="rich-content" style={blockTypoStyle(c)}>{c.text ?? ""}</p>;
     case "image":
       return c.url ? <img src={c.url} alt={c.alt ?? ""} className="mx-auto max-w-full rounded-lg" /> : null;
     case "spacer":
@@ -36,9 +45,9 @@ export function BlockRenderer({ block, eventId }: BlockRendererProps) {
     case "columns":
       return <div className="grid gap-4 sm:grid-cols-2">{(c.columns ?? []).map((col, i) => <div key={i} className="rich-content">{col.text ?? ""}</div>)}</div>;
     case "list":
-      return <ul className="rich-content list-disc pl-6">{(c.items ?? []).map((item, i) => <li key={i}>{item}</li>)}</ul>;
+      return <ul className="rich-content list-disc pl-6" style={blockTypoStyle(c)}>{(c.items ?? []).map((item, i) => <li key={i}>{item}</li>)}</ul>;
     case "quote":
-      return <blockquote className="rich-content border-l-4 pl-4 italic" style={{ borderColor: "var(--event-border)" }}>{c.text ?? ""}</blockquote>;
+      return <blockquote className="rich-content border-l-4 pl-4 italic" style={{ borderColor: "var(--event-border)", ...blockTypoStyle(c) }}>{c.text ?? ""}</blockquote>;
     case "countdown":
       return <CountdownBlock targetDate={c.targetDate ?? ""} />;
     case "map":

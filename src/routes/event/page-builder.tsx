@@ -5,6 +5,8 @@ import { supabase, type UserEvent, type CustomPage, type Json } from "../../lib/
 import { Button } from "../../components/ui/Button";
 import { Input, Textarea } from "../../components/ui";
 import { LoadingSpinner, ErrorState } from "../../components/ui";
+import { TypographyControls } from "../../components/ui/TypographyControls";
+import type { TypographyStyle } from "../../lib/typography";
 import { BLOCK_TYPES, createBlock, blocksToJson, jsonToBlocks, type Block, type BlockType } from "./block-types";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
@@ -121,11 +123,16 @@ export function PageBuilder() {
 
 function BlockEditor({ block, onChange }: { block: Block; onChange: (c: Partial<Block["content"]>) => void }) {
   const c = block.content;
+  const typo: TypographyStyle = {
+    text: c.text, fontFamily: c.fontFamily, fontSize: c.fontSize, fontWeight: c.fontWeight,
+    color: c.color, align: c.align, italic: c.italic, underline: c.underline, lineHeight: c.lineHeight, letterSpacing: c.letterSpacing,
+  };
+  const onTypo = (v: TypographyStyle) => onChange({ fontFamily: v.fontFamily, fontSize: v.fontSize, fontWeight: v.fontWeight, color: v.color, align: v.align, italic: v.italic, underline: v.underline, lineHeight: v.lineHeight, letterSpacing: v.letterSpacing });
   switch (block.type) {
     case "heading":
-      return <div className="space-y-2"><Input label="Text" value={c.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} /><div><label className="mb-1 block text-xs text-dash-muted">Level</label><select value={c.level ?? 2} onChange={(e) => onChange({ level: Number(e.target.value) })} className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm"><option value={1}>H1</option><option value={2}>H2</option><option value={3}>H3</option></select></div></div>;
+      return <div className="space-y-2"><Input label="Text" value={c.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} /><div><label className="mb-1 block text-xs text-dash-muted">Level</label><select value={c.level ?? 2} onChange={(e) => onChange({ level: Number(e.target.value) })} className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm"><option value={1}>H1</option><option value={2}>H2</option><option value={3}>H3</option></select></div><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
     case "paragraph":
-      return <Textarea label="Text" value={c.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} rows={4} />;
+      return <div className="space-y-2"><Textarea label="Text" value={c.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} rows={4} /><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
     case "image":
       return <div className="space-y-2"><Input label="Image URL" value={c.url ?? ""} onChange={(e) => onChange({ url: e.target.value })} /><Input label="Alt Text" value={c.alt ?? ""} onChange={(e) => onChange({ alt: e.target.value })} /></div>;
     case "spacer":
@@ -139,9 +146,9 @@ function BlockEditor({ block, onChange }: { block: Block; onChange: (c: Partial<
     case "button":
       return <div className="space-y-2"><Input label="Label" value={c.label ?? ""} onChange={(e) => onChange({ label: e.target.value })} /><Input label="Link URL" value={c.href ?? ""} onChange={(e) => onChange({ href: e.target.value })} /></div>;
     case "list":
-      return <Textarea label="Items (one per line)" value={(c.items ?? []).join("\n")} onChange={(e) => onChange({ items: e.target.value.split("\n").filter(Boolean) })} rows={4} />;
+      return <div className="space-y-2"><Textarea label="Items (one per line)" value={(c.items ?? []).join("\n")} onChange={(e) => onChange({ items: e.target.value.split("\n").filter(Boolean) })} rows={4} /><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
     case "quote":
-      return <Textarea label="Quote Text" value={c.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} rows={3} />;
+      return <div className="space-y-2"><Textarea label="Quote Text" value={c.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} rows={3} /><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
     case "countdown":
       return <Input label="Target Date & Time" type="datetime-local" value={(c.targetDate ?? "").slice(0, 16)} onChange={(e) => onChange({ targetDate: new Date(e.target.value).toISOString() })} />;
     case "map":

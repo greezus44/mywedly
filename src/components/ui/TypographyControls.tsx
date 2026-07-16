@@ -97,6 +97,14 @@ export function TypographyControls({ label, value, onChange, showText }: Typogra
         <Toggle checked={value.italic ?? false} onChange={(v) => update({ italic: v })} label="Italic" />
         <Toggle checked={value.underline ?? false} onChange={(v) => update({ underline: v })} label="Underline" />
       </div>
+      <RangeInput
+        label="Line Spacing"
+        value={value.lineHeight ?? 1.5}
+        onChange={(v) => update({ lineHeight: v })}
+        min={1}
+        max={3}
+        step={0.1}
+      />
     </div>
   );
 }
