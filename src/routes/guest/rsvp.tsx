@@ -1,14 +1,41 @@
 import { useState, useEffect } from "react";
 import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { supabase, type EventRsvp, type EventSchedule, type SubEvent } from "../../lib/supabase";
+import { supabase, type EventRsvp, type EventSchedule, type SubEvent, type Json } from "../../lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDate, formatTime12 } from "../../lib/utils";
+
+interface RsvpContent {
+  title?: string;
+  subtitle?: string;
+  attendingText?: string;
+  declinedText?: string;
+  attendingMessage?: string;
+  declinedMessage?: string;
+  attendingColor?: string;
+  declinedColor?: string;
+}
+
+const DEFAULT_RSVP_CONTENT: RsvpContent = {
+  title: "RSVP",
+  subtitle: "Let us know if you'll be joining us",
+  attendingText: "Attending",
+  declinedText: "Declined",
+  attendingMessage: "Thank you! We look forward to seeing you.",
+  declinedMessage: "We're sorry you can't make it. Thank you for letting us know.",
+  attendingColor: "#16a34a",
+  declinedColor: "#dc2626",
+};
 
 export default function GuestRsvp() {
   const { event, slug, invitedSubEventIds } = useGuestOutletContext();
   const { guest } = useGuestAuth();
   const queryClient = useQueryClient();
+
+  const rsvpContent: RsvpContent = {
+    ...DEFAULT_RSVP_CONTENT,
+    ...(((event.content as Record<string, unknown> | null)?.rsvp as Partial<RsvpContent>) ?? {}),
+  };
 
   // FIX #3: Load event schedule for display
   const { data: schedule } = useQuery({
@@ -116,8 +143,8 @@ export default function GuestRsvp() {
       <div className="mx-auto max-w-2xl">
         {/* Event Details */}
         <div className="mb-8 text-center">
-          <h1 className="guest-title mb-2">RSVP</h1>
-          <p className="guest-subtitle">Let us know if you'll be joining us</p>
+          <h1 className="guest-title mb-2 text-center">{rsvpContent.title}</h1>
+          <p className="guest-subtitle text-center">{rsvpContent.subtitle}</p>
         </div>
 
         {/* FIX #3: Event date, time, address */}
@@ -166,14 +193,14 @@ export default function GuestRsvp() {
                   <h3 className="mb-2" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>{se.name}</h3>
                   {se.date && <p className="mb-3 text-sm" style={{ color: "var(--event-muted)" }}>{formatDate(se.date)}{se.time ? ` at ${formatTime12(se.time)}` : ""}</p>}
                   <div className="flex gap-3">
-                    <button onClick={() => handleRsvp(se.id, "attending")} className="event-btn-primary" style={{ opacity: current.status === "attending" ? 1 : 0.6 }}>Attending</button>
-                    <button onClick={() => handleRsvp(se.id, "declined")} className="event-btn-secondary" style={{ opacity: current.status === "declined" ? 1 : 0.6 }}>Declined</button>
+                    <button onClick={() => handleRsvp(se.id, "attending")} className="event-btn-primary" style={{ opacity: current.status === "attending" ? 1 : 0.6, backgroundColor: current.status === "attending" ? rsvpContent.attendingColor : undefined, borderColor: current.status === "attending" ? rsvpContent.attendingColor : undefined }}>{rsvpContent.attendingText}</button>
+                    <button onClick={() => handleRsvp(se.id, "declined")} className="event-btn-secondary" style={{ opacity: current.status === "declined" ? 1 : 0.6, backgroundColor: current.status === "declined" ? rsvpContent.declinedColor : undefined, borderColor: current.status === "declined" ? rsvpContent.declinedColor : undefined, color: current.status === "declined" ? "#fff" : undefined }}>{rsvpContent.declinedText}</button>
                   </div>
                   {current.status === "attending" && (
-                    <p className="mt-2 text-sm" style={{ color: "var(--event-muted)" }}>Thank you! We look forward to seeing you.</p>
+                    <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.attendingMessage}</p>
                   )}
                   {current.status === "declined" && (
-                    <p className="mt-2 text-sm" style={{ color: "var(--event-muted)" }}>We're sorry you can't make it. Thank you for letting us know.</p>
+                    <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.declinedMessage}</p>
                   )}
                 </div>
               );
@@ -182,9 +209,15 @@ export default function GuestRsvp() {
         ) : (
           <div className="event-card text-center">
             <div className="flex justify-center gap-3">
-              <button onClick={() => handleRsvp(null, "attending")} className="event-btn-primary" style={{ opacity: responses["main"]?.status === "attending" ? 1 : 0.6 }}>Attending</button>
-              <button onClick={() => handleRsvp(null, "declined")} className="event-btn-secondary" style={{ opacity: responses["main"]?.status === "declined" ? 1 : 0.6 }}>Declined</button>
+              <button onClick={() => handleRsvp(null, "attending")} className="event-btn-primary" style={{ opacity: responses["main"]?.status === "attending" ? 1 : 0.6, backgroundColor: responses["main"]?.status === "attending" ? rsvpContent.attendingColor : undefined, borderColor: responses["main"]?.status === "attending" ? rsvpContent.attendingColor : undefined }}>{rsvpContent.attendingText}</button>
+              <button onClick={() => handleRsvp(null, "declined")} className="event-btn-secondary" style={{ opacity: responses["main"]?.status === "declined" ? 1 : 0.6, backgroundColor: responses["main"]?.status === "declined" ? rsvpContent.declinedColor : undefined, borderColor: responses["main"]?.status === "declined" ? rsvpContent.declinedColor : undefined, color: responses["main"]?.status === "declined" ? "#fff" : undefined }}>{rsvpContent.declinedText}</button>
             </div>
+            {responses["main"]?.status === "attending" && (
+              <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.attendingMessage}</p>
+            )}
+            {responses["main"]?.status === "declined" && (
+              <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.declinedMessage}</p>
+            )}
           </div>
         )}
       </div>

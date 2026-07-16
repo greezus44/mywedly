@@ -1,17 +1,61 @@
 import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventRsvp } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventRsvp, type Json } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { LoadingSpinner, ErrorState, EmptyState, Badge } from "../../components/ui";
+import { LoadingSpinner, ErrorState, EmptyState, Badge, ColorInput } from "../../components/ui";
+import { Input } from "../../components/ui/Input";
+import { Textarea } from "../../components/ui/Input";
 import { formatDate, formatDateTime, isRsvpClosed } from "../../lib/utils";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
+
+export interface RsvpContent {
+  title?: string;
+  subtitle?: string;
+  attendingText?: string;
+  declinedText?: string;
+  attendingMessage?: string;
+  declinedMessage?: string;
+  attendingColor?: string;
+  declinedColor?: string;
+}
+
+const DEFAULT_RSVP_CONTENT: RsvpContent = {
+  title: "RSVP",
+  subtitle: "Let us know if you'll be joining us",
+  attendingText: "Attending",
+  declinedText: "Declined",
+  attendingMessage: "Thank you! We look forward to seeing you.",
+  declinedMessage: "We're sorry you can't make it. Thank you for letting us know.",
+  attendingColor: "#16a34a",
+  declinedColor: "#dc2626",
+};
 
 export function RsvpPage() {
   const { event, eventId } = useOutletContext<EventContextValue>();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string>("all");
+  const [rsvpContent, setRsvpContent] = useState<RsvpContent>(() => {
+    const content = (event.draft_content ?? event.content) as Record<string, unknown> | null;
+    return { ...DEFAULT_RSVP_CONTENT, ...((content?.rsvp as Partial<RsvpContent>) ?? {}) };
+  });
+  const [showEditor, setShowEditor] = useState(false);
+
+  useEffect(() => {
+    const content = (event.draft_content ?? event.content) as Record<string, unknown> | null;
+    setRsvpContent({ ...DEFAULT_RSVP_CONTENT, ...((content?.rsvp as Partial<RsvpContent>) ?? {}) });
+  }, [event.draft_content, event.content]);
+
+  const saveContentMutation = useMutation({
+    mutationFn: async () => {
+      const existing = ((event.draft_content ?? event.content) as Record<string, unknown> | null) ?? {};
+      const updated = { ...existing, rsvp: rsvpContent };
+      const { error } = await supabase.from("user_events").update({ draft_content: updated as unknown as Json }).eq("id", eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", eventId] }),
+  });
 
   const { data: rsvps, isLoading, isError, error } = useQuery({
     queryKey: ["event-rsvps-admin", eventId],
@@ -48,8 +92,39 @@ export function RsvpPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold text-dash-text">RSVP</h2>
-        {deadline && <Badge variant={closed ? "danger" : "warning"}>{closed ? "Closed" : `Closes ${formatDate(deadline)}`}</Badge>}
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setShowEditor((v) => !v)}>{showEditor ? "Hide Editor" : "Edit RSVP Page"}</Button>
+          {deadline && <Badge variant={closed ? "danger" : "warning"}>{closed ? "Closed" : `Closes ${formatDate(deadline)}`}</Badge>}
+        </div>
       </div>
+      {showEditor && (
+        <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-dash-text">RSVP Page Content</h3>
+            <Button size="sm" onClick={() => saveContentMutation.mutate()} loading={saveContentMutation.isPending}>Save</Button>
+          </div>
+          {saveContentMutation.isError && <p className="text-sm text-dash-danger">{saveContentMutation.error instanceof Error ? saveContentMutation.error.message : "Save failed"}</p>}
+          {saveContentMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
+          <Input label="Page Title" value={rsvpContent.title ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, title: e.target.value }))} />
+          <Input label="Subtitle" value={rsvpContent.subtitle ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, subtitle: e.target.value }))} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Attending Button Text" value={rsvpContent.attendingText ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, attendingText: e.target.value }))} />
+            <Input label="Declined Button Text" value={rsvpContent.declinedText ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, declinedText: e.target.value }))} />
+          </div>
+          <Textarea label="Attending Confirmation Message" value={rsvpContent.attendingMessage ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, attendingMessage: e.target.value }))} rows={2} />
+          <Textarea label="Declined Confirmation Message" value={rsvpContent.declinedMessage ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, declinedMessage: e.target.value }))} rows={2} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-dash-muted">Attending Selected Colour</label>
+              <ColorInput value={rsvpContent.attendingColor ?? "#16a34a"} onChange={(v) => setRsvpContent((p) => ({ ...p, attendingColor: v }))} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-dash-muted">Declined Selected Colour</label>
+              <ColorInput value={rsvpContent.declinedColor ?? "#dc2626"} onChange={(v) => setRsvpContent((p) => ({ ...p, declinedColor: v }))} />
+            </div>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-green-600">{counts.attending}</p><p className="text-xs text-dash-muted">Attending</p></div>
         <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-red-600">{counts.declined}</p><p className="text-xs text-dash-muted">Declined</p></div>
