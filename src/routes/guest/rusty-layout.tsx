@@ -63,7 +63,7 @@ export default function RustyLayout() {
   const navLinks = [
     { label: "Home", to: `/r/${slug}/home` },
     ...(hasRsvpAccess(invitations ?? { invitations: [], hasMainEventAccess: false, error: null }) ? [{ label: "RSVP", to: `/r/${slug}/rsvp` }] : []),
-    { label: "Messages", to: `/r/${slug}/wishes` },
+    ...(((event.content as Record<string, unknown> | null)?.messagesEnabled !== false) ? [{ label: "Messages", to: `/r/${slug}/wishes` }] : []),
     ...(customPages ?? []).map((p) => ({ label: p.title, to: `/r/${slug}/p/${p.slug}` })),
   ];
 

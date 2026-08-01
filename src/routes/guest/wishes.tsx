@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Navigate, useParams, useLocation } from "react-router-dom";
 import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { supabase, type EventMessage } from "../../lib/supabase";
@@ -9,7 +10,11 @@ interface WishesContent { heading?: string; subheading?: string; placeholder?: s
 
 export default function GuestWishes() {
   const { event } = useGuestOutletContext();
+  const { slug } = useParams<{ slug: string }>();
+  const location = useLocation();
   const { guest } = useGuestAuth();
+  const messagesEnabled = ((event.content as Record<string, unknown> | null) ?? {}).messagesEnabled !== false;
+  if (!messagesEnabled) { const prefix = location.pathname.startsWith("/r/") ? `/r/${slug}` : `/e/${slug}`; return <Navigate to={`${prefix}/home`} replace />; }
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);

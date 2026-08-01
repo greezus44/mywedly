@@ -90,8 +90,12 @@ export function TypographyControls({ label, value, onChange, showText }: Typogra
         </div>
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-dash-muted">Colour</label>
+        <label className="mb-1 block text-xs font-medium text-dash-muted">Text Colour</label>
         <ColorInput value={value.color ?? "#000000"} onChange={(v) => update({ color: v })} />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-medium text-dash-muted">Background Colour</label>
+        <ColorInput value={value.backgroundColor ?? ""} onChange={(v) => update({ backgroundColor: v })} />
       </div>
       <div>
         <label className="mb-1 block text-xs font-medium text-dash-muted">Alignment</label>
@@ -116,6 +120,26 @@ export function TypographyControls({ label, value, onChange, showText }: Typogra
       <div className="flex gap-4">
         <Toggle checked={value.italic ?? false} onChange={(v) => update({ italic: v })} label="Italic" />
         <Toggle checked={value.underline ?? false} onChange={(v) => update({ underline: v })} label="Underline" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-dash-muted">Border Colour</label>
+          <ColorInput value={value.borderColor ?? ""} onChange={(v) => update({ borderColor: v })} />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-dash-muted">Border Width (px)</label>
+          <input type="number" value={value.borderWidth ?? 0} onChange={(e) => update({ borderWidth: Math.max(0, Number(e.target.value)) })} min={0} max={20} className="w-full rounded-lg border border-dash-border bg-dash-bg px-2 py-1.5 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-dash-muted">Border Radius (px)</label>
+          <input type="number" value={value.borderRadius ?? 0} onChange={(e) => update({ borderRadius: Math.max(0, Number(e.target.value)) })} min={0} max={100} className="w-full rounded-lg border border-dash-border bg-dash-bg px-2 py-1.5 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-dash-muted">Padding</label>
+          <input type="text" value={value.padding ?? ""} onChange={(e) => update({ padding: e.target.value })} placeholder="e.g. 8px 16px" className="w-full rounded-lg border border-dash-border bg-dash-bg px-2 py-1.5 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+        </div>
       </div>
       <RangeInput
         label="Line Spacing"

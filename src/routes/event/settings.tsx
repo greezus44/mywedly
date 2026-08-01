@@ -3,7 +3,7 @@ import { useOutletContext, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input, DatePicker, TimePicker, DateTimePicker } from "../../components/ui";
+import { Input, DatePicker, TimePicker, DateTimePicker, Toggle } from "../../components/ui";
 import { Modal } from "../../components/ui";
 import { isValidSlug, slugify } from "../../lib/utils";
 
@@ -21,6 +21,8 @@ export function SettingsPage() {
   const [venue, setVenue] = useState(event.draft_venue ?? event.venue ?? "");
   const [address, setAddress] = useState(event.draft_address ?? event.address ?? "");
   const [rsvpDeadline, setRsvpDeadline] = useState(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "");
+  const rawContent = (event.draft_content ?? event.content) as Record<string, unknown> | null;
+  const [messagesEnabled, setMessagesEnabled] = useState(rawContent?.messagesEnabled !== false);
   const [showDelete, setShowDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,15 +35,19 @@ export function SettingsPage() {
     setVenue(event.draft_venue ?? event.venue ?? "");
     setAddress(event.draft_address ?? event.address ?? "");
     setRsvpDeadline(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "");
+    const rc = (event.draft_content ?? event.content) as Record<string, unknown> | null;
+    setMessagesEnabled(rc?.messagesEnabled !== false);
   }, [event]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (slug && !isValidSlug(slug)) throw new Error("Invalid slug. Use lowercase letters, numbers, and hyphens only.");
+      const existingContent = (event.draft_content ?? event.content) as Record<string, unknown> | null ?? {};
       const { error } = await supabase.from("user_events").update({
         draft_name: name, draft_slug: slug || slugify(name), draft_event_type: eventType,
         draft_event_date: eventDate, draft_event_time: eventTime, draft_venue: venue,
         draft_address: address, draft_rsvp_deadline: rsvpDeadline,
+        draft_content: { ...existingContent, messagesEnabled },
       }).eq("id", eventId);
       if (error) throw error;
     },
@@ -76,6 +82,15 @@ export function SettingsPage() {
         <Input label="Venue" value={venue} onChange={(e) => setVenue(e.target.value)} placeholder="Venue name" />
         <Input label="Address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Full address" />
         <DateTimePicker label="RSVP Deadline" value={rsvpDeadline} onChange={setRsvpDeadline} />
+      </div>
+      <div className="space-y-4 rounded-lg border border-dash-border bg-dash-surface p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-dash-text">Messages Page</h3>
+            <p className="text-xs text-dash-muted">Show or hide the Messages page from guests.</p>
+          </div>
+          <Toggle checked={messagesEnabled} onChange={setMessagesEnabled} />
+        </div>
       </div>
       <div className="rounded-lg border border-dash-border border-red-200 bg-dash-surface p-4">
         <h3 className="mb-2 text-sm font-semibold text-dash-danger">Danger Zone</h3>

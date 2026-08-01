@@ -25,7 +25,7 @@ export function BlockRenderer({ block, eventId }: BlockRendererProps) {
       return <Tag className="guest-title" style={{ fontSize: c.level === 1 ? "2.5rem" : c.level === 2 ? "2rem" : "1.5rem", ...blockTypoStyle(c) }}>{c.text ?? ""}</Tag>;
     }
     case "paragraph":
-      return <p className="rich-content" style={blockTypoStyle(c)}>{c.text ?? ""}</p>;
+      return <p className="rich-content" style={{ whiteSpace: "pre-wrap", ...blockTypoStyle(c) }}>{c.text ?? ""}</p>;
     case "image":
       return c.url ? <img src={c.url} alt={c.alt ?? ""} className="mx-auto max-w-full rounded-lg" /> : null;
     case "spacer":
@@ -43,11 +43,11 @@ export function BlockRenderer({ block, eventId }: BlockRendererProps) {
     case "button":
       return <div className="text-center"><a href={c.href ?? "#"} className="event-btn-primary inline-block">{c.label ?? "Button"}</a></div>;
     case "columns":
-      return <div className="grid gap-4 sm:grid-cols-2">{(c.columns ?? []).map((col, i) => <div key={i} className="rich-content">{col.text ?? ""}</div>)}</div>;
+      return <div className="grid gap-4 sm:grid-cols-2">{(c.columns ?? []).map((col, i) => <div key={i} className="rich-content" style={{ whiteSpace: "pre-wrap" }}>{col.text ?? ""}</div>)}</div>;
     case "list":
-      return <ul className="rich-content list-disc pl-6" style={blockTypoStyle(c)}>{(c.items ?? []).map((item, i) => <li key={i}>{item}</li>)}</ul>;
+      return <ul className="rich-content list-disc pl-6" style={{ whiteSpace: "pre-wrap", ...blockTypoStyle(c) }}>{(c.items ?? []).map((item, i) => <li key={i}>{item}</li>)}</ul>;
     case "quote":
-      return <blockquote className="rich-content border-l-4 pl-4 italic" style={{ borderColor: "var(--event-border)", ...blockTypoStyle(c) }}>{c.text ?? ""}</blockquote>;
+      return <blockquote className="rich-content border-l-4 pl-4 italic" style={{ borderColor: "var(--event-border)", whiteSpace: "pre-wrap", ...blockTypoStyle(c) }}>{c.text ?? ""}</blockquote>;
     case "countdown":
       return <CountdownBlock targetDate={c.targetDate ?? ""} />;
     case "map":
@@ -59,9 +59,9 @@ export function BlockRenderer({ block, eventId }: BlockRendererProps) {
     case "schedule":
       return eventId ? <ScheduleBlock eventId={eventId} /> : null;
     case "venue":
-      return <div className="event-card text-center"><h3 className="guest-title mb-2">{c.title ?? "Venue"}</h3><p className="text-dash-muted">{c.address ?? ""}</p></div>;
+      return <div className="event-card text-center"><h3 className="guest-title mb-2">{c.title ?? "Venue"}</h3><p className="text-dash-muted" style={{ whiteSpace: "pre-wrap" }}>{c.address ?? ""}</p></div>;
     case "faq":
-      return <div className="space-y-3">{(c.questions ?? []).map((q, i) => <div key={i} className="event-card"><h4 className="font-semibold" style={{ color: "var(--event-heading)" }}>{q.question}</h4><p className="mt-1 text-sm" style={{ color: "var(--event-muted)" }}>{q.answer}</p></div>)}</div>;
+      return <div className="space-y-3">{(c.questions ?? []).map((q, i) => <div key={i} className="event-card"><h4 className="font-semibold" style={{ color: "var(--event-heading)", whiteSpace: "pre-wrap" }}>{q.question}</h4><p className="mt-1 text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{q.answer}</p></div>)}</div>;
     default:
       return null;
   }
