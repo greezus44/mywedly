@@ -36,7 +36,7 @@ export default function GuestHome() {
       })}
       {(invitedSubEventIds.length > 0 || !!guest) && (
         <section className="rsvp-section text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
-          <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">RSVP Now</button>
+          <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">{content.rsvpButtonText || "RSVP Now"}</button>
         </section>
       )}
     </div>

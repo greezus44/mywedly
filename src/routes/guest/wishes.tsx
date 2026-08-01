@@ -15,10 +15,10 @@ export default function GuestWishes() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const wishesContent = ((event.content as Record<string, unknown> | null) ?? {}).wishes as WishesContent | undefined;
-  const heading = wishesContent?.heading || "Messages";
-  const subheading = wishesContent?.subheading || "Leave us a message to cherish";
+  const heading = wishesContent?.heading;
+  const subheading = wishesContent?.subheading;
   const placeholder = wishesContent?.placeholder || "Write your message here...";
-  const submitLabel = wishesContent?.submitLabel || "Send Message";
+  const submitLabel = wishesContent?.submitLabel || "Send";
 
   const { data: messages, isLoading } = useQuery({
     queryKey: ["event-messages-public", event.id],

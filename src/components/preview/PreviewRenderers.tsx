@@ -21,6 +21,7 @@ export interface EventContent {
   heading?: unknown;
   body?: string;
   sections?: HomeSection[];
+  rsvpButtonText?: string;
 }
 
 interface CoverPreviewProps { config: CoverConfig; theme: unknown; eventName?: string; }
@@ -103,6 +104,9 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
         {sections.length === 0 && !logo?.url && (
           <section className="guest-section text-center"><div className="mx-auto max-w-md"><p className="guest-subtitle">No content yet.</p></div></section>
         )}
+        <section className="rsvp-section text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
+          <button type="button" className="event-btn-primary">{content.rsvpButtonText || "RSVP Now"}</button>
+        </section>
       </div>
     </EventThemeProvider>
   );

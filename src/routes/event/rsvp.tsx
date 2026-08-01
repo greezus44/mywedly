@@ -22,12 +22,8 @@ export interface RsvpContent {
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
-  title: "RSVP",
-  subtitle: "Let us know if you'll be joining us",
   attendingText: "Attending",
-  declinedText: "Declined",
-  attendingMessage: "Thank you! We look forward to seeing you.",
-  declinedMessage: "We're sorry you can't make it. Thank you for letting us know.",
+  declinedText: "Decline",
   attendingColor: "#16a34a",
   declinedColor: "#dc2626",
 };

@@ -72,6 +72,11 @@ export function HomeEditor() {
               </div>
             ))}
             <Button variant="secondary" onClick={addSection}>+ Add Section</Button>
+            <div className="space-y-2 rounded-lg border border-dash-border bg-dash-surface p-4">
+              <label className="block text-xs font-medium text-dash-muted">RSVP Button Text</label>
+              <input type="text" value={content.rsvpButtonText ?? ""} onChange={(e) => setContent((p) => ({ ...p, rsvpButtonText: e.target.value }))} placeholder="RSVP Now" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+              <p className="text-xs text-dash-muted">The button guests tap to go to the RSVP page.</p>
+            </div>
           </div>
         }
         preview={<HomePreview content={content} theme={event.draft_theme ?? event.theme} />}

@@ -13,7 +13,7 @@ export function useGuestOutletContext(): GuestOutletContext { return useOutletCo
 export default function GuestLayout() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { guest, eventId, loading: authLoading } = useGuestAuth();
+  const { guest, eventId, loading: authLoading, signOut } = useGuestAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
   // FIX #2: Guest page reads from event.theme (published), NOT draft_theme
@@ -88,6 +88,7 @@ export default function GuestLayout() {
               {navLinks.map((link) => (
                 <NavLink key={link.to} to={link.to} onClick={closeMenu} className={({ isActive }) => `rounded-lg px-4 py-3 text-base font-medium transition-colors ${isActive ? "opacity-100" : "opacity-70 hover:opacity-100"}`} style={({ isActive }) => ({ color: isActive ? "var(--event-primary)" : "var(--event-text)", backgroundColor: isActive ? "var(--event-surface-alt)" : "transparent" })}>{link.label}</NavLink>
               ))}
+              <button onClick={() => { signOut(); navigate(`/e/${slug}/signin`, { replace: true }); }} className="mt-4 rounded-lg px-4 py-3 text-left text-base font-medium opacity-70 transition-colors hover:opacity-100" style={{ color: "var(--event-text)" }}>Sign Out</button>
             </nav>
           </div>
         </div>
