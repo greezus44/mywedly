@@ -5,6 +5,7 @@ import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui";
 import { TypographyControls } from "../../components/ui/TypographyControls";
+import { ButtonColourEditor } from "../../components/ui/ButtonColourEditor";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { LoginPreview, type LoginConfig } from "../../components/preview/PreviewRenderers";
 import type { TypographyStyle } from "../../lib/typography";
@@ -45,6 +46,7 @@ export function LoginEditor() {
             <TypographyControls label="Subheading" value={(config.subheading as TypographyStyle) ?? {}} onChange={(v) => update({ subheading: v })} showText />
             <Input label="Placeholder" value={config.placeholder ?? ""} onChange={(e) => update({ placeholder: e.target.value })} placeholder="Enter your username" />
             <Input label="Button Label" value={config.buttonLabel ?? ""} onChange={(e) => update({ buttonLabel: e.target.value })} placeholder="Sign In" />
+            <ButtonColourEditor label="Button Colours" value={config.buttonColors ?? {}} onChange={(v) => update({ buttonColors: v })} />
           </div>
         }
         preview={<LoginPreview config={config} theme={event.draft_theme ?? event.theme} eventName={event.draft_name ?? event.name ?? undefined} />}

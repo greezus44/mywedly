@@ -2,6 +2,7 @@ import { useMemo, type CSSProperties } from "react";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { jsonToTheme } from "../../lib/theme";
 import { resolveTypography } from "../../lib/typography";
+import { ButtonColors, buttonColorsToStyle, buttonColorsToHoverStyle } from "../ui/ButtonColourEditor";
 
 export interface CoverConfig {
   background?: { image?: string | null; color?: string; position?: string; fit?: string };
@@ -11,9 +12,10 @@ export interface CoverConfig {
   subheading?: unknown;
   bodyHtml?: string;
   ctaText?: string;
+  buttonColors?: ButtonColors;
 }
 export interface LogoConfig { url?: string | null; size?: number; align?: string; marginTop?: number; marginBottom?: number; }
-export interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; }
+export interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; buttonColors?: ButtonColors; }
 export interface HomeLogo { url?: string | null; size?: number; marginTop?: number; marginBottom?: number; }
 export interface HomeSection { heading?: unknown; body?: string; }
 export interface EventContent {
@@ -22,6 +24,7 @@ export interface EventContent {
   body?: string;
   sections?: HomeSection[];
   rsvpButtonText?: string;
+  rsvpButtonColors?: ButtonColors;
 }
 
 interface CoverPreviewProps { config: CoverConfig; theme: unknown; eventName?: string; }
@@ -46,7 +49,7 @@ export function CoverPreview({ config, theme, eventName }: CoverPreviewProps) {
           {heading.text && <h1 className="guest-title mb-3" style={heading.style}>{heading.text}</h1>}
           {subheading.text && <p className="guest-subtitle mb-3" style={subheading.style}>{subheading.text}</p>}
           {config.bodyHtml && <div className="rich-content mb-6" dangerouslySetInnerHTML={{ __html: config.bodyHtml }} />}
-          <button type="button" className="event-btn-primary">{cta}</button>
+          <button type="button" className="event-btn-primary" style={buttonColorsToStyle(config.buttonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(config.buttonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(config.buttonColors))}>{cta}</button>
         </div>
       </div>
     </EventThemeProvider>
@@ -70,7 +73,7 @@ export function LoginPreview({ config, theme, eventName }: LoginPreviewProps) {
           <div className="event-card space-y-3">
             <label className="block text-center text-sm font-medium" style={{ color: "var(--event-text)" }}>{placeholder}</label>
             <input type="text" className="event-input" placeholder={placeholder} style={{ textAlign: "center" }} disabled />
-            <button type="button" className="event-btn-primary w-full">{buttonLabel}</button>
+            <button type="button" className="event-btn-primary w-full" style={buttonColorsToStyle(config.buttonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(config.buttonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(config.buttonColors))}>{buttonLabel}</button>
           </div>
         </div>
       </div>
@@ -105,7 +108,7 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
           <section className="guest-section text-center"><div className="mx-auto max-w-md"><p className="guest-subtitle">No content yet.</p></div></section>
         )}
         <section className="rsvp-section text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
-          <button type="button" className="event-btn-primary">{content.rsvpButtonText || "RSVP Now"}</button>
+          <button type="button" className="event-btn-primary" style={buttonColorsToStyle(content.rsvpButtonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(content.rsvpButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(content.rsvpButtonColors))}>{content.rsvpButtonText || "RSVP Now"}</button>
         </section>
       </div>
     </EventThemeProvider>

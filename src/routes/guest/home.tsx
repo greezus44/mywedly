@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { getTypographyText, getTypographyStyle } from "../../lib/typography";
+import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/ui/ButtonColourEditor";
 import type { EventContent } from "../../components/preview/PreviewRenderers";
 
 export default function GuestHome() {
@@ -36,7 +37,7 @@ export default function GuestHome() {
       })}
       {(invitedSubEventIds.length > 0 || !!guest) && (
         <section className="rsvp-section text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
-          <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">{content.rsvpButtonText || "RSVP Now"}</button>
+          <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary" style={buttonColorsToStyle(content.rsvpButtonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(content.rsvpButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(content.rsvpButtonColors))}>{content.rsvpButtonText || "RSVP Now"}</button>
         </section>
       )}
     </div>

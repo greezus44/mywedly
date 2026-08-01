@@ -33,6 +33,7 @@ export interface BlockContent {
   underline?: boolean;
   lineHeight?: number;
   letterSpacing?: number;
+  buttonColors?: import("../../components/ui/ButtonColourEditor").ButtonColors;
 }
 
 export interface Block {

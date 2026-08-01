@@ -4,6 +4,7 @@ import { cn } from "../../lib/utils";
 export { Input, Textarea, Select } from "./Input";
 export { Button } from "./Button";
 export { FontSelect } from "./FontSelect";
+export { ButtonColourEditor, type ButtonColors } from "./ButtonColourEditor";
 export { DatePicker } from "./DatePicker";
 export { TimePicker } from "./TimePicker";
 export { DateTimePicker } from "./DateTimePicker";

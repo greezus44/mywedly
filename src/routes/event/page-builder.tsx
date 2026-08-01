@@ -6,6 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { Input, Textarea } from "../../components/ui";
 import { LoadingSpinner, ErrorState } from "../../components/ui";
 import { TypographyControls } from "../../components/ui/TypographyControls";
+import { ButtonColourEditor } from "../../components/ui/ButtonColourEditor";
 import type { TypographyStyle } from "../../lib/typography";
 import { BLOCK_TYPES, createBlock, blocksToJson, jsonToBlocks, type Block, type BlockType } from "./block-types";
 
@@ -144,7 +145,7 @@ function BlockEditor({ block, onChange }: { block: Block; onChange: (c: Partial<
     case "video":
       return <Input label="Video URL (YouTube/Vimeo)" value={c.url ?? ""} onChange={(e) => onChange({ url: e.target.value })} />;
     case "button":
-      return <div className="space-y-2"><Input label="Label" value={c.label ?? ""} onChange={(e) => onChange({ label: e.target.value })} /><Input label="Link URL" value={c.href ?? ""} onChange={(e) => onChange({ href: e.target.value })} /></div>;
+      return <div className="space-y-2"><Input label="Label" value={c.label ?? ""} onChange={(e) => onChange({ label: e.target.value })} /><Input label="Link URL" value={c.href ?? ""} onChange={(e) => onChange({ href: e.target.value })} /><ButtonColourEditor label="Button Colours" value={c.buttonColors ?? {}} onChange={(v) => onChange({ buttonColors: v })} /></div>;
     case "list":
       return <div className="space-y-2"><Textarea label="Items (one per line)" value={(c.items ?? []).join("\n")} onChange={(e) => onChange({ items: e.target.value.split("\n").filter(Boolean) })} rows={4} /><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
     case "quote":

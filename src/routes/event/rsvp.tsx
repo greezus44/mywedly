@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventRsvp, type Json } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Badge, ColorInput } from "../../components/ui";
+import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { Input } from "../../components/ui/Input";
 import { Textarea } from "../../components/ui/Input";
 import { formatDate, formatDateTime, isRsvpClosed } from "../../lib/utils";
@@ -19,6 +20,8 @@ export interface RsvpContent {
   declinedMessage?: string;
   attendingColor?: string;
   declinedColor?: string;
+  attendingButtonColors?: ButtonColors;
+  declinedButtonColors?: ButtonColors;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -119,6 +122,8 @@ export function RsvpPage() {
               <ColorInput value={rsvpContent.declinedColor ?? "#dc2626"} onChange={(v) => setRsvpContent((p) => ({ ...p, declinedColor: v }))} />
             </div>
           </div>
+          <ButtonColourEditor label="Attending Button Colours" value={rsvpContent.attendingButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, attendingButtonColors: v }))} />
+          <ButtonColourEditor label="Declined Button Colours" value={rsvpContent.declinedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, declinedButtonColors: v }))} />
         </div>
       )}
       <div className="grid grid-cols-3 gap-3">

@@ -5,8 +5,9 @@ import { useGuestAuth } from "../../lib/guest-auth";
 import { supabase, type EventMessage } from "../../lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDateTime } from "../../lib/utils";
+import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 
-interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; }
+interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; }
 
 export default function GuestWishes() {
   const { event } = useGuestOutletContext();
@@ -83,7 +84,7 @@ export default function GuestWishes() {
             required
           />
           {submitError && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{submitError}</p>}
-          <button type="submit" disabled={submitMutation.isPending} className="event-btn-primary" style={{ opacity: submitMutation.isPending ? 0.6 : 1 }}>
+          <button type="submit" disabled={submitMutation.isPending} className="event-btn-primary" style={{ opacity: submitMutation.isPending ? 0.6 : 1, ...buttonColorsToStyle(wishesContent?.buttonColors) }} onMouseEnter={(e) => { if (!submitMutation.isPending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(wishesContent?.buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(wishesContent?.buttonColors))}>
             {submitMutation.isPending ? "Sending..." : submitLabel}
           </button>
         </form>

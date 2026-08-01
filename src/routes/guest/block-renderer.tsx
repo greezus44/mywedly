@@ -3,6 +3,7 @@ import type { Block } from "../event/block-types";
 import { getCountdown, formatDate, formatTime12 } from "../../lib/utils";
 import { supabase } from "../../lib/supabase";
 import { getTypographyStyle } from "../../lib/typography";
+import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/ui/ButtonColourEditor";
 
 interface BlockRendererProps {
   block: Block;
@@ -41,7 +42,7 @@ export function BlockRenderer({ block, eventId }: BlockRendererProps) {
       return <div className="aspect-video w-full overflow-hidden rounded-lg"><iframe src={embed} className="h-full w-full" allowFullScreen title="Video" /></div>;
     }
     case "button":
-      return <div className="text-center"><a href={c.href ?? "#"} className="event-btn-primary inline-block">{c.label ?? "Button"}</a></div>;
+      return <div className="text-center"><a href={c.href ?? "#"} className="event-btn-primary inline-block" style={buttonColorsToStyle(c.buttonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(c.buttonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(c.buttonColors))}>{c.label ?? "Button"}</a></div>;
     case "columns":
       return <div className="grid gap-4 sm:grid-cols-2">{(c.columns ?? []).map((col, i) => <div key={i} className="rich-content" style={{ whiteSpace: "pre-wrap" }}>{col.text ?? ""}</div>)}</div>;
     case "list":

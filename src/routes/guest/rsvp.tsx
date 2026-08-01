@@ -4,6 +4,7 @@ import { useGuestAuth } from "../../lib/guest-auth";
 import { supabase, type EventRsvp, type EventSchedule, type SubEvent, type Json } from "../../lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDate, formatTime12 } from "../../lib/utils";
+import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 
 interface RsvpContent {
   title?: string;
@@ -14,6 +15,8 @@ interface RsvpContent {
   declinedMessage?: string;
   attendingColor?: string;
   declinedColor?: string;
+  attendingButtonColors?: ButtonColors;
+  declinedButtonColors?: ButtonColors;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -189,8 +192,8 @@ export default function GuestRsvp() {
                   <h3 className="mb-2" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>{se.name}</h3>
                   {se.date && <p className="mb-3 text-sm" style={{ color: "var(--event-muted)" }}>{formatDate(se.date)}{se.time ? ` at ${formatTime12(se.time)}` : ""}</p>}
                   <div className="flex gap-3">
-                    <button onClick={() => handleRsvp(se.id, "attending")} className="event-btn-primary" style={{ opacity: current.status === "attending" ? 1 : 0.6, backgroundColor: current.status === "attending" ? rsvpContent.attendingColor : undefined, borderColor: current.status === "attending" ? rsvpContent.attendingColor : undefined }}>{rsvpContent.attendingText}</button>
-                    <button onClick={() => handleRsvp(se.id, "declined")} className="event-btn-secondary" style={{ opacity: current.status === "declined" ? 1 : 0.6, backgroundColor: current.status === "declined" ? rsvpContent.declinedColor : undefined, borderColor: current.status === "declined" ? rsvpContent.declinedColor : undefined, color: current.status === "declined" ? "#fff" : undefined }}>{rsvpContent.declinedText}</button>
+                    <button onClick={() => handleRsvp(se.id, "attending")} className="event-btn-primary" style={{ opacity: current.status === "attending" ? 1 : 0.6, ...(current.status === "attending" ? { backgroundColor: rsvpContent.attendingColor, borderColor: rsvpContent.attendingColor } : {}), ...buttonColorsToStyle(rsvpContent.attendingButtonColors) }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.attendingButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(rsvpContent.attendingButtonColors))}>{rsvpContent.attendingText}</button>
+                    <button onClick={() => handleRsvp(se.id, "declined")} className="event-btn-secondary" style={{ opacity: current.status === "declined" ? 1 : 0.6, ...(current.status === "declined" ? { backgroundColor: rsvpContent.declinedColor, borderColor: rsvpContent.declinedColor, color: "#fff" } : {}), ...buttonColorsToStyle(rsvpContent.declinedButtonColors) }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.declinedButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(rsvpContent.declinedButtonColors))}>{rsvpContent.declinedText}</button>
                   </div>
                   {current.status === "attending" && rsvpContent.attendingMessage && (
                     <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.attendingMessage}</p>
@@ -205,8 +208,8 @@ export default function GuestRsvp() {
         ) : (
           <div className="event-card text-center">
             <div className="flex justify-center gap-3">
-              <button onClick={() => handleRsvp(null, "attending")} className="event-btn-primary" style={{ opacity: responses["main"]?.status === "attending" ? 1 : 0.6, backgroundColor: responses["main"]?.status === "attending" ? rsvpContent.attendingColor : undefined, borderColor: responses["main"]?.status === "attending" ? rsvpContent.attendingColor : undefined }}>{rsvpContent.attendingText}</button>
-              <button onClick={() => handleRsvp(null, "declined")} className="event-btn-secondary" style={{ opacity: responses["main"]?.status === "declined" ? 1 : 0.6, backgroundColor: responses["main"]?.status === "declined" ? rsvpContent.declinedColor : undefined, borderColor: responses["main"]?.status === "declined" ? rsvpContent.declinedColor : undefined, color: responses["main"]?.status === "declined" ? "#fff" : undefined }}>{rsvpContent.declinedText}</button>
+              <button onClick={() => handleRsvp(null, "attending")} className="event-btn-primary" style={{ opacity: responses["main"]?.status === "attending" ? 1 : 0.6, ...(responses["main"]?.status === "attending" ? { backgroundColor: rsvpContent.attendingColor, borderColor: rsvpContent.attendingColor } : {}), ...buttonColorsToStyle(rsvpContent.attendingButtonColors) }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.attendingButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(rsvpContent.attendingButtonColors))}>{rsvpContent.attendingText}</button>
+              <button onClick={() => handleRsvp(null, "declined")} className="event-btn-secondary" style={{ opacity: responses["main"]?.status === "declined" ? 1 : 0.6, ...(responses["main"]?.status === "declined" ? { backgroundColor: rsvpContent.declinedColor, borderColor: rsvpContent.declinedColor, color: "#fff" } : {}), ...buttonColorsToStyle(rsvpContent.declinedButtonColors) }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.declinedButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(rsvpContent.declinedButtonColors))}>{rsvpContent.declinedText}</button>
             </div>
             {responses["main"]?.status === "attending" && rsvpContent.attendingMessage && (
               <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.attendingMessage}</p>

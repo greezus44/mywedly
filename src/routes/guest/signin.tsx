@@ -5,6 +5,7 @@ import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { resolveTypography } from "../../lib/typography";
+import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/ui/ButtonColourEditor";
 
 interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; }
 
@@ -42,6 +43,7 @@ export default function GuestSignIn() {
   const subheading = resolveTypography(loginConfig.subheading, "Please sign in to view your invitation");
   const placeholder = loginConfig.placeholder || "Enter your username";
   const buttonLabel = loginConfig.buttonLabel || "Sign In";
+  const buttonColors = (loginConfig as { buttonColors?: import("../../components/ui/ButtonColourEditor").ButtonColors }).buttonColors;
 
   return (
     <EventThemeProvider theme={event.theme}>
@@ -57,7 +59,7 @@ export default function GuestSignIn() {
               <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus style={{ textAlign: "center" }} />
             </div>
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
-            <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1 }}>{submitting ? "Signing in..." : buttonLabel}</button>
+            <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1, ...buttonColorsToStyle(buttonColors) }} onMouseEnter={(e) => { if (!submitting) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(buttonColors))}>{submitting ? "Signing in..." : buttonLabel}</button>
           </form>
           <div className="mt-6 text-center"><Link to={`/e/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>Back to cover</Link></div>
         </div>

@@ -7,6 +7,7 @@ import { Input, Textarea, ColorInput, RangeInput } from "../../components/ui";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
 import { TypographyControls } from "../../components/ui/TypographyControls";
+import { ButtonColourEditor } from "../../components/ui/ButtonColourEditor";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { CoverPreview, type CoverConfig } from "../../components/preview/PreviewRenderers";
 import type { TypographyStyle } from "../../lib/typography";
@@ -61,6 +62,7 @@ export function CoverEditor() {
               <RichTextEditor value={config.bodyHtml ?? ""} onChange={(html) => update({ bodyHtml: html })} />
             </div>
             <Input label="Button Text" value={config.ctaText ?? ""} onChange={(e) => update({ ctaText: e.target.value })} placeholder="Enter" />
+            <ButtonColourEditor label="Button Colours" value={config.buttonColors ?? {}} onChange={(v) => update({ buttonColors: v })} />
           </div>
         }
         preview={<CoverPreview config={config} theme={event.draft_theme ?? event.theme} eventName={event.draft_name ?? event.name ?? undefined} />}

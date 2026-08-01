@@ -4,6 +4,7 @@ import { supabase, type UserEvent } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { RUSTY_THEME } from "../../lib/theme";
 import { resolveTypography } from "../../lib/typography";
+import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/ui/ButtonColourEditor";
 
 interface LogoConfig { url?: string | null; size?: number; align?: string; }
 
@@ -35,6 +36,7 @@ export default function RustyCover() {
   const logoSize = typeof logoConfig.size === "number" ? logoConfig.size : 120;
   const logoAlign = logoConfig.align || "center";
   const buttonText = (rawCoverConfig.ctaText as string) || "Enter";
+  const buttonColors = rawCoverConfig.buttonColors as import("../../components/ui/ButtonColourEditor").ButtonColors | undefined;
   const eyebrow = resolveTypography(rawCoverConfig.eyebrow, "");
   const heading = resolveTypography(rawCoverConfig.heading, event.name ?? undefined);
   const subheading = resolveTypography(rawCoverConfig.subheading, "");
@@ -49,7 +51,7 @@ export default function RustyCover() {
           {heading.text && <h1 className="guest-title mb-3" style={heading.style}>{heading.text}</h1>}
           {subheading.text && <p className="guest-subtitle mb-3" style={subheading.style}>{subheading.text}</p>}
           {typeof rawCoverConfig.bodyHtml === "string" && rawCoverConfig.bodyHtml && <div className="rich-content mb-8 max-w-md" dangerouslySetInnerHTML={{ __html: rawCoverConfig.bodyHtml }} />}
-          <button type="button" onClick={() => navigate(`/r/${slug}/signin`)} className="event-btn-primary">{buttonText}</button>
+          <button type="button" onClick={() => navigate(`/r/${slug}/signin`)} className="event-btn-primary" style={buttonColorsToStyle(buttonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(buttonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(buttonColors))}>{buttonText}</button>
         </div>
       </div>
     </EventThemeProvider>

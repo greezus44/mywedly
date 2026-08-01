@@ -3,11 +3,12 @@ import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventMessage } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { LoadingSpinner, ErrorState, Modal } from "../../components/ui";
+import { LoadingSpinner, ErrorState, Modal, ColorInput } from "../../components/ui";
+import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { formatDateTime } from "../../lib/utils";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
-interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; }
+interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; }
 
 export function MessagesPage() {
   const { event, eventId } = useOutletContext<EventContextValue>();
@@ -122,6 +123,7 @@ export function MessagesPage() {
             <label className="mb-1 block text-xs font-medium text-dash-muted">Submit Button Label</label>
             <input type="text" value={wishesContent.submitLabel ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, submitLabel: e.target.value }))} placeholder="Send Message" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
           </div>
+          <ButtonColourEditor label="Submit Button Colours" value={wishesContent.buttonColors ?? {}} onChange={(v) => setWishesContent((p) => ({ ...p, buttonColors: v }))} />
           <div className="flex items-center gap-3 pt-2">
             <Button size="sm" onClick={saveSettings} loading={saving}>Save</Button>
             {saveSuccess && <span className="text-sm text-green-600">Saved!</span>}
