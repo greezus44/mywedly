@@ -5,6 +5,8 @@ import { ColorInput, RangeInput, Toggle } from "./index";
 import { HEADING_FONT_OPTIONS } from "../../lib/theme";
 import { cn } from "../../lib/utils";
 
+const FONT_SIZES = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72];
+
 interface TypographyControlsProps {
   label?: string;
   value: TypographyStyle;
@@ -41,13 +43,31 @@ export function TypographyControls({ label, value, onChange, showText }: Typogra
           options={HEADING_FONT_OPTIONS}
         />
       </div>
-      <RangeInput
-        label="Font Size"
-        value={value.fontSize ?? 16}
-        onChange={(v) => update({ fontSize: v })}
-        min={8}
-        max={72}
-      />
+      <div>
+        <label className="mb-1 block text-xs font-medium text-dash-muted">Font Size</label>
+        <div className="flex items-center gap-2">
+          <select
+            value={FONT_SIZES.includes(value.fontSize ?? 16) ? value.fontSize : "custom"}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v !== "custom") update({ fontSize: Number(v) });
+            }}
+            className="flex-1 rounded-lg border border-dash-border bg-dash-bg px-2 py-1.5 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+          >
+            {FONT_SIZES.map((s) => <option key={s} value={s}>{s}px</option>)}
+            {!FONT_SIZES.includes(value.fontSize ?? 16) && value.fontSize !== undefined && <option value="custom">{value.fontSize}px</option>}
+          </select>
+          <input
+            type="number"
+            value={value.fontSize ?? 16}
+            onChange={(e) => update({ fontSize: Math.max(1, Math.min(200, Number(e.target.value))) })}
+            min={1}
+            max={200}
+            className="w-20 rounded-lg border border-dash-border bg-dash-bg px-2 py-1.5 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+          />
+          <span className="text-xs text-dash-muted">px</span>
+        </div>
+      </div>
       <div>
         <label className="mb-1 block text-xs font-medium text-dash-muted">Weight</label>
         <div className="flex gap-1">

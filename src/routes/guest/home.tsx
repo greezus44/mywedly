@@ -1,10 +1,12 @@
 import { useNavigate } from "react-router-dom";
 import { useGuestOutletContext } from "./guest-layout";
+import { useGuestAuth } from "../../lib/guest-auth";
 import { getTypographyText, getTypographyStyle } from "../../lib/typography";
 import type { EventContent } from "../../components/preview/PreviewRenderers";
 
 export default function GuestHome() {
   const { event, slug, invitedSubEventIds } = useGuestOutletContext();
+  const { guest } = useGuestAuth();
   const navigate = useNavigate();
   const content = (event.content ?? {}) as EventContent;
   const sections = content.sections ?? ((content.heading !== undefined || content.body !== undefined) ? [{ heading: content.heading, body: content.body }] : []);
@@ -32,7 +34,7 @@ export default function GuestHome() {
           </section>
         );
       })}
-      {invitedSubEventIds.length > 0 && (
+      {(invitedSubEventIds.length > 0 || !!guest) && (
         <section className="rsvp-section text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
           <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary">RSVP Now</button>
         </section>

@@ -15,10 +15,10 @@ export default function GuestWishes() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const wishesContent = ((event.content as Record<string, unknown> | null) ?? {}).wishes as WishesContent | undefined;
-  const heading = wishesContent?.heading || "Wishes & Messages";
+  const heading = wishesContent?.heading || "Messages";
   const subheading = wishesContent?.subheading || "Leave us a message to cherish";
   const placeholder = wishesContent?.placeholder || "Write your message here...";
-  const submitLabel = wishesContent?.submitLabel || "Send Wish";
+  const submitLabel = wishesContent?.submitLabel || "Send Message";
 
   const { data: messages, isLoading } = useQuery({
     queryKey: ["event-messages-public", event.id],
@@ -63,8 +63,8 @@ export default function GuestWishes() {
     <div className="guest-section">
       <div className="mx-auto max-w-2xl">
         <div className="mb-8 text-center">
-          <h1 className="guest-title mb-2">{heading}</h1>
-          <p className="guest-subtitle">{subheading}</p>
+          {heading && <h1 className="guest-title mb-2 text-center">{heading}</h1>}
+          {subheading && <p className="guest-subtitle text-center" style={{ margin: "0 auto" }}>{subheading}</p>}
         </div>
 
         <form onSubmit={handleSubmit} className="event-card mb-8 space-y-4">
@@ -86,7 +86,7 @@ export default function GuestWishes() {
         {isLoading ? (
           <p className="text-center" style={{ color: "var(--event-muted)" }}>Loading messages...</p>
         ) : !messages || messages.length === 0 ? (
-          <p className="text-center" style={{ color: "var(--event-muted)" }}>No messages yet. Be the first to leave a wish!</p>
+          <p className="text-center" style={{ color: "var(--event-muted)" }}>No messages yet. Be the first to leave a message!</p>
         ) : (
           <div className="space-y-4">
             {messages.map((msg) => (

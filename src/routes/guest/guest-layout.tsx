@@ -3,7 +3,7 @@ import { useParams, useNavigate, NavLink, Outlet, Link, useOutletContext } from 
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { resolveGuestInvitations, getInvitedSubEventIds, type ResolveResult } from "../../lib/invitations";
+import { resolveGuestInvitations, getInvitedSubEventIds, hasRsvpAccess, type ResolveResult } from "../../lib/invitations";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { LoadingSpinner } from "../../components/ui";
 
@@ -41,7 +41,7 @@ export default function GuestLayout() {
   const { data: invitations } = useQuery({
     queryKey: ["guest-invitations", guest?.id, event?.id],
     queryFn: async (): Promise<ResolveResult> => {
-      if (!guest || !event) return { invitations: [], error: null };
+      if (!guest || !event) return { invitations: [], hasMainEventAccess: false, error: null };
       return resolveGuestInvitations(supabase, guest.id, event.id);
     },
     enabled: !!guest && !!event,
@@ -63,8 +63,8 @@ export default function GuestLayout() {
 
   const navLinks = [
     { label: "Home", to: `/e/${slug}/home` },
-    ...(invitedSubEventIds.length > 0 ? [{ label: "RSVP", to: `/e/${slug}/rsvp` }] : []),
-    { label: "Wishes", to: `/e/${slug}/wishes` },
+    ...(hasRsvpAccess(invitations ?? { invitations: [], hasMainEventAccess: false, error: null }) ? [{ label: "RSVP", to: `/e/${slug}/rsvp` }] : []),
+    { label: "Messages", to: `/e/${slug}/wishes` },
     ...(customPages ?? []).map((p) => ({ label: p.title, to: `/e/${slug}/p/${p.slug}` })),
   ];
 

@@ -12,7 +12,7 @@ const navTabs = [
   { label: "Cover", to: "" }, { label: "Login", to: "login" }, { label: "Home", to: "home" },
   { label: "Events", to: "events" }, { label: "Guests", to: "guests" }, { label: "Guest Groups", to: "groups" },
   { label: "RSVP", to: "rsvp" }, { label: "Schedule", to: "timeline" }, { label: "Pages", to: "pages" },
-  { label: "Wishes", to: "wishes" }, { label: "Theme", to: "theme" }, { label: "Share", to: "sharing" },
+  { label: "Messages", to: "wishes" }, { label: "Theme", to: "theme" }, { label: "Share", to: "sharing" },
   { label: "Analytics", to: "analytics" }, { label: "Settings", to: "settings" },
 ];
 

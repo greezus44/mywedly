@@ -32,7 +32,7 @@ export function AnalyticsPage() {
     { label: "Attending", value: attending },
     { label: "Declined", value: declined },
     { label: "Pending", value: pending },
-    { label: "Wishes", value: totalMessages },
+    { label: "Messages", value: totalMessages },
   ];
 
   if (!guests) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;

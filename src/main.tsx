@@ -25,7 +25,7 @@ import { ThemeEditor } from "./routes/event/theme-editor";
 import { SharingPage } from "./routes/event/sharing";
 import { AnalyticsPage } from "./routes/event/analytics";
 import { SettingsPage } from "./routes/event/settings";
-import { WishesPage } from "./routes/event/wishes";
+import { MessagesPage } from "./routes/event/wishes";
 
 import GuestCover from "./routes/guest/cover";
 import GuestSignIn from "./routes/guest/signin";
@@ -70,7 +70,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 <Route path="sharing" element={<SharingPage />} />
                 <Route path="analytics" element={<AnalyticsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
-                <Route path="wishes" element={<WishesPage />} />
+                <Route path="wishes" element={<MessagesPage />} />
               </Route>
 
               <Route path="/e/:slug" element={<GuestCover />} />
