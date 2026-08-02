@@ -29,7 +29,7 @@ export default function GuestHome() {
         return (
           <section key={i} className="guest-section">
             <div className="mx-auto max-w-3xl">
-              {headingText && <h2 className="guest-title mb-4" style={headingStyle}>{headingText}</h2>}
+              {headingText && <h2 className="guest-title mb-4" style={{ whiteSpace: "pre-wrap", ...headingStyle }}>{headingText}</h2>}
               {section.body && <div className="rich-content" dangerouslySetInnerHTML={{ __html: section.body }} />}
             </div>
           </section>

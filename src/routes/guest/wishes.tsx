@@ -69,8 +69,8 @@ export default function GuestWishes() {
     <div className="guest-section">
       <div className="mx-auto max-w-2xl">
         <div className="mb-8 text-center">
-          {heading && <h1 className="guest-title mb-2 text-center">{heading}</h1>}
-          {subheading && <p className="guest-subtitle text-center" style={{ margin: "0 auto" }}>{subheading}</p>}
+          {heading && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap" }}>{heading}</h1>}
+          {subheading && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap" }}>{subheading}</p>}
         </div>
 
         <form onSubmit={handleSubmit} className="event-card mb-8 space-y-4">

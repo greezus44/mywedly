@@ -95,26 +95,27 @@ export default function GuestRsvp() {
     enabled: !!guest,
   });
 
-  const [responses, setResponses] = useState<Record<string, { status: string; plus_ones: number; message: string }>>({});
+  const [responses, setResponses] = useState<Record<string, { status: string; plus_ones: number; message: string; plus_one_name: string }>>({});
 
   useEffect(() => {
     if (existingRsvps) {
-      const map: Record<string, { status: string; plus_ones: number; message: string }> = {};
+      const map: Record<string, { status: string; plus_ones: number; message: string; plus_one_name: string }> = {};
       existingRsvps.forEach((r) => {
         const key = r.sub_event_id || "main";
-        map[key] = { status: r.status, plus_ones: r.plus_ones, message: r.message ?? "" };
+        map[key] = { status: r.status, plus_ones: r.plus_ones, message: r.message ?? "", plus_one_name: (r.plus_one_names?.[0] ?? "") };
       });
       setResponses(map);
     }
   }, [existingRsvps]);
 
   const rsvpMutation = useMutation({
-    mutationFn: async ({ subEventId, status, plus_ones, message }: { subEventId: string | null; status: string; plus_ones: number; message: string }) => {
+    mutationFn: async ({ subEventId, status, plus_ones, message, plus_one_name }: { subEventId: string | null; status: string; plus_ones: number; message: string; plus_one_name: string }) => {
       const existing = existingRsvps?.find((r) => (subEventId ? r.sub_event_id === subEventId : !r.sub_event_id));
+      const plusOneNames = plus_one_name.trim() ? [plus_one_name.trim()] : [];
       if (existing) {
         const { error } = await supabase
           .from("event_rsvps")
-          .update({ status, plus_ones, message, responded_at: new Date().toISOString() })
+          .update({ status, plus_ones, message, plus_one_names: plusOneNames, responded_at: new Date().toISOString() })
           .eq("id", existing.id);
         if (error) throw error;
       } else {
@@ -127,6 +128,7 @@ export default function GuestRsvp() {
             status,
             plus_ones,
             message,
+            plus_one_names: plusOneNames,
             sub_event_id: subEventId,
             responded_at: new Date().toISOString(),
           });
@@ -140,10 +142,25 @@ export default function GuestRsvp() {
 
   const handleRsvp = (subEventId: string | null, status: string) => {
     const key = subEventId || "main";
-    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "" };
+    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "", plus_one_name: "" };
     const updated = { ...current, status };
     setResponses((p) => ({ ...p, [key]: updated }));
-    rsvpMutation.mutate({ subEventId, status, plus_ones: updated.plus_ones, message: updated.message });
+    rsvpMutation.mutate({ subEventId, status, plus_ones: updated.plus_ones, message: updated.message, plus_one_name: updated.plus_one_name });
+  };
+
+  const handlePlusOneName = (subEventId: string | null, name: string) => {
+    const key = subEventId || "main";
+    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "", plus_one_name: "" };
+    const updated = { ...current, plus_one_name: name };
+    setResponses((p) => ({ ...p, [key]: updated }));
+  };
+
+  const handlePlusOneNameBlur = (subEventId: string | null) => {
+    const key = subEventId || "main";
+    const current = responses[key];
+    if (current && current.status !== "pending") {
+      rsvpMutation.mutate({ subEventId, status: current.status, plus_ones: current.plus_ones, message: current.message, plus_one_name: current.plus_one_name });
+    }
   };
 
   const scheduleHeadingText = getTypographyText(rsvpContent.scheduleHeading, "Schedule");
@@ -156,14 +173,14 @@ export default function GuestRsvp() {
   const showAdditionalInfo = !!(additionalInfoHeadingText || (additionalInfoBody && additionalInfoBody.trim()));
 
   const attendingSelectedStyle = (isSelected: boolean): React.CSSProperties => {
-    if (!isSelected) return {};
-    const base: React.CSSProperties = {};
+    if (!isSelected) return buttonColorsToStyle(rsvpContent.attendingButtonColors);
+    const base: React.CSSProperties = { ...buttonColorsToStyle(rsvpContent.attendingButtonColors) };
     if (rsvpContent.attendingColor) { base.backgroundColor = rsvpContent.attendingColor; base.borderColor = rsvpContent.attendingColor; }
     return base;
   };
   const declinedSelectedStyle = (isSelected: boolean): React.CSSProperties => {
-    if (!isSelected) return {};
-    const base: React.CSSProperties = {};
+    if (!isSelected) return buttonColorsToStyle(rsvpContent.declinedButtonColors);
+    const base: React.CSSProperties = { ...buttonColorsToStyle(rsvpContent.declinedButtonColors) };
     if (rsvpContent.declinedColor) { base.backgroundColor = rsvpContent.declinedColor; base.borderColor = rsvpContent.declinedColor; base.color = "#fff"; }
     return base;
   };
@@ -191,11 +208,11 @@ export default function GuestRsvp() {
           {items.map((item) => (
             <div key={item.id} className="grid grid-cols-[100px_1fr] gap-4 items-start">
               <div className="text-sm font-medium" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)" }}>
-                {item.start_time ? formatTime12(item.start_time) : ""}
+                {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
               </div>
               <div>
-                <p className="font-medium" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{item.title}</p>
-                {item.description && <p className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{item.description}</p>}
+                <p className="font-medium" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", whiteSpace: "pre-wrap" }}>{item.title}</p>
+                {item.description && <p className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap" }}>{item.description}</p>}
               </div>
             </div>
           ))}
@@ -210,7 +227,7 @@ export default function GuestRsvp() {
       <div className="mt-6">
         {additionalInfoHeadingText && <h3 className="mb-2" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...additionalInfoHeadingStyle }}>{additionalInfoHeadingText}</h3>}
         {additionalInfoBody && additionalInfoBody.trim() && (
-          <div className="whitespace-pre-wrap text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{additionalInfoBody}</div>
+          <div className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap" }}>{additionalInfoBody}</div>
         )}
       </div>
     );
@@ -218,7 +235,7 @@ export default function GuestRsvp() {
 
   const renderRsvpButtons = (subEventId: string | null) => {
     const key = subEventId || "main";
-    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "" };
+    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "", plus_one_name: "" };
     const isAttending = current.status === "attending";
     const isDeclined = current.status === "declined";
     return (
@@ -227,27 +244,33 @@ export default function GuestRsvp() {
           <button
             onClick={() => handleRsvp(subEventId, "attending")}
             className="event-btn-primary"
-            style={{ opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...buttonColorsToStyle(rsvpContent.attendingButtonColors) }}
+            style={{ opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending) }}
             onMouseEnter={(e) => { if (!isAttending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.attendingButtonColors)); }}
-            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...buttonColorsToStyle(rsvpContent.attendingButtonColors) })}
+            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending) })}
           >
             {rsvpContent.attendingText}
           </button>
           <button
             onClick={() => handleRsvp(subEventId, "declined")}
             className="event-btn-secondary"
-            style={{ opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...buttonColorsToStyle(rsvpContent.declinedButtonColors) }}
+            style={{ opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined) }}
             onMouseEnter={(e) => { if (!isDeclined) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.declinedButtonColors)); }}
-            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...buttonColorsToStyle(rsvpContent.declinedButtonColors) })}
+            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined) })}
           >
             {rsvpContent.declinedText}
           </button>
         </div>
         {isAttending && rsvpContent.attendingMessage && (
-          <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.attendingMessage}</p>
+          <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{rsvpContent.attendingMessage}</p>
         )}
         {isDeclined && rsvpContent.declinedMessage && (
-          <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.declinedMessage}</p>
+          <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{rsvpContent.declinedMessage}</p>
+        )}
+        {guest?.allow_plus_one && (
+          <div className="mt-4">
+            <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>Plus One Name</label>
+            <input type="text" value={current.plus_one_name} onChange={(e) => handlePlusOneName(subEventId, e.target.value)} onBlur={() => handlePlusOneNameBlur(subEventId)} placeholder="Enter +1 name" className="event-input" style={{ fontFamily: "var(--event-font-body)" }} />
+          </div>
         )}
       </div>
     );
@@ -277,8 +300,8 @@ export default function GuestRsvp() {
       <div className="mx-auto max-w-2xl">
         {/* Header */}
         <div className="mb-8 text-center">
-          {rsvpContent.title && <h1 className="guest-title mb-2 text-center">{rsvpContent.title}</h1>}
-          {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", ...guestNameStyle }}>{guestNameText}</p>}
+          {rsvpContent.title && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap" }}>{rsvpContent.title}</h1>}
+          {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...guestNameStyle }}>{guestNameText}</p>}
         </div>
 
         {/* Multiple sub-events or single main event */}

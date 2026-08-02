@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventGuest, type GuestGroup, type SubEvent } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventGuest, type GuestGroup, type SubEvent, type EventRsvp } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
 import { GuestForm, RsvpBadge, type GuestFormValues } from "./guest-form";
@@ -36,6 +36,14 @@ export function GuestsPage() {
     queryKey: ["guest-event-invites", eventId],
     queryFn: async () => { const { data, error } = await supabase.from("guest_event_invites").select("guest_id, sub_event_id, invite_type").eq("event_id", eventId); if (error) throw error; return data ?? []; },
   });
+  const { data: rsvps } = useQuery({
+    queryKey: ["event-rsvps-dashboard", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("event_rsvps").select("guest_id, plus_one_names").eq("event_id", eventId); if (error) throw error; return (data ?? []) as Pick<EventRsvp, "guest_id" | "plus_one_names">[]; },
+  });
+  const plusOneNameFor = (guestId: string): string | null => {
+    const r = rsvps?.find((r) => r.guest_id === guestId);
+    return r?.plus_one_names?.[0] ?? null;
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => { const { error } = await supabase.from("event_guests").delete().eq("id", id); if (error) throw error; },
@@ -71,11 +79,11 @@ export function GuestsPage() {
     try {
       let guestId: string;
       if (editGuest) {
-        const { error } = await supabase.from("event_guests").update({ name: values.name, username: values.username, group_name: values.group_name, side: values.side, group_id: values.group_id }).eq("id", editGuest.id);
+        const { error } = await supabase.from("event_guests").update({ name: values.name, username: values.username, group_name: values.group_name, side: values.side, group_id: values.group_id, allow_plus_one: values.allow_plus_one }).eq("id", editGuest.id);
         if (error) throw error;
         guestId = editGuest.id;
       } else {
-        const { data: newGuest, error } = await supabase.from("event_guests").insert({ event_id: eventId, name: values.name, username: values.username || generateUsername(values.name), group_name: values.group_name, side: values.side, group_id: values.group_id, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0 }).select("id").single();
+        const { data: newGuest, error } = await supabase.from("event_guests").insert({ event_id: eventId, name: values.name, username: values.username || generateUsername(values.name), group_name: values.group_name, side: values.side, group_id: values.group_id, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0, allow_plus_one: values.allow_plus_one }).select("id").single();
         if (error) throw error;
         guestId = newGuest.id;
       }
@@ -100,9 +108,9 @@ export function GuestsPage() {
       ) : (
         <div className="overflow-hidden rounded-lg border border-dash-border">
           <table className="w-full">
-            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted"><input type="checkbox" checked={selectedGuestIds.size === guests.length && guests.length > 0} onChange={(e) => setSelectedGuestIds(e.target.checked ? new Set(guests.map((g) => g.id)) : new Set())} className="accent-dash-primary" /></th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Name</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Group</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">RSVP</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
+            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted"><input type="checkbox" checked={selectedGuestIds.size === guests.length && guests.length > 0} onChange={(e) => setSelectedGuestIds(e.target.checked ? new Set(guests.map((g) => g.id)) : new Set())} className="accent-dash-primary" /></th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Name</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Group</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">RSVP</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">+1</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
             <tbody className="divide-y divide-dash-border bg-dash-surface">
-              {guests.map((g) => (<tr key={g.id}><td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td><td className="px-4 py-2 text-sm text-dash-text">{g.name}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "—"}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.group_name ?? "—"}</td><td className="px-4 py-2"><RsvpBadge status={g.rsvp_status} /></td><td className="px-4 py-2 text-right"><button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button><button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button></td></tr>))}
+              {guests.map((g) => (<tr key={g.id}><td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td><td className="px-4 py-2 text-sm text-dash-text">{g.name}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "—"}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.group_name ?? "—"}</td><td className="px-4 py-2"><RsvpBadge status={g.rsvp_status} /></td><td className="px-4 py-2 text-sm text-dash-muted">{g.allow_plus_one ? (plusOneNameFor(g.id) ?? "Yes") : "—"}</td><td className="px-4 py-2 text-right"><button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button><button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button></td></tr>))}
             </tbody>
           </table>
         </div>

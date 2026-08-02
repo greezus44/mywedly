@@ -4,13 +4,13 @@ import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui";
 import { generateUsername } from "../../lib/utils";
 
-export interface GuestFormValues { name: string; username: string; group_name: string; side: string; group_id: string | null; }
-export function guestToForm(g: EventGuest): GuestFormValues { return { name: g.name ?? "", username: g.username ?? "", group_name: g.group_name ?? "", side: g.side ?? "", group_id: g.group_id ?? null }; }
+export interface GuestFormValues { name: string; username: string; group_name: string; side: string; group_id: string | null; allow_plus_one: boolean; }
+export function guestToForm(g: EventGuest): GuestFormValues { return { name: g.name ?? "", username: g.username ?? "", group_name: g.group_name ?? "", side: g.side ?? "", group_id: g.group_id ?? null, allow_plus_one: g.allow_plus_one ?? false }; }
 
 interface GuestFormProps { eventId: string; guest?: EventGuest | null; groups?: Array<{ id: string; name: string }>; onSubmit: (values: GuestFormValues) => Promise<void>; onCancel: () => void; submitting?: boolean; }
 
 export function GuestForm({ guest, groups, onSubmit, onCancel, submitting }: GuestFormProps) {
-  const [values, setValues] = useState<GuestFormValues>(() => guest ? guestToForm(guest) : { name: "", username: "", group_name: "", side: "", group_id: null });
+  const [values, setValues] = useState<GuestFormValues>(() => guest ? guestToForm(guest) : { name: "", username: "", group_name: "", side: "", group_id: null, allow_plus_one: false });
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -35,6 +35,12 @@ export function GuestForm({ guest, groups, onSubmit, onCancel, submitting }: Gue
         <select value={values.side} onChange={(e) => setValues((p) => ({ ...p, side: e.target.value }))} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-dash-text focus:border-dash-primary focus:outline-none">
           <option value="">None</option><option value="groom">Groom</option><option value="bride">Bride</option><option value="other">Other</option>
         </select>
+      </div>
+      <div>
+        <label className="flex items-center gap-2 text-sm font-medium text-dash-text">
+          <input type="checkbox" checked={values.allow_plus_one} onChange={(e) => setValues((p) => ({ ...p, allow_plus_one: e.target.checked }))} className="accent-dash-primary" />
+          Allow +1
+        </label>
       </div>
       {error && <p className="text-sm text-dash-danger">{error}</p>}
       <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button><Button type="submit" loading={submitting}>{guest ? "Update" : "Add"} Guest</Button></div>

@@ -28,6 +28,7 @@ export function EventsPage() {
   const [schedStart, setSchedStart] = useState(""); const [schedEnd, setSchedEnd] = useState("");
   const [schedVenue, setSchedVenue] = useState(""); const [schedAddress, setSchedAddress] = useState("");
   const [schedDesc, setSchedDesc] = useState("");
+  const [schedSubEventId, setSchedSubEventId] = useState<string>("");
 
   const { data: subEvents, isLoading, isError, error } = useQuery({
     queryKey: ["sub-events", eventId],
@@ -65,9 +66,9 @@ export function EventsPage() {
   });
 
   // FIX #3: Schedule management
-  const resetSchedForm = () => { setSchedTitle(""); setSchedDate(""); setSchedStart(""); setSchedEnd(""); setSchedVenue(""); setSchedAddress(""); setSchedDesc(""); setEditSchedule(null); setFormError(null); };
+  const resetSchedForm = () => { setSchedTitle(""); setSchedDate(""); setSchedStart(""); setSchedEnd(""); setSchedVenue(""); setSchedAddress(""); setSchedDesc(""); setSchedSubEventId(""); setEditSchedule(null); setFormError(null); };
   const openAddSchedule = () => { resetSchedForm(); setShowScheduleForm(true); };
-  const openEditSchedule = (s: EventSchedule) => { setEditSchedule(s); setSchedTitle(s.title ?? ""); setSchedDate(s.schedule_date ?? ""); setSchedStart(s.start_time ?? ""); setSchedEnd(s.end_time ?? ""); setSchedVenue(s.venue ?? ""); setSchedAddress(s.address ?? ""); setSchedDesc(s.description ?? ""); setFormError(null); setShowScheduleForm(true); };
+  const openEditSchedule = (s: EventSchedule) => { setEditSchedule(s); setSchedTitle(s.title ?? ""); setSchedDate(s.schedule_date ?? ""); setSchedStart(s.start_time ?? ""); setSchedEnd(s.end_time ?? ""); setSchedVenue(s.venue ?? ""); setSchedAddress(s.address ?? ""); setSchedDesc(s.description ?? ""); setSchedSubEventId(s.sub_event_id ?? ""); setFormError(null); setShowScheduleForm(true); };
 
   const handleScheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSubmitting(true); setFormError(null);
@@ -78,6 +79,7 @@ export function EventsPage() {
         start_time: schedStart || null, end_time: schedEnd || null,
         venue: schedVenue || null, address: schedAddress || null,
         description: schedDesc || null,
+        sub_event_id: schedSubEventId || null,
         order_index: editSchedule?.order_index ?? (schedule?.length ?? 0),
       };
       if (editSchedule) { const { error } = await supabase.from("event_schedule").update(payload).eq("id", editSchedule.id); if (error) throw error; }
@@ -177,6 +179,13 @@ export function EventsPage() {
       <Modal open={showScheduleForm} onClose={() => { setShowScheduleForm(false); resetSchedForm(); }} title={editSchedule ? "Edit Schedule Item" : "Add Schedule Item"}>
         <form onSubmit={handleScheduleSubmit} className="space-y-4">
           <Input label="Title" value={schedTitle} onChange={(e) => setSchedTitle(e.target.value)} placeholder="e.g. Ceremony" required autoFocus />
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-dash-text">Assign to Event</label>
+            <select value={schedSubEventId} onChange={(e) => setSchedSubEventId(e.target.value)} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-dash-text focus:border-dash-primary focus:outline-none">
+              <option value="">Main Event</option>
+              {(subEvents ?? []).map((se) => <option key={se.id} value={se.id}>{se.name}</option>)}
+            </select>
+          </div>
           <Input label="Date" type="date" value={schedDate} onChange={(e) => setSchedDate(e.target.value)} />
           <div className="grid grid-cols-2 gap-3"><Input label="Start Time" type="time" value={schedStart} onChange={(e) => setSchedStart(e.target.value)} /><Input label="End Time" type="time" value={schedEnd} onChange={(e) => setSchedEnd(e.target.value)} /></div>
           <Input label="Venue" value={schedVenue} onChange={(e) => setSchedVenue(e.target.value)} /><Input label="Address" value={schedAddress} onChange={(e) => setSchedAddress(e.target.value)} />
