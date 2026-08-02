@@ -3,7 +3,8 @@ import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { supabase, type EventRsvp, type EventSchedule, type SubEvent, type Json } from "../../lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { formatDate, formatTime12 } from "../../lib/utils";
+import { formatTime12 } from "../../lib/utils";
+import { getTypographyText, getTypographyStyle } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 
 interface RsvpContent {
@@ -17,6 +18,10 @@ interface RsvpContent {
   declinedColor?: string;
   attendingButtonColors?: ButtonColors;
   declinedButtonColors?: ButtonColors;
+  scheduleHeading?: unknown;
+  guestNameTypography?: unknown;
+  additionalInfoHeading?: unknown;
+  additionalInfoBody?: string;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -25,6 +30,18 @@ const DEFAULT_RSVP_CONTENT: RsvpContent = {
   attendingColor: "#16a34a",
   declinedColor: "#dc2626",
 };
+
+function getDateParts(dateStr: string | null | undefined): { weekday: string; day: string; month: string; year: string } | null {
+  if (!dateStr) return null;
+  const date = new Date(dateStr + (dateStr.length === 10 ? "T00:00:00" : ""));
+  if (isNaN(date.getTime())) return null;
+  return {
+    weekday: date.toLocaleDateString("en-US", { weekday: "long" }),
+    day: date.toLocaleDateString("en-US", { day: "numeric" }),
+    month: date.toLocaleDateString("en-US", { month: "long" }),
+    year: date.toLocaleDateString("en-US", { year: "numeric" }),
+  };
+}
 
 export default function GuestRsvp() {
   const { event, slug, invitedSubEventIds } = useGuestOutletContext();
@@ -36,7 +53,6 @@ export default function GuestRsvp() {
     ...(((event.content as Record<string, unknown> | null)?.rsvp as Partial<RsvpContent>) ?? {}),
   };
 
-  // FIX #3: Load event schedule for display
   const { data: schedule } = useQuery({
     queryKey: ["event-schedule-public", event.id],
     queryFn: async () => {
@@ -50,7 +66,6 @@ export default function GuestRsvp() {
     },
   });
 
-  // Load sub-events the guest is invited to
   const { data: subEvents } = useQuery({
     queryKey: ["invited-sub-events", invitedSubEventIds],
     queryFn: async () => {
@@ -66,7 +81,6 @@ export default function GuestRsvp() {
     enabled: invitedSubEventIds.length > 0,
   });
 
-  // Load existing RSVPs for this guest
   const { data: existingRsvps } = useQuery({
     queryKey: ["guest-rsvps", guest?.id, event.id],
     queryFn: async () => {
@@ -132,92 +146,153 @@ export default function GuestRsvp() {
     rsvpMutation.mutate({ subEventId, status, plus_ones: updated.plus_ones, message: updated.message });
   };
 
-  const eventDate = event.event_date;
-  const eventTime = event.event_time;
-  const venue = event.venue;
-  const address = event.address;
+  const scheduleHeadingText = getTypographyText(rsvpContent.scheduleHeading, "Schedule");
+  const scheduleHeadingStyle = getTypographyStyle(rsvpContent.scheduleHeading);
+  const guestNameText = guest?.name ? getTypographyText(rsvpContent.guestNameTypography, guest.name) : "";
+  const guestNameStyle = getTypographyStyle(rsvpContent.guestNameTypography);
+  const additionalInfoHeadingText = getTypographyText(rsvpContent.additionalInfoHeading, "");
+  const additionalInfoHeadingStyle = getTypographyStyle(rsvpContent.additionalInfoHeading);
+  const additionalInfoBody = rsvpContent.additionalInfoBody;
+  const showAdditionalInfo = !!(additionalInfoHeadingText || (additionalInfoBody && additionalInfoBody.trim()));
+
+  const attendingSelectedStyle = (isSelected: boolean): React.CSSProperties => {
+    if (!isSelected) return {};
+    const base: React.CSSProperties = {};
+    if (rsvpContent.attendingColor) { base.backgroundColor = rsvpContent.attendingColor; base.borderColor = rsvpContent.attendingColor; }
+    return base;
+  };
+  const declinedSelectedStyle = (isSelected: boolean): React.CSSProperties => {
+    if (!isSelected) return {};
+    const base: React.CSSProperties = {};
+    if (rsvpContent.declinedColor) { base.backgroundColor = rsvpContent.declinedColor; base.borderColor = rsvpContent.declinedColor; base.color = "#fff"; }
+    return base;
+  };
+
+  const renderDateColumn = (dateStr: string | null | undefined) => {
+    const parts = getDateParts(dateStr);
+    if (!parts) return null;
+    return (
+      <div className="flex flex-col items-center text-center" style={{ minWidth: "90px" }}>
+        <span className="text-xs uppercase tracking-wide" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.weekday}</span>
+        <span className="text-3xl font-bold leading-tight" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{parts.day}</span>
+        <span className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{parts.month}</span>
+        <span className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.year}</span>
+      </div>
+    );
+  };
+
+  const renderSchedule = (subEventId: string | null) => {
+    const items = (schedule ?? []).filter((s) => (subEventId ? s.sub_event_id === subEventId : !s.sub_event_id));
+    if (items.length === 0) return null;
+    return (
+      <div className="mt-6">
+        {scheduleHeadingText && <h3 className="mb-4" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...scheduleHeadingStyle }}>{scheduleHeadingText}</h3>}
+        <div className="space-y-3">
+          {items.map((item) => (
+            <div key={item.id} className="grid grid-cols-[100px_1fr] gap-4 items-start">
+              <div className="text-sm font-medium" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)" }}>
+                {item.start_time ? formatTime12(item.start_time) : ""}
+              </div>
+              <div>
+                <p className="font-medium" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{item.title}</p>
+                {item.description && <p className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{item.description}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderAdditionalInfo = () => {
+    if (!showAdditionalInfo) return null;
+    return (
+      <div className="mt-6">
+        {additionalInfoHeadingText && <h3 className="mb-2" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...additionalInfoHeadingStyle }}>{additionalInfoHeadingText}</h3>}
+        {additionalInfoBody && additionalInfoBody.trim() && (
+          <div className="whitespace-pre-wrap text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{additionalInfoBody}</div>
+        )}
+      </div>
+    );
+  };
+
+  const renderRsvpButtons = (subEventId: string | null) => {
+    const key = subEventId || "main";
+    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "" };
+    const isAttending = current.status === "attending";
+    const isDeclined = current.status === "declined";
+    return (
+      <div className="mt-6">
+        <div className="flex gap-3">
+          <button
+            onClick={() => handleRsvp(subEventId, "attending")}
+            className="event-btn-primary"
+            style={{ opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...buttonColorsToStyle(rsvpContent.attendingButtonColors) }}
+            onMouseEnter={(e) => { if (!isAttending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.attendingButtonColors)); }}
+            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...buttonColorsToStyle(rsvpContent.attendingButtonColors) })}
+          >
+            {rsvpContent.attendingText}
+          </button>
+          <button
+            onClick={() => handleRsvp(subEventId, "declined")}
+            className="event-btn-secondary"
+            style={{ opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...buttonColorsToStyle(rsvpContent.declinedButtonColors) }}
+            onMouseEnter={(e) => { if (!isDeclined) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.declinedButtonColors)); }}
+            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...buttonColorsToStyle(rsvpContent.declinedButtonColors) })}
+          >
+            {rsvpContent.declinedText}
+          </button>
+        </div>
+        {isAttending && rsvpContent.attendingMessage && (
+          <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.attendingMessage}</p>
+        )}
+        {isDeclined && rsvpContent.declinedMessage && (
+          <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.declinedMessage}</p>
+        )}
+      </div>
+    );
+  };
+
+  const renderEventBlock = (eventName: string, dateStr: string | null, timeStr: string | null, venue: string | null, address: string | null, subEventId: string | null) => {
+    return (
+      <div className="flex gap-6 sm:gap-8">
+        {renderDateColumn(dateStr)}
+        <div className="flex-1">
+          {eventName && <h2 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>{eventName}</h2>}
+          {timeStr && <p className="text-sm mb-1" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{formatTime12(timeStr)}</p>}
+          {venue && <p className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{venue}</p>}
+          {address && <p className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{address}</p>}
+          {renderSchedule(subEventId)}
+          {renderAdditionalInfo()}
+          {renderRsvpButtons(subEventId)}
+        </div>
+      </div>
+    );
+  };
+
+  const hasSubEvents = subEvents && subEvents.length > 0;
 
   return (
     <div className="guest-section">
       <div className="mx-auto max-w-2xl">
-        {/* Event Details */}
+        {/* Header */}
         <div className="mb-8 text-center">
           {rsvpContent.title && <h1 className="guest-title mb-2 text-center">{rsvpContent.title}</h1>}
-          {rsvpContent.subtitle && <p className="guest-subtitle text-center" style={{ margin: "0 auto" }}>{rsvpContent.subtitle}</p>}
+          {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", ...guestNameStyle }}>{guestNameText}</p>}
         </div>
 
-        {/* FIX #3: Event date, time, address */}
-        {(eventDate || eventTime || venue || address) && (
-          <div className="event-card mb-6 space-y-2 text-center">
-            {eventDate && (
-              <p className="text-lg" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>
-                {formatDate(eventDate)}{eventTime ? ` at ${formatTime12(eventTime)}` : ""}
-              </p>
-            )}
-            {venue && <p style={{ color: "var(--event-text)" }}>{venue}</p>}
-            {address && <p style={{ color: "var(--event-muted)" }}>{address}</p>}
-          </div>
-        )}
-
-        {/* FIX #3: Event schedule/timeline */}
-        {schedule && schedule.length > 0 && (
-          <div className="event-card mb-6">
-            <h2 className="mb-4 text-center" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>Schedule</h2>
-            <div className="space-y-3">
-              {schedule.map((item) => (
-                <div key={item.id} className="flex items-start gap-4 border-t border-dashed pt-3" style={{ borderColor: "var(--event-border)" }}>
-                  <div className="shrink-0 text-right" style={{ minWidth: "80px" }}>
-                    {item.start_time && <p className="text-sm font-medium" style={{ color: "var(--event-primary)" }}>{formatTime12(item.start_time)}</p>}
-                    {item.end_time && <p className="text-xs" style={{ color: "var(--event-muted)" }}>{formatTime12(item.end_time)}</p>}
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium" style={{ color: "var(--event-heading)" }}>{item.title}</p>
-                    {item.description && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{item.description}</p>}
-                    {item.venue && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{item.venue}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Sub-event RSVPs */}
-        {subEvents && subEvents.length > 0 ? (
-          <div className="space-y-4">
-            {subEvents.map((se) => {
-              const key = se.id;
-              const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "" };
-              return (
-                <div key={se.id} className="event-card">
-                  <h3 className="mb-2" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>{se.name}</h3>
-                  {se.date && <p className="mb-3 text-sm" style={{ color: "var(--event-muted)" }}>{formatDate(se.date)}{se.time ? ` at ${formatTime12(se.time)}` : ""}</p>}
-                  <div className="flex gap-3">
-                    <button onClick={() => handleRsvp(se.id, "attending")} className="event-btn-primary" style={{ opacity: current.status === "attending" ? 1 : 0.6, ...(current.status === "attending" ? { backgroundColor: rsvpContent.attendingColor, borderColor: rsvpContent.attendingColor } : {}), ...buttonColorsToStyle(rsvpContent.attendingButtonColors) }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.attendingButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(rsvpContent.attendingButtonColors))}>{rsvpContent.attendingText}</button>
-                    <button onClick={() => handleRsvp(se.id, "declined")} className="event-btn-secondary" style={{ opacity: current.status === "declined" ? 1 : 0.6, ...(current.status === "declined" ? { backgroundColor: rsvpContent.declinedColor, borderColor: rsvpContent.declinedColor, color: "#fff" } : {}), ...buttonColorsToStyle(rsvpContent.declinedButtonColors) }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.declinedButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(rsvpContent.declinedButtonColors))}>{rsvpContent.declinedText}</button>
-                  </div>
-                  {current.status === "attending" && rsvpContent.attendingMessage && (
-                    <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.attendingMessage}</p>
-                  )}
-                  {current.status === "declined" && rsvpContent.declinedMessage && (
-                    <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.declinedMessage}</p>
-                  )}
-                </div>
-              );
-            })}
+        {/* Multiple sub-events or single main event */}
+        {hasSubEvents ? (
+          <div className="space-y-8">
+            {subEvents!.map((se, i) => (
+              <div key={se.id}>
+                {i > 0 && <hr className="border-0 border-t my-8" style={{ borderColor: "var(--event-border)" }} />}
+                {renderEventBlock(se.name, se.date, se.time ?? se.start_time, se.venue, se.address, se.id)}
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="event-card text-center">
-            <div className="flex justify-center gap-3">
-              <button onClick={() => handleRsvp(null, "attending")} className="event-btn-primary" style={{ opacity: responses["main"]?.status === "attending" ? 1 : 0.6, ...(responses["main"]?.status === "attending" ? { backgroundColor: rsvpContent.attendingColor, borderColor: rsvpContent.attendingColor } : {}), ...buttonColorsToStyle(rsvpContent.attendingButtonColors) }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.attendingButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(rsvpContent.attendingButtonColors))}>{rsvpContent.attendingText}</button>
-              <button onClick={() => handleRsvp(null, "declined")} className="event-btn-secondary" style={{ opacity: responses["main"]?.status === "declined" ? 1 : 0.6, ...(responses["main"]?.status === "declined" ? { backgroundColor: rsvpContent.declinedColor, borderColor: rsvpContent.declinedColor, color: "#fff" } : {}), ...buttonColorsToStyle(rsvpContent.declinedButtonColors) }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.declinedButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(rsvpContent.declinedButtonColors))}>{rsvpContent.declinedText}</button>
-            </div>
-            {responses["main"]?.status === "attending" && rsvpContent.attendingMessage && (
-              <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.attendingMessage}</p>
-            )}
-            {responses["main"]?.status === "declined" && rsvpContent.declinedMessage && (
-              <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)" }}>{rsvpContent.declinedMessage}</p>
-            )}
-          </div>
+          renderEventBlock(event.name ?? "", event.event_date, event.event_time, event.venue, event.address, null)
         )}
       </div>
     </div>

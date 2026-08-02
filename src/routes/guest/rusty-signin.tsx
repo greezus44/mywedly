@@ -41,7 +41,7 @@ export default function RustySignIn() {
 
   const loginConfig = (event.login_config ?? {}) as LoginConfig;
   const heading = resolveTypography(loginConfig.heading, (event.name ?? undefined) || "Welcome");
-  const subheading = resolveTypography(loginConfig.subheading, "Please sign in to view your invitation");
+  const subheading = resolveTypography(loginConfig.subheading, "");
   const placeholder = loginConfig.placeholder || "Enter your username";
   const buttonLabel = loginConfig.buttonLabel || "Sign In";
   const buttonColors = (loginConfig as { buttonColors?: import("../../components/ui/ButtonColourEditor").ButtonColors }).buttonColors;
@@ -52,9 +52,9 @@ export default function RustySignIn() {
         <div className="w-full max-w-md">
           <div className="mb-8 text-center">
             <h1 className="guest-title mb-2" style={heading.style}>{heading.text}</h1>
-            <p className="guest-subtitle" style={subheading.style}>{subheading.text}</p>
+            {subheading.text && <p className="guest-subtitle" style={subheading.style}>{subheading.text}</p>}
           </div>
-          <form onSubmit={handleSubmit} className="event-card space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-center text-sm font-medium" style={{ color: "var(--event-text)" }}>{placeholder}</label>
               <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus style={{ textAlign: "center" }} />
@@ -62,7 +62,6 @@ export default function RustySignIn() {
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
             <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1, ...buttonColorsToStyle(buttonColors) }} onMouseEnter={(e) => { if (!submitting) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(buttonColors))}>{submitting ? "Signing in..." : buttonLabel}</button>
           </form>
-          <div className="mt-6 text-center"><Link to={`/r/${slug}`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>Back to cover</Link></div>
         </div>
       </div>
     </EventThemeProvider>

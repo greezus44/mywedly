@@ -7,6 +7,7 @@ import { LoadingSpinner, ErrorState, EmptyState, Badge, ColorInput } from "../..
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { Input } from "../../components/ui/Input";
 import { Textarea } from "../../components/ui/Input";
+import { TypographyControls } from "../../components/ui/TypographyControls";
 import { formatDate, formatDateTime, isRsvpClosed } from "../../lib/utils";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
@@ -22,6 +23,10 @@ export interface RsvpContent {
   declinedColor?: string;
   attendingButtonColors?: ButtonColors;
   declinedButtonColors?: ButtonColors;
+  scheduleHeading?: unknown;
+  guestNameTypography?: unknown;
+  additionalInfoHeading?: unknown;
+  additionalInfoBody?: string;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -124,6 +129,19 @@ export function RsvpPage() {
           </div>
           <ButtonColourEditor label="Attending Button Colours" value={rsvpContent.attendingButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, attendingButtonColors: v }))} />
           <ButtonColourEditor label="Declined Button Colours" value={rsvpContent.declinedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, declinedButtonColors: v }))} />
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Schedule Heading</label>
+            <TypographyControls value={rsvpContent.scheduleHeading ?? { text: "Schedule" }} onChange={(v) => setRsvpContent((p) => ({ ...p, scheduleHeading: v }))} />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Guest Name Typography</label>
+            <TypographyControls value={rsvpContent.guestNameTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, guestNameTypography: v }))} />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Additional Information Heading</label>
+            <TypographyControls value={rsvpContent.additionalInfoHeading ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, additionalInfoHeading: v }))} />
+          </div>
+          <Textarea label="Additional Information Content" value={rsvpContent.additionalInfoBody ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, additionalInfoBody: e.target.value }))} rows={3} />
         </div>
       )}
       <div className="grid grid-cols-3 gap-3">
