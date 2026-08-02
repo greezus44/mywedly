@@ -1,22 +1,48 @@
 import { useState, type FormEvent } from "react";
-import { supabase, type EventGuest } from "../../lib/supabase";
+import { supabase, type EventGuest, type SubEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui";
 import { generateUsername } from "../../lib/utils";
 
-export interface GuestFormValues { name: string; username: string; group_name: string; side: string; group_id: string | null; allow_plus_one: boolean; }
-export function guestToForm(g: EventGuest): GuestFormValues { return { name: g.name ?? "", username: g.username ?? "", group_name: g.group_name ?? "", side: g.side ?? "", group_id: g.group_id ?? null, allow_plus_one: g.allow_plus_one ?? false }; }
+export interface GuestFormValues {
+  name: string; username: string; group_name: string; side: string;
+  group_id: string | null; allow_plus_one: boolean;
+  /** sub_event_id → invited? overrides */
+  eventInvitations: Record<string, boolean>;
+  /** sub_event_id → allow +1? overrides */
+  plusOnePerEvent: Record<string, boolean>;
+}
 
-interface GuestFormProps { eventId: string; guest?: EventGuest | null; groups?: Array<{ id: string; name: string }>; onSubmit: (values: GuestFormValues) => Promise<void>; onCancel: () => void; submitting?: boolean; }
+export function guestToForm(g: EventGuest): GuestFormValues {
+  return { name: g.name ?? "", username: g.username ?? "", group_name: g.group_name ?? "", side: g.side ?? "", group_id: g.group_id ?? null, allow_plus_one: g.allow_plus_one ?? false, eventInvitations: {}, plusOnePerEvent: {} };
+}
 
-export function GuestForm({ guest, groups, onSubmit, onCancel, submitting }: GuestFormProps) {
-  const [values, setValues] = useState<GuestFormValues>(() => guest ? guestToForm(guest) : { name: "", username: "", group_name: "", side: "", group_id: null, allow_plus_one: false });
+interface GuestFormProps {
+  eventId: string;
+  guest?: EventGuest | null;
+  groups?: Array<{ id: string; name: string }>;
+  subEvents?: SubEvent[];
+  /** Existing invitation overrides for this guest: sub_event_id → is_invited */
+  existingInvitations?: Record<string, boolean>;
+  /** Existing +1-per-event overrides: sub_event_id → allow_plus_one */
+  existingPlusOnePerEvent?: Record<string, boolean>;
+  onSubmit: (values: GuestFormValues) => Promise<void>;
+  onCancel: () => void;
+  submitting?: boolean;
+}
+
+export function GuestForm({ guest, groups, subEvents, existingInvitations, existingPlusOnePerEvent, onSubmit, onCancel, submitting }: GuestFormProps) {
+  const [values, setValues] = useState<GuestFormValues>(() => guest ? guestToForm(guest) : { name: "", username: "", group_name: "", side: "", group_id: null, allow_plus_one: false, eventInvitations: {}, plusOnePerEvent: {} });
   const [error, setError] = useState<string | null>(null);
+
+  // Initialize invitation and +1-per-event state from props
+  const [invitedEvents, setInvitedEvents] = useState<Record<string, boolean>>(() => existingInvitations ?? {});
+  const [plusOneEvents, setPlusOneEvents] = useState<Record<string, boolean>>(() => existingPlusOnePerEvent ?? {});
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault(); setError(null);
     if (!values.name.trim()) { setError("Name is required"); return; }
-    await onSubmit({ ...values, username: values.username.trim() || generateUsername(values.name) });
+    await onSubmit({ ...values, username: values.username.trim() || generateUsername(values.name), eventInvitations: invitedEvents, plusOnePerEvent: plusOneEvents });
   };
 
   return (
@@ -39,9 +65,34 @@ export function GuestForm({ guest, groups, onSubmit, onCancel, submitting }: Gue
       <div>
         <label className="flex items-center gap-2 text-sm font-medium text-dash-text">
           <input type="checkbox" checked={values.allow_plus_one} onChange={(e) => setValues((p) => ({ ...p, allow_plus_one: e.target.checked }))} className="accent-dash-primary" />
-          Allow +1
+          Allow +1 (applies to main event and events without per-event setting)
         </label>
       </div>
+
+      {/* Per-event invitation overrides */}
+      {subEvents && subEvents.length > 0 && (
+        <div className="border-t border-dash-border pt-4">
+          <p className="mb-2 text-sm font-medium text-dash-text">Event Invitations</p>
+          <p className="mb-3 text-xs text-dash-muted">Override which events this guest is invited to. Group assignments act as defaults; individual selections here override the group for this guest only.</p>
+          <div className="space-y-2">
+            {subEvents.map((se) => (
+              <div key={se.id} className="flex items-center justify-between rounded-lg border border-dash-border bg-dash-bg px-3 py-2">
+                <label className="flex items-center gap-2 text-sm text-dash-text">
+                  <input type="checkbox" checked={invitedEvents[se.id] ?? false} onChange={(e) => { setInvitedEvents((p) => ({ ...p, [se.id]: e.target.checked })); if (!e.target.checked) setPlusOneEvents((p) => { const c = { ...p }; delete c[se.id]; return c; }); }} className="accent-dash-primary" />
+                  {se.name}
+                </label>
+                {invitedEvents[se.id] && (
+                  <label className="flex items-center gap-1.5 text-xs text-dash-muted">
+                    <input type="checkbox" checked={plusOneEvents[se.id] ?? false} onChange={(e) => setPlusOneEvents((p) => ({ ...p, [se.id]: e.target.checked }))} className="accent-dash-primary" />
+                    +1
+                  </label>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {error && <p className="text-sm text-dash-danger">{error}</p>}
       <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button><Button type="submit" loading={submitting}>{guest ? "Update" : "Add"} Guest</Button></div>
     </form>

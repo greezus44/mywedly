@@ -30,12 +30,28 @@ export function GuestsPage() {
   });
   const { data: subEvents } = useQuery({
     queryKey: ["sub-events", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("sub_events").select("id, name").eq("parent_event_id", eventId).order("display_order", { ascending: true }); if (error) throw error; return data as SubEvent[]; },
+    queryFn: async () => { const { data, error } = await supabase.from("sub_events").select("*").eq("parent_event_id", eventId).order("display_order", { ascending: true }); if (error) throw error; return data as SubEvent[]; },
   });
   const { data: existingInvites } = useQuery({
     queryKey: ["guest-event-invites", eventId],
     queryFn: async () => { const { data, error } = await supabase.from("guest_event_invites").select("guest_id, sub_event_id, invite_type").eq("event_id", eventId); if (error) throw error; return data ?? []; },
   });
+
+  // Load invitation overrides for the guest being edited
+  const { data: editGuestOverrides } = useQuery({
+    queryKey: ["guest-invitation-overrides", editGuest?.id],
+    queryFn: async () => {
+      if (!editGuest) return { invited: {} as Record<string, boolean>, plusOne: {} as Record<string, boolean> };
+      const { data, error } = await supabase.from("guest_invitation_overrides").select("sub_event_id, is_invited, allow_plus_one").eq("guest_id", editGuest.id);
+      if (error) throw error;
+      const invited: Record<string, boolean> = {};
+      const plusOne: Record<string, boolean> = {};
+      (data ?? []).forEach((o) => { invited[o.sub_event_id as string] = o.is_invited as boolean; if (o.allow_plus_one) plusOne[o.sub_event_id as string] = o.allow_plus_one as boolean; });
+      return { invited, plusOne };
+    },
+    enabled: !!editGuest,
+  });
+
   const { data: rsvps } = useQuery({
     queryKey: ["event-rsvps-dashboard", eventId],
     queryFn: async () => { const { data, error } = await supabase.from("event_rsvps").select("guest_id, plus_one_names").eq("event_id", eventId); if (error) throw error; return (data ?? []) as Pick<EventRsvp, "guest_id" | "plus_one_names">[]; },
@@ -92,7 +108,27 @@ export function GuestsPage() {
       if (values.group_id) {
         await supabase.from("guest_group_members").insert({ guest_id: guestId, group_id: values.group_id });
       }
-      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }); setShowForm(false); setEditGuest(null);
+
+      // Save per-event invitation overrides + per-event +1 settings
+      if (subEvents && subEvents.length > 0) {
+        // Delete existing overrides for this guest
+        await supabase.from("guest_invitation_overrides").delete().eq("guest_id", guestId);
+        // Insert new overrides
+        const overridesToInsert: Array<{ guest_id: string; sub_event_id: string; is_invited: boolean; allow_plus_one: boolean }> = [];
+        for (const se of subEvents) {
+          const isInvited = values.eventInvitations[se.id] ?? false;
+          const allowPlusOne = values.plusOnePerEvent[se.id] ?? false;
+          overridesToInsert.push({ guest_id: guestId, sub_event_id: se.id, is_invited: isInvited, allow_plus_one: allowPlusOne });
+        }
+        if (overridesToInsert.length > 0) {
+          const { error: overrideError } = await supabase.from("guest_invitation_overrides").insert(overridesToInsert);
+          if (overrideError) throw overrideError;
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["guest-invitation-overrides", guestId] });
+      setShowForm(false); setEditGuest(null);
     } catch (e) { setFormError(e instanceof Error ? e.message : "Failed to save guest"); }
     finally { setSubmitting(false); }
   };
@@ -117,7 +153,17 @@ export function GuestsPage() {
       )}
       <Modal open={showForm} onClose={() => { setShowForm(false); setEditGuest(null); setFormError(null); }} title={editGuest ? "Edit Guest" : "Add Guest"}>
         {formError && <p className="mb-3 text-sm text-dash-danger">{formError}</p>}
-        <GuestForm eventId={eventId} guest={editGuest} groups={groups ?? []} onSubmit={handleAddOrUpdate} onCancel={() => { setShowForm(false); setEditGuest(null); setFormError(null); }} submitting={submitting} />
+        <GuestForm
+          eventId={eventId}
+          guest={editGuest}
+          groups={groups ?? []}
+          subEvents={subEvents ?? []}
+          existingInvitations={editGuest ? editGuestOverrides?.invited : undefined}
+          existingPlusOnePerEvent={editGuest ? editGuestOverrides?.plusOne : undefined}
+          onSubmit={handleAddOrUpdate}
+          onCancel={() => { setShowForm(false); setEditGuest(null); setFormError(null); }}
+          submitting={submitting}
+        />
       </Modal>
       <Modal open={showInvites} onClose={() => setShowInvites(false)} title="Manage Invitations">
         <div className="space-y-4">

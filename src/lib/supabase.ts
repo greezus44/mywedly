@@ -78,5 +78,5 @@ export interface CustomPage {
 }
 
 export interface SubEventGroupAssignment { id: string; sub_event_id: string; group_id: string; created_at: string; }
-export interface GuestInvitationOverride { id: string; sub_event_id: string; guest_id: string; is_invited: boolean; created_at: string; }
+export interface GuestInvitationOverride { id: string; sub_event_id: string; guest_id: string; is_invited: boolean; created_at: string; allow_plus_one: boolean; }
 export interface SharingEvent { id: string; event_id: string; type: string; metadata: Json; created_at: string; }

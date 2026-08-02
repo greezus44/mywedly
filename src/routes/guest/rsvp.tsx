@@ -18,10 +18,13 @@ interface RsvpContent {
   declinedColor?: string;
   attendingButtonColors?: ButtonColors;
   declinedButtonColors?: ButtonColors;
+  attendingSelectedButtonColors?: ButtonColors;
+  declinedSelectedButtonColors?: ButtonColors;
   scheduleHeading?: unknown;
   guestNameTypography?: unknown;
   additionalInfoHeading?: unknown;
   additionalInfoBody?: string;
+  subtitleTypography?: unknown;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -94,6 +97,29 @@ export default function GuestRsvp() {
     },
     enabled: !!guest,
   });
+
+  // Load per-event +1 permissions from guest_invitation_overrides
+  const { data: plusOnePermissions } = useQuery({
+    queryKey: ["guest-plus-one-permissions", guest?.id, event.id],
+    queryFn: async () => {
+      if (!guest) return {} as Record<string, boolean>;
+      const { data, error } = await supabase
+        .from("guest_invitation_overrides")
+        .select("sub_event_id, is_invited, allow_plus_one")
+        .eq("guest_id", guest.id);
+      if (error) throw error;
+      const map: Record<string, boolean> = {};
+      (data ?? []).forEach((o) => { if (o.is_invited && o.allow_plus_one) map[o.sub_event_id as string] = true; });
+      return map;
+    },
+    enabled: !!guest,
+  });
+
+  const allowPlusOneFor = (subEventId: string | null): boolean => {
+    if (subEventId) return !!plusOnePermissions?.[subEventId];
+    // For main event (no sub_event), use guest's global allow_plus_one
+    return !!guest?.allow_plus_one;
+  };
 
   const [responses, setResponses] = useState<Record<string, { status: string; plus_ones: number; message: string; plus_one_name: string }>>({});
 
@@ -172,14 +198,21 @@ export default function GuestRsvp() {
   const additionalInfoBody = rsvpContent.additionalInfoBody;
   const showAdditionalInfo = !!(additionalInfoHeadingText || (additionalInfoBody && additionalInfoBody.trim()));
 
+  const subtitleText = getTypographyText(rsvpContent.subtitleTypography, rsvpContent.subtitle ?? "");
+  const subtitleStyle = getTypographyStyle(rsvpContent.subtitleTypography);
+
   const attendingSelectedStyle = (isSelected: boolean): React.CSSProperties => {
     if (!isSelected) return buttonColorsToStyle(rsvpContent.attendingButtonColors);
+    const selectedColors = rsvpContent.attendingSelectedButtonColors;
+    if (selectedColors) return buttonColorsToStyle(selectedColors);
     const base: React.CSSProperties = { ...buttonColorsToStyle(rsvpContent.attendingButtonColors) };
     if (rsvpContent.attendingColor) { base.backgroundColor = rsvpContent.attendingColor; base.borderColor = rsvpContent.attendingColor; }
     return base;
   };
   const declinedSelectedStyle = (isSelected: boolean): React.CSSProperties => {
     if (!isSelected) return buttonColorsToStyle(rsvpContent.declinedButtonColors);
+    const selectedColors = rsvpContent.declinedSelectedButtonColors;
+    if (selectedColors) return buttonColorsToStyle(selectedColors);
     const base: React.CSSProperties = { ...buttonColorsToStyle(rsvpContent.declinedButtonColors) };
     if (rsvpContent.declinedColor) { base.backgroundColor = rsvpContent.declinedColor; base.borderColor = rsvpContent.declinedColor; base.color = "#fff"; }
     return base;
@@ -266,7 +299,7 @@ export default function GuestRsvp() {
         {isDeclined && rsvpContent.declinedMessage && (
           <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{rsvpContent.declinedMessage}</p>
         )}
-        {guest?.allow_plus_one && (
+        {allowPlusOneFor(subEventId) && (
           <div className="mt-4">
             <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>Plus One Name</label>
             <input type="text" value={current.plus_one_name} onChange={(e) => handlePlusOneName(subEventId, e.target.value)} onBlur={() => handlePlusOneNameBlur(subEventId)} placeholder="Enter +1 name" className="event-input" style={{ fontFamily: "var(--event-font-body)" }} />
@@ -301,6 +334,7 @@ export default function GuestRsvp() {
         {/* Header */}
         <div className="mb-8 text-center">
           {rsvpContent.title && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap" }}>{rsvpContent.title}</h1>}
+          {subtitleText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...subtitleStyle }}>{subtitleText}</p>}
           {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...guestNameStyle }}>{guestNameText}</p>}
         </div>
 

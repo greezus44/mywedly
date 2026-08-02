@@ -23,10 +23,13 @@ export interface RsvpContent {
   declinedColor?: string;
   attendingButtonColors?: ButtonColors;
   declinedButtonColors?: ButtonColors;
+  attendingSelectedButtonColors?: ButtonColors;
+  declinedSelectedButtonColors?: ButtonColors;
   scheduleHeading?: unknown;
   guestNameTypography?: unknown;
   additionalInfoHeading?: unknown;
   additionalInfoBody?: string;
+  subtitleTypography?: unknown;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -111,6 +114,10 @@ export function RsvpPage() {
           {saveContentMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
           <Input label="Page Title" value={rsvpContent.title ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, title: e.target.value }))} />
           <Input label="Subtitle" value={rsvpContent.subtitle ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, subtitle: e.target.value }))} />
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Subtitle Typography</label>
+            <TypographyControls value={rsvpContent.subtitleTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, subtitleTypography: v }))} showText={false} />
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Attending Button Text" value={rsvpContent.attendingText ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, attendingText: e.target.value }))} />
             <Input label="Declined Button Text" value={rsvpContent.declinedText ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, declinedText: e.target.value }))} />
@@ -128,7 +135,9 @@ export function RsvpPage() {
             </div>
           </div>
           <ButtonColourEditor label="Attending Button Colours" value={rsvpContent.attendingButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, attendingButtonColors: v }))} />
+          <ButtonColourEditor label="Attending Selected Button Colours" value={rsvpContent.attendingSelectedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, attendingSelectedButtonColors: v }))} />
           <ButtonColourEditor label="Declined Button Colours" value={rsvpContent.declinedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, declinedButtonColors: v }))} />
+          <ButtonColourEditor label="Declined Selected Button Colours" value={rsvpContent.declinedSelectedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, declinedSelectedButtonColors: v }))} />
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">Schedule Heading</label>
             <TypographyControls value={rsvpContent.scheduleHeading ?? { text: "Schedule" }} onChange={(v) => setRsvpContent((p) => ({ ...p, scheduleHeading: v }))} />
@@ -159,13 +168,14 @@ export function RsvpPage() {
       ) : (
         <div className="overflow-hidden rounded-lg border border-dash-border">
           <table className="w-full">
-            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Guest</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Status</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Plus Ones</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Message</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Responded</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
+            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Guest</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Status</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Plus Ones</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">+1 Name</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Message</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Responded</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
             <tbody className="divide-y divide-dash-border bg-dash-surface">
               {filtered.map((r) => (
                 <tr key={r.id}>
                   <td className="px-4 py-2 text-sm text-dash-text">{r.guest_name ?? "—"}</td>
                   <td className="px-4 py-2"><Badge variant={r.status === "attending" ? "success" : r.status === "declined" ? "danger" : "default"}>{r.status}</Badge></td>
                   <td className="px-4 py-2 text-sm text-dash-muted">{r.plus_ones}</td>
+                  <td className="px-4 py-2 text-sm text-dash-text">{r.plus_one_names?.[0] ?? ""}</td>
                   <td className="px-4 py-2 text-sm text-dash-muted max-w-xs truncate">{r.message ?? "—"}</td>
                   <td className="px-4 py-2 text-xs text-dash-muted">{r.responded_at ? formatDateTime(r.responded_at) : "—"}</td>
                   <td className="px-4 py-2 text-right">
