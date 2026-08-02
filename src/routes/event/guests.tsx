@@ -37,6 +37,43 @@ export function GuestsPage() {
     queryFn: async () => { const { data, error } = await supabase.from("guest_event_invites").select("guest_id, sub_event_id, invite_type").eq("event_id", eventId); if (error) throw error; return data ?? []; },
   });
 
+  // Group → sub_event assignments (for computing which events each guest is invited to via groups)
+  const { data: groupAssignments } = useQuery({
+    queryKey: ["group-assignments", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("sub_event_group_assignments").select("group_id, sub_event_id"); if (error) throw error; return data ?? []; },
+  });
+
+  // Per-guest invitation overrides for all guests in this event
+  const { data: allOverrides } = useQuery({
+    queryKey: ["all-guest-invitation-overrides", eventId],
+    queryFn: async () => {
+      if (!guests || guests.length === 0) return [];
+      const { data, error } = await supabase.from("guest_invitation_overrides").select("guest_id, sub_event_id, is_invited").in("guest_id", guests.map((g) => g.id));
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!guests && guests.length > 0,
+  });
+
+  // Compute invited events per guest: group assignments + direct invites + overrides
+  const invitedEventsByGuest = new Map<string, string[]>();
+  if (subEvents && subEvents.length > 0) {
+    for (const g of (guests ?? [])) {
+      const invited = new Set<string>();
+      // Via group_id
+      if (g.group_id) {
+        (groupAssignments ?? []).filter((a) => a.group_id === g.group_id).forEach((a) => invited.add(a.sub_event_id as string));
+      }
+      // Via direct invites
+      (existingInvites ?? []).filter((inv) => inv.guest_id === g.id && inv.invite_type === "include" && inv.sub_event_id).forEach((inv) => invited.add(inv.sub_event_id as string));
+      // Apply overrides
+      (allOverrides ?? []).filter((o) => o.guest_id === g.id).forEach((o) => { if (o.is_invited) invited.add(o.sub_event_id as string); else invited.delete(o.sub_event_id as string); });
+      invitedEventsByGuest.set(g.id, [...invited]);
+    }
+  }
+
+  const subEventNameById = new Map<string, string>((subEvents ?? []).map((se) => [se.id, se.name ?? "Untitled"]));
+
   // Load invitation overrides for the guest being edited
   const { data: editGuestOverrides } = useQuery({
     queryKey: ["guest-invitation-overrides", editGuest?.id],
@@ -95,11 +132,11 @@ export function GuestsPage() {
     try {
       let guestId: string;
       if (editGuest) {
-        const { error } = await supabase.from("event_guests").update({ name: values.name, username: values.username, group_name: values.group_name, side: values.side, group_id: values.group_id, allow_plus_one: values.allow_plus_one }).eq("id", editGuest.id);
+        const { error } = await supabase.from("event_guests").update({ name: values.name, username: values.username, group_name: values.group_name, group_id: values.group_id, allow_plus_one: values.allow_plus_one }).eq("id", editGuest.id);
         if (error) throw error;
         guestId = editGuest.id;
       } else {
-        const { data: newGuest, error } = await supabase.from("event_guests").insert({ event_id: eventId, name: values.name, username: values.username || generateUsername(values.name), group_name: values.group_name, side: values.side, group_id: values.group_id, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0, allow_plus_one: values.allow_plus_one }).select("id").single();
+        const { data: newGuest, error } = await supabase.from("event_guests").insert({ event_id: eventId, name: values.name, username: values.username || generateUsername(values.name), group_name: values.group_name, group_id: values.group_id, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0, allow_plus_one: values.allow_plus_one }).select("id").single();
         if (error) throw error;
         guestId = newGuest.id;
       }
@@ -144,9 +181,9 @@ export function GuestsPage() {
       ) : (
         <div className="overflow-hidden rounded-lg border border-dash-border">
           <table className="w-full">
-            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted"><input type="checkbox" checked={selectedGuestIds.size === guests.length && guests.length > 0} onChange={(e) => setSelectedGuestIds(e.target.checked ? new Set(guests.map((g) => g.id)) : new Set())} className="accent-dash-primary" /></th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Name</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Group</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">RSVP</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">+1</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
+            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted"><input type="checkbox" checked={selectedGuestIds.size === guests.length && guests.length > 0} onChange={(e) => setSelectedGuestIds(e.target.checked ? new Set(guests.map((g) => g.id)) : new Set())} className="accent-dash-primary" /></th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Name</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Group</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Invited Events</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">RSVP</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">+1</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
             <tbody className="divide-y divide-dash-border bg-dash-surface">
-              {guests.map((g) => (<tr key={g.id}><td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td><td className="px-4 py-2 text-sm text-dash-text">{g.name}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "—"}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.group_name ?? "—"}</td><td className="px-4 py-2"><RsvpBadge status={g.rsvp_status} /></td><td className="px-4 py-2 text-sm text-dash-muted">{g.allow_plus_one ? (plusOneNameFor(g.id) ?? "Yes") : "—"}</td><td className="px-4 py-2 text-right"><button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button><button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button></td></tr>))}
+              {guests.map((g) => (<tr key={g.id}><td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td><td className="px-4 py-2 text-sm text-dash-text">{g.name}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "—"}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.group_name ?? "—"}</td><td className="px-4 py-2 text-sm text-dash-muted">{(invitedEventsByGuest.get(g.id) ?? []).map((id) => subEventNameById.get(id) ?? "Unknown").join(", ") || "—"}</td><td className="px-4 py-2"><RsvpBadge status={g.rsvp_status} /></td><td className="px-4 py-2 text-sm text-dash-muted">{g.allow_plus_one ? (plusOneNameFor(g.id) ?? "Yes") : "—"}</td><td className="px-4 py-2 text-right"><button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button><button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button></td></tr>))}
             </tbody>
           </table>
         </div>

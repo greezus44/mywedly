@@ -29,13 +29,13 @@ export function GroupsPage() {
     queryFn: async () => { const { data, error } = await supabase.from("sub_event_group_assignments").select("id, sub_event_id, group_id").in("group_id", (groups ?? []).map((g) => g.id)); if (error) throw error; return data ?? []; },
     enabled: !!(groups && groups.length > 0),
   });
-  const { data: groupMembers } = useQuery({
-    queryKey: ["group-members", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("guest_group_members").select("group_id, guest_id"); if (error) throw error; return data ?? []; },
+  const { data: eventGuests } = useQuery({
+    queryKey: ["event-guests", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("event_guests").select("id, group_id").eq("event_id", eventId); if (error) throw error; return data ?? []; },
   });
 
   const guestCountByGroup = new Map<string, number>();
-  (groupMembers ?? []).forEach((m) => { const gid = m.group_id as string; guestCountByGroup.set(gid, (guestCountByGroup.get(gid) ?? 0) + 1); });
+  (eventGuests ?? []).forEach((g) => { const gid = g.group_id as string | null; if (gid) guestCountByGroup.set(gid, (guestCountByGroup.get(gid) ?? 0) + 1); });
 
   const createGroup = async (e: React.FormEvent) => {
     e.preventDefault(); setSubmitting(true); setFormError(null);
@@ -46,7 +46,7 @@ export function GroupsPage() {
 
   const deleteGroup = useMutation({
     mutationFn: async (id: string) => { await supabase.from("sub_event_group_assignments").delete().eq("group_id", id); await supabase.from("guest_group_members").delete().eq("group_id", id); await supabase.from("event_guests").update({ group_id: null }).eq("group_id", id); const { error } = await supabase.from("guest_groups").delete().eq("id", id); if (error) throw error; },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] }); queryClient.invalidateQueries({ queryKey: ["group-assignments", eventId] }); queryClient.invalidateQueries({ queryKey: ["group-members", eventId] }); queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] }); queryClient.invalidateQueries({ queryKey: ["group-assignments", eventId] }); queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }); },
   });
 
   const assignGroupToEvent = useMutation({

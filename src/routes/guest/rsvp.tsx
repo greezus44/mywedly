@@ -99,7 +99,7 @@ export default function GuestRsvp() {
   });
 
   // Load per-event +1 permissions from guest_invitation_overrides
-  const { data: plusOnePermissions } = useQuery({
+  const { data: plusOneOverrides } = useQuery({
     queryKey: ["guest-plus-one-permissions", guest?.id, event.id],
     queryFn: async () => {
       if (!guest) return {} as Record<string, boolean>;
@@ -109,14 +109,19 @@ export default function GuestRsvp() {
         .eq("guest_id", guest.id);
       if (error) throw error;
       const map: Record<string, boolean> = {};
-      (data ?? []).forEach((o) => { if (o.is_invited && o.allow_plus_one) map[o.sub_event_id as string] = true; });
+      (data ?? []).forEach((o) => { map[o.sub_event_id as string] = !!(o.is_invited && o.allow_plus_one); });
       return map;
     },
     enabled: !!guest,
   });
 
   const allowPlusOneFor = (subEventId: string | null): boolean => {
-    if (subEventId) return !!plusOnePermissions?.[subEventId];
+    if (subEventId) {
+      // If there's an explicit per-event override, use it
+      if (plusOneOverrides && subEventId in plusOneOverrides) return plusOneOverrides[subEventId];
+      // No per-event override — fall back to guest's global allow_plus_one
+      return !!guest?.allow_plus_one;
+    }
     // For main event (no sub_event), use guest's global allow_plus_one
     return !!guest?.allow_plus_one;
   };
@@ -239,8 +244,8 @@ export default function GuestRsvp() {
         {scheduleHeadingText && <h3 className="mb-4" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...scheduleHeadingStyle }}>{scheduleHeadingText}</h3>}
         <div className="space-y-3">
           {items.map((item) => (
-            <div key={item.id} className="grid grid-cols-[100px_1fr] gap-4 items-start">
-              <div className="text-sm font-medium" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)" }}>
+            <div key={item.id} className="grid grid-cols-[140px_1fr] gap-5 items-start">
+              <div className="text-sm font-medium whitespace-nowrap" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)" }}>
                 {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
               </div>
               <div>

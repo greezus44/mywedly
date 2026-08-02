@@ -158,9 +158,9 @@ export function EventsPage() {
                 <p className="mb-2 text-xs font-semibold text-dash-muted">Programme</p>
                 <div className="space-y-1">
                   {items.map((item) => (
-                    <div key={item.id} className="flex gap-3 text-sm">
+                    <div key={item.id} className="grid grid-cols-[140px_1fr] gap-4 text-sm">
                       <span className="text-dash-muted whitespace-nowrap">{item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` – ${formatTime12(item.end_time)}` : ""}</span>
-                      <span className="text-dash-text">{item.title}</span>
+                      <div><span className="text-dash-text whitespace-pre-line">{item.title}</span>{item.description && <p className="text-dash-muted text-xs whitespace-pre-line mt-0.5">{item.description}</p>}</div>
                     </div>
                   ))}
                 </div>
