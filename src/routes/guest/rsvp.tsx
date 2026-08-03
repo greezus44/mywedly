@@ -9,7 +9,9 @@ import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from
 
 interface RsvpContent {
   title?: string;
+  titleTypography?: unknown;
   subtitle?: string;
+  subtitleTypography?: unknown;
   attendingText?: string;
   declinedText?: string;
   attendingMessage?: string;
@@ -24,7 +26,12 @@ interface RsvpContent {
   guestNameTypography?: unknown;
   additionalInfoHeading?: unknown;
   additionalInfoBody?: string;
-  subtitleTypography?: unknown;
+  eventNameTypography?: unknown;
+  eventTimeTypography?: unknown;
+  eventAddressTypography?: unknown;
+  programmeItemTypography?: unknown;
+  rsvpDeadlineTypography?: unknown;
+  additionalInfoBodyTypography?: unknown;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -194,8 +201,6 @@ export default function GuestRsvp() {
     }
   };
 
-  const scheduleHeadingText = getTypographyText(rsvpContent.scheduleHeading, "Schedule");
-  const scheduleHeadingStyle = getTypographyStyle(rsvpContent.scheduleHeading);
   const guestNameText = guest?.name ? getTypographyText(rsvpContent.guestNameTypography, guest.name) : "";
   const guestNameStyle = getTypographyStyle(rsvpContent.guestNameTypography);
   const additionalInfoHeadingText = getTypographyText(rsvpContent.additionalInfoHeading, "");
@@ -205,6 +210,14 @@ export default function GuestRsvp() {
 
   const subtitleText = getTypographyText(rsvpContent.subtitleTypography, rsvpContent.subtitle ?? "");
   const subtitleStyle = getTypographyStyle(rsvpContent.subtitleTypography);
+  const titleStyle = getTypographyStyle(rsvpContent.titleTypography);
+  const eventNameStyle = getTypographyStyle(rsvpContent.eventNameTypography);
+  const eventTimeStyle = getTypographyStyle(rsvpContent.eventTimeTypography);
+  const eventAddressStyle = getTypographyStyle(rsvpContent.eventAddressTypography);
+  const programmeItemStyle = getTypographyStyle(rsvpContent.programmeItemTypography);
+  const rsvpDeadlineStyle = getTypographyStyle(rsvpContent.rsvpDeadlineTypography);
+  const rsvpDeadline = (event.draft_rsvp_deadline ?? event.rsvp_deadline) as string | null | undefined;
+  const additionalInfoBodyStyle = getTypographyStyle(rsvpContent.additionalInfoBodyTypography);
 
   const attendingSelectedStyle = (isSelected: boolean): React.CSSProperties => {
     if (!isSelected) return buttonColorsToStyle(rsvpContent.attendingButtonColors);
@@ -241,16 +254,15 @@ export default function GuestRsvp() {
     if (items.length === 0) return null;
     return (
       <div className="mt-6">
-        {scheduleHeadingText && <h3 className="mb-4" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...scheduleHeadingStyle }}>{scheduleHeadingText}</h3>}
         <div className="space-y-3">
           {items.map((item) => (
             <div key={item.id} className="grid grid-cols-[140px_1fr] gap-5 items-start">
-              <div className="text-sm font-medium whitespace-nowrap" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)" }}>
+              <div className="text-sm font-medium whitespace-nowrap" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", ...programmeItemStyle }}>
                 {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
               </div>
               <div>
-                <p className="font-medium" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", whiteSpace: "pre-wrap" }}>{item.title}</p>
-                {item.description && <p className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap" }}>{item.description}</p>}
+                <p className="font-medium" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", whiteSpace: "pre-wrap", ...programmeItemStyle }}>{item.title}</p>
+                {item.description && <p className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", ...programmeItemStyle }}>{item.description}</p>}
               </div>
             </div>
           ))}
@@ -264,9 +276,7 @@ export default function GuestRsvp() {
     return (
       <div className="mt-6">
         {additionalInfoHeadingText && <h3 className="mb-2" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...additionalInfoHeadingStyle }}>{additionalInfoHeadingText}</h3>}
-        {additionalInfoBody && additionalInfoBody.trim() && (
-          <div className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap" }}>{additionalInfoBody}</div>
-        )}
+        {additionalInfoBody && <div className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", ...additionalInfoBodyStyle }}>{additionalInfoBody}</div>}
       </div>
     );
   };
@@ -319,13 +329,18 @@ export default function GuestRsvp() {
       <div className="flex gap-6 sm:gap-8">
         {renderDateColumn(dateStr)}
         <div className="flex-1">
-          {eventName && <h2 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>{eventName}</h2>}
-          {timeStr && <p className="text-sm mb-1" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{formatTime12(timeStr)}</p>}
-          {venue && <p className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{venue}</p>}
-          {address && <p className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{address}</p>}
+          {eventName && <h2 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...eventNameStyle }}>{eventName}</h2>}
+          {timeStr && <p className="text-sm mb-1" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", ...eventTimeStyle }}>{formatTime12(timeStr)}</p>}
+          {venue && <p className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", ...eventTimeStyle }}>{venue}</p>}
+          {address && <p className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...eventAddressStyle }}>{address}</p>}
           {renderSchedule(subEventId)}
           {renderAdditionalInfo()}
-          {renderRsvpButtons(subEventId)}
+          {rsvpDeadline && (
+          <p className="mt-3 text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", ...rsvpDeadlineStyle }}>
+            RSVP by {new Date(rsvpDeadline).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+          </p>
+        )}
+        {renderRsvpButtons(subEventId)}
         </div>
       </div>
     );
@@ -338,7 +353,7 @@ export default function GuestRsvp() {
       <div className="mx-auto max-w-2xl">
         {/* Header */}
         <div className="mb-8 text-center">
-          {rsvpContent.title && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap" }}>{rsvpContent.title}</h1>}
+          {rsvpContent.title && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...titleStyle }}>{rsvpContent.title}</h1>}
           {subtitleText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...subtitleStyle }}>{subtitleText}</p>}
           {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...guestNameStyle }}>{guestNameText}</p>}
         </div>

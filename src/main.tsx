@@ -18,12 +18,9 @@ import { EventsPage } from "./routes/event/events";
 import { GuestsPage } from "./routes/event/guests";
 import { GroupsPage } from "./routes/event/groups";
 import { RsvpPage } from "./routes/event/rsvp";
-import { TimelinePage } from "./routes/event/timeline";
 import { PagesPage } from "./routes/event/pages";
 import { PageBuilder } from "./routes/event/page-builder";
 import { ThemeEditor } from "./routes/event/theme-editor";
-import { SharingPage } from "./routes/event/sharing";
-import { AnalyticsPage } from "./routes/event/analytics";
 import { SettingsPage } from "./routes/event/settings";
 import { MessagesPage } from "./routes/event/wishes";
 
@@ -63,12 +60,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 <Route path="guests" element={<GuestsPage />} />
                 <Route path="groups" element={<GroupsPage />} />
                 <Route path="rsvp" element={<RsvpPage />} />
-                <Route path="timeline" element={<TimelinePage />} />
                 <Route path="pages" element={<PagesPage />} />
                 <Route path="pages/:pageId" element={<PageBuilder />} />
                 <Route path="theme" element={<ThemeEditor />} />
-                <Route path="sharing" element={<SharingPage />} />
-                <Route path="analytics" element={<AnalyticsPage />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="wishes" element={<MessagesPage />} />
               </Route>

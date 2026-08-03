@@ -48,27 +48,31 @@ export function GuestsPage() {
     queryKey: ["all-guest-invitation-overrides", eventId],
     queryFn: async () => {
       if (!guests || guests.length === 0) return [];
-      const { data, error } = await supabase.from("guest_invitation_overrides").select("guest_id, sub_event_id, is_invited").in("guest_id", guests.map((g) => g.id));
+      const { data, error } = await supabase.from("guest_invitation_overrides").select("guest_id, sub_event_id, is_invited, allow_plus_one").in("guest_id", guests.map((g) => g.id));
       if (error) throw error;
       return data ?? [];
     },
     enabled: !!guests && guests.length > 0,
   });
 
-  // Compute invited events per guest: group assignments + direct invites + overrides
+  // Compute invited events + +1 permission per guest
   const invitedEventsByGuest = new Map<string, string[]>();
+  const plusOneEventsByGuest = new Map<string, Set<string>>();
   if (subEvents && subEvents.length > 0) {
     for (const g of (guests ?? [])) {
       const invited = new Set<string>();
-      // Via group_id
+      const plusOne = new Set<string>();
       if (g.group_id) {
         (groupAssignments ?? []).filter((a) => a.group_id === g.group_id).forEach((a) => invited.add(a.sub_event_id as string));
       }
-      // Via direct invites
       (existingInvites ?? []).filter((inv) => inv.guest_id === g.id && inv.invite_type === "include" && inv.sub_event_id).forEach((inv) => invited.add(inv.sub_event_id as string));
-      // Apply overrides
-      (allOverrides ?? []).filter((o) => o.guest_id === g.id).forEach((o) => { if (o.is_invited) invited.add(o.sub_event_id as string); else invited.delete(o.sub_event_id as string); });
+      (allOverrides ?? []).filter((o) => o.guest_id === g.id).forEach((o) => {
+        const seId = o.sub_event_id as string;
+        if (o.is_invited) { invited.add(seId); if (o.allow_plus_one) plusOne.add(seId); }
+        else { invited.delete(seId); plusOne.delete(seId); }
+      });
       invitedEventsByGuest.set(g.id, [...invited]);
+      plusOneEventsByGuest.set(g.id, plusOne);
     }
   }
 
@@ -179,11 +183,11 @@ export function GuestsPage() {
       {!guests || guests.length === 0 ? (
         <EmptyState title="No guests yet" description="Add guests to invite them to your event." action={<Button size="sm" onClick={() => { setEditGuest(null); setShowForm(true); }}>Add Guest</Button>} />
       ) : (
-        <div className="overflow-hidden rounded-lg border border-dash-border">
+        <div className="overflow-x-auto rounded-lg border border-dash-border">
           <table className="w-full">
             <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted"><input type="checkbox" checked={selectedGuestIds.size === guests.length && guests.length > 0} onChange={(e) => setSelectedGuestIds(e.target.checked ? new Set(guests.map((g) => g.id)) : new Set())} className="accent-dash-primary" /></th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Name</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Group</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Invited Events</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">RSVP</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">+1</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
             <tbody className="divide-y divide-dash-border bg-dash-surface">
-              {guests.map((g) => (<tr key={g.id}><td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td><td className="px-4 py-2 text-sm text-dash-text">{g.name}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "—"}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.group_name ?? "—"}</td><td className="px-4 py-2 text-sm text-dash-muted">{(invitedEventsByGuest.get(g.id) ?? []).map((id) => subEventNameById.get(id) ?? "Unknown").join(", ") || "—"}</td><td className="px-4 py-2"><RsvpBadge status={g.rsvp_status} /></td><td className="px-4 py-2 text-sm text-dash-muted">{g.allow_plus_one ? (plusOneNameFor(g.id) ?? "Yes") : "—"}</td><td className="px-4 py-2 text-right"><button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button><button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button></td></tr>))}
+              {guests.map((g) => (<tr key={g.id}><td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td><td className="px-4 py-2 text-sm text-dash-text">{g.name}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "—"}</td><td className="px-4 py-2 text-sm text-dash-muted">{g.group_name ?? "—"}</td><td className="px-4 py-2 text-sm text-dash-muted">{(invitedEventsByGuest.get(g.id) ?? []).map((id) => { const name = subEventNameById.get(id) ?? "Unknown"; const hasPlus1 = plusOneEventsByGuest.get(g.id)?.has(id); return hasPlus1 ? `${name} (+1)` : name; }).join(", ") || "—"}</td><td className="px-4 py-2"><RsvpBadge status={g.rsvp_status} /></td><td className="px-4 py-2 text-sm text-dash-muted">{g.allow_plus_one ? (plusOneNameFor(g.id) ?? "Yes") : "—"}</td><td className="px-4 py-2 text-right"><button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button><button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button></td></tr>))}
             </tbody>
           </table>
         </div>

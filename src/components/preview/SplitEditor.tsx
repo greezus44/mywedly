@@ -14,7 +14,7 @@ export function SplitEditor({ editor, preview }: SplitEditorProps) {
       </div>
       <div className="order-1 lg:order-2">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-dash-muted">Live Preview</div>
-        <div className="overflow-hidden rounded-lg border border-dash-border">{preview}</div>
+        <div className="lg:sticky lg:top-4 overflow-hidden rounded-lg border border-dash-border">{preview}</div>
       </div>
     </div>
   );

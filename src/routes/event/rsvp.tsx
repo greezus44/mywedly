@@ -9,12 +9,17 @@ import { Input } from "../../components/ui/Input";
 import { Textarea } from "../../components/ui/Input";
 import { TypographyControls } from "../../components/ui/TypographyControls";
 import { formatDate, formatDateTime, isRsvpClosed } from "../../lib/utils";
+import { DateTimePicker } from "../../components/ui";
+import { SplitEditor } from "../../components/preview/SplitEditor";
+import { RsvpPreview } from "../../components/preview/PreviewRenderers";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
 
 export interface RsvpContent {
   title?: string;
+  titleTypography?: unknown;
   subtitle?: string;
+  subtitleTypography?: unknown;
   attendingText?: string;
   declinedText?: string;
   attendingMessage?: string;
@@ -29,7 +34,12 @@ export interface RsvpContent {
   guestNameTypography?: unknown;
   additionalInfoHeading?: unknown;
   additionalInfoBody?: string;
-  subtitleTypography?: unknown;
+  additionalInfoBodyTypography?: unknown;
+  eventNameTypography?: unknown;
+  eventTimeTypography?: unknown;
+  eventAddressTypography?: unknown;
+  programmeItemTypography?: unknown;
+  rsvpDeadlineTypography?: unknown;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -48,6 +58,13 @@ export function RsvpPage() {
     return { ...DEFAULT_RSVP_CONTENT, ...((content?.rsvp as Partial<RsvpContent>) ?? {}) };
   });
   const [showEditor, setShowEditor] = useState(false);
+  const [rsvpDeadline, setRsvpDeadline] = useState(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "");
+  useEffect(() => { setRsvpDeadline(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? ""); }, [event.draft_rsvp_deadline, event.rsvp_deadline]);
+
+  const saveDeadlineMutation = useMutation({
+    mutationFn: async () => { const { error } = await supabase.from("user_events").update({ draft_rsvp_deadline: rsvpDeadline || null }).eq("id", eventId); if (error) throw error; },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", eventId] }),
+  });
 
   useEffect(() => {
     const content = (event.draft_content ?? event.content) as Record<string, unknown> | null;
@@ -105,7 +122,9 @@ export function RsvpPage() {
         </div>
       </div>
       {showEditor && (
-        <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-4">
+      <SplitEditor
+        editor={
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-dash-text">RSVP Page Content</h3>
             <Button size="sm" onClick={() => saveContentMutation.mutate()} loading={saveContentMutation.isPending}>Save</Button>
@@ -113,6 +132,10 @@ export function RsvpPage() {
           {saveContentMutation.isError && <p className="text-sm text-dash-danger">{saveContentMutation.error instanceof Error ? saveContentMutation.error.message : "Save failed"}</p>}
           {saveContentMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
           <Input label="Page Title" value={rsvpContent.title ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, title: e.target.value }))} />
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Title Typography</label>
+            <TypographyControls value={rsvpContent.titleTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, titleTypography: v }))} showText={false} />
+          </div>
           <Input label="Subtitle" value={rsvpContent.subtitle ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, subtitle: e.target.value }))} />
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">Subtitle Typography</label>
@@ -139,10 +162,6 @@ export function RsvpPage() {
           <ButtonColourEditor label="Declined Button Colours" value={rsvpContent.declinedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, declinedButtonColors: v }))} />
           <ButtonColourEditor label="Declined Selected Button Colours" value={rsvpContent.declinedSelectedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, declinedSelectedButtonColors: v }))} />
           <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">Schedule Heading</label>
-            <TypographyControls value={rsvpContent.scheduleHeading ?? { text: "Schedule" }} onChange={(v) => setRsvpContent((p) => ({ ...p, scheduleHeading: v }))} />
-          </div>
-          <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">Guest Name Typography</label>
             <TypographyControls value={rsvpContent.guestNameTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, guestNameTypography: v }))} />
           </div>
@@ -151,8 +170,48 @@ export function RsvpPage() {
             <TypographyControls value={rsvpContent.additionalInfoHeading ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, additionalInfoHeading: v }))} />
           </div>
           <Textarea label="Additional Information Content" value={rsvpContent.additionalInfoBody ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, additionalInfoBody: e.target.value }))} rows={3} />
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Additional Info Content Typography</label>
+            <TypographyControls value={rsvpContent.additionalInfoBodyTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, additionalInfoBodyTypography: v }))} showText={false} />
+          </div>
+          <div className="space-y-2 border-t border-dash-border pt-3">
+            <label className="block text-xs font-semibold text-dash-text">Event Details Typography</label>
+          </div>
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Event Name Typography</label>
+            <TypographyControls value={rsvpContent.eventNameTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, eventNameTypography: v }))} showText={false} />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Event Time Typography</label>
+            <TypographyControls value={rsvpContent.eventTimeTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, eventTimeTypography: v }))} showText={false} />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Event Address Typography</label>
+            <TypographyControls value={rsvpContent.eventAddressTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, eventAddressTypography: v }))} showText={false} />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Programme Item Typography</label>
+            <TypographyControls value={rsvpContent.programmeItemTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, programmeItemTypography: v }))} showText={false} />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">RSVP Deadline Typography</label>
+            <TypographyControls value={rsvpContent.rsvpDeadlineTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, rsvpDeadlineTypography: v }))} showText={false} />
+          </div>
         </div>
+        }
+        preview={<RsvpPreview theme={event.draft_theme ?? event.theme} content={rsvpContent as unknown as Record<string, unknown>} />}
+      />
       )}
+      <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-dash-text">RSVP Deadline</h3>
+          <Button size="sm" onClick={() => saveDeadlineMutation.mutate()} loading={saveDeadlineMutation.isPending}>Save Deadline</Button>
+        </div>
+        {saveDeadlineMutation.isError && <p className="text-sm text-dash-danger">{saveDeadlineMutation.error instanceof Error ? saveDeadlineMutation.error.message : "Save failed"}</p>}
+        {saveDeadlineMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
+        <DateTimePicker label="RSVP Deadline" value={rsvpDeadline} onChange={setRsvpDeadline} />
+        <p className="text-xs text-dash-muted">Guests won't be able to RSVP after this date. Leave blank for no deadline.</p>
+      </div>
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-green-600">{counts.attending}</p><p className="text-xs text-dash-muted">Attending</p></div>
         <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-red-600">{counts.declined}</p><p className="text-xs text-dash-muted">Declined</p></div>

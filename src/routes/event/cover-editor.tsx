@@ -14,7 +14,7 @@ import type { TypographyStyle } from "../../lib/typography";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
 
-const defaultConfig: CoverConfig = { background: { image: null, color: "", position: "center", fit: "cover" }, overlayOpacity: 30, ctaText: "Enter" };
+const defaultConfig: CoverConfig = { background: { image: null, color: "", position: "center", fit: "cover" }, overlayOpacity: 30, ctaText: "Enter", logo: null };
 
 export function CoverEditor() {
   const { event, eventId } = useOutletContext<EventContextValue>();
@@ -25,6 +25,8 @@ export function CoverEditor() {
 
   const update = (patch: Partial<CoverConfig>) => setConfig((p) => ({ ...p, ...patch }));
   const updateBg = (patch: Partial<NonNullable<CoverConfig["background"]>>) => setConfig((p) => ({ ...p, background: { ...(p.background ?? {}), ...patch } }));
+
+  const updateLogo = (patch: Partial<NonNullable<CoverConfig["logo"]>>) => setConfig((p) => ({ ...p, logo: { ...(p.logo ?? {}), ...patch } }));
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -44,6 +46,16 @@ export function CoverEditor() {
       {saveMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
       <SplitEditor
         editor={
+          <>
+          <div className="space-y-4 rounded-lg border border-dash-border bg-dash-surface p-4">
+            <h3 className="text-sm font-semibold text-dash-text">Cover Page Logo</h3>
+            <ImageUpload userId={event.creator_id} value={config.logo?.url ?? null} onChange={(url) => updateLogo({ url })} label="Logo Image" />
+            <RangeInput label="Logo Size (height px)" value={config.logo?.size ?? 120} onChange={(v) => updateLogo({ size: v })} min={40} max={300} />
+            <RangeInput label="Max Width (px)" value={config.logo?.maxWidth ?? 300} onChange={(v) => updateLogo({ maxWidth: v })} min={50} max={600} />
+            <RangeInput label="Max Height (px)" value={config.logo?.maxHeight ?? 200} onChange={(v) => updateLogo({ maxHeight: v })} min={50} max={400} />
+            <RangeInput label="Top Spacing (px)" value={config.logo?.marginTop ?? 0} onChange={(v) => updateLogo({ marginTop: v })} min={0} max={120} />
+            <RangeInput label="Bottom Spacing (px)" value={config.logo?.marginBottom ?? 32} onChange={(v) => updateLogo({ marginBottom: v })} min={0} max={80} />
+          </div>
           <div className="space-y-4 rounded-lg border border-dash-border bg-dash-surface p-4">
             <ImageUpload userId={event.creator_id} value={config.background?.image ?? null} onChange={(url) => updateBg({ image: url })} label="Background Image" />
             <ColorInput value={config.background?.color ?? ""} onChange={(v) => updateBg({ color: v })} />
@@ -64,6 +76,7 @@ export function CoverEditor() {
             <Input label="Button Text" value={config.ctaText ?? ""} onChange={(e) => update({ ctaText: e.target.value })} placeholder="Enter" />
             <ButtonColourEditor label="Button Colours" value={config.buttonColors ?? {}} onChange={(v) => update({ buttonColors: v })} />
           </div>
+          </>
         }
         preview={<CoverPreview config={config} theme={event.draft_theme ?? event.theme} eventName={event.draft_name ?? event.name ?? undefined} />}
       />

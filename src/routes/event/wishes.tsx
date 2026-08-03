@@ -8,7 +8,7 @@ import { ButtonColourEditor, type ButtonColors } from "../../components/ui/Butto
 import { formatDateTime } from "../../lib/utils";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
-interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; }
+interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; enabled?: boolean; }
 
 export function MessagesPage() {
   const { event, eventId } = useOutletContext<EventContextValue>();
@@ -107,6 +107,13 @@ export function MessagesPage() {
       {tab === "settings" && (
         <div className="space-y-4 rounded-lg border border-dash-border bg-dash-surface p-4">
           <h3 className="text-sm font-semibold text-dash-text">Messages Page Content</h3>
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-dash-text">
+              <input type="checkbox" checked={wishesContent.enabled ?? true} onChange={(e) => setWishesContent((p) => ({ ...p, enabled: e.target.checked }))} className="accent-dash-primary" />
+              Messages feature enabled
+            </label>
+            <p className="mt-1 text-xs text-dash-muted">When enabled, guests can submit messages. When disabled, the Messages page is hidden from guests.</p>
+          </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-dash-muted">Page Heading</label>
             <input type="text" value={wishesContent.heading ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, heading: e.target.value }))} placeholder="Messages" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />

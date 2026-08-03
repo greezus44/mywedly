@@ -13,6 +13,7 @@ export interface CoverConfig {
   bodyHtml?: string;
   ctaText?: string;
   buttonColors?: ButtonColors;
+  logo?: { url?: string | null; size?: number; maxWidth?: number; maxHeight?: number; marginTop?: number; marginBottom?: number; } | null;
 }
 export interface LogoConfig { url?: string | null; size?: number; align?: string; marginTop?: number; marginBottom?: number; }
 export interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; buttonColors?: ButtonColors; }
@@ -40,11 +41,13 @@ export function CoverPreview({ config, theme, eventName }: CoverPreviewProps) {
   const heading = resolveTypography(config.heading, eventName ?? "");
   const subheading = resolveTypography(config.subheading, "");
   const cta = config.ctaText || "Enter";
+  const logo = config.logo;
   return (
     <EventThemeProvider theme={theme}>
       <div className="relative flex min-h-[400px] flex-col items-center justify-center overflow-hidden p-8 text-center" style={bgStyle}>
         {bg.image && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />}
         <div className="relative z-10 flex max-w-md flex-col items-center">
+          {logo?.url && <div style={{ marginTop: logo.marginTop ? `${logo.marginTop}px` : undefined, marginBottom: logo.marginBottom != null ? `${logo.marginBottom}px` : "2rem", display: "flex", justifyContent: "center", width: "100%" }}><img src={logo.url} alt="Logo" style={{ height: logo.size ? `${logo.size}px` : "120px", width: "auto", maxWidth: logo.maxWidth ? `${logo.maxWidth}px` : undefined, maxHeight: logo.maxHeight ? `${logo.maxHeight}px` : "40vh", objectFit: "contain", background: "transparent" }} /></div>}
           {eyebrow.text && <p className="guest-eyebrow mb-2" style={eyebrow.style}>{eyebrow.text}</p>}
           {heading.text && <h1 className="guest-title mb-3" style={heading.style}>{heading.text}</h1>}
           {subheading.text && <p className="guest-subtitle mb-3" style={subheading.style}>{subheading.text}</p>}
@@ -115,18 +118,20 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
   );
 }
 
-interface RsvpPreviewProps { theme: unknown; }
-export function RsvpPreview({ theme }: RsvpPreviewProps) {
+interface RsvpPreviewProps { theme: unknown; content?: Record<string, unknown> | null; }
+export function RsvpPreview({ theme, content }: RsvpPreviewProps) {
+  const c = content as { title?: string; subtitle?: string; attendingText?: string; declinedText?: string } | null;
   return (
     <EventThemeProvider theme={theme}>
       <div className="guest-section">
         <div className="mx-auto max-w-md text-center">
-          <h1 className="guest-title mb-2">RSVP</h1>
-          <p className="guest-subtitle mb-6">Let us know if you'll be joining us</p>
+          <h1 className="guest-title mb-2">{c?.title || "RSVP"}</h1>
+          {c?.subtitle && <p className="guest-subtitle mb-6">{c.subtitle}</p>}
           <div className="event-card space-y-3">
+            <p className="guest-subtitle" style={{ fontSize: "1rem" }}>Guest Name</p>
             <div className="flex justify-center gap-3">
-              <button type="button" className="event-btn-primary" style={{ opacity: 0.6 }}>Attending</button>
-              <button type="button" className="event-btn-secondary" style={{ opacity: 0.6 }}>Decline</button>
+              <button type="button" className="event-btn-primary" style={{ opacity: 0.6 }}>{c?.attendingText || "Attending"}</button>
+              <button type="button" className="event-btn-secondary" style={{ opacity: 0.6 }}>{c?.declinedText || "Decline"}</button>
             </div>
           </div>
         </div>
