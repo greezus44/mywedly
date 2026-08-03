@@ -23,7 +23,7 @@ export function BlockRenderer({ block, eventId }: BlockRendererProps) {
   switch (block.type) {
     case "heading": {
       const Tag = (`h${c.level ?? 2}`) as "h1" | "h2" | "h3";
-      return <Tag className="guest-title" style={{ fontSize: c.level === 1 ? "2.5rem" : c.level === 2 ? "2rem" : "1.5rem", ...blockTypoStyle(c) }}>{c.text ?? ""}</Tag>;
+      return <Tag className="guest-title" style={{ fontSize: c.level === 1 ? "clamp(1.75rem,5vw,2.5rem)" : c.level === 2 ? "clamp(1.5rem,4vw,2rem)" : "clamp(1.25rem,3vw,1.5rem)", ...blockTypoStyle(c) }}>{c.text ?? ""}</Tag>;
     }
     case "paragraph":
       return <p className="rich-content" style={{ whiteSpace: "pre-wrap", ...blockTypoStyle(c) }}>{c.text ?? ""}</p>;
@@ -77,7 +77,7 @@ function CountdownBlock({ targetDate }: { targetDate: string }) {
   if (countdown.isPast) return <p className="text-center text-dash-muted">The event has begun!</p>;
   const items = [{ label: "Days", value: countdown.days }, { label: "Hours", value: countdown.hours }, { label: "Minutes", value: countdown.minutes }, { label: "Seconds", value: countdown.seconds }];
   return (
-    <div className="flex justify-center gap-4">
+    <div className="flex justify-center gap-2 sm:gap-4">
       {items.map((it) => <div key={it.label} className="text-center"><p className="text-3xl font-bold" style={{ color: "var(--event-primary)" }}>{it.value}</p><p className="text-xs" style={{ color: "var(--event-muted)" }}>{it.label}</p></div>)}
     </div>
   );
@@ -103,7 +103,7 @@ function ScheduleBlock({ eventId }: { eventId: string }) {
   return (
     <div className="event-card space-y-3">
       {items.map((it) => (
-        <div key={it.id} className="flex items-start gap-4 border-t pt-3" style={{ borderColor: "var(--event-border)" }}>
+        <div key={it.id} className="flex flex-col gap-1 border-t pt-3 sm:flex-row sm:items-start sm:gap-4" style={{ borderColor: "var(--event-border)" }}>
           <div className="shrink-0 text-right" style={{ minWidth: "80px" }}>
             {it.start_time && <p className="text-sm font-medium" style={{ color: "var(--event-primary)" }}>{formatTime12(it.start_time)}</p>}
             {it.end_time && <p className="text-xs" style={{ color: "var(--event-muted)" }}>{formatTime12(it.end_time)}</p>}

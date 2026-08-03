@@ -43,7 +43,7 @@ export default function GuestCover() {
 
   return (
     <EventThemeProvider theme={event.theme}>
-      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden" style={bgStyle}>
+      <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden" style={{ minHeight: "100dvh", ...bgStyle }}>
         {bgConfig.image && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />}
         <div className="relative z-10 flex w-full max-w-lg flex-col items-center px-6 py-16 text-center animate-fadeIn" style={{ whiteSpace: "pre-wrap" }}>
           {logoConfig.url && <div className="mb-8 flex w-full" style={{ justifyContent: logoAlign === "left" ? "flex-start" : logoAlign === "right" ? "flex-end" : "center" }}><img src={logoConfig.url} alt="Logo" style={{ height: `${logoSize}px`, width: "auto", maxHeight: "40vh", background: "transparent" }} className="object-contain" /></div>}
