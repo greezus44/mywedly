@@ -32,6 +32,7 @@ interface RsvpContent {
   programmeItemTypography?: unknown;
   rsvpDeadlineTypography?: unknown;
   additionalInfoBodyTypography?: unknown;
+  rsvpDeadlinePrefix?: string;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -408,11 +409,6 @@ export default function GuestRsvp() {
           {address && <p className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...eventAddressStyle }}>{address}</p>}
           {renderSchedule(subEventId)}
           {renderAdditionalInfo()}
-          {rsvpDeadline && (
-          <p className="mt-3 text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", ...rsvpDeadlineStyle }}>
-            RSVP by {new Date(rsvpDeadline).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
-          </p>
-        )}
         {renderRsvpButtons(subEventId)}
         </div>
       </div>
@@ -429,6 +425,11 @@ export default function GuestRsvp() {
           {rsvpContent.title && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...titleStyle }}>{rsvpContent.title}</h1>}
           {subtitleText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...subtitleStyle }}>{subtitleText}</p>}
           {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...guestNameStyle }}>{guestNameText}</p>}
+          {rsvpDeadline && (
+            <p className="mt-4 text-center" style={{ whiteSpace: "pre-wrap", ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)" }}>
+              {rsvpContent.rsvpDeadlinePrefix || "RSVP by"} {new Date(rsvpDeadline).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+            </p>
+          )}
         </div>
 
         {/* Multiple sub-events or single main event */}

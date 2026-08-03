@@ -40,6 +40,7 @@ export interface RsvpContent {
   eventAddressTypography?: unknown;
   programmeItemTypography?: unknown;
   rsvpDeadlineTypography?: unknown;
+  rsvpDeadlinePrefix?: string;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -193,6 +194,7 @@ export function RsvpPage() {
             <label className="block text-xs font-medium text-dash-muted">Programme Item Typography</label>
             <TypographyControls value={rsvpContent.programmeItemTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, programmeItemTypography: v }))} showText={false} />
           </div>
+          <Input label="RSVP Deadline Prefix Text" value={rsvpContent.rsvpDeadlinePrefix ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, rsvpDeadlinePrefix: e.target.value }))} placeholder="e.g. Please RSVP before, Kindly respond before" />
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">RSVP Deadline Typography</label>
             <TypographyControls value={rsvpContent.rsvpDeadlineTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, rsvpDeadlineTypography: v }))} showText={false} />
