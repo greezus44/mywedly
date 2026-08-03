@@ -133,14 +133,15 @@ export default function GuestRsvp() {
     return !!guest?.allow_plus_one;
   };
 
-  const [responses, setResponses] = useState<Record<string, { status: string; plus_ones: number; message: string; plus_one_name: string }>>({});
+  const [responses, setResponses] = useState<Record<string, { status: string; plus_ones: number; message: string; plus_one_name: string; bringing_plus_one: boolean | null; plus_one_saved: boolean }>>({});
 
   useEffect(() => {
     if (existingRsvps) {
-      const map: Record<string, { status: string; plus_ones: number; message: string; plus_one_name: string }> = {};
+      const map: Record<string, { status: string; plus_ones: number; message: string; plus_one_name: string; bringing_plus_one: boolean | null; plus_one_saved: boolean }> = {};
       existingRsvps.forEach((r) => {
         const key = r.sub_event_id || "main";
-        map[key] = { status: r.status, plus_ones: r.plus_ones, message: r.message ?? "", plus_one_name: (r.plus_one_names?.[0] ?? "") };
+        const savedName = r.plus_one_names?.[0] ?? "";
+        map[key] = { status: r.status, plus_ones: r.plus_ones, message: r.message ?? "", plus_one_name: savedName, bringing_plus_one: savedName ? true : null, plus_one_saved: !!savedName };
       });
       setResponses(map);
     }
@@ -180,25 +181,63 @@ export default function GuestRsvp() {
 
   const handleRsvp = (subEventId: string | null, status: string) => {
     const key = subEventId || "main";
-    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "", plus_one_name: "" };
+    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "", plus_one_name: "", bringing_plus_one: null, plus_one_saved: false };
+    // When declining, clear all +1 data
+    if (status === "declined") {
+      const cleared = { ...current, status, plus_ones: 0, plus_one_name: "", bringing_plus_one: null, plus_one_saved: false };
+      setResponses((p) => ({ ...p, [key]: cleared }));
+      rsvpMutation.mutate({ subEventId, status, plus_ones: 0, message: cleared.message, plus_one_name: "" });
+      return;
+    }
     const updated = { ...current, status };
     setResponses((p) => ({ ...p, [key]: updated }));
     rsvpMutation.mutate({ subEventId, status, plus_ones: updated.plus_ones, message: updated.message, plus_one_name: updated.plus_one_name });
   };
 
-  const handlePlusOneName = (subEventId: string | null, name: string) => {
+  const handleBringingPlusOne = (subEventId: string | null, bringing: boolean) => {
     const key = subEventId || "main";
-    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "", plus_one_name: "" };
-    const updated = { ...current, plus_one_name: name };
-    setResponses((p) => ({ ...p, [key]: updated }));
+    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "", plus_one_name: "", bringing_plus_one: null, plus_one_saved: false };
+    if (bringing) {
+      setResponses((p) => ({ ...p, [key]: { ...current, bringing_plus_one: true } }));
+    } else {
+      // Clear +1 name and save the cleared state
+      const cleared = { ...current, bringing_plus_one: false, plus_one_name: "", plus_ones: 0, plus_one_saved: false };
+      setResponses((p) => ({ ...p, [key]: cleared }));
+      rsvpMutation.mutate({ subEventId, status: current.status, plus_ones: 0, message: current.message, plus_one_name: "" });
+    }
   };
 
-  const handlePlusOneNameBlur = (subEventId: string | null) => {
+  const plusOneSaveMutation = useMutation({
+    mutationFn: async ({ subEventId, status, plus_ones, message, plus_one_name }: { subEventId: string | null; status: string; plus_ones: number; message: string; plus_one_name: string }) => {
+      const existing = existingRsvps?.find((r) => (subEventId ? r.sub_event_id === subEventId : !r.sub_event_id));
+      const plusOneNames = plus_one_name.trim() ? [plus_one_name.trim()] : [];
+      if (existing) {
+        const { error } = await supabase
+          .from("event_rsvps")
+          .update({ plus_ones: plusOneNames.length, plus_one_names: plusOneNames, responded_at: new Date().toISOString() })
+          .eq("id", existing.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: (_data, vars) => {
+      const key = (vars.subEventId || "main");
+      setResponses((p) => { const c = p[key]; return c ? { ...p, [key]: { ...c, plus_one_saved: true } } : p; });
+      queryClient.invalidateQueries({ queryKey: ["guest-rsvps", guest?.id, event.id] });
+    },
+  });
+
+  const handleSavePlusOne = (subEventId: string | null) => {
     const key = subEventId || "main";
     const current = responses[key];
-    if (current && current.status !== "pending") {
-      rsvpMutation.mutate({ subEventId, status: current.status, plus_ones: current.plus_ones, message: current.message, plus_one_name: current.plus_one_name });
-    }
+    if (!current || !current.plus_one_name.trim()) return;
+    plusOneSaveMutation.mutate({ subEventId, status: current.status, plus_ones: 1, message: current.message, plus_one_name: current.plus_one_name });
+  };
+
+  const handlePlusOneName = (subEventId: string | null, name: string) => {
+    const key = subEventId || "main";
+    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "", plus_one_name: "", bringing_plus_one: null, plus_one_saved: false };
+    const updated = { ...current, plus_one_name: name, plus_one_saved: false };
+    setResponses((p) => ({ ...p, [key]: updated }));
   };
 
   const guestNameText = guest?.name ? getTypographyText(rsvpContent.guestNameTypography, guest.name) : "";
@@ -283,7 +322,7 @@ export default function GuestRsvp() {
 
   const renderRsvpButtons = (subEventId: string | null) => {
     const key = subEventId || "main";
-    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "", plus_one_name: "" };
+    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "", plus_one_name: "", bringing_plus_one: null, plus_one_saved: false };
     const isAttending = current.status === "attending";
     const isDeclined = current.status === "declined";
     return (
@@ -314,10 +353,44 @@ export default function GuestRsvp() {
         {isDeclined && rsvpContent.declinedMessage && (
           <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{rsvpContent.declinedMessage}</p>
         )}
-        {allowPlusOneFor(subEventId) && (
+        {isAttending && allowPlusOneFor(subEventId) && (
+          <div className="mt-4">
+            <p className="mb-2 text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>Bringing a +1?</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleBringingPlusOne(subEventId, true)}
+                className="event-btn-secondary"
+                style={{ opacity: current.bringing_plus_one === true ? 1 : 0.6, ...(current.bringing_plus_one === true ? { backgroundColor: "var(--event-surface-alt)", borderColor: "var(--event-primary)" } : {}) }}
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => handleBringingPlusOne(subEventId, false)}
+                className="event-btn-secondary"
+                style={{ opacity: current.bringing_plus_one === false ? 1 : 0.6, ...(current.bringing_plus_one === false ? { backgroundColor: "var(--event-surface-alt)", borderColor: "var(--event-primary)" } : {}) }}
+              >
+                No
+              </button>
+            </div>
+          </div>
+        )}
+        {isAttending && allowPlusOneFor(subEventId) && current.bringing_plus_one === true && (
           <div className="mt-4">
             <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>Plus One Name</label>
-            <input type="text" value={current.plus_one_name} onChange={(e) => handlePlusOneName(subEventId, e.target.value)} onBlur={() => handlePlusOneNameBlur(subEventId)} placeholder="Enter +1 name" className="event-input" style={{ fontFamily: "var(--event-font-body)" }} />
+            <input type="text" value={current.plus_one_name} onChange={(e) => handlePlusOneName(subEventId, e.target.value)} placeholder="Enter +1 name" className="event-input" style={{ fontFamily: "var(--event-font-body)" }} />
+            {current.plus_one_name.trim() && (
+              <div className="mt-2 flex items-center gap-3">
+                <button onClick={() => handleSavePlusOne(subEventId)} disabled={plusOneSaveMutation.isPending} className="event-btn-primary" style={{ padding: "0.5rem 1.5rem", fontSize: "0.875rem" }}>
+                  {plusOneSaveMutation.isPending ? "Saving…" : "Save +1"}
+                </button>
+                {current.plus_one_saved && !plusOneSaveMutation.isPending && (
+                  <span className="text-sm" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)" }}>Saved!</span>
+                )}
+                {plusOneSaveMutation.isError && (
+                  <span className="text-sm" style={{ color: "var(--event-error, #dc2626)", fontFamily: "var(--event-font-body)" }}>Save failed</span>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
