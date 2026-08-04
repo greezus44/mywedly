@@ -1,5 +1,6 @@
 import type { TypographyStyle } from "../../lib/typography";
 import { Input } from "./Input";
+import { Textarea } from "./Input";
 import { FontSelect } from "./FontSelect";
 import { ColorInput, RangeInput, Toggle } from "./index";
 import { HEADING_FONT_OPTIONS } from "../../lib/theme";
@@ -12,6 +13,7 @@ interface TypographyControlsProps {
   value: TypographyStyle;
   onChange: (value: TypographyStyle) => void;
   showText?: boolean;
+  multiline?: boolean;
 }
 
 const WEIGHTS = [400, 500, 700];
@@ -21,19 +23,29 @@ const ALIGNS = [
   { value: "right", label: "R" },
 ];
 
-export function TypographyControls({ label, value, onChange, showText }: TypographyControlsProps) {
+export function TypographyControls({ label, value, onChange, showText, multiline }: TypographyControlsProps) {
   const update = (patch: Partial<TypographyStyle>) => onChange({ ...value, ...patch });
 
   return (
     <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-3">
       {label && <h4 className="text-xs font-semibold text-dash-text">{label}</h4>}
       {showText && (
-        <Input
-          label="Text"
-          value={value.text ?? ""}
-          onChange={(e) => update({ text: e.target.value })}
-          placeholder="Enter text"
-        />
+        multiline ? (
+          <Textarea
+            label="Text"
+            value={value.text ?? ""}
+            onChange={(e) => update({ text: e.target.value })}
+            placeholder="Enter text"
+            rows={2}
+          />
+        ) : (
+          <Input
+            label="Text"
+            value={value.text ?? ""}
+            onChange={(e) => update({ text: e.target.value })}
+            placeholder="Enter text"
+          />
+        )
       )}
       <div>
         <label className="mb-1 block text-xs font-medium text-dash-muted">Font Family</label>

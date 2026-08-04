@@ -15,6 +15,7 @@ export function extractPathFromUrl(url: string): string | null {
 }
 
 export async function compressImage(file: File, maxDim = 1600, quality = 0.82): Promise<File> {
+  const isPng = file.type === "image/png";
   return new Promise((resolve) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -31,16 +32,28 @@ export async function compressImage(file: File, maxDim = 1600, quality = 0.82): 
       canvas.height = height;
       const ctx = canvas.getContext("2d");
       if (!ctx) { resolve(file); return; }
+      if (isPng) ctx.clearRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0, width, height);
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) { resolve(file); return; }
-          const out = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
-          resolve(out);
-        },
-        "image/jpeg",
-        quality,
-      );
+      if (isPng) {
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) { resolve(file); return; }
+            const out = new File([blob], file.name.replace(/\.[^.]+$/, ".png"), { type: "image/png" });
+            resolve(out);
+          },
+          "image/png",
+        );
+      } else {
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) { resolve(file); return; }
+            const out = new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+            resolve(out);
+          },
+          "image/jpeg",
+          quality,
+        );
+      }
     };
     img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
     img.src = url;

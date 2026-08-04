@@ -48,9 +48,9 @@ export function CoverPreview({ config, theme, eventName }: CoverPreviewProps) {
         {bg.image && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />}
         <div className="relative z-10 flex max-w-md flex-col items-center">
           {logo?.url && <div style={{ marginTop: logo.marginTop ? `${logo.marginTop}px` : undefined, marginBottom: logo.marginBottom != null ? `${logo.marginBottom}px` : "2rem", display: "flex", justifyContent: "center", width: "100%" }}><img src={logo.url} alt="Logo" style={{ height: logo.size ? `${logo.size}px` : "120px", width: "auto", maxWidth: logo.maxWidth ? `${logo.maxWidth}px` : undefined, maxHeight: logo.maxHeight ? `${logo.maxHeight}px` : "40vh", objectFit: "contain", background: "transparent" }} /></div>}
-          {eyebrow.text && <p className="guest-eyebrow mb-2" style={eyebrow.style}>{eyebrow.text}</p>}
-          {heading.text && <h1 className="guest-title mb-3" style={heading.style}>{heading.text}</h1>}
-          {subheading.text && <p className="guest-subtitle mb-3" style={subheading.style}>{subheading.text}</p>}
+          {eyebrow.text && <p className="guest-eyebrow mb-2" style={{ whiteSpace: "pre-wrap", ...eyebrow.style }}>{eyebrow.text}</p>}
+          {heading.text && <h1 className="guest-title mb-3" style={{ whiteSpace: "pre-wrap", ...heading.style }}>{heading.text}</h1>}
+          {subheading.text && <p className="guest-subtitle mb-3" style={{ whiteSpace: "pre-wrap", ...subheading.style }}>{subheading.text}</p>}
           {config.bodyHtml && <div className="rich-content mb-6" dangerouslySetInnerHTML={{ __html: config.bodyHtml }} />}
           <button type="button" className="event-btn-primary" style={buttonColorsToStyle(config.buttonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(config.buttonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(config.buttonColors))}>{cta}</button>
         </div>

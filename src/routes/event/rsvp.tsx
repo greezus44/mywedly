@@ -41,6 +41,10 @@ export interface RsvpContent {
   programmeItemTypography?: unknown;
   rsvpDeadlineTypography?: unknown;
   rsvpDeadlinePrefix?: string;
+  plusOneYesButtonColors?: ButtonColors;
+  plusOneNoButtonColors?: ButtonColors;
+  plusOneYesSelectedButtonColors?: ButtonColors;
+  plusOneNoSelectedButtonColors?: ButtonColors;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -194,6 +198,13 @@ export function RsvpPage() {
             <label className="block text-xs font-medium text-dash-muted">Programme Item Typography</label>
             <TypographyControls value={rsvpContent.programmeItemTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, programmeItemTypography: v }))} showText={false} />
           </div>
+          <div className="space-y-2 border-t border-dash-border pt-3">
+            <label className="block text-xs font-semibold text-dash-text">+1 Button Colours</label>
+          </div>
+          <ButtonColourEditor label="+1 Yes Button Colours" value={rsvpContent.plusOneYesButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, plusOneYesButtonColors: v }))} />
+          <ButtonColourEditor label="+1 Yes Selected Button Colours" value={rsvpContent.plusOneYesSelectedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, plusOneYesSelectedButtonColors: v }))} />
+          <ButtonColourEditor label="+1 No Button Colours" value={rsvpContent.plusOneNoButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, plusOneNoButtonColors: v }))} />
+          <ButtonColourEditor label="+1 No Selected Button Colours" value={rsvpContent.plusOneNoSelectedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, plusOneNoSelectedButtonColors: v }))} />
           <Input label="RSVP Deadline Prefix Text" value={rsvpContent.rsvpDeadlinePrefix ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, rsvpDeadlinePrefix: e.target.value }))} placeholder="e.g. Please RSVP before, Kindly respond before" />
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">RSVP Deadline Typography</label>

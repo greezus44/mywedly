@@ -67,8 +67,8 @@ export function CoverEditor() {
             </div>
             <RangeInput label="Overlay Opacity" value={config.overlayOpacity ?? 30} onChange={(v) => update({ overlayOpacity: v })} min={0} max={100} />
             <TypographyControls label="Eyebrow" value={(config.eyebrow as TypographyStyle) ?? {}} onChange={(v) => update({ eyebrow: v })} showText />
-            <TypographyControls label="Heading" value={(config.heading as TypographyStyle) ?? {}} onChange={(v) => update({ heading: v })} showText />
-            <TypographyControls label="Subheading" value={(config.subheading as TypographyStyle) ?? {}} onChange={(v) => update({ subheading: v })} showText />
+            <TypographyControls label="Heading" value={(config.heading as TypographyStyle) ?? {}} onChange={(v) => update({ heading: v })} showText multiline />
+            <TypographyControls label="Subheading" value={(config.subheading as TypographyStyle) ?? {}} onChange={(v) => update({ subheading: v })} showText multiline />
             <div>
               <label className="mb-1 block text-xs font-medium text-dash-muted">Body Content</label>
               <RichTextEditor value={config.bodyHtml ?? ""} onChange={(html) => update({ bodyHtml: html })} />

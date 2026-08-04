@@ -33,6 +33,10 @@ interface RsvpContent {
   rsvpDeadlineTypography?: unknown;
   additionalInfoBodyTypography?: unknown;
   rsvpDeadlinePrefix?: string;
+  plusOneYesButtonColors?: ButtonColors;
+  plusOneNoButtonColors?: ButtonColors;
+  plusOneYesSelectedButtonColors?: ButtonColors;
+  plusOneNoSelectedButtonColors?: ButtonColors;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -296,7 +300,7 @@ export default function GuestRsvp() {
       <div className="mt-6">
         <div className="space-y-3">
           {items.map((item) => (
-            <div key={item.id} className="grid grid-cols-1 gap-1 sm:grid-cols-[140px_1fr] sm:gap-5 sm:items-start">
+            <div key={item.id} className="grid grid-cols-[80px_1fr] gap-2 sm:grid-cols-[140px_1fr] sm:gap-5 sm:items-start">
               <div className="text-sm font-medium whitespace-nowrap" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", ...programmeItemStyle }}>
                 {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
               </div>
@@ -361,14 +365,18 @@ export default function GuestRsvp() {
               <button
                 onClick={() => handleBringingPlusOne(subEventId, true)}
                 className="event-btn-secondary"
-                style={{ opacity: current.bringing_plus_one === true ? 1 : 0.6, ...(current.bringing_plus_one === true ? { backgroundColor: "var(--event-surface-alt)", borderColor: "var(--event-primary)" } : {}) }}
+                style={{ opacity: current.bringing_plus_one === true ? 1 : 0.6, ...(current.bringing_plus_one === true ? (rsvpContent.plusOneYesSelectedButtonColors ? buttonColorsToStyle(rsvpContent.plusOneYesSelectedButtonColors) : { backgroundColor: "var(--event-surface-alt)", borderColor: "var(--event-primary)" }) : buttonColorsToStyle(rsvpContent.plusOneYesButtonColors)) }}
+                onMouseEnter={(e) => { if (current.bringing_plus_one !== true) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.plusOneYesButtonColors)); }}
+                onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: current.bringing_plus_one === true ? 1 : 0.6, ...(current.bringing_plus_one === true ? (rsvpContent.plusOneYesSelectedButtonColors ? buttonColorsToStyle(rsvpContent.plusOneYesSelectedButtonColors) : { backgroundColor: "var(--event-surface-alt)", borderColor: "var(--event-primary)" }) : buttonColorsToStyle(rsvpContent.plusOneYesButtonColors)) })}
               >
                 Yes
               </button>
               <button
                 onClick={() => handleBringingPlusOne(subEventId, false)}
                 className="event-btn-secondary"
-                style={{ opacity: current.bringing_plus_one === false ? 1 : 0.6, ...(current.bringing_plus_one === false ? { backgroundColor: "var(--event-surface-alt)", borderColor: "var(--event-primary)" } : {}) }}
+                style={{ opacity: current.bringing_plus_one === false ? 1 : 0.6, ...(current.bringing_plus_one === false ? (rsvpContent.plusOneNoSelectedButtonColors ? buttonColorsToStyle(rsvpContent.plusOneNoSelectedButtonColors) : { backgroundColor: "var(--event-surface-alt)", borderColor: "var(--event-primary)" }) : buttonColorsToStyle(rsvpContent.plusOneNoButtonColors)) }}
+                onMouseEnter={(e) => { if (current.bringing_plus_one !== false) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.plusOneNoButtonColors)); }}
+                onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: current.bringing_plus_one === false ? 1 : 0.6, ...(current.bringing_plus_one === false ? (rsvpContent.plusOneNoSelectedButtonColors ? buttonColorsToStyle(rsvpContent.plusOneNoSelectedButtonColors) : { backgroundColor: "var(--event-surface-alt)", borderColor: "var(--event-primary)" }) : buttonColorsToStyle(rsvpContent.plusOneNoButtonColors)) })}
               >
                 No
               </button>
@@ -400,9 +408,9 @@ export default function GuestRsvp() {
 
   const renderEventBlock = (eventName: string, dateStr: string | null, timeStr: string | null, venue: string | null, address: string | null, subEventId: string | null) => {
     return (
-      <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-6">
+      <div className="flex flex-row items-start gap-4 sm:gap-6">
         {renderDateColumn(dateStr)}
-        <div className="flex-1 w-full sm:w-auto">
+        <div className="flex-1 min-w-0">
           {eventName && <h2 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...eventNameStyle }}>{eventName}</h2>}
           {timeStr && <p className="text-sm mb-1" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", ...eventTimeStyle }}>{formatTime12(timeStr)}</p>}
           {venue && <p className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", ...eventTimeStyle }}>{venue}</p>}
@@ -423,13 +431,13 @@ export default function GuestRsvp() {
         {/* Header */}
         <div className="mb-8 text-center">
           {rsvpContent.title && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...titleStyle }}>{rsvpContent.title}</h1>}
-          {subtitleText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...subtitleStyle }}>{subtitleText}</p>}
-          {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...guestNameStyle }}>{guestNameText}</p>}
           {rsvpDeadline && (
-            <p className="mt-4 text-center" style={{ whiteSpace: "pre-wrap", ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)" }}>
+            <p className="mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)" }}>
               {rsvpContent.rsvpDeadlinePrefix || "RSVP by"} {new Date(rsvpDeadline).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
             </p>
           )}
+          {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...guestNameStyle }}>{guestNameText}</p>}
+          {subtitleText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...subtitleStyle }}>{subtitleText}</p>}
         </div>
 
         {/* Multiple sub-events or single main event */}
