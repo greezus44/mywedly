@@ -260,7 +260,7 @@ export default function GuestRsvp() {
   const eventAddressStyle = getTypographyStyle(rsvpContent.eventAddressTypography);
   const programmeItemStyle = getTypographyStyle(rsvpContent.programmeItemTypography);
   const rsvpDeadlineStyle = getTypographyStyle(rsvpContent.rsvpDeadlineTypography);
-  const rsvpDeadline = event.rsvp_deadline as string | null | undefined;
+  const rsvpDeadline = (event.draft_rsvp_deadline ?? event.rsvp_deadline) as string | null | undefined;
   const additionalInfoBodyStyle = getTypographyStyle(rsvpContent.additionalInfoBodyTypography);
 
   const attendingSelectedStyle = (isSelected: boolean): React.CSSProperties => {
