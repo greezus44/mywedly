@@ -71,7 +71,7 @@ html { scroll-behavior:smooth;overflow-x:hidden; }
   .event-themed .guest-title { font-size:calc(1.75rem * var(--event-font-scale,1)); }
   .event-themed .guest-subtitle { font-size:calc(1.0625rem * var(--event-font-scale,1));max-width:100%; }
   .event-themed .event-card { padding:1.25rem; }
-  .event-themed .event-btn-primary,.event-themed .event-btn-secondary { padding:0.75rem 1.5rem;font-size:0.875rem; }
+  .event-themed .event-btn-primary,.event-themed .event-btn-secondary { padding:0.625rem 1rem;font-size:0.8rem;letter-spacing:0.03em; }
   .event-themed .rich-content { font-size:1rem; }
   .event-themed .rich-content h1 { font-size:calc(1.5rem * var(--event-font-scale,1)); }
   .event-themed .rich-content h2 { font-size:calc(1.25rem * var(--event-font-scale,1)); }
