@@ -284,11 +284,11 @@ export default function GuestRsvp() {
     const parts = getDateParts(dateStr);
     if (!parts) return null;
     return (
-      <div className="flex flex-col items-center text-center flex-shrink-0" style={{ minWidth: "60px" }}>
-        <span className="text-xs uppercase tracking-wide" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.weekday}</span>
-        <span className="text-3xl font-bold leading-tight" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{parts.day}</span>
-        <span className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{parts.month}</span>
-        <span className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.year}</span>
+      <div className="flex flex-col items-center text-center flex-shrink-0" style={{ minWidth: "56px" }}>
+        <span className="text-[0.625rem] sm:text-xs uppercase tracking-wide" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.weekday}</span>
+        <span className="text-2xl sm:text-3xl font-bold leading-tight" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{parts.day}</span>
+        <span className="text-xs sm:text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{parts.month}</span>
+        <span className="text-xs sm:text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.year}</span>
       </div>
     );
   };
@@ -297,16 +297,16 @@ export default function GuestRsvp() {
     const items = (schedule ?? []).filter((s) => (subEventId ? s.sub_event_id === subEventId : !s.sub_event_id));
     if (items.length === 0) return null;
     return (
-      <div className="mt-6">
-        <div className="space-y-3">
+      <div className="mt-4 sm:mt-6">
+        <div className="space-y-2 sm:space-y-3">
           {items.map((item) => (
-            <div key={item.id} className="grid grid-cols-[80px_1fr] gap-2 sm:grid-cols-[100px_1fr] md:grid-cols-[140px_1fr] sm:gap-5 sm:items-start">
-              <div className="text-sm font-medium" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", whiteSpace: "nowrap", ...programmeItemStyle }}>
+            <div key={item.id} className="grid grid-cols-[5rem_1fr] gap-2 sm:grid-cols-[7rem_1fr] md:grid-cols-[9rem_1fr] sm:gap-5 sm:items-start">
+              <div className="text-xs sm:text-sm font-medium overflow-hidden" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", whiteSpace: "nowrap", ...programmeItemStyle }}>
                 {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
               </div>
-              <div>
-                <p className="font-medium" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", whiteSpace: "pre-wrap", ...programmeItemStyle }}>{item.title}</p>
-                {item.description && <p className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", ...programmeItemStyle }}>{item.description}</p>}
+              <div className="min-w-0">
+                <p className="font-medium text-sm sm:text-base" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", whiteSpace: "pre-wrap", overflowWrap: "break-word", ...programmeItemStyle }}>{item.title}</p>
+                {item.description && <p className="text-xs sm:text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", overflowWrap: "break-word", ...programmeItemStyle }}>{item.description}</p>}
               </div>
             </div>
           ))}
@@ -318,7 +318,7 @@ export default function GuestRsvp() {
   const renderAdditionalInfo = () => {
     if (!showAdditionalInfo) return null;
     return (
-      <div className="mt-6">
+      <div className="mt-4 sm:mt-6">
         {additionalInfoHeadingText && <h3 className="mb-2" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...additionalInfoHeadingStyle }}>{additionalInfoHeadingText}</h3>}
         {additionalInfoBody && <div className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", ...additionalInfoBodyStyle }}>{additionalInfoBody}</div>}
       </div>
@@ -331,7 +331,7 @@ export default function GuestRsvp() {
     const isAttending = current.status === "attending";
     const isDeclined = current.status === "declined";
     return (
-      <div className="mt-6">
+      <div className="mt-4 sm:mt-6">
         <div className="flex gap-2 sm:gap-3 justify-center sm:justify-start">
           <button
             onClick={() => handleRsvp(subEventId, "attending")}
@@ -359,8 +359,8 @@ export default function GuestRsvp() {
           <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{rsvpContent.declinedMessage}</p>
         )}
         {isAttending && allowPlusOneFor(subEventId) && (
-          <div className="mt-4">
-            <p className="mb-2 text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>Bringing a +1?</p>
+          <div className="mt-3 sm:mt-4">
+            <p className="mb-2 text-xs sm:text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>Bringing a +1?</p>
             <div className="flex gap-2 sm:gap-3 justify-center sm:justify-start">
               <button
                 onClick={() => handleBringingPlusOne(subEventId, true)}
@@ -384,12 +384,12 @@ export default function GuestRsvp() {
           </div>
         )}
         {isAttending && allowPlusOneFor(subEventId) && current.bringing_plus_one === true && (
-          <div className="mt-4">
-            <label className="mb-1.5 block text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>Plus One Name</label>
+          <div className="mt-3 sm:mt-4">
+            <label className="mb-1.5 block text-xs sm:text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>Plus One Name</label>
             <input type="text" value={current.plus_one_name} onChange={(e) => handlePlusOneName(subEventId, e.target.value)} placeholder="Enter +1 name" className="event-input" style={{ fontFamily: "var(--event-font-body)" }} />
             {current.plus_one_name.trim() && (
-              <div className="mt-2 flex items-center gap-3">
-                <button onClick={() => handleSavePlusOne(subEventId)} disabled={plusOneSaveMutation.isPending} className="event-btn-primary" style={{ padding: "0.5rem 1.5rem", fontSize: "0.875rem" }}>
+              <div className="mt-2 flex flex-wrap items-center gap-2 sm:gap-3">
+                <button onClick={() => handleSavePlusOne(subEventId)} disabled={plusOneSaveMutation.isPending} className="event-btn-primary" style={{ padding: "0.5rem 1.25rem", fontSize: "0.8rem" }}>
                   {plusOneSaveMutation.isPending ? "Saving…" : "Save +1"}
                 </button>
                 {current.plus_one_saved && !plusOneSaveMutation.isPending && (
@@ -411,10 +411,10 @@ export default function GuestRsvp() {
       <div className="flex flex-row items-start gap-2 sm:gap-6">
         {renderDateColumn(dateStr)}
         <div className="flex-1 min-w-0">
-          {eventName && <h2 className="text-xl sm:text-2xl font-bold mb-1 break-words" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...eventNameStyle }}>{eventName}</h2>}
-          {timeStr && <p className="text-sm mb-1" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", whiteSpace: "nowrap", ...eventTimeStyle }}>{formatTime12(timeStr)}</p>}
-          {venue && <p className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", ...eventTimeStyle }}>{venue}</p>}
-          {address && <p className="text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...eventAddressStyle }}>{address}</p>}
+          {eventName && <h2 className="text-lg sm:text-2xl font-bold mb-1 break-words" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...eventNameStyle }}>{eventName}</h2>}
+          {timeStr && <p className="text-xs sm:text-sm mb-1" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", whiteSpace: "nowrap", ...eventTimeStyle }}>{formatTime12(timeStr)}</p>}
+          {venue && <p className="text-xs sm:text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", ...eventTimeStyle }}>{venue}</p>}
+          {address && <p className="text-xs sm:text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...eventAddressStyle }}>{address}</p>}
           {renderSchedule(subEventId)}
           {renderAdditionalInfo()}
         {renderRsvpButtons(subEventId)}
@@ -429,7 +429,7 @@ export default function GuestRsvp() {
     <div className="guest-section">
       <div className="mx-auto max-w-2xl">
         {/* Header */}
-        <div className="mb-8 text-center">
+        <div className="mb-6 sm:mb-8 text-center">
           {rsvpContent.title && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...titleStyle }}>{rsvpContent.title}</h1>}
           {rsvpDeadline && (
             <p className="mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)" }}>
@@ -442,10 +442,10 @@ export default function GuestRsvp() {
 
         {/* Multiple sub-events or single main event */}
         {hasSubEvents ? (
-          <div className="space-y-8">
+          <div className="space-y-6 sm:space-y-8">
             {subEvents!.map((se, i) => (
               <div key={se.id}>
-                {i > 0 && <hr className="border-0 border-t my-8" style={{ borderColor: "var(--event-border)" }} />}
+                {i > 0 && <hr className="border-0 border-t my-6 sm:my-8" style={{ borderColor: "var(--event-border)" }} />}
                 {renderEventBlock(se.name, se.date, se.time ?? se.start_time, se.venue, se.address, se.id)}
               </div>
             ))}
