@@ -40,6 +40,7 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
 .event-themed .rich-content blockquote { border-left:3px solid var(--event-border);padding-left:1em;margin:1em 0;font-style:italic;color:var(--event-muted); }
 .event-themed .guest-section { padding:4rem 1.5rem; }
 @media (min-width:768px) { .event-themed .guest-section { padding:5rem 2rem; } }
+@media (min-width:641px) and (max-width:1024px) { .event-themed .guest-section { padding:4rem 1.5rem; } }
 .event-themed .guest-section-tight { padding:2.5rem 1.5rem; }
 .event-themed .guest-eyebrow { font-size:0.875rem;font-weight:600;letter-spacing:0.15em;text-transform:uppercase;color:var(--event-muted);margin-bottom:1rem; }
 .event-themed .guest-title { font-size:calc(2.25rem * var(--event-font-scale,1));font-weight:700;margin-bottom:1rem;line-height:1.2; }
@@ -75,4 +76,11 @@ html { scroll-behavior:smooth;overflow-x:hidden; }
   .event-themed .rich-content h1 { font-size:calc(1.5rem * var(--event-font-scale,1)); }
   .event-themed .rich-content h2 { font-size:calc(1.25rem * var(--event-font-scale,1)); }
   .event-themed .rich-content h3 { font-size:calc(1.125rem * var(--event-font-scale,1)); }
+}
+@media (min-width:641px) and (max-width:1024px) {
+  .event-themed .guest-title { font-size:calc(2.25rem * var(--event-font-scale,1)); }
+  .event-themed .guest-subtitle { font-size:calc(1.125rem * var(--event-font-scale,1)); }
+  .event-themed .event-card { padding:1.5rem; }
+  .event-themed .event-btn-primary,.event-themed .event-btn-secondary { padding:0.75rem 1.75rem;font-size:0.9rem; }
+  .event-themed .rich-content { font-size:1.03125rem; }
 }

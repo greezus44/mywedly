@@ -260,7 +260,7 @@ export default function GuestRsvp() {
   const eventAddressStyle = getTypographyStyle(rsvpContent.eventAddressTypography);
   const programmeItemStyle = getTypographyStyle(rsvpContent.programmeItemTypography);
   const rsvpDeadlineStyle = getTypographyStyle(rsvpContent.rsvpDeadlineTypography);
-  const rsvpDeadline = (event.draft_rsvp_deadline ?? event.rsvp_deadline) as string | null | undefined;
+  const rsvpDeadline = event.rsvp_deadline as string | null | undefined;
   const additionalInfoBodyStyle = getTypographyStyle(rsvpContent.additionalInfoBodyTypography);
 
   const attendingSelectedStyle = (isSelected: boolean): React.CSSProperties => {
@@ -284,7 +284,7 @@ export default function GuestRsvp() {
     const parts = getDateParts(dateStr);
     if (!parts) return null;
     return (
-      <div className="flex flex-col items-center text-center" style={{ minWidth: "90px" }}>
+      <div className="flex flex-col items-center text-center" style={{ minWidth: "72px" }}>
         <span className="text-xs uppercase tracking-wide" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.weekday}</span>
         <span className="text-3xl font-bold leading-tight" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{parts.day}</span>
         <span className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{parts.month}</span>
@@ -300,8 +300,8 @@ export default function GuestRsvp() {
       <div className="mt-6">
         <div className="space-y-3">
           {items.map((item) => (
-            <div key={item.id} className="grid grid-cols-[80px_1fr] gap-2 sm:grid-cols-[140px_1fr] sm:gap-5 sm:items-start">
-              <div className="text-sm font-medium whitespace-nowrap" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", ...programmeItemStyle }}>
+            <div key={item.id} className="grid grid-cols-[64px_1fr] gap-2 sm:grid-cols-[100px_1fr] md:grid-cols-[140px_1fr] sm:gap-5 sm:items-start">
+              <div className="text-sm font-medium" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", wordBreak: "keep-all", ...programmeItemStyle }}>
                 {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
               </div>
               <div>
@@ -408,7 +408,7 @@ export default function GuestRsvp() {
 
   const renderEventBlock = (eventName: string, dateStr: string | null, timeStr: string | null, venue: string | null, address: string | null, subEventId: string | null) => {
     return (
-      <div className="flex flex-row items-start gap-4 sm:gap-6">
+      <div className="flex flex-row items-start gap-3 sm:gap-6">
         {renderDateColumn(dateStr)}
         <div className="flex-1 min-w-0">
           {eventName && <h2 className="text-2xl font-bold mb-1" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...eventNameStyle }}>{eventName}</h2>}
