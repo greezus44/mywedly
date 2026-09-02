@@ -81,7 +81,7 @@ export function TimelinePage() {
             <div key={item.id} className="rounded-lg border border-dash-border bg-dash-surface p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-dash-text">{item.title}</h3>
+                  <h3 className="font-semibold text-dash-text" style={{ whiteSpace: "pre-wrap" }}>{item.title}</h3>
                   {item.schedule_date && <p className="text-sm text-dash-muted">{formatDate(item.schedule_date)}{item.start_time ? ` at ${formatTime12(item.start_time)}` : ""}{item.end_time ? ` – ${formatTime12(item.end_time)}` : ""}</p>}
                   {item.description && <p className="mt-1 text-sm text-dash-muted">{item.description}</p>}
                   {item.venue && <p className="mt-1 text-sm text-dash-muted">{item.venue}</p>}
@@ -97,7 +97,7 @@ export function TimelinePage() {
       )}
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editItem ? "Edit Schedule Item" : "Add Schedule Item"}>
         <div className="space-y-4">
-          <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Ceremony" autoFocus />
+          <Textarea label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Ceremony" rows={2} autoFocus />
           <Textarea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
           <DatePicker label="Date" value={date} onChange={(e) => setDate(e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
