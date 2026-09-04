@@ -5,7 +5,9 @@ import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { resolveGuestInvitations, getInvitedSubEventIds, hasRsvpAccess, type ResolveResult } from "../../lib/invitations";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { useLanguage } from "../../lib/language";
 import { LoadingSpinner } from "../../components/ui";
+import { LanguageToggle } from "../../components/site/LanguageToggle";
 
 export interface GuestOutletContext { event: UserEvent; slug: string; theme: unknown; invitedSubEventIds: string[]; }
 export function useGuestOutletContext(): GuestOutletContext { return useOutletContext<GuestOutletContext>(); }
@@ -61,17 +63,19 @@ export default function GuestLayout() {
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
   if (!guest || eventId !== event.id) return null;
 
+  const { t } = useLanguage();
   const navLinks = [
-    { label: "Home", to: `/e/${slug}/home` },
+    { label: t("Home", "Utama"), to: `/e/${slug}/home` },
     ...(hasRsvpAccess(invitations ?? { invitations: [], hasMainEventAccess: false, error: null }) ? [{ label: "RSVP", to: `/e/${slug}/rsvp` }] : []),
-    ...(((event.content as Record<string, unknown> | null)?.messagesEnabled !== false) ? [{ label: "Messages", to: `/e/${slug}/wishes` }] : []),
+    ...(((event.content as Record<string, unknown> | null)?.messagesEnabled !== false) ? [{ label: t("Messages", "Mesej"), to: `/e/${slug}/wishes` }] : []),
     ...(customPages ?? []).map((p) => ({ label: p.title, to: `/e/${slug}/p/${p.slug}` })),
   ];
 
   return (
     // FIX #2: Pass event.theme (published) to EventThemeProvider
     <EventThemeProvider theme={event.theme}>
-      <button onClick={() => setMenuOpen(true)} aria-label="Open navigation menu" className="fixed left-4 top-4 z-40 flex h-8 w-8 items-center justify-center transition-all hover:scale-105" style={{ color: "var(--event-accent)" }}>
+      <LanguageToggle />
+      <button onClick={() => setMenuOpen(true) aria-label="Open navigation menu" className="fixed left-4 top-4 z-40 flex h-8 w-8 items-center justify-center transition-all hover:scale-105" style={{ color: "var(--event-accent)" }}>
         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
       </button>
       {menuOpen && (
@@ -88,7 +92,7 @@ export default function GuestLayout() {
               {navLinks.map((link) => (
                 <NavLink key={link.to} to={link.to} onClick={closeMenu} className={({ isActive }) => `rounded-lg px-4 py-3 text-base font-medium transition-colors ${isActive ? "opacity-100" : "opacity-70 hover:opacity-100"}`} style={({ isActive }) => ({ color: isActive ? "var(--event-primary)" : "var(--event-text)", backgroundColor: isActive ? "var(--event-surface-alt)" : "transparent" })}>{link.label}</NavLink>
               ))}
-              <button onClick={() => { signOut(); navigate(`/e/${slug}/signin`, { replace: true }); }} className="mt-4 rounded-lg px-4 py-3 text-left text-base font-medium opacity-70 transition-colors hover:opacity-100" style={{ color: "var(--event-text)" }}>Sign Out</button>
+              <button onClick={() => { signOut(); navigate(`/e/${slug}/signin`, { replace: true }); }} className="mt-4 rounded-lg px-4 py-3 text-left text-base font-medium opacity-70 transition-colors hover:opacity-100" style={{ color: "var(--event-text)" }}>{t("Sign Out", "Log Keluar")}</button>
             </nav>
           </div>
         </div>

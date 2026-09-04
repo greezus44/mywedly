@@ -6,7 +6,9 @@ import { EventThemeProvider } from "../../lib/theme-context";
 import { RUSTY_THEME } from "../../lib/theme";
 import { resolveGuestInvitations, getInvitedSubEventIds, hasRsvpAccess, type ResolveResult } from "../../lib/invitations";
 import { useGuestAuth } from "../../lib/guest-auth";
+import { useLanguage } from "../../lib/language";
 import { LoadingSpinner } from "../../components/ui";
+import { LanguageToggle } from "../../components/site/LanguageToggle";
 
 export { useGuestOutletContext } from "./guest-layout";
 
@@ -69,6 +71,7 @@ export default function RustyLayout() {
 
   return (
     <EventThemeProvider theme={RUSTY_THEME}>
+      <LanguageToggle />
       <button onClick={() => setMenuOpen(true)} aria-label="Open navigation menu" className="fixed left-4 top-4 z-40 flex h-8 w-8 items-center justify-center transition-all hover:scale-105" style={{ color: "var(--event-accent)" }}>
         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
       </button>
@@ -86,7 +89,7 @@ export default function RustyLayout() {
               {navLinks.map((link) => (
                 <NavLink key={link.to} to={link.to} onClick={closeMenu} className={({ isActive }) => `rounded-lg px-4 py-3 text-base font-medium transition-colors ${isActive ? "opacity-100" : "opacity-70 hover:opacity-100"}`} style={({ isActive }) => ({ color: isActive ? "var(--event-primary)" : "var(--event-text)", backgroundColor: isActive ? "var(--event-surface-alt)" : "transparent" })}>{link.label}</NavLink>
               ))}
-              <button onClick={() => { signOut(); navigate(`/r/${slug}/signin`, { replace: true }); }} className="mt-4 rounded-lg px-4 py-3 text-left text-base font-medium opacity-70 transition-colors hover:opacity-100" style={{ color: "var(--event-text)" }}>Sign Out</button>
+              <button onClick={() => { signOut(); navigate(`/r/${slug}/signin`, { replace: true }); }} className="mt-4 rounded-lg px-4 py-3 text-left text-base font-medium opacity-70 transition-colors hover:opacity-100" style={{ color: "var(--event-text)" }}>{t("Sign Out", "Log Keluar")}</button>
             </nav>
           </div>
         </div>
