@@ -45,6 +45,8 @@ export interface RsvpContent {
   plusOneNoButtonColors?: ButtonColors;
   plusOneYesSelectedButtonColors?: ButtonColors;
   plusOneNoSelectedButtonColors?: ButtonColors;
+  contactMessage?: string;
+  contactMessageTypography?: unknown;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -209,6 +211,14 @@ export function RsvpPage() {
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">RSVP Deadline Typography</label>
             <TypographyControls value={rsvpContent.rsvpDeadlineTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, rsvpDeadlineTypography: v }))} showText={false} />
+          </div>
+          <div className="space-y-2 border-t border-dash-border pt-3">
+            <label className="block text-xs font-semibold text-dash-text">Contact Information</label>
+          </div>
+          <Textarea label="Contact Message" value={rsvpContent.contactMessage ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, contactMessage: e.target.value }))} rows={2} placeholder="e.g. Please contact Sarah at +673 123 4567 if you have any questions." />
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Contact Message Typography</label>
+            <TypographyControls value={rsvpContent.contactMessageTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, contactMessageTypography: v }))} showText={false} />
           </div>
         </div>
         }

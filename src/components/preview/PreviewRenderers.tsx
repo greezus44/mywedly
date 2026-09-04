@@ -120,7 +120,7 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
 
 interface RsvpPreviewProps { theme: unknown; content?: Record<string, unknown> | null; }
 export function RsvpPreview({ theme, content }: RsvpPreviewProps) {
-  const c = content as { title?: string; subtitle?: string; attendingText?: string; declinedText?: string } | null;
+  const c = content as { title?: string; subtitle?: string; attendingText?: string; declinedText?: string; contactMessage?: string } | null;
   return (
     <EventThemeProvider theme={theme}>
       <div className="guest-section">
@@ -134,6 +134,9 @@ export function RsvpPreview({ theme, content }: RsvpPreviewProps) {
               <button type="button" className="event-btn-secondary" style={{ opacity: 0.6 }}>{c?.declinedText || "Decline"}</button>
             </div>
           </div>
+          {c?.contactMessage?.trim() && (
+            <p className="mt-8" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap" }}>{c.contactMessage}</p>
+          )}
         </div>
       </div>
     </EventThemeProvider>
