@@ -97,7 +97,7 @@ export function TimelinePage() {
       )}
       <Modal open={showForm} onClose={() => setShowForm(false)} title={editItem ? "Edit Schedule Item" : "Add Schedule Item"}>
         <div className="space-y-4">
-          <Textarea label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Ceremony" rows={2} autoFocus />
+          <Textarea label="Title" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSave(); } }} placeholder="e.g. Ceremony (Shift+Enter for new line)" rows={2} autoFocus />
           <Textarea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
           <DatePicker label="Date" value={date} onChange={(e) => setDate(e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
