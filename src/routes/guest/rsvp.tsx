@@ -65,6 +65,7 @@ function getDateParts(dateStr: string | null | undefined): { weekday: string; da
 export default function GuestRsvp() {
   const { event, slug, invitedSubEventIds } = useGuestOutletContext();
   const { guest } = useGuestAuth();
+  const { language } = useLanguage();
   const queryClient = useQueryClient();
 
   const rsvpContent: RsvpContent = {

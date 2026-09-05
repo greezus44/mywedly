@@ -64,6 +64,10 @@ export function RsvpPage() {
     const content = (event.draft_content ?? event.content) as Record<string, unknown> | null;
     return { ...DEFAULT_RSVP_CONTENT, ...((content?.rsvp as Partial<RsvpContent>) ?? {}) };
   });
+  const [rsvpBm, setRsvpBm] = useState<Record<string, string>>(() => {
+    const content = (event.draft_content ?? event.content) as Record<string, unknown> | null;
+    return ((content?.rsvpBm as Record<string, string>) ?? {});
+  });
   const [showEditor, setShowEditor] = useState(false);
   const [rsvpDeadline, setRsvpDeadline] = useState(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "");
   useEffect(() => { setRsvpDeadline(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? ""); }, [event.draft_rsvp_deadline, event.rsvp_deadline]);
@@ -76,12 +80,13 @@ export function RsvpPage() {
   useEffect(() => {
     const content = (event.draft_content ?? event.content) as Record<string, unknown> | null;
     setRsvpContent({ ...DEFAULT_RSVP_CONTENT, ...((content?.rsvp as Partial<RsvpContent>) ?? {}) });
+    setRsvpBm(((content?.rsvpBm as Record<string, string>) ?? {}));
   }, [event.draft_content, event.content]);
 
   const saveContentMutation = useMutation({
     mutationFn: async () => {
       const existing = ((event.draft_content ?? event.content) as Record<string, unknown> | null) ?? {};
-      const updated = { ...existing, rsvp: rsvpContent };
+      const updated = { ...existing, rsvp: rsvpContent, rsvpBm };
       const { error } = await supabase.from("user_events").update({ draft_content: updated as unknown as Json }).eq("id", eventId);
       if (error) throw error;
     },
@@ -139,7 +144,7 @@ export function RsvpPage() {
           {saveContentMutation.isError && <p className="text-sm text-dash-danger">{saveContentMutation.error instanceof Error ? saveContentMutation.error.message : "Save failed"}</p>}
           {saveContentMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
           <Input label="Page Title" value={rsvpContent.title ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, title: e.target.value }))} />
-          <Input label="Page Title (Bahasa Melayu)" value={(rsvpContent as Record<string, string>).titleBm ?? ""} onChange={(e) => { const existing = (event.draft_content ?? event.content) as Record<string, unknown> | null; const rsvpBm = ((existing?.rsvpBm as Record<string, string>) ?? {}); setRsvpContent((p) => ({ ...p })); saveRsvpBm({ ...rsvpBm, title: e.target.value }); }} placeholder="Auto-translate if empty" />
+          <Input label="Page Title (Bahasa Melayu)" value={rsvpBm.title ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, title: e.target.value }))} placeholder="Auto-translate if empty" />
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">Title Typography</label>
             <TypographyControls value={rsvpContent.titleTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, titleTypography: v }))} showText={false} />
