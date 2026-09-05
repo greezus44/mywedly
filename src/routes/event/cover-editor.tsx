@@ -67,13 +67,17 @@ export function CoverEditor() {
             </div>
             <RangeInput label="Overlay Opacity" value={config.overlayOpacity ?? 30} onChange={(v) => update({ overlayOpacity: v })} min={0} max={100} />
             <TypographyControls label="Eyebrow" value={(config.eyebrow as TypographyStyle) ?? {}} onChange={(v) => update({ eyebrow: v })} showText />
+            <Input label="Eyebrow (Bahasa Melayu)" value={config.eyebrowBm ?? ""} onChange={(e) => update({ eyebrowBm: e.target.value })} placeholder="Auto-translate if empty" />
             <TypographyControls label="Heading" value={(config.heading as TypographyStyle) ?? {}} onChange={(v) => update({ heading: v })} showText multiline />
+            <Input label="Heading (Bahasa Melayu)" value={config.headingBm ?? ""} onChange={(e) => update({ headingBm: e.target.value })} placeholder="Auto-translate if empty" />
             <TypographyControls label="Subheading" value={(config.subheading as TypographyStyle) ?? {}} onChange={(v) => update({ subheading: v })} showText multiline />
+            <Input label="Subheading (Bahasa Melayu)" value={config.subheadingBm ?? ""} onChange={(e) => update({ subheadingBm: e.target.value })} placeholder="Auto-translate if empty" />
             <div>
               <label className="mb-1 block text-xs font-medium text-dash-muted">Body Content</label>
               <RichTextEditor value={config.bodyHtml ?? ""} onChange={(html) => update({ bodyHtml: html })} />
             </div>
             <Input label="Button Text" value={config.ctaText ?? ""} onChange={(e) => update({ ctaText: e.target.value })} placeholder="Enter" />
+            <Input label="Button Text (Bahasa Melayu)" value={config.ctaTextBm ?? ""} onChange={(e) => update({ ctaTextBm: e.target.value })} placeholder="Auto-translate if empty" />
             <ButtonColourEditor label="Button Colours" value={config.buttonColors ?? {}} onChange={(v) => update({ buttonColors: v })} />
           </div>
           </>

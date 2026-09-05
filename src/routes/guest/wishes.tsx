@@ -6,8 +6,10 @@ import { supabase, type EventMessage } from "../../lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDateTime } from "../../lib/utils";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
+import { useLanguage } from "../../lib/language";
+import { pickText, autoTranslate } from "../../lib/translations";
 
-interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; }
+interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; }
 
 export default function GuestWishes() {
   const { event } = useGuestOutletContext();
@@ -20,11 +22,12 @@ export default function GuestWishes() {
   const [message, setMessage] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const { language } = useLanguage();
   const wishesContent = ((event.content as Record<string, unknown> | null) ?? {}).wishes as WishesContent | undefined;
-  const heading = wishesContent?.heading;
-  const subheading = wishesContent?.subheading;
-  const placeholder = wishesContent?.placeholder || "Write your message here...";
-  const submitLabel = wishesContent?.submitLabel || "Send";
+  const heading = language === "bm" ? pickText(wishesContent?.heading, wishesContent?.headingBm, autoTranslate(wishesContent?.heading ?? "")) : wishesContent?.heading;
+  const subheading = language === "bm" ? pickText(wishesContent?.subheading, wishesContent?.subheadingBm, autoTranslate(wishesContent?.subheading ?? "")) : wishesContent?.subheading;
+  const placeholder = language === "bm" ? pickText(wishesContent?.placeholder || "Write your message here...", wishesContent?.placeholderBm, autoTranslate(wishesContent?.placeholder || "Write your message here...")) : (wishesContent?.placeholder || "Write your message here...");
+  const submitLabel = language === "bm" ? pickText(wishesContent?.submitLabel || "Send", wishesContent?.submitLabelBm, autoTranslate(wishesContent?.submitLabel || "Send")) : (wishesContent?.submitLabel || "Send");
 
   const { data: messages, isLoading } = useQuery({
     queryKey: ["event-messages-public", event.id],
@@ -85,14 +88,14 @@ export default function GuestWishes() {
           />
           {submitError && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{submitError}</p>}
           <button type="submit" disabled={submitMutation.isPending} className="event-btn-primary" style={{ opacity: submitMutation.isPending ? 0.6 : 1, ...buttonColorsToStyle(wishesContent?.buttonColors) }} onMouseEnter={(e) => { if (!submitMutation.isPending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(wishesContent?.buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(wishesContent?.buttonColors))}>
-            {submitMutation.isPending ? "Sending..." : submitLabel}
+            {submitMutation.isPending ? (language === "bm" ? "Menghantar..." : "Sending...") : submitLabel}
           </button>
         </form>
 
         {isLoading ? (
-          <p className="text-center" style={{ color: "var(--event-muted)" }}>Loading messages...</p>
+          <p className="text-center" style={{ color: "var(--event-muted)" }}>{language === "bm" ? "Memuatkan mesej..." : "Loading messages..."}</p>
         ) : !messages || messages.length === 0 ? (
-          <p className="text-center" style={{ color: "var(--event-muted)" }}>No messages yet. Be the first to leave a message!</p>
+          <p className="text-center" style={{ color: "var(--event-muted)" }}>{language === "bm" ? "Tiada mesej lagi. Jadi yang pertama meninggalkan mesej!" : "No messages yet. Be the first to leave a message!"}</p>
         ) : (
           <div className="space-y-4">
             {messages.map((msg) => (

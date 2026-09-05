@@ -5,10 +5,12 @@ import { useGuestOutletContext } from "./guest-layout";
 import { BlockRenderer } from "./block-renderer";
 import { jsonToBlocks } from "../event/block-types";
 import { LoadingSpinner } from "../../components/ui";
+import { useLanguage } from "../../lib/language";
 
 export default function GuestCustomPage() {
   const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
   const { event } = useGuestOutletContext();
+  const { t } = useLanguage();
 
   const { data: page, isLoading } = useQuery({
     queryKey: ["custom-page-public", event.id, pageSlug],
@@ -29,9 +31,9 @@ export default function GuestCustomPage() {
   if (isLoading) return <div className="flex min-h-[50vh] items-center justify-center"><LoadingSpinner /></div>;
   if (!page) return (
     <div className="guest-section text-center">
-      <h1 className="guest-title mb-2">Page Not Found</h1>
-      <p className="guest-subtitle mb-4">This page could not be found or is not published.</p>
-      <Link to={`/e/${slug}/home`} className="event-btn-primary inline-block">Back to Home</Link>
+      <h1 className="guest-title mb-2">{t("Page Not Found", "Halaman Tidak Ditemui")}</h1>
+      <p className="guest-subtitle mb-4">{t("This page could not be found or is not published.", "Halaman ini tidak ditemui atau tidak diterbitkan.")}</p>
+      <Link to={`/e/${slug}/home`} className="event-btn-primary inline-block">{t("Back to Home", "Kembali ke Utama")}</Link>
     </div>
   );
 
@@ -46,7 +48,7 @@ export default function GuestCustomPage() {
             {blocks.map((block) => <BlockRenderer key={block.id} block={block} eventId={event.id} />)}
           </div>
         ) : (
-          page.body ? <div className="rich-content" dangerouslySetInnerHTML={{ __html: page.body }} /> : <p className="text-center text-dash-muted">No content yet.</p>
+          page.body ? <div className="rich-content" dangerouslySetInnerHTML={{ __html: page.body }} /> : <p className="text-center text-dash-muted">{t("No content yet.", "Tiada kandungan lagi.")}</p>
         )}
       </div>
     </div>

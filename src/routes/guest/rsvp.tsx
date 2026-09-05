@@ -6,6 +6,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatTime12 } from "../../lib/utils";
 import { getTypographyText, getTypographyStyle } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
+import { useLanguage } from "../../lib/language";
+import { pickText, autoTranslate } from "../../lib/translations";
 
 interface RsvpContent {
   title?: string;
@@ -68,6 +70,13 @@ export default function GuestRsvp() {
   const rsvpContent: RsvpContent = {
     ...DEFAULT_RSVP_CONTENT,
     ...(((event.content as Record<string, unknown> | null)?.rsvp as Partial<RsvpContent>) ?? {}),
+  };
+  const rsvpBm = ((event.content as Record<string, unknown> | null)?.rsvpBm ?? {}) as Record<string, string>;
+  const tr = (en: string, bmKey?: string) => {
+    if (language !== "bm") return en;
+    if (bmKey && rsvpBm[bmKey]?.trim()) return rsvpBm[bmKey];
+    const auto = autoTranslate(en);
+    return auto ?? en;
   };
 
   const { data: schedule } = useQuery({
@@ -304,7 +313,7 @@ export default function GuestRsvp() {
       <div className="mt-4 sm:mt-6">
         <div className="space-y-3 sm:space-y-4">
           {items.map((item) => (
-            <div key={item.id} className="grid grid-cols-[7.5rem_1fr] gap-3 items-start sm:grid-cols-[8.5rem_1fr] md:grid-cols-[10rem_1fr] sm:gap-6">
+            <div key={item.id} className="grid grid-cols-[5.5rem_1fr] gap-4 items-start sm:grid-cols-[8.5rem_1fr] md:grid-cols-[10rem_1fr] sm:gap-6">
               <div className="text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", whiteSpace: "nowrap", ...programmeItemStyle }}>
                 {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
               </div>
@@ -344,7 +353,7 @@ export default function GuestRsvp() {
             onMouseEnter={(e) => { if (!isAttending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.attendingButtonColors)); }}
             onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending) })}
           >
-            {rsvpContent.attendingText}
+            {tr(rsvpContent.attendingText || "Attending", "attendingText")}
           </button>
           <button
             onClick={() => handleRsvp(subEventId, "declined")}
@@ -353,18 +362,18 @@ export default function GuestRsvp() {
             onMouseEnter={(e) => { if (!isDeclined) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.declinedButtonColors)); }}
             onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined) })}
           >
-            {rsvpContent.declinedText}
+            {tr(rsvpContent.declinedText || "Declined", "declinedText")}
           </button>
         </div>
         {isAttending && rsvpContent.attendingMessage && (
-          <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{rsvpContent.attendingMessage}</p>
+          <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{tr(rsvpContent.attendingMessage, "attendingMessage")}</p>
         )}
         {isDeclined && rsvpContent.declinedMessage && (
-          <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{rsvpContent.declinedMessage}</p>
+          <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{tr(rsvpContent.declinedMessage, "declinedMessage")}</p>
         )}
         {isAttending && allowPlusOneFor(subEventId) && (
           <div className="mt-3 sm:mt-4">
-            <p className="mb-2 text-xs sm:text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>Bringing a +1?</p>
+            <p className="mb-2 text-xs sm:text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{tr("Bringing a +1?", "plusOneQuestion")}</p>
             <div className="flex gap-2 sm:gap-3 justify-center sm:justify-start">
               <button
                 onClick={() => handleBringingPlusOne(subEventId, true)}
@@ -373,7 +382,7 @@ export default function GuestRsvp() {
                 onMouseEnter={(e) => { if (current.bringing_plus_one !== true) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.plusOneYesButtonColors)); }}
                 onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: current.bringing_plus_one === true ? 1 : 0.6, ...(current.bringing_plus_one === true ? (rsvpContent.plusOneYesSelectedButtonColors ? buttonColorsToStyle(rsvpContent.plusOneYesSelectedButtonColors) : { backgroundColor: "var(--event-surface-alt)", borderColor: "var(--event-primary)" }) : buttonColorsToStyle(rsvpContent.plusOneYesButtonColors)) })}
               >
-                Yes
+                {tr("Yes", "plusOneYes")}
               </button>
               <button
                 onClick={() => handleBringingPlusOne(subEventId, false)}
@@ -382,7 +391,7 @@ export default function GuestRsvp() {
                 onMouseEnter={(e) => { if (current.bringing_plus_one !== false) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.plusOneNoButtonColors)); }}
                 onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: current.bringing_plus_one === false ? 1 : 0.6, ...(current.bringing_plus_one === false ? (rsvpContent.plusOneNoSelectedButtonColors ? buttonColorsToStyle(rsvpContent.plusOneNoSelectedButtonColors) : { backgroundColor: "var(--event-surface-alt)", borderColor: "var(--event-primary)" }) : buttonColorsToStyle(rsvpContent.plusOneNoButtonColors)) })}
               >
-                No
+                {tr("No", "plusOneNo")}
               </button>
             </div>
           </div>
@@ -394,13 +403,13 @@ export default function GuestRsvp() {
             {current.plus_one_name.trim() && (
               <div className="mt-2 flex flex-wrap items-center gap-2 sm:gap-3">
                 <button onClick={() => handleSavePlusOne(subEventId)} disabled={plusOneSaveMutation.isPending} className="event-btn-primary" style={{ padding: "0.5rem 1.25rem", fontSize: "0.8rem" }}>
-                  {plusOneSaveMutation.isPending ? "Saving…" : "Save +1"}
+                  {plusOneSaveMutation.isPending ? tr("Saving…", "plusOneSaving") : tr("Save +1", "plusOneSaveButton")}
                 </button>
                 {current.plus_one_saved && !plusOneSaveMutation.isPending && (
-                  <span className="text-sm" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)" }}>Saved!</span>
+                  <span className="text-sm" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)" }}>{tr("Saved!", "plusOneSaved")}</span>
                 )}
                 {plusOneSaveMutation.isError && (
-                  <span className="text-sm" style={{ color: "var(--event-error, #dc2626)", fontFamily: "var(--event-font-body)" }}>Save failed</span>
+                  <span className="text-sm" style={{ color: "var(--event-error, #dc2626)", fontFamily: "var(--event-font-body)" }}>{tr("Save failed", "plusOneSaveFailed")}</span>
                 )}
               </div>
             )}
@@ -434,14 +443,14 @@ export default function GuestRsvp() {
       <div className="mx-auto max-w-2xl">
         {/* Header */}
         <div className="mb-6 sm:mb-8 text-center">
-          {rsvpContent.title && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...titleStyle }}>{rsvpContent.title}</h1>}
+          {rsvpContent.title && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...titleStyle }}>{tr(rsvpContent.title, "title")}</h1>}
           {rsvpDeadline && (
             <p className="mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)" }}>
-              {rsvpContent.rsvpDeadlinePrefix || "RSVP by"} {new Date(rsvpDeadline).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+              {tr(rsvpContent.rsvpDeadlinePrefix || "RSVP by", "rsvpDeadlinePrefix")} {new Date(rsvpDeadline).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
             </p>
           )}
           {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...guestNameStyle }}>{guestNameText}</p>}
-          {subtitleText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...subtitleStyle }}>{subtitleText}</p>}
+          {subtitleText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...subtitleStyle }}>{tr(subtitleText, "subtitle")}</p>}
         </div>
 
         {/* Multiple sub-events or single main event */}
@@ -460,7 +469,7 @@ export default function GuestRsvp() {
 
         {contactMessageText && (
           <div className="mt-8 sm:mt-10 text-center">
-            <p style={{ whiteSpace: "pre-wrap", color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...contactMessageStyle }}>{contactMessageText}</p>
+            <p style={{ whiteSpace: "pre-wrap", color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...contactMessageStyle }}>{tr(contactMessageText, "contactMessage")}</p>
           </div>
         )}
       </div>

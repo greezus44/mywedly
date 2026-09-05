@@ -8,7 +8,7 @@ import { ButtonColourEditor, type ButtonColors } from "../../components/ui/Butto
 import { formatDateTime } from "../../lib/utils";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
-interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; enabled?: boolean; }
+interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; enabled?: boolean; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; }
 
 export function MessagesPage() {
   const { event, eventId } = useOutletContext<EventContextValue>();
@@ -119,16 +119,32 @@ export function MessagesPage() {
             <input type="text" value={wishesContent.heading ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, heading: e.target.value }))} placeholder="Messages" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
           </div>
           <div>
+            <label className="mb-1 block text-xs font-medium text-dash-muted">Page Heading (Bahasa Melayu)</label>
+            <input type="text" value={wishesContent.headingBm ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, headingBm: e.target.value }))} placeholder="Auto-translate if empty" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+          </div>
+          <div>
             <label className="mb-1 block text-xs font-medium text-dash-muted">Subheading</label>
             <input type="text" value={wishesContent.subheading ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, subheading: e.target.value }))} placeholder="Leave us a message" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-dash-muted">Subheading (Bahasa Melayu)</label>
+            <input type="text" value={wishesContent.subheadingBm ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, subheadingBm: e.target.value }))} placeholder="Auto-translate if empty" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-dash-muted">Input Placeholder</label>
             <input type="text" value={wishesContent.placeholder ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, placeholder: e.target.value }))} placeholder="Write your message here..." className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
           </div>
           <div>
+            <label className="mb-1 block text-xs font-medium text-dash-muted">Input Placeholder (Bahasa Melayu)</label>
+            <input type="text" value={wishesContent.placeholderBm ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, placeholderBm: e.target.value }))} placeholder="Auto-translate if empty" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+          </div>
+          <div>
             <label className="mb-1 block text-xs font-medium text-dash-muted">Submit Button Label</label>
             <input type="text" value={wishesContent.submitLabel ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, submitLabel: e.target.value }))} placeholder="Send Message" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-dash-muted">Submit Button Label (Bahasa Melayu)</label>
+            <input type="text" value={wishesContent.submitLabelBm ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, submitLabelBm: e.target.value }))} placeholder="Auto-translate if empty" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
           </div>
           <ButtonColourEditor label="Submit Button Colours" value={wishesContent.buttonColors ?? {}} onChange={(v) => setWishesContent((p) => ({ ...p, buttonColors: v }))} />
           <div className="flex items-center gap-3 pt-2">

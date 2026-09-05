@@ -43,9 +43,13 @@ export function LoginEditor() {
         editor={
           <div className="space-y-4 rounded-lg border border-dash-border bg-dash-surface p-4">
             <TypographyControls label="Heading" value={(config.heading as TypographyStyle) ?? {}} onChange={(v) => update({ heading: v })} showText />
+            <Input label="Heading (Bahasa Melayu)" value={config.headingBm ?? ""} onChange={(e) => update({ headingBm: e.target.value })} placeholder="Auto-translate if empty" />
             <TypographyControls label="Subheading" value={(config.subheading as TypographyStyle) ?? {}} onChange={(v) => update({ subheading: v })} showText />
+            <Input label="Subheading (Bahasa Melayu)" value={config.subheadingBm ?? ""} onChange={(e) => update({ subheadingBm: e.target.value })} placeholder="Auto-translate if empty" />
             <Input label="Placeholder" value={config.placeholder ?? ""} onChange={(e) => update({ placeholder: e.target.value })} placeholder="Enter your username" />
+            <Input label="Placeholder (Bahasa Melayu)" value={config.placeholderBm ?? ""} onChange={(e) => update({ placeholderBm: e.target.value })} placeholder="Auto-translate if empty" />
             <Input label="Button Label" value={config.buttonLabel ?? ""} onChange={(e) => update({ buttonLabel: e.target.value })} placeholder="Sign In" />
+            <Input label="Button Label (Bahasa Melayu)" value={config.buttonLabelBm ?? ""} onChange={(e) => update({ buttonLabelBm: e.target.value })} placeholder="Auto-translate if empty" />
             <ButtonColourEditor label="Button Colours" value={config.buttonColors ?? {}} onChange={(v) => update({ buttonColors: v })} />
           </div>
         }

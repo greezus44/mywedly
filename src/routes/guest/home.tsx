@@ -4,11 +4,14 @@ import { useGuestAuth } from "../../lib/guest-auth";
 import { getTypographyText, getTypographyStyle } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/ui/ButtonColourEditor";
 import type { EventContent } from "../../components/preview/PreviewRenderers";
+import { useLanguage } from "../../lib/language";
+import { pickText, autoTranslate } from "../../lib/translations";
 
 export default function GuestHome() {
   const { event, slug, invitedSubEventIds } = useGuestOutletContext();
   const { guest } = useGuestAuth();
   const navigate = useNavigate();
+  const { language, t } = useLanguage();
   const content = (event.content ?? {}) as EventContent;
   const sections = content.sections ?? ((content.heading !== undefined || content.body !== undefined) ? [{ heading: content.heading, body: content.body }] : []);
   const logo = content.logo;
@@ -21,15 +24,17 @@ export default function GuestHome() {
         </div>
       )}
       {sections.length === 0 && !logo?.url && (
-        <section className="guest-section text-center"><div className="mx-auto max-w-md"><p className="guest-subtitle">Welcome to {event.name}. Check back soon for updates.</p></div></section>
+        <section className="guest-section text-center"><div className="mx-auto max-w-md"><p className="guest-subtitle">{t("Welcome to", "Selamat datang ke")} {event.name}. {t("Check back soon for updates.", "Sila semak semula nanti untuk kemas kini.")}</p></div></section>
       )}
       {sections.map((section, i) => {
         const headingText = getTypographyText(section.heading, "");
         const headingStyle = getTypographyStyle(section.heading);
+        const headingBm = (section as { headingBm?: string }).headingBm || "";
+        const displayHeading = language === "bm" ? pickText(headingText, headingBm) : headingText;
         return (
           <section key={i} className="guest-section">
             <div className="mx-auto max-w-3xl">
-              {headingText && <h2 className="guest-title mb-4" style={{ whiteSpace: "pre-wrap", ...headingStyle }}>{headingText}</h2>}
+              {displayHeading && <h2 className="guest-title mb-4" style={{ whiteSpace: "pre-wrap", ...headingStyle }}>{displayHeading}</h2>}
               {section.body && <div className="rich-content" dangerouslySetInnerHTML={{ __html: section.body }} />}
             </div>
           </section>
@@ -37,7 +42,7 @@ export default function GuestHome() {
       })}
       {(invitedSubEventIds.length > 0 || !!guest) && (
         <section className="rsvp-section text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
-          <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary" style={buttonColorsToStyle(content.rsvpButtonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(content.rsvpButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(content.rsvpButtonColors))}>{content.rsvpButtonText || "RSVP Now"}</button>
+          <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary" style={buttonColorsToStyle(content.rsvpButtonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(content.rsvpButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(content.rsvpButtonColors))}>{pickText(content.rsvpButtonText || "RSVP Now", (content as { rsvpButtonTextBm?: string }).rsvpButtonTextBm, autoTranslate(content.rsvpButtonText || "RSVP Now"))}</button>
         </section>
       )}
     </div>

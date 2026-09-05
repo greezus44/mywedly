@@ -67,6 +67,10 @@ export function HomeEditor() {
                 </div>
                 <TypographyControls label="Heading" value={(section.heading as TypographyStyle) ?? {}} onChange={(v) => updateSection(i, { heading: v })} showText />
                 <div>
+                  <label className="mb-1 block text-xs font-medium text-dash-muted">Heading (Bahasa Melayu)</label>
+                  <input type="text" value={section.headingBm ?? ""} onChange={(e) => updateSection(i, { headingBm: e.target.value })} placeholder="Auto-translate if empty" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+                </div>
+                <div>
                   <label className="mb-1 block text-xs font-medium text-dash-muted">Body Content</label>
                   <RichTextEditor value={section.body ?? ""} onChange={(html) => updateSection(i, { body: html })} />
                 </div>
@@ -76,6 +80,10 @@ export function HomeEditor() {
             <div className="space-y-2 rounded-lg border border-dash-border bg-dash-surface p-4">
               <label className="block text-xs font-medium text-dash-muted">RSVP Button Text</label>
               <input type="text" value={content.rsvpButtonText ?? ""} onChange={(e) => setContent((p) => ({ ...p, rsvpButtonText: e.target.value }))} placeholder="RSVP Now" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+              <div>
+                <label className="mb-1 block text-xs font-medium text-dash-muted">RSVP Button Text (Bahasa Melayu)</label>
+                <input type="text" value={content.rsvpButtonTextBm ?? ""} onChange={(e) => setContent((p) => ({ ...p, rsvpButtonTextBm: e.target.value }))} placeholder="Auto-translate if empty" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+              </div>
               <p className="text-xs text-dash-muted">The button guests tap to go to the RSVP page.</p>
             </div>
             <ButtonColourEditor label="RSVP Button Colours" value={content.rsvpButtonColors ?? {}} onChange={(v) => setContent((p) => ({ ...p, rsvpButtonColors: v }))} />

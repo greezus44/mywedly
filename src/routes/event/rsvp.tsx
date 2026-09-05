@@ -139,11 +139,13 @@ export function RsvpPage() {
           {saveContentMutation.isError && <p className="text-sm text-dash-danger">{saveContentMutation.error instanceof Error ? saveContentMutation.error.message : "Save failed"}</p>}
           {saveContentMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
           <Input label="Page Title" value={rsvpContent.title ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, title: e.target.value }))} />
+          <Input label="Page Title (Bahasa Melayu)" value={(rsvpContent as Record<string, string>).titleBm ?? ""} onChange={(e) => { const existing = (event.draft_content ?? event.content) as Record<string, unknown> | null; const rsvpBm = ((existing?.rsvpBm as Record<string, string>) ?? {}); setRsvpContent((p) => ({ ...p })); saveRsvpBm({ ...rsvpBm, title: e.target.value }); }} placeholder="Auto-translate if empty" />
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">Title Typography</label>
             <TypographyControls value={rsvpContent.titleTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, titleTypography: v }))} showText={false} />
           </div>
           <Input label="Subtitle" value={rsvpContent.subtitle ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, subtitle: e.target.value }))} />
+          <Input label="Subtitle (Bahasa Melayu)" value={rsvpBm.subtitle ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, subtitle: e.target.value }))} placeholder="Auto-translate if empty" />
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">Subtitle Typography</label>
             <TypographyControls value={rsvpContent.subtitleTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, subtitleTypography: v }))} showText={false} />
@@ -152,8 +154,14 @@ export function RsvpPage() {
             <Input label="Attending Button Text" value={rsvpContent.attendingText ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, attendingText: e.target.value }))} />
             <Input label="Declined Button Text" value={rsvpContent.declinedText ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, declinedText: e.target.value }))} />
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Attending Text (BM)" value={rsvpBm.attendingText ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, attendingText: e.target.value }))} placeholder="Auto-translate" />
+            <Input label="Declined Text (BM)" value={rsvpBm.declinedText ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, declinedText: e.target.value }))} placeholder="Auto-translate" />
+          </div>
           <Textarea label="Attending Confirmation Message" value={rsvpContent.attendingMessage ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, attendingMessage: e.target.value }))} rows={2} />
+          <Textarea label="Attending Message (BM)" value={rsvpBm.attendingMessage ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, attendingMessage: e.target.value }))} rows={2} placeholder="Auto-translate if empty" />
           <Textarea label="Declined Confirmation Message" value={rsvpContent.declinedMessage ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, declinedMessage: e.target.value }))} rows={2} />
+          <Textarea label="Declined Message (BM)" value={rsvpBm.declinedMessage ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, declinedMessage: e.target.value }))} rows={2} placeholder="Auto-translate if empty" />
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-dash-muted">Attending Selected Colour</label>
@@ -208,6 +216,7 @@ export function RsvpPage() {
           <ButtonColourEditor label="+1 No Button Colours" value={rsvpContent.plusOneNoButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, plusOneNoButtonColors: v }))} />
           <ButtonColourEditor label="+1 No Selected Button Colours" value={rsvpContent.plusOneNoSelectedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, plusOneNoSelectedButtonColors: v }))} />
           <Input label="RSVP Deadline Prefix Text" value={rsvpContent.rsvpDeadlinePrefix ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, rsvpDeadlinePrefix: e.target.value }))} placeholder="e.g. Please RSVP before, Kindly respond before" />
+          <Input label="Deadline Prefix (BM)" value={rsvpBm.rsvpDeadlinePrefix ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, rsvpDeadlinePrefix: e.target.value }))} placeholder="Auto-translate if empty" />
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">RSVP Deadline Typography</label>
             <TypographyControls value={rsvpContent.rsvpDeadlineTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, rsvpDeadlineTypography: v }))} showText={false} />
@@ -216,6 +225,7 @@ export function RsvpPage() {
             <label className="block text-xs font-semibold text-dash-text">Contact Information</label>
           </div>
           <Textarea label="Contact Message" value={rsvpContent.contactMessage ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, contactMessage: e.target.value }))} rows={2} placeholder="e.g. Please contact Sarah at +673 123 4567 if you have any questions." />
+          <Textarea label="Contact Message (BM)" value={rsvpBm.contactMessage ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, contactMessage: e.target.value }))} rows={2} placeholder="Auto-translate if empty" />
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">Contact Message Typography</label>
             <TypographyControls value={rsvpContent.contactMessageTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, contactMessageTypography: v }))} showText={false} />

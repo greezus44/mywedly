@@ -62,10 +62,11 @@ export default function RustyLayout() {
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
   if (!guest || eventId !== event.id) return null;
 
+  const { t } = useLanguage();
   const navLinks = [
-    { label: "Home", to: `/r/${slug}/home` },
+    { label: t("Home", "Utama"), to: `/r/${slug}/home` },
     ...(hasRsvpAccess(invitations ?? { invitations: [], hasMainEventAccess: false, error: null }) ? [{ label: "RSVP", to: `/r/${slug}/rsvp` }] : []),
-    ...(((event.content as Record<string, unknown> | null)?.messagesEnabled !== false) ? [{ label: "Messages", to: `/r/${slug}/wishes` }] : []),
+    ...(((event.content as Record<string, unknown> | null)?.messagesEnabled !== false) ? [{ label: t("Messages", "Mesej"), to: `/r/${slug}/wishes` }] : []),
     ...(customPages ?? []).map((p) => ({ label: p.title, to: `/r/${slug}/p/${p.slug}` })),
   ];
 

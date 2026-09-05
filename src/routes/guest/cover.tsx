@@ -5,6 +5,9 @@ import { EventThemeProvider } from "../../lib/theme-context";
 import { jsonToTheme } from "../../lib/theme";
 import { resolveTypography } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/ui/ButtonColourEditor";
+import { LanguageToggle } from "../../components/site/LanguageToggle";
+import { useLanguage } from "../../lib/language";
+import { pickText, autoTranslate } from "../../lib/translations";
 
 interface LogoConfig { url?: string | null; size?: number; align?: string; }
 
@@ -25,6 +28,7 @@ export default function GuestCover() {
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
 
   const theme = jsonToTheme(event.theme);
+  const { language } = useLanguage();
   const rawCoverConfig = (event.cover_config ?? {}) as Record<string, unknown>;
   const logoConfig = (event.logo_config ?? {}) as LogoConfig;
   const bgConfig = (rawCoverConfig.background ?? {}) as { image?: string | null; color?: string; position?: string; fit?: string };
@@ -35,14 +39,23 @@ export default function GuestCover() {
   else bgStyle.backgroundColor = theme.colors.bg;
   const logoSize = typeof logoConfig.size === "number" ? logoConfig.size : 120;
   const logoAlign = logoConfig.align || "center";
-  const buttonText = (rawCoverConfig.ctaText as string) || "Enter";
+  const rawCtaText = (rawCoverConfig.ctaText as string) || "Enter";
+  const ctaBm = (rawCoverConfig.ctaTextBm as string) || "";
+  const buttonText = language === "bm" ? pickText(rawCtaText, ctaBm, autoTranslate(rawCtaText)) : rawCtaText;
   const buttonColors = rawCoverConfig.buttonColors as import("../../components/ui/ButtonColourEditor").ButtonColors | undefined;
-  const eyebrow = resolveTypography(rawCoverConfig.eyebrow, "");
-  const heading = resolveTypography(rawCoverConfig.heading, event.name ?? undefined);
-  const subheading = resolveTypography(rawCoverConfig.subheading, "");
+  const eyebrowRaw = resolveTypography(rawCoverConfig.eyebrow, "");
+  const headingRaw = resolveTypography(rawCoverConfig.heading, event.name ?? undefined);
+  const subheadingRaw = resolveTypography(rawCoverConfig.subheading, "");
+  const eyebrowBm = (rawCoverConfig.eyebrowBm as string) || "";
+  const headingBm = (rawCoverConfig.headingBm as string) || "";
+  const subheadingBm = (rawCoverConfig.subheadingBm as string) || "";
+  const eyebrow = { text: language === "bm" ? pickText(eyebrowRaw.text, eyebrowBm, autoTranslate(eyebrowRaw.text)) : eyebrowRaw.text, style: eyebrowRaw.style };
+  const heading = { text: language === "bm" ? pickText(headingRaw.text, headingBm) : headingRaw.text, style: headingRaw.style };
+  const subheading = { text: language === "bm" ? pickText(subheadingRaw.text, subheadingBm, autoTranslate(subheadingRaw.text)) : subheadingRaw.text, style: subheadingRaw.style };
 
   return (
     <EventThemeProvider theme={event.theme}>
+      <LanguageToggle />
       <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden" style={{ minHeight: "100dvh", ...bgStyle }}>
         {bgConfig.image && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />}
         <div className="relative z-10 flex w-full max-w-lg flex-col items-center px-6 py-16 text-center animate-fadeIn" style={{ whiteSpace: "pre-wrap" }}>

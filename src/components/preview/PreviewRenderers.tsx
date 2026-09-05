@@ -14,18 +14,24 @@ export interface CoverConfig {
   ctaText?: string;
   buttonColors?: ButtonColors;
   logo?: { url?: string | null; size?: number; maxWidth?: number; maxHeight?: number; marginTop?: number; marginBottom?: number; } | null;
+  eyebrowBm?: string;
+  headingBm?: string;
+  subheadingBm?: string;
+  ctaTextBm?: string;
 }
 export interface LogoConfig { url?: string | null; size?: number; align?: string; marginTop?: number; marginBottom?: number; }
-export interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; buttonColors?: ButtonColors; }
+export interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; buttonLabelBm?: string; }
 export interface HomeLogo { url?: string | null; size?: number; marginTop?: number; marginBottom?: number; }
-export interface HomeSection { heading?: unknown; body?: string; }
+export interface HomeSection { heading?: unknown; body?: string; headingBm?: string; }
 export interface EventContent {
   logo?: HomeLogo | null;
   heading?: unknown;
   body?: string;
   sections?: HomeSection[];
   rsvpButtonText?: string;
+  rsvpButtonTextBm?: string;
   rsvpButtonColors?: ButtonColors;
+  wishes?: { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; };
 }
 
 interface CoverPreviewProps { config: CoverConfig; theme: unknown; eventName?: string; }

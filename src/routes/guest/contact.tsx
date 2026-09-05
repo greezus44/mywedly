@@ -1,5 +1,6 @@
 import { useGuestOutletContext } from "./guest-layout";
 import { formatDate, formatTime12 } from "../../lib/utils";
+import { useLanguage } from "../../lib/language";
 
 interface ContactInfo {
   email?: string | null;
@@ -12,6 +13,7 @@ interface ContactInfo {
 
 export default function GuestContact() {
   const { event, slug } = useGuestOutletContext();
+  const { t } = useLanguage();
 
   const email = (event.sharing_config as { email?: string } | null)?.email ?? null;
   const phone = (event.sharing_config as { phone?: string } | null)?.phone ?? null;
@@ -31,9 +33,9 @@ export default function GuestContact() {
       <div className="mx-auto max-w-3xl">
         {/* Heading */}
         <div className="mb-10 text-center">
-          <p className="guest-eyebrow">Get in touch</p>
-          <h1 className="guest-title">Contact</h1>
-          <p className="guest-subtitle mx-auto">Reach us with any questions about the celebration.</p>
+          <p className="guest-eyebrow">{t("Get in touch", "Hubungi kami")}</p>
+          <h1 className="guest-title">{t("Contact", "Hubungi")}</h1>
+          <p className="guest-subtitle mx-auto">{t("Reach us with any questions about the celebration.", "Hubungi kami untuk sebarang soalan tentang majlis.")}</p>
         </div>
 
         {/* Contact card */}
@@ -45,7 +47,7 @@ export default function GuestContact() {
             {/* Date & time */}
             {eventDate && (
               <div>
-                <p className="guest-eyebrow mb-1">When</p>
+                <p className="guest-eyebrow mb-1">{t("When", "Bila")}</p>
                 <p className="text-base">
                   {formatDate(eventDate)}{eventTime && ` · ${formatTime12(eventTime)}`}
                 </p>
@@ -55,7 +57,7 @@ export default function GuestContact() {
             {/* Venue */}
             {venue && (
               <div>
-                <p className="guest-eyebrow mb-1">Where</p>
+                <p className="guest-eyebrow mb-1">{t("Where", "Di Mana")}</p>
                 <p className="text-base">{venue}</p>
                 {address && <p className="text-sm" style={{ color: "var(--event-muted)" }}>{address}</p>}
               </div>
@@ -64,7 +66,7 @@ export default function GuestContact() {
             {/* Email */}
             {email && (
               <div>
-                <p className="guest-eyebrow mb-1">Email</p>
+                <p className="guest-eyebrow mb-1">{t("Email", "E-mel")}</p>
                 <a href={`mailto:${email}`} className="text-base hover:underline" style={{ color: "var(--event-primary)" }}>
                   {email}
                 </a>
@@ -74,7 +76,7 @@ export default function GuestContact() {
             {/* Phone */}
             {phone && (
               <div>
-                <p className="guest-eyebrow mb-1">Phone</p>
+                <p className="guest-eyebrow mb-1">{t("Phone", "Telefon")}</p>
                 <a href={`tel:${phone}`} className="text-base hover:underline" style={{ color: "var(--event-primary)" }}>
                   {phone}
                 </a>
@@ -82,7 +84,7 @@ export default function GuestContact() {
             )}
 
             {!hasContact && (
-              <p style={{ color: "var(--event-muted)" }}>Contact details will be added soon.</p>
+              <p style={{ color: "var(--event-muted)" }}>{t("Contact details will be added soon.", "Butiran hubungan akan ditambah tidak lama lagi.")}</p>
             )}
           </div>
         </div>
@@ -90,7 +92,7 @@ export default function GuestContact() {
         {/* Embedded map */}
         {mapSrc && (
           <div>
-            <p className="guest-eyebrow mb-3">Location</p>
+            <p className="guest-eyebrow mb-3">{t("Location", "Lokasi")}</p>
             <iframe
               title="Event location"
               src={mapSrc}
@@ -106,7 +108,7 @@ export default function GuestContact() {
         {/* Back link */}
         <div className="mt-10 text-center">
           <a href={`/e/${slug}/home`} className="text-sm hover:underline" style={{ color: "var(--event-muted)" }}>
-            Back to home
+            {t("Back to home", "Kembali ke utama")}
           </a>
         </div>
       </div>
