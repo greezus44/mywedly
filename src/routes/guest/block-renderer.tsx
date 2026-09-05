@@ -4,6 +4,8 @@ import { getCountdown, formatDate, formatTime12 } from "../../lib/utils";
 import { supabase } from "../../lib/supabase";
 import { getTypographyStyle } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/ui/ButtonColourEditor";
+import { useLanguage } from "../../lib/language";
+import { setCurrentLanguage } from "../../lib/translations";
 
 interface BlockRendererProps {
   block: Block;
@@ -19,6 +21,8 @@ function blockTypoStyle(c: Block["content"]): React.CSSProperties {
 }
 
 export function BlockRenderer({ block, eventId }: BlockRendererProps) {
+  const { language } = useLanguage();
+  setCurrentLanguage(language);
   const c = block.content;
   switch (block.type) {
     case "heading": {

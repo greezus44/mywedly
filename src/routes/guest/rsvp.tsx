@@ -3,11 +3,11 @@ import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { supabase, type EventRsvp, type EventSchedule, type SubEvent, type Json } from "../../lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { formatTime12 } from "../../lib/utils";
+import { formatTime12, formatDateLong } from "../../lib/utils";
 import { getTypographyText, getTypographyStyle } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { useLanguage } from "../../lib/language";
-import { pickText, autoTranslate } from "../../lib/translations";
+import { pickText, autoTranslate, getCurrentLanguage, setCurrentLanguage } from "../../lib/translations";
 
 interface RsvpContent {
   title?: string;
@@ -54,10 +54,13 @@ function getDateParts(dateStr: string | null | undefined): { weekday: string; da
   if (!dateStr) return null;
   const date = new Date(dateStr + (dateStr.length === 10 ? "T00:00:00" : ""));
   if (isNaN(date.getTime())) return null;
+  const bm = getCurrentLanguage() === "bm";
+  const bmMonths = ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"];
+  const bmWeekdays = ["Ahad", "Isnin", "Selasa", "Rabu", "Khamis", "Jumaat", "Sabtu"];
   return {
-    weekday: date.toLocaleDateString("en-US", { weekday: "long" }),
+    weekday: bm ? bmWeekdays[date.getDay()] : date.toLocaleDateString("en-US", { weekday: "long" }),
     day: date.toLocaleDateString("en-US", { day: "numeric" }),
-    month: date.toLocaleDateString("en-US", { month: "long" }),
+    month: bm ? bmMonths[date.getMonth()] : date.toLocaleDateString("en-US", { month: "long" }),
     year: date.toLocaleDateString("en-US", { year: "numeric" }),
   };
 }
@@ -66,6 +69,7 @@ export default function GuestRsvp() {
   const { event, slug, invitedSubEventIds } = useGuestOutletContext();
   const { guest } = useGuestAuth();
   const { language } = useLanguage();
+  setCurrentLanguage(language);
   const queryClient = useQueryClient();
 
   const rsvpContent: RsvpContent = {
@@ -447,7 +451,7 @@ export default function GuestRsvp() {
           {rsvpContent.title && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...titleStyle }}>{tr(rsvpContent.title, "title")}</h1>}
           {rsvpDeadline && (
             <p className="mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)" }}>
-              {tr(rsvpContent.rsvpDeadlinePrefix || "RSVP by", "rsvpDeadlinePrefix")} {new Date(rsvpDeadline).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}
+              {tr(rsvpContent.rsvpDeadlinePrefix || "RSVP by", "rsvpDeadlinePrefix")} {formatDateLong(rsvpDeadline)}
             </p>
           )}
           {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...guestNameStyle }}>{guestNameText}</p>}

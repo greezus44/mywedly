@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { setCurrentLanguage } from "./translations";
 
 export type Language = "en" | "bm";
 
@@ -23,8 +24,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
+    setCurrentLanguage(lang);
     if (typeof localStorage !== "undefined") localStorage.setItem(STORAGE_KEY, lang);
   };
+
+  useEffect(() => { setCurrentLanguage(language); }, [language]);
 
   useEffect(() => {
     const handler = () => {

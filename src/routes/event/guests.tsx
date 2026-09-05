@@ -5,6 +5,7 @@ import { supabase, type UserEvent, type EventGuest, type GuestGroup, type SubEve
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
 import { GuestForm, RsvpBadge, type GuestFormValues } from "./guest-form";
+import { BulkImportModal } from "./bulk-import";
 import { generateUsername } from "../../lib/utils";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
@@ -17,6 +18,7 @@ export function GuestsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [showInvites, setShowInvites] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [selectedGuestIds, setSelectedGuestIds] = useState<Set<string>>(new Set());
   const [inviteSubEventId, setInviteSubEventId] = useState<string>("");
 
@@ -179,7 +181,7 @@ export function GuestsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between"><h2 className="text-lg font-semibold text-dash-text">Guests</h2><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => setShowInvites(true)} disabled={!guests || guests.length === 0}>Manage Invitations</Button><Button size="sm" onClick={() => { setEditGuest(null); setShowForm(true); }}>Add Guest</Button></div></div>
+      <div className="flex items-center justify-between"><h2 className="text-lg font-semibold text-dash-text">Guests</h2><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => setShowBulkImport(true)}>Bulk Import</Button><Button size="sm" variant="secondary" onClick={() => setShowInvites(true)} disabled={!guests || guests.length === 0}>Manage Invitations</Button><Button size="sm" onClick={() => { setEditGuest(null); setShowForm(true); }}>Add Guest</Button></div></div>
       {!guests || guests.length === 0 ? (
         <EmptyState title="No guests yet" description="Add guests to invite them to your event." action={<Button size="sm" onClick={() => { setEditGuest(null); setShowForm(true); }}>Add Guest</Button>} />
       ) : (
@@ -233,6 +235,17 @@ export function GuestsPage() {
           )}
         </div>
       </Modal>
+      <BulkImportModal
+        open={showBulkImport}
+        onClose={() => setShowBulkImport(false)}
+        existingUsernames={new Set((guests ?? []).map((g) => (g.username ?? "").toLowerCase()).filter(Boolean))}
+        onImport={async (importGuests) => {
+          const rows = importGuests.map((g) => ({ event_id: eventId, name: g.name, username: g.username, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0, allow_plus_one: false }));
+          const { error } = await supabase.from("event_guests").insert(rows);
+          if (error) throw error;
+          queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
+        }}
+      />
     </div>
   );
 }

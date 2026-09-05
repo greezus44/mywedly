@@ -1,6 +1,7 @@
 import { useGuestOutletContext } from "./guest-layout";
 import { formatDate, formatTime12 } from "../../lib/utils";
 import { useLanguage } from "../../lib/language";
+import { setCurrentLanguage } from "../../lib/translations";
 
 interface ContactInfo {
   email?: string | null;
@@ -13,7 +14,8 @@ interface ContactInfo {
 
 export default function GuestContact() {
   const { event, slug } = useGuestOutletContext();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  setCurrentLanguage(language);
 
   const email = (event.sharing_config as { email?: string } | null)?.email ?? null;
   const phone = (event.sharing_config as { phone?: string } | null)?.phone ?? null;

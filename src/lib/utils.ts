@@ -1,14 +1,20 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { getCurrentLanguage } from "./translations";
 
 export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
+const BM_MONTHS = ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"];
+const BM_WEEKDAYS = ["Ahad", "Isnin", "Selasa", "Rabu", "Khamis", "Jumaat", "Sabtu"];
+const EN_MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 export function formatDate(d: string | Date | null | undefined): string {
   if (!d) return "";
   const date = typeof d === "string" ? new Date(d + (d.length === 10 ? "T00:00:00" : "")) : d;
   if (isNaN(date.getTime())) return "";
+  if (getCurrentLanguage() === "bm") return `${BM_WEEKDAYS[date.getDay()]}, ${date.getDate()} ${BM_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
   return date.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 }
 
@@ -16,7 +22,16 @@ export function formatDateShort(d: string | Date | null | undefined): string {
   if (!d) return "";
   const date = typeof d === "string" ? new Date(d + (d.length === 10 ? "T00:00:00" : "")) : d;
   if (isNaN(date.getTime())) return "";
+  if (getCurrentLanguage() === "bm") return `${date.getDate()} ${BM_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+export function formatDateLong(d: string | Date | null | undefined): string {
+  if (!d) return "";
+  const date = typeof d === "string" ? new Date(d + (d.length === 10 ? "T00:00:00" : "")) : d;
+  if (isNaN(date.getTime())) return "";
+  if (getCurrentLanguage() === "bm") return `${date.getDate()} ${BM_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
 export function formatTime12(t: string | null | undefined): string {
@@ -28,6 +43,7 @@ export function formatDateTime(d: string | Date | null | undefined): string {
   if (!d) return "";
   const date = typeof d === "string" ? new Date(d) : d;
   if (isNaN(date.getTime())) return "";
+  if (getCurrentLanguage() === "bm") return `${date.getDate()} ${BM_MONTHS[date.getMonth()]} ${date.getFullYear()}, ${to12Hour(`${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`)}`;
   return date.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
@@ -48,6 +64,15 @@ export function to12Hour(time24: string): string {
   if (!m) return time24;
   let h = parseInt(m[1], 10);
   const min = m[2];
+  if (getCurrentLanguage() === "bm") {
+    let period: string;
+    if (h >= 0 && h < 12) period = "pagi";
+    else if (h === 12) period = "tengah hari";
+    else if (h >= 13 && h < 18) period = "petang";
+    else period = "malam";
+    h = h % 12 || 12;
+    return `${h}:${min} ${period}`;
+  }
   const period = h >= 12 ? "PM" : "AM";
   h = h % 12 || 12;
   return `${h}:${min} ${period}`;

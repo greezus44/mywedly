@@ -5,13 +5,14 @@ import { getTypographyText, getTypographyStyle } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/ui/ButtonColourEditor";
 import type { EventContent } from "../../components/preview/PreviewRenderers";
 import { useLanguage } from "../../lib/language";
-import { pickText, autoTranslate } from "../../lib/translations";
+import { pickText, autoTranslate, setCurrentLanguage } from "../../lib/translations";
 
 export default function GuestHome() {
   const { event, slug, invitedSubEventIds } = useGuestOutletContext();
   const { guest } = useGuestAuth();
   const navigate = useNavigate();
   const { language, t } = useLanguage();
+  setCurrentLanguage(language);
   const content = (event.content ?? {}) as EventContent;
   const sections = content.sections ?? ((content.heading !== undefined || content.body !== undefined) ? [{ heading: content.heading, body: content.body }] : []);
   const logo = content.logo;
