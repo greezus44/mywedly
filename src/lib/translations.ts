@@ -24,7 +24,7 @@ export function setCurrentLanguage(lang: Language) {
   currentLanguage = lang;
 }
 
-function getCurrentLanguage(): Language {
+export function getCurrentLanguage(): Language {
   return currentLanguage;
 }
 

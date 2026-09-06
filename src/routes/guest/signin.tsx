@@ -8,7 +8,7 @@ import { resolveTypography } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/ui/ButtonColourEditor";
 import { LanguageToggle } from "../../components/site/LanguageToggle";
 import { useLanguage } from "../../lib/language";
-import { pickText, autoTranslate } from "../../lib/translations";
+import { pickText, autoTranslate, setCurrentLanguage } from "../../lib/translations";
 
 interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; }
 
@@ -42,6 +42,7 @@ export default function GuestSignIn() {
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
 
   const { language } = useLanguage();
+  setCurrentLanguage(language);
   const loginConfig = (event.login_config ?? {}) as LoginConfig;
   const headingRaw = resolveTypography(loginConfig.heading, (event.name ?? undefined) || "Welcome");
   const subheadingRaw = resolveTypography(loginConfig.subheading, "");

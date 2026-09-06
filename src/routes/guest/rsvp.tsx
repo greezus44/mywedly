@@ -318,7 +318,7 @@ export default function GuestRsvp() {
       <div className="mt-4 sm:mt-6">
         <div className="space-y-3 sm:space-y-4">
           {items.map((item) => (
-            <div key={item.id} className="grid grid-cols-[5.5rem_1fr] gap-4 items-start sm:grid-cols-[8.5rem_1fr] md:grid-cols-[10rem_1fr] sm:gap-6">
+            <div key={item.id} className="grid grid-cols-[7rem_1fr] gap-4 items-start sm:grid-cols-[10rem_1fr] md:grid-cols-[12rem_1fr] sm:gap-6">
               <div className="text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", whiteSpace: "nowrap", ...programmeItemStyle }}>
                 {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
               </div>
@@ -403,8 +403,8 @@ export default function GuestRsvp() {
         )}
         {isAttending && allowPlusOneFor(subEventId) && current.bringing_plus_one === true && (
           <div className="mt-3 sm:mt-4">
-            <label className="mb-1.5 block text-xs sm:text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>Plus One Name</label>
-            <input type="text" value={current.plus_one_name} onChange={(e) => handlePlusOneName(subEventId, e.target.value)} placeholder="Enter +1 name" className="event-input" style={{ fontFamily: "var(--event-font-body)" }} />
+            <label className="mb-1.5 block text-xs sm:text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{tr("Plus One Name", "plusOneNameLabel")}</label>
+            <input type="text" value={current.plus_one_name} onChange={(e) => handlePlusOneName(subEventId, e.target.value)} placeholder={tr("Enter +1 name", "plusOneNamePlaceholder")} className="event-input" style={{ fontFamily: "var(--event-font-body)" }} />
             {current.plus_one_name.trim() && (
               <div className="mt-2 flex flex-wrap items-center gap-2 sm:gap-3">
                 <button onClick={() => handleSavePlusOne(subEventId)} disabled={plusOneSaveMutation.isPending} className="event-btn-primary" style={{ padding: "0.5rem 1.25rem", fontSize: "0.8rem" }}>

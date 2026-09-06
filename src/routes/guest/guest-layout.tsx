@@ -6,6 +6,7 @@ import { EventThemeProvider } from "../../lib/theme-context";
 import { resolveGuestInvitations, getInvitedSubEventIds, hasRsvpAccess, type ResolveResult } from "../../lib/invitations";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { useLanguage } from "../../lib/language";
+import { setCurrentLanguage } from "../../lib/translations";
 import { LoadingSpinner } from "../../components/ui";
 import { LanguageToggle } from "../../components/site/LanguageToggle";
 
@@ -63,7 +64,8 @@ export default function GuestLayout() {
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
   if (!guest || eventId !== event.id) return null;
 
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  setCurrentLanguage(language);
   const navLinks = [
     { label: t("Home", "Utama"), to: `/e/${slug}/home` },
     ...(hasRsvpAccess(invitations ?? { invitations: [], hasMainEventAccess: false, error: null }) ? [{ label: "RSVP", to: `/e/${slug}/rsvp` }] : []),

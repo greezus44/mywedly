@@ -7,7 +7,7 @@ import { resolveTypography } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/ui/ButtonColourEditor";
 import { LanguageToggle } from "../../components/site/LanguageToggle";
 import { useLanguage } from "../../lib/language";
-import { pickText, autoTranslate } from "../../lib/translations";
+import { pickText, autoTranslate, setCurrentLanguage } from "../../lib/translations";
 
 interface LogoConfig { url?: string | null; size?: number; align?: string; }
 
@@ -29,6 +29,7 @@ export default function GuestCover() {
 
   const theme = jsonToTheme(event.theme);
   const { language } = useLanguage();
+  setCurrentLanguage(language);
   const rawCoverConfig = (event.cover_config ?? {}) as Record<string, unknown>;
   const logoConfig = (event.logo_config ?? {}) as LogoConfig;
   const bgConfig = (rawCoverConfig.background ?? {}) as { image?: string | null; color?: string; position?: string; fit?: string };

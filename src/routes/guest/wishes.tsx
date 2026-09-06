@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDateTime } from "../../lib/utils";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { useLanguage } from "../../lib/language";
-import { pickText, autoTranslate } from "../../lib/translations";
+import { pickText, autoTranslate, setCurrentLanguage } from "../../lib/translations";
 
 interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; }
 
@@ -23,6 +23,7 @@ export default function GuestWishes() {
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const { language } = useLanguage();
+  setCurrentLanguage(language);
   const wishesContent = ((event.content as Record<string, unknown> | null) ?? {}).wishes as WishesContent | undefined;
   const heading = language === "bm" ? pickText(wishesContent?.heading, wishesContent?.headingBm, autoTranslate(wishesContent?.heading ?? "")) : wishesContent?.heading;
   const subheading = language === "bm" ? pickText(wishesContent?.subheading, wishesContent?.subheadingBm, autoTranslate(wishesContent?.subheading ?? "")) : wishesContent?.subheading;

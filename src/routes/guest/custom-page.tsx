@@ -6,11 +6,13 @@ import { BlockRenderer } from "./block-renderer";
 import { jsonToBlocks } from "../event/block-types";
 import { LoadingSpinner } from "../../components/ui";
 import { useLanguage } from "../../lib/language";
+import { setCurrentLanguage } from "../../lib/translations";
 
 export default function GuestCustomPage() {
   const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
   const { event } = useGuestOutletContext();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  setCurrentLanguage(language);
 
   const { data: page, isLoading } = useQuery({
     queryKey: ["custom-page-public", event.id, pageSlug],
