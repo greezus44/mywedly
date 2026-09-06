@@ -31,7 +31,8 @@ export function formatDateLong(d: string | Date | null | undefined): string {
   const date = typeof d === "string" ? new Date(d + (d.length === 10 ? "T00:00:00" : "")) : d;
   if (isNaN(date.getTime())) return "";
   if (getCurrentLanguage() === "bm") return `${date.getDate()} ${BM_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
-  return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const EN_MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  return `${date.getDate()} ${EN_MONTHS_LONG[date.getMonth()]} ${date.getFullYear()}`;
 }
 
 export function formatTime12(t: string | null | undefined): string {
