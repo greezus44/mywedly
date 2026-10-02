@@ -20,6 +20,9 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
 * { box-sizing:border-box; }
 
 .event-themed { min-height:100vh;min-height:100dvh;overflow-x:hidden;overflow-x:clip;background-color:var(--event-bg);color:var(--event-text);font-family:var(--event-font-body);line-height:1.75;font-size:1.0625rem; }
+.event-themed:has(.guest-home-page),
+.event-themed:has(.guest-rsvp-page),
+.event-themed-natural { min-height:0 !important; }
 .event-themed h1,.event-themed h2,.event-themed h3,.event-themed h4 { font-family:var(--event-font-heading);color:var(--event-heading);line-height:1.2; }
 .event-themed .event-btn-primary { background-color:var(--event-btn-bg);color:var(--event-btn-color);padding:0.875rem 2.5rem;border-radius:var(--event-radius);font-weight:var(--event-btn-font-weight);font-family:var(--event-btn-font-family);font-size:1rem;transition:all 0.25s ease;cursor:pointer;border:1px solid var(--event-btn-bg);letter-spacing:0.05em;text-transform:uppercase; }
 .event-themed .event-btn-primary:hover { background-color:var(--event-btn-bg-hover);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.1); }
@@ -114,8 +117,8 @@ html { scroll-behavior:smooth;overflow-x:hidden; }
   .event-themed .guest-home-page .guest-section,
   .event-themed .guest-home-page .rsvp-section,
   .event-themed .guest-rsvp-page {
-    padding-left: 1rem;
-    padding-right: 1rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
   }
 
   .event-themed .guest-home-page > section,
@@ -144,11 +147,11 @@ html { scroll-behavior:smooth;overflow-x:hidden; }
   }
 
   .event-themed .guest-rsvp-page .guest-rsvp-event {
-    gap: 1rem;
+    gap: 1.5rem;
   }
 
   .event-themed .guest-rsvp-page .guest-rsvp-schedule-row {
-    grid-template-columns: 8rem minmax(0, 1fr);
+    grid-template-columns: 6rem minmax(0, 1fr);
     column-gap: 0.75rem;
   }
 
@@ -159,7 +162,7 @@ html { scroll-behavior:smooth;overflow-x:hidden; }
 
   .event-themed .guest-rsvp-page .guest-rsvp-schedule-time {
     white-space: nowrap;
-    min-width: 7rem;
+    min-width: 6rem;
     text-align: left;
   }
 }

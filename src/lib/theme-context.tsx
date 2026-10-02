@@ -10,13 +10,14 @@ const EventThemeContext = createContext<EventThemeContextValue>({ cssVars: {} })
 interface EventThemeProviderProps {
   theme: unknown;
   children: ReactNode;
+  className?: string;
 }
 
-export function EventThemeProvider({ theme, children }: EventThemeProviderProps) {
+export function EventThemeProvider({ theme, children, className }: EventThemeProviderProps) {
   const cssVars = useMemo(() => themeToEventCssVars(jsonToTheme(theme)), [theme]);
   return (
     <EventThemeContext.Provider value={{ cssVars }}>
-      <div className="event-themed" style={cssVars as CSSProperties}>
+      <div className={`event-themed${className ? ` ${className}` : ""}`} style={{ ...cssVars, ...(className ? { minHeight: "auto" } : {}) } as CSSProperties}>
         {children}
       </div>
     </EventThemeContext.Provider>

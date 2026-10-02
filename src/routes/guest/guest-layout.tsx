@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate, NavLink, Outlet, Link, useOutletContext } from "react-router-dom";
+import { useParams, useNavigate, useLocation, NavLink, Outlet, Link, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
@@ -16,7 +16,9 @@ export function useGuestOutletContext(): GuestOutletContext { return useOutletCo
 export default function GuestLayout() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { guest, eventId, loading: authLoading, signOut } = useGuestAuth();
+  const isNaturalPage = location.pathname.endsWith("/home") || location.pathname.endsWith("/rsvp");
   const [menuOpen, setMenuOpen] = useState(false);
 
   // FIX #2: Guest page reads from event.theme (published), NOT draft_theme
@@ -89,7 +91,7 @@ export default function GuestLayout() {
 
   return (
     // FIX #2: Pass event.theme (published) to EventThemeProvider
-    <EventThemeProvider theme={event.theme}>
+    <EventThemeProvider theme={event.theme} className={isNaturalPage ? "event-themed-natural" : undefined}>
       <LanguageToggle />
       <button onClick={() => setMenuOpen(true)} aria-label="Open navigation menu" className="fixed left-4 top-4 z-40 flex h-8 w-8 items-center justify-center transition-all hover:scale-105" style={{ color: "var(--event-accent)" }}>
         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
