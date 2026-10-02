@@ -353,11 +353,11 @@ export default function GuestRsvp() {
         <div className={cn("text-center pt-8 sm:pt-12", (rsvpContent.title || rsvpDeadline || guestNameText || subtitleText) && "mb-12 sm:mb-16")}>
           {rsvpContent.title && <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0, ...titleStyle }}>{tr(rsvpContent.title, "title")}</h1>}
           {rsvpDeadline && (
-            <p className="text-center" style={{ whiteSpace: "pre-wrap", marginTop: 0, marginBottom: 0, ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)", textTransform: "uppercase" }}>
+            <p className="text-center" style={{ whiteSpace: "pre-wrap", marginTop: "4px", marginBottom: 0, ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)", textTransform: "uppercase" }}>
               {tr(rsvpContent.rsvpDeadlinePrefix || "RSVP by", "rsvpDeadlinePrefix").toLocaleUpperCase()} {formatDateLong(rsvpDeadline).toLocaleUpperCase()}
             </p>
           )}
-          {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "16px auto 0", whiteSpace: "pre-wrap", ...guestNameStyle }}>{guestNameText}</p>}
+          {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "32px auto 0", whiteSpace: "pre-wrap", ...guestNameStyle }}>{guestNameText}</p>}
           {subtitleText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...subtitleStyle }}>{tr(subtitleText, "subtitle")}</p>}
         </div>
 
