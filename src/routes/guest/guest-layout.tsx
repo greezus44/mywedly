@@ -18,6 +18,8 @@ export default function GuestLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { guest, eventId, loading: authLoading, signOut } = useGuestAuth();
+  const { t, language } = useLanguage();
+  setCurrentLanguage(language);
   const isNaturalPage = location.pathname.endsWith("/home") || location.pathname.endsWith("/rsvp");
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -80,8 +82,6 @@ export default function GuestLayout() {
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
   if (!guest || eventId !== event.id) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><LoadingSpinner /></div>;
 
-  const { t, language } = useLanguage();
-  setCurrentLanguage(language);
   const navLinks = [
     { label: t("Home", "Utama"), to: `/e/${slug}/home` },
     ...(hasRsvpAccess(invitations ?? { invitations: [], hasMainEventAccess: false, error: null }) ? [{ label: "RSVP", to: `/e/${slug}/rsvp` }] : []),
