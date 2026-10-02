@@ -18,6 +18,7 @@ export const HEADING_FONT_OPTIONS:FontOption[]=[
   {label:"Great Vibes",value:"'Great Vibes', cursive",stack:"'Great Vibes', cursive"},
   {label:"Imperial Script",value:"'Imperial Script', cursive",stack:"'Imperial Script', cursive"},
   {label:"Sans Serif",value:"system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",stack:"system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"},
+  {label:"Tahoma",value:"Tahoma, Verdana, Segoe, sans-serif",stack:"Tahoma, Verdana, Segoe, sans-serif"},
 ];
 export const RICH_FONT_OPTIONS:FontOption[]=HEADING_FONT_OPTIONS;
 
