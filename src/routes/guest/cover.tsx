@@ -15,6 +15,9 @@ interface LogoConfig { url?: string | null; size?: number; align?: string; }
 export default function GuestCover() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const { language } = useLanguage();
+  setCurrentLanguage(language);
+
   const { data: event, isLoading } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
@@ -28,9 +31,16 @@ export default function GuestCover() {
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
 
+  useEffect(() => {
+    if (!event) return;
+    const coverConfig = (event.cover_config ?? {}) as Record<string, unknown>;
+    const background = (coverConfig.background ?? {}) as { color?: string };
+    const previous = document.body.style.backgroundColor;
+    document.body.style.backgroundColor = background.color || jsonToTheme(event.theme).colors.bg;
+    return () => { document.body.style.backgroundColor = previous; };
+  }, [event]);
+
   const theme = jsonToTheme(event.theme);
-  const { language } = useLanguage();
-  setCurrentLanguage(language);
   const rawCoverConfig = (event.cover_config ?? {}) as Record<string, unknown>;
   const logoConfig = (event.logo_config ?? {}) as LogoConfig;
   const bgConfig = (rawCoverConfig.background ?? {}) as { image?: string | null; color?: string; position?: string; fit?: string };
@@ -54,13 +64,6 @@ export default function GuestCover() {
   const eyebrow = { text: language === "bm" ? pickText(eyebrowRaw.text, eyebrowBm, autoTranslate(eyebrowRaw.text)) : eyebrowRaw.text, style: eyebrowRaw.style };
   const heading = { text: language === "bm" ? pickText(headingRaw.text, headingBm) : headingRaw.text, style: headingRaw.style };
   const subheading = { text: language === "bm" ? pickText(subheadingRaw.text, subheadingBm, autoTranslate(subheadingRaw.text)) : subheadingRaw.text, style: subheadingRaw.style };
-
-  const bodyBgColor = bgConfig.color || theme.colors.bg;
-  useEffect(() => {
-    const prev = document.body.style.backgroundColor;
-    document.body.style.backgroundColor = bodyBgColor;
-    return () => { document.body.style.backgroundColor = prev; };
-  }, [bodyBgColor]);
 
   return (
     <EventThemeProvider theme={event.theme}>

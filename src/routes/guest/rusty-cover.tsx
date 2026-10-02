@@ -16,6 +16,8 @@ export default function RustyCover() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
 
+  const { language } = useLanguage();
+
   const { data: event, isLoading } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
@@ -29,7 +31,15 @@ export default function RustyCover() {
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1></div>;
 
-  const { language } = useLanguage();
+  useEffect(() => {
+    if (!event) return;
+    const coverConfig = (event.cover_config ?? {}) as Record<string, unknown>;
+    const background = (coverConfig.background ?? {}) as { color?: string };
+    const previous = document.body.style.backgroundColor;
+    document.body.style.backgroundColor = background.color || RUSTY_THEME.colors.bg;
+    return () => { document.body.style.backgroundColor = previous; };
+  }, [event]);
+
   const rawCoverConfig = (event.cover_config ?? {}) as Record<string, unknown>;
   const logoConfig = (event.logo_config ?? {}) as LogoConfig;
   const bgConfig = (rawCoverConfig.background ?? {}) as { image?: string | null; color?: string; position?: string; fit?: string };
