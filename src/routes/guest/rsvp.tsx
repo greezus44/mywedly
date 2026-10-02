@@ -236,10 +236,10 @@ export default function GuestRsvp() {
     const parts = getDateParts(dateStr);
     if (!parts) return null;
     return (
-      <div className="flex flex-col items-center text-center flex-shrink-0" style={{ minWidth: "64px" }}>
-        <span className="text-[0.6875rem] sm:text-xs uppercase tracking-wide" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...eventDateFontStyle }}>{parts.weekday}</span>
+      <div className="flex flex-col items-center text-center flex-shrink-0" style={{ minWidth: "64px", textTransform: "uppercase" }}>
+        <span className="text-[0.6875rem] sm:text-xs uppercase tracking-wide" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...eventDateFontStyle }}>{parts.weekday.toLocaleUpperCase()}</span>
         <span className="text-3xl sm:text-3xl font-bold leading-tight" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", ...eventDateFontStyle }}>{parts.day}</span>
-        <span className="text-sm sm:text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", ...eventDateFontStyle }}>{parts.month}</span>
+        <span className="text-sm sm:text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", ...eventDateFontStyle }}>{parts.month.toLocaleUpperCase()}</span>
         <span className="text-sm sm:text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...eventDateFontStyle }}>{parts.year}</span>
       </div>
     );
@@ -348,8 +348,8 @@ export default function GuestRsvp() {
         <div className={cn("text-center pt-16 sm:pt-24", (rsvpContent.title || rsvpDeadline || guestNameText || subtitleText) && "mb-6 sm:mb-8")}>
           {rsvpContent.title && <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: (rsvpDeadline || guestNameText || subtitleText) ? undefined : 0, ...titleStyle }}>{tr(rsvpContent.title, "title")}</h1>}
           {rsvpDeadline && (
-            <p className="mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)" }}>
-              {tr(rsvpContent.rsvpDeadlinePrefix || "RSVP by", "rsvpDeadlinePrefix")} {formatDateLong(rsvpDeadline)}
+            <p className="mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)", textTransform: "uppercase" }}>
+              {tr(rsvpContent.rsvpDeadlinePrefix || "RSVP by", "rsvpDeadlinePrefix").toLocaleUpperCase()} {formatDateLong(rsvpDeadline).toLocaleUpperCase()}
             </p>
           )}
           {guestNameText && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...guestNameStyle }}>{guestNameText}</p>}
