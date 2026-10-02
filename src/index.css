@@ -93,7 +93,7 @@ html { scroll-behavior:smooth;overflow-x:hidden; }
 
 @media (min-width:641px) {
   .event-themed .guest-home-page .guest-section > div { max-width:48rem; }
-  .event-themed .guest-rsvp-page .guest-rsvp-content { max-width:80rem; }
+  .event-themed .guest-rsvp-page .guest-rsvp-content { max-width:96rem; }
   .event-themed .guest-rsvp-page .guest-rsvp-schedule-row { grid-template-columns:12rem minmax(0,1fr); column-gap:1.5rem; }
 }
 
