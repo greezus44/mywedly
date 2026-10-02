@@ -29,8 +29,9 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
         if (stored) {
           const session = JSON.parse(stored) as { guestId: string; eventId: string };
           const { data, error } = await supabase
-            .from("event_guests").select("*").eq("id", session.guestId).eq("event_id", session.eventId).maybeSingle();
-          if (!cancelled && !error && data) { setGuest(data as EventGuest); setEventId(session.eventId); }
+            .rpc("guest_session_lookup", { p_guest_id: session.guestId, p_event_id: session.eventId })
+            .maybeSingle();
+          if (!cancelled && !error && data) { setGuest(data as unknown as EventGuest); setEventId(session.eventId); }
           else if (!cancelled) { try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ } }
         }
       } catch { /* ignore */ }
@@ -44,13 +45,12 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
     // Normalize: replace non-breaking spaces and other Unicode whitespace, collapse multiple spaces, trim
     const normalized = username.replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, " ").replace(/\s+/g, " ").trim();
     if (!normalized) return { error: "Please enter your username" };
-    // Escape ILIKE wildcards so the input is matched literally (case-insensitively)
-    const escaped = normalized.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
     const { data, error } = await supabase
-      .from("event_guests").select("*").eq("event_id", targetEventId).ilike("username", escaped).maybeSingle();
+      .rpc("guest_signin_lookup", { p_event_id: targetEventId, p_username: normalized })
+      .maybeSingle();
     if (error) return { error: "Unable to sign in. Please try again." };
     if (!data) return { error: "Username not found. Please check and try again." };
-    const guestData = data as EventGuest;
+    const guestData = data as unknown as EventGuest;
     setGuest(guestData); setEventId(targetEventId);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ guestId: guestData.id, eventId: targetEventId })); } catch { /* localStorage may throw in iOS Safari private mode */ }
     return { error: null };

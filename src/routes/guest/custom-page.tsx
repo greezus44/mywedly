@@ -7,6 +7,7 @@ import { jsonToBlocks } from "../event/block-types";
 import { LoadingSpinner } from "../../components/ui";
 import { useLanguage } from "../../lib/language";
 import { setCurrentLanguage } from "../../lib/translations";
+import { sanitizeHtml } from "../../lib/sanitize";
 
 export default function GuestCustomPage() {
   const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
@@ -50,7 +51,7 @@ export default function GuestCustomPage() {
             {blocks.map((block) => <BlockRenderer key={block.id} block={block} eventId={event.id} />)}
           </div>
         ) : (
-          page.body ? <div className="rich-content" dangerouslySetInnerHTML={{ __html: page.body }} /> : <p className="text-center text-dash-muted">{t("No content yet.", "Tiada kandungan lagi.")}</p>
+          page.body ? <div className="rich-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(page.body) }} /> : <p className="text-center text-dash-muted">{t("No content yet.", "Tiada kandungan lagi.")}</p>
         )}
       </div>
     </div>

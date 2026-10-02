@@ -59,7 +59,8 @@ export default function GuestWishes() {
       setSubmitError(null);
     },
     onError: (err) => {
-      setSubmitError(err instanceof Error ? err.message : "Failed to submit wish");
+      console.error("Failed to submit wish", err);
+      setSubmitError("We couldn't post your message. Please try again.");
     },
   });
 

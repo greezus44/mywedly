@@ -7,6 +7,7 @@ import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/
 import type { EventContent } from "../../components/preview/PreviewRenderers";
 import { useLanguage } from "../../lib/language";
 import { pickText, autoTranslate, setCurrentLanguage } from "../../lib/translations";
+import { sanitizeHtml } from "../../lib/sanitize";
 
 export default function GuestHome() {
   const { event, slug, invitedSubEventIds } = useGuestOutletContext();
@@ -42,7 +43,7 @@ export default function GuestHome() {
           <section key={i} className="guest-section" style={i === 0 ? { paddingTop: 0 } : undefined}>
             <div className="mx-auto max-w-3xl">
               {displayHeading && <h2 className="guest-title mb-4" style={{ whiteSpace: "pre-wrap", ...headingStyle }}>{displayHeading}</h2>}
-              {displayBody && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: displayBody }} />}
+              {displayBody && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: sanitizeHtml(displayBody) }} />}
             </div>
           </section>
         );

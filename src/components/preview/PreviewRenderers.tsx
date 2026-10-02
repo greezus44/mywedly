@@ -4,6 +4,7 @@ import { jsonToTheme } from "../../lib/theme";
 import { resolveTypography, getTypographyStyle } from "../../lib/typography";
 import { formatDateLong } from "../../lib/utils";
 import { ButtonColors, buttonColorsToStyle, buttonColorsToHoverStyle } from "../ui/ButtonColourEditor";
+import { sanitizeHtml } from "../../lib/sanitize";
 
 export interface CoverConfig {
   background?: { image?: string | null; color?: string; position?: string; fit?: string };
@@ -59,7 +60,7 @@ export function CoverPreview({ config, theme, eventName }: CoverPreviewProps) {
           {eyebrow.text && <p className="guest-eyebrow mb-2" style={{ whiteSpace: "pre-wrap", ...eyebrow.style }}>{eyebrow.text}</p>}
           {heading.text && <h1 className="guest-title mb-3" style={{ whiteSpace: "pre-wrap", ...heading.style }}>{heading.text}</h1>}
           {subheading.text && <p className="guest-subtitle mb-3" style={{ whiteSpace: "pre-wrap", ...subheading.style }}>{subheading.text}</p>}
-          {config.bodyHtml && <div className="rich-content mb-6" dangerouslySetInnerHTML={{ __html: config.bodyHtml }} />}
+          {config.bodyHtml && <div className="rich-content mb-6" dangerouslySetInnerHTML={{ __html: sanitizeHtml(config.bodyHtml) }} />}
           <button type="button" className="event-btn-primary" style={buttonColorsToStyle(config.buttonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(config.buttonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(config.buttonColors))}>{cta}</button>
         </div>
       </div>
@@ -115,7 +116,7 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
             <section key={i} className="guest-section">
               <div className="mx-auto max-w-3xl">
                 {heading.text && <h2 className="guest-title mb-4" style={heading.style}>{heading.text}</h2>}
-                {section.body && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: section.body }} />}
+                {section.body && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.body) }} />}
               </div>
             </section>
           );

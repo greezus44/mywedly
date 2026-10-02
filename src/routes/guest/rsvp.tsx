@@ -129,12 +129,9 @@ export default function GuestRsvp() {
     queryKey: ["guest-rsvps", guest?.id, event.id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("event_rsvps")
-        .select("*")
-        .eq("guest_id", guest!.id)
-        .eq("event_id", event.id);
+        .rpc("guest_list_rsvps", { p_guest_id: guest!.id, p_event_id: event.id });
       if (error) throw error;
-      return data as EventRsvp[];
+      return (data ?? []) as unknown as EventRsvp[];
     },
     enabled: !!guest,
   });
@@ -154,27 +151,20 @@ export default function GuestRsvp() {
 
   const rsvpMutation = useMutation({
     mutationFn: async ({ subEventId, status, plus_ones, message }: { subEventId: string | null; status: string; plus_ones: number; message: string }) => {
-      const existing = existingRsvps?.find((r) => (subEventId ? r.sub_event_id === subEventId : !r.sub_event_id));
-      if (existing) {
-        const { error } = await supabase
-          .from("event_rsvps")
-          .update({ status, plus_ones, message, responded_at: new Date().toISOString() })
-          .eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("event_rsvps")
-          .insert({
-            event_id: event.id,
-            guest_id: guest!.id,
-            guest_name: guest!.name,
-            status,
-            plus_ones,
-            message,
-            sub_event_id: subEventId,
-            responded_at: new Date().toISOString(),
-          });
-        if (error) throw error;
+      const { error } = await supabase.rpc("guest_submit_rsvp", {
+        p_guest_id: guest!.id,
+        p_event_id: event.id,
+        p_sub_event_id: subEventId,
+        p_status: status,
+        p_plus_ones: plus_ones,
+        p_message: message,
+      });
+      if (error) {
+        console.error("RSVP submit failed", error);
+        const code = error.message || "";
+        if (code.includes("rsvp_closed")) throw new Error("RSVP is closed for this event.");
+        if (code.includes("rsvp_not_allowed")) throw new Error("You are not invited to this event.");
+        throw new Error("We couldn't save your response. Please try again.");
       }
     },
     onSuccess: () => {

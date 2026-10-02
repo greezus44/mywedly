@@ -78,7 +78,7 @@ export default function GuestLayout() {
   useEffect(() => { document.body.style.overflow = menuOpen ? "hidden" : ""; return () => { document.body.style.overflow = ""; }; }, [menuOpen]);
 
   if (isLoading || authLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><LoadingSpinner /></div>;
-  if (isError) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Something went wrong</h1><p className="text-dash-muted">{error instanceof Error ? error.message : "Please try again later."}</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
+  if (isError) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Something went wrong</h1><p className="text-dash-muted">{"Please try again later."}</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
   if (!guest || eventId !== event.id) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><LoadingSpinner /></div>;
 
