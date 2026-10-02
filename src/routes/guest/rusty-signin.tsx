@@ -17,6 +17,7 @@ export default function RustySignIn() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { guest, eventId, signIn } = useGuestAuth();
+  const { language } = useLanguage();
   const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -49,7 +50,6 @@ export default function RustySignIn() {
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
 
-  const { language } = useLanguage();
   const loginConfig = (event.login_config ?? {}) as LoginConfig;
   const headingRaw = resolveTypography(loginConfig.heading, (event.name ?? undefined) || "Welcome");
   const subheadingRaw = resolveTypography(loginConfig.subheading, "");
