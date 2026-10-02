@@ -18,7 +18,7 @@ export default function GuestHome() {
   const logo = content.logo;
 
   return (
-    <div>
+    <div className="guest-home-page">
       {logo?.url && (
         <div style={{ paddingTop: logo.marginTop ? `${logo.marginTop}px` : undefined, paddingBottom: logo.marginBottom != null ? `${Math.min(logo.marginBottom, 8)}px` : "0.5rem", display: "flex", justifyContent: "center" }}>
           <img src={logo.url} alt="" className="home-logo" style={{ maxWidth: logo.size ? `${logo.size}px` : "140px", height: "auto", width: "auto" }} />

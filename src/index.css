@@ -54,6 +54,15 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
 .event-themed .home-logo { display:block;margin-left:auto;margin-right:auto;background:transparent;border:none;box-shadow:none; }
 .event-themed .rsvp-section { background-color: var(--event-bg); }
 
+.guest-home-page .guest-section,
+.guest-rsvp-page {
+  width: 100%;
+}
+
+.guest-rsvp-content {
+  width: 100%;
+}
+
 .scrollbar-thin::-webkit-scrollbar { width:6px;height:6px; }
 .scrollbar-thin::-webkit-scrollbar-track { background:transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background:var(--dash-border);border-radius:3px; }
@@ -76,7 +85,59 @@ html { scroll-behavior:smooth;overflow-x:hidden; }
   .event-themed .rich-content h1 { font-size:calc(1.5rem * var(--event-font-scale,1)); }
   .event-themed .rich-content h2 { font-size:calc(1.25rem * var(--event-font-scale,1)); }
   .event-themed .rich-content h3 { font-size:calc(1.125rem * var(--event-font-scale,1)); }
+
+  .event-themed .guest-home-page .guest-section,
+  .event-themed .guest-rsvp-page {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+
+  .event-themed .guest-home-page > section {
+    max-width: 42rem;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .event-themed .guest-home-page .rsvp-section {
+    padding-top: 2rem;
+    padding-bottom: 3rem;
+  }
+
+  .event-themed .guest-rsvp-page .guest-rsvp-content {
+    max-width: 42rem;
+  }
+
+  .event-themed .guest-rsvp-page .guest-rsvp-event {
+    gap: 1rem;
+  }
+
+  .event-themed .guest-rsvp-page .guest-rsvp-schedule-row {
+    grid-template-columns: minmax(5.75rem, 6.5rem) minmax(0, 1fr);
+    column-gap: 0.75rem;
+  }
+
+  .event-themed .guest-rsvp-page .guest-rsvp-schedule-row > :first-child {
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+  }
+
+  .event-themed .guest-rsvp-page .guest-rsvp-schedule-row > :last-child {
+    min-width: 0;
+  }
 }
+
+@media (min-width:641px) and (max-width:1024px) {
+  .event-themed .guest-home-page .guest-section,
+  .event-themed .guest-rsvp-page {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+
+  .event-themed .guest-rsvp-page .guest-rsvp-schedule-row {
+    grid-template-columns: 8rem minmax(0, 1fr);
+  }
+}
+
 @media (min-width:641px) and (max-width:1024px) {
   .event-themed .guest-title { font-size:calc(2.25rem * var(--event-font-scale,1)); }
   .event-themed .guest-subtitle { font-size:calc(1.125rem * var(--event-font-scale,1)); }
