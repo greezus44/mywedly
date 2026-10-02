@@ -329,7 +329,7 @@ export default function GuestRsvp() {
 
   const renderEventBlock = (eventName: string, dateStr: string | null, timeStr: string | null, venue: string | null, address: string | null, subEventId: string | null) => {
     return (
-      <div className="guest-rsvp-event flex flex-row items-start gap-3 sm:gap-6">
+      <div className="guest-rsvp-event flex flex-row items-start gap-1.5 sm:gap-3">
         {renderDateColumn(dateStr)}
         <div className="flex-1 min-w-0">
           {eventName && <h2 className="text-lg sm:text-2xl font-bold mb-1 break-words" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...eventNameStyle }}>{eventName}</h2>}
