@@ -28,9 +28,6 @@ export default function GuestCover() {
     enabled: !!slug,
   });
 
-  if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
-  if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
-
   useEffect(() => {
     if (!event) return;
     const coverConfig = (event.cover_config ?? {}) as Record<string, unknown>;
@@ -39,6 +36,9 @@ export default function GuestCover() {
     document.body.style.backgroundColor = background.color || jsonToTheme(event.theme).colors.bg;
     return () => { document.body.style.backgroundColor = previous; };
   }, [event]);
+
+  if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
+  if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
 
   const theme = jsonToTheme(event.theme);
   const rawCoverConfig = (event.cover_config ?? {}) as Record<string, unknown>;

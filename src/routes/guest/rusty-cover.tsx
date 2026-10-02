@@ -28,9 +28,6 @@ export default function RustyCover() {
     enabled: !!slug,
   });
 
-  if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
-  if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1></div>;
-
   useEffect(() => {
     if (!event) return;
     const coverConfig = (event.cover_config ?? {}) as Record<string, unknown>;
@@ -39,6 +36,9 @@ export default function RustyCover() {
     document.body.style.backgroundColor = background.color || RUSTY_THEME.colors.bg;
     return () => { document.body.style.backgroundColor = previous; };
   }, [event]);
+
+  if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
+  if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1></div>;
 
   const rawCoverConfig = (event.cover_config ?? {}) as Record<string, unknown>;
   const logoConfig = (event.logo_config ?? {}) as LogoConfig;
@@ -63,13 +63,6 @@ export default function RustyCover() {
   const eyebrow = { text: language === "bm" ? pickText(eyebrowRaw.text, eyebrowBm, autoTranslate(eyebrowRaw.text)) : eyebrowRaw.text, style: eyebrowRaw.style };
   const heading = { text: language === "bm" ? pickText(headingRaw.text, headingBm) : headingRaw.text, style: headingRaw.style };
   const subheading = { text: language === "bm" ? pickText(subheadingRaw.text, subheadingBm, autoTranslate(subheadingRaw.text)) : subheadingRaw.text, style: subheadingRaw.style };
-
-  const bodyBgColor = bgConfig.color || RUSTY_THEME.colors.bg;
-  useEffect(() => {
-    const prev = document.body.style.backgroundColor;
-    document.body.style.backgroundColor = bodyBgColor;
-    return () => { document.body.style.backgroundColor = prev; };
-  }, [bodyBgColor]);
 
   return (
     <EventThemeProvider theme={RUSTY_THEME}>
