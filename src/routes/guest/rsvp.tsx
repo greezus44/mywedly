@@ -350,7 +350,7 @@ export default function GuestRsvp() {
     <div className="guest-section guest-rsvp-page">
       <div className="mx-auto max-w-2xl guest-rsvp-content">
         {/* Header */}
-        <div className={cn("text-center pt-16 sm:pt-24", (rsvpContent.title || rsvpDeadline || guestNameText || subtitleText) && "mb-6 sm:mb-8")}>
+        <div className={cn("text-center pt-8 sm:pt-12", (rsvpContent.title || rsvpDeadline || guestNameText || subtitleText) && "mb-12 sm:mb-16")}>
           {rsvpContent.title && <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0, ...titleStyle }}>{tr(rsvpContent.title, "title")}</h1>}
           {rsvpDeadline && (
             <p className="text-center" style={{ whiteSpace: "pre-wrap", marginTop: 0, marginBottom: 0, ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)", textTransform: "uppercase" }}>
