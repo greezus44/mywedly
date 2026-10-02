@@ -88,6 +88,7 @@ export const AUTO_BM: Record<string, string> = {
   "Welcome to": "Selamat datang ke",
   "Check back soon for updates.": "Sila semak semula nanti untuk kemas kini.",
   "Sign Out": "Log Keluar",
+  "Schedule": "Aturcara",
 };
 
 /**

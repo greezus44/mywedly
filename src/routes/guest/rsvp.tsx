@@ -311,15 +311,19 @@ export default function GuestRsvp() {
     );
   };
 
+  const scheduleHeadingText = getTypographyText(rsvpContent.scheduleHeading, "");
+  const scheduleHeadingStyle = getTypographyStyle(rsvpContent.scheduleHeading);
+
   const renderSchedule = (subEventId: string | null) => {
     const items = (schedule ?? []).filter((s) => (subEventId ? s.sub_event_id === subEventId : !s.sub_event_id));
     if (items.length === 0) return null;
     return (
       <div className="mt-4 sm:mt-6">
+        <h3 className="mb-3 sm:mb-4" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...scheduleHeadingStyle }}>{scheduleHeadingText || tr("Schedule", "scheduleHeading")}</h3>
         <div className="space-y-3 sm:space-y-4">
           {items.map((item) => (
-            <div key={item.id} className="grid grid-cols-[4.5rem_1fr] gap-3 items-start sm:grid-cols-[10rem_1fr] md:grid-cols-[12rem_1fr] sm:gap-6">
-              <div className="text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", whiteSpace: "normal", overflow: "hidden", ...programmeItemStyle }}>
+            <div key={item.id} className="grid grid-cols-[8rem_1fr] gap-3 items-start sm:grid-cols-[10rem_1fr] md:grid-cols-[12rem_1fr] sm:gap-6">
+              <div className="text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", whiteSpace: "nowrap", ...programmeItemStyle }}>
                 {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
               </div>
               <div className="min-w-0">
