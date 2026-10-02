@@ -107,7 +107,7 @@ export function isRsvpClosed(deadline: string | null | undefined): boolean {
 }
 
 export function generateUsername(name: string): string {
-  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "").replace(/\s+/g, "") + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
+  return name.trim();
 }
 
 export function slugify(s: string): string {

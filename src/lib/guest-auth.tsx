@@ -41,8 +41,11 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (targetEventId: string, username: string): Promise<{ error: string | null }> => {
     if (!username.trim()) return { error: "Please enter your username" };
+    const trimmed = username.trim();
+    // Escape ILIKE wildcards so the input is matched literally (case-insensitively)
+    const escaped = trimmed.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
     const { data, error } = await supabase
-      .from("event_guests").select("*").eq("event_id", targetEventId).ilike("username", username.trim()).maybeSingle();
+      .from("event_guests").select("*").eq("event_id", targetEventId).ilike("username", escaped).maybeSingle();
     if (error) return { error: "Unable to sign in. Please try again." };
     if (!data) return { error: "Username not found. Please check and try again." };
     const guestData = data as EventGuest;
