@@ -318,7 +318,7 @@ export default function GuestRsvp() {
       <div className="mt-4 sm:mt-6">
         <div className="space-y-3 sm:space-y-4">
           {items.map((item) => (
-            <div key={item.id} className="grid grid-cols-[7rem_1fr] gap-4 items-start sm:grid-cols-[10rem_1fr] md:grid-cols-[12rem_1fr] sm:gap-6">
+            <div key={item.id} className="grid grid-cols-[auto_1fr] gap-3 items-start sm:grid-cols-[10rem_1fr] md:grid-cols-[12rem_1fr] sm:gap-6">
               <div className="text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", whiteSpace: "nowrap", ...programmeItemStyle }}>
                 {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
               </div>
@@ -350,7 +350,7 @@ export default function GuestRsvp() {
     const isDeclined = current.status === "declined";
     return (
       <div className="mt-4 sm:mt-6">
-        <div className="flex gap-2 sm:gap-3 justify-center sm:justify-start">
+        <div className="flex flex-wrap gap-2 sm:gap-3 justify-center sm:justify-start">
           <button
             onClick={() => handleRsvp(subEventId, "attending")}
             className="event-btn-primary"
@@ -379,7 +379,7 @@ export default function GuestRsvp() {
         {isAttending && allowPlusOneFor(subEventId) && (
           <div className="mt-3 sm:mt-4">
             <p className="mb-2 text-xs sm:text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{tr("Bringing a +1?", "plusOneQuestion")}</p>
-            <div className="flex gap-2 sm:gap-3 justify-center sm:justify-start">
+            <div className="flex flex-wrap gap-2 sm:gap-3 justify-center sm:justify-start">
               <button
                 onClick={() => handleBringingPlusOne(subEventId, true)}
                 className="event-btn-secondary"
@@ -426,7 +426,7 @@ export default function GuestRsvp() {
 
   const renderEventBlock = (eventName: string, dateStr: string | null, timeStr: string | null, venue: string | null, address: string | null, subEventId: string | null) => {
     return (
-      <div className="flex flex-row items-start gap-2 sm:gap-6">
+      <div className="flex flex-row items-start gap-3 sm:gap-6">
         {renderDateColumn(dateStr)}
         <div className="flex-1 min-w-0">
           {eventName && <h2 className="text-lg sm:text-2xl font-bold mb-1 break-words" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...eventNameStyle }}>{eventName}</h2>}
