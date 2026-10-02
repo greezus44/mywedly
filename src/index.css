@@ -37,6 +37,13 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
 .event-themed .rich-content ul,.event-themed .rich-content ol { padding-left:1.75em;margin:0.8em 0; }
 .event-themed .rich-content a { color:var(--event-primary);text-decoration:underline; }
 .event-themed .rich-content img { max-width:100%;border-radius:var(--event-radius);margin:1em 0; }
+.event-themed .rich-content font[size="1"] { font-size:0.75rem; }
+.event-themed .rich-content font[size="2"] { font-size:0.875rem; }
+.event-themed .rich-content font[size="3"] { font-size:1rem; }
+.event-themed .rich-content font[size="4"] { font-size:1.125rem; }
+.event-themed .rich-content font[size="5"] { font-size:1.25rem; }
+.event-themed .rich-content font[size="6"] { font-size:1.5rem; }
+.event-themed .rich-content font[size="7"] { font-size:1.875rem; }
 .event-themed .rich-content blockquote { border-left:3px solid var(--event-border);padding-left:1em;margin:1em 0;font-style:italic;color:var(--event-muted); }
 .event-themed .guest-section { padding:3.5rem 1.5rem; }
 @media (min-width:768px) { .event-themed .guest-section { padding:4rem 2rem; } }

@@ -27,6 +27,7 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
   }, [value]);
 
   const exec = (cmd: string, val?: string) => {
+    if (cmd === "fontSize") document.execCommand("styleWithCSS", false, "true");
     document.execCommand(cmd, false, val);
     ref.current?.focus();
     updateActive();
