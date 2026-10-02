@@ -46,7 +46,8 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
 .event-themed .rich-content font[size="7"] { font-size:1.875rem; }
 .event-themed .rich-content blockquote { border-left:3px solid var(--event-border);padding-left:1em;margin:1em 0;font-style:italic;color:var(--event-muted); }
 .event-themed .guest-section { padding:3.5rem 1.5rem; }
-@media (min-width:768px) { .event-themed .guest-section { padding:4rem 2rem; } }
+@media (min-width:768px) { .event-themed .guest-section { padding:4rem 2rem; }
+  .event-themed .guest-rsvp-page { padding-right:1rem; } }
 @media (min-width:641px) and (max-width:1024px) { .event-themed .guest-section { padding:4rem 1.5rem; } }
 .event-themed .guest-section-tight { padding:2.5rem 1.5rem; }
 .event-themed .guest-eyebrow { font-size:0.875rem;font-weight:600;letter-spacing:0.15em;text-transform:uppercase;color:var(--event-muted);margin-bottom:1rem; }
@@ -93,7 +94,7 @@ html { scroll-behavior:smooth;overflow-x:hidden; }
 
 @media (min-width:641px) {
   .event-themed .guest-home-page .guest-section > div { max-width:48rem; }
-  .event-themed .guest-rsvp-page .guest-rsvp-content { max-width:96rem; }
+  .event-themed .guest-rsvp-page .guest-rsvp-content { max-width:80rem; }
   .event-themed .guest-rsvp-page .guest-rsvp-schedule-row { grid-template-columns:12rem minmax(0,1fr); column-gap:1.5rem; }
 }
 
@@ -167,7 +168,7 @@ html { scroll-behavior:smooth;overflow-x:hidden; }
   .event-themed .guest-home-page .guest-section,
   .event-themed .guest-rsvp-page {
     padding-left: 1.5rem;
-    padding-right: 1.5rem;
+    padding-right: 0.75rem;
   }
 
   .event-themed .guest-rsvp-page .guest-rsvp-schedule-row {
