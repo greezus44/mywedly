@@ -61,6 +61,18 @@ function getDateParts(dateStr: string | null | undefined): { weekday: string; da
   };
 }
 
+function formatScheduleTimeRange(startTime: string | null | undefined, endTime: string | null | undefined): string {
+  const start = formatTime12(startTime);
+  const end = formatTime12(endTime);
+  if (!start || !end) return start || end;
+  const startPeriod = start.match(/\s(AM|PM|pagi|petang|malam|tengah hari)$/)?.[1];
+  const endPeriod = end.match(/\s(AM|PM|pagi|petang|malam|tengah hari)$/)?.[1];
+  if (startPeriod && startPeriod === endPeriod) {
+    return `${start.slice(0, -startPeriod.length).trim()} \u2013 ${end}`;
+  }
+  return `${start} \u2013 ${end}`;
+}
+
 export default function GuestRsvp() {
   const { event, slug, invitedSubEventIds } = useGuestOutletContext();
   const { guest } = useGuestAuth();
@@ -242,7 +254,7 @@ export default function GuestRsvp() {
           {items.map((item) => (
             <div key={item.id} className="guest-rsvp-schedule-row grid items-start">
               <div className="guest-rsvp-schedule-time text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", ...programmeItemStyle }}>
-                {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
+                {formatScheduleTimeRange(item.start_time, item.end_time)}
               </div>
               <div className="guest-rsvp-schedule-title min-w-0">
                 <p className="font-medium text-sm sm:text-base leading-snug" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", overflowWrap: "break-word", ...programmeItemStyle }}>{item.title}</p>
