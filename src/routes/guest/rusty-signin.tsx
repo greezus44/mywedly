@@ -36,7 +36,10 @@ export default function RustySignIn() {
     try {
       const result = await signIn(event.id, username.trim());
       if (result.error) { setError(result.error); setSubmitting(false); }
-      else navigate(`/r/${slug}/home`, { replace: true });
+      // On success, do NOT navigate here. The useEffect below fires once
+      // the guest/eventId state is committed by React, which avoids a race
+      // condition on iOS WebKit where GuestLayout renders with stale null
+      // state and bounces the user back to the signin page.
     } catch {
       setError("Unable to sign in. Please try again.");
       setSubmitting(false);

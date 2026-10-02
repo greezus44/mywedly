@@ -51,7 +51,21 @@ export default function RustyLayout() {
   const invitedSubEventIds = invitations ? getInvitedSubEventIds(invitations) : [];
 
   useEffect(() => {
-    if (!authLoading && event && (!guest || eventId !== event.id)) navigate(`/r/${slug}/signin`, { replace: true });
+    if (authLoading || !event) return;
+    if (!guest || eventId !== event.id) {
+      // Check localStorage directly as a fallback — on iOS WebKit, the
+      // guest auth context state may lag behind by a render cycle right
+      // after signIn(). If a valid session exists in storage for this
+      // event, skip the redirect this cycle and let the provider catch up.
+      try {
+        const stored = localStorage.getItem("guest_session");
+        if (stored) {
+          const session = JSON.parse(stored) as { guestId: string; eventId: string };
+          if (session.eventId === event.id) return;
+        }
+      } catch { /* ignore */ }
+      navigate(`/r/${slug}/signin`, { replace: true });
+    }
   }, [authLoading, guest, eventId, event, slug, navigate]);
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
@@ -60,7 +74,7 @@ export default function RustyLayout() {
   if (isLoading || authLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><LoadingSpinner /></div>;
   if (isError) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Something went wrong</h1><p className="text-dash-muted">{error instanceof Error ? error.message : "Please try again later."}</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
-  if (!guest || eventId !== event.id) return null;
+  if (!guest || eventId !== event.id) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><LoadingSpinner /></div>;
 
   const { t } = useLanguage();
   const navLinks = [
