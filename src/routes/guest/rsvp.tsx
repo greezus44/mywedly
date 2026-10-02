@@ -3,7 +3,7 @@ import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { supabase, type EventRsvp, type EventSchedule, type SubEvent, type Json } from "../../lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { formatTime12, formatDateLong } from "../../lib/utils";
+import { formatTime12, formatDateLong, cn } from "../../lib/utils";
 import { getTypographyText, getTypographyStyle } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { useLanguage } from "../../lib/language";
@@ -342,8 +342,8 @@ export default function GuestRsvp() {
     <div className="guest-section guest-rsvp-page">
       <div className="mx-auto max-w-2xl guest-rsvp-content">
         {/* Header */}
-        <div className="mb-6 sm:mb-8 text-center">
-          {rsvpContent.title && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...titleStyle }}>{tr(rsvpContent.title, "title")}</h1>}
+        <div className={cn("text-center", (rsvpContent.title || rsvpDeadline || guestNameText || subtitleText) && "mb-6 sm:mb-8")}>
+          {rsvpContent.title && <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: (rsvpDeadline || guestNameText || subtitleText) ? undefined : 0, ...titleStyle }}>{tr(rsvpContent.title, "title")}</h1>}
           {rsvpDeadline && (
             <p className="mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)" }}>
               {tr(rsvpContent.rsvpDeadlinePrefix || "RSVP by", "rsvpDeadlinePrefix")} {formatDateLong(rsvpDeadline)}
