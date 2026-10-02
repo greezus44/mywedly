@@ -30,6 +30,7 @@ interface RsvpContent {
   additionalInfoHeading?: unknown;
   additionalInfoBody?: string;
   eventNameTypography?: unknown;
+  eventDateTypography?: unknown;
   eventTimeTypography?: unknown;
   eventAddressTypography?: unknown;
   programmeItemTypography?: unknown;
@@ -203,6 +204,8 @@ export default function GuestRsvp() {
   const subtitleStyle = getTypographyStyle(rsvpContent.subtitleTypography);
   const titleStyle = getTypographyStyle(rsvpContent.titleTypography);
   const eventNameStyle = getTypographyStyle(rsvpContent.eventNameTypography);
+  const eventDateStyle = getTypographyStyle(rsvpContent.eventDateTypography);
+  const eventDateFontStyle = eventDateStyle.fontFamily ? { fontFamily: eventDateStyle.fontFamily } : {};
   const eventTimeStyle = getTypographyStyle(rsvpContent.eventTimeTypography);
   const eventAddressStyle = getTypographyStyle(rsvpContent.eventAddressTypography);
   const programmeItemStyle = getTypographyStyle(rsvpContent.programmeItemTypography);
@@ -234,10 +237,10 @@ export default function GuestRsvp() {
     if (!parts) return null;
     return (
       <div className="flex flex-col items-center text-center flex-shrink-0" style={{ minWidth: "64px" }}>
-        <span className="text-[0.6875rem] sm:text-xs uppercase tracking-wide" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.weekday}</span>
-        <span className="text-3xl sm:text-3xl font-bold leading-tight" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{parts.day}</span>
-        <span className="text-sm sm:text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{parts.month}</span>
-        <span className="text-sm sm:text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.year}</span>
+        <span className="text-[0.6875rem] sm:text-xs uppercase tracking-wide" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...eventDateFontStyle }}>{parts.weekday}</span>
+        <span className="text-3xl sm:text-3xl font-bold leading-tight" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", ...eventDateFontStyle }}>{parts.day}</span>
+        <span className="text-sm sm:text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", ...eventDateFontStyle }}>{parts.month}</span>
+        <span className="text-sm sm:text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...eventDateFontStyle }}>{parts.year}</span>
       </div>
     );
   };

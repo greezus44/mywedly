@@ -1,7 +1,8 @@
 import { useMemo, type CSSProperties } from "react";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { jsonToTheme } from "../../lib/theme";
-import { resolveTypography } from "../../lib/typography";
+import { resolveTypography, getTypographyStyle } from "../../lib/typography";
+import { formatDateLong } from "../../lib/utils";
 import { ButtonColors, buttonColorsToStyle, buttonColorsToHoverStyle } from "../ui/ButtonColourEditor";
 
 export interface CoverConfig {
@@ -129,10 +130,13 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
   );
 }
 
-interface RsvpPreviewProps { theme: unknown; content?: Record<string, unknown> | null; }
-export function RsvpPreview({ theme, content }: RsvpPreviewProps) {
-  const c = content as { title?: string; subtitle?: string; scheduleHeading?: unknown; attendingText?: string; declinedText?: string; contactMessage?: string } | null;
+interface RsvpPreviewProps { theme: unknown; content?: Record<string, unknown> | null; eventDate?: string | null; subEventDates?: (string | null)[]; }
+export function RsvpPreview({ theme, content, eventDate, subEventDates = [] }: RsvpPreviewProps) {
+  const c = content as { title?: string; subtitle?: string; scheduleHeading?: unknown; attendingText?: string; declinedText?: string; contactMessage?: string; eventDateTypography?: unknown } | null;
   const scheduleHeading = resolveTypography(c?.scheduleHeading, "Program");
+  const eventDateStyle = getTypographyStyle(c?.eventDateTypography);
+  const eventDateFontStyle = eventDateStyle.fontFamily ? { fontFamily: eventDateStyle.fontFamily } : {};
+  const dates = subEventDates.length > 0 ? subEventDates : [eventDate];
   return (
     <EventThemeProvider theme={theme}>
       <div className="guest-section">
@@ -140,6 +144,7 @@ export function RsvpPreview({ theme, content }: RsvpPreviewProps) {
           <h1 className="guest-title mb-2">{c?.title || "RSVP"}</h1>
           {c?.subtitle && <p className="guest-subtitle mb-6">{c.subtitle}</p>}
           {scheduleHeading.text && <h3 className="guest-subtitle mb-4" style={scheduleHeading.style}>{scheduleHeading.text}</h3>}
+          {dates.some(Boolean) && <div className="mb-4 flex flex-wrap justify-center gap-3" style={eventDateFontStyle}>{dates.filter((date): date is string => !!date).map((date) => <span key={date}>{formatDateLong(date)}</span>)}</div>}
           <div className="event-card space-y-3">
             <p className="guest-subtitle" style={{ fontSize: "1rem" }}>Guest Name</p>
             <div className="flex justify-center gap-3">

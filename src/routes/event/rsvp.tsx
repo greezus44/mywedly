@@ -8,6 +8,8 @@ import { ButtonColourEditor, type ButtonColors } from "../../components/ui/Butto
 import { Input } from "../../components/ui/Input";
 import { Textarea } from "../../components/ui/Input";
 import { TypographyControls } from "../../components/ui/TypographyControls";
+import { FontSelect } from "../../components/ui/FontSelect";
+import { HEADING_FONT_OPTIONS } from "../../lib/theme";
 import type { TypographyStyle } from "../../lib/typography";
 import { formatDate, formatDateTime, isRsvpClosed } from "../../lib/utils";
 import { DateTimePicker } from "../../components/ui";
@@ -38,6 +40,7 @@ export interface RsvpContent {
   additionalInfoBody?: string;
   additionalInfoBodyTypography?: unknown;
   eventNameTypography?: unknown;
+  eventDateTypography?: unknown;
   eventTimeTypography?: unknown;
   eventAddressTypography?: unknown;
   programmeItemTypography?: unknown;
@@ -113,9 +116,9 @@ export function RsvpPage() {
   const { data: subEvents } = useQuery({
     queryKey: ["event-sub-events-rsvp", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("sub_events").select("id, name").eq("parent_event_id", eventId);
+      const { data, error } = await supabase.from("sub_events").select("id, name, date").eq("parent_event_id", eventId);
       if (error) throw error;
-      return data as Pick<SubEvent, "id" | "name">[];
+      return data as Pick<SubEvent, "id" | "name" | "date">[];
     },
   });
 
@@ -239,6 +242,15 @@ export function RsvpPage() {
             <TypographyControls value={rsvpContent.eventNameTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, eventNameTypography: v }))} showText={false} />
           </div>
           <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Event Date Font Family</label>
+            <FontSelect
+              value={(rsvpContent.eventDateTypography as TypographyStyle | undefined)?.fontFamily ?? ""}
+              onChange={(fontFamily) => setRsvpContent((p) => ({ ...p, eventDateTypography: { ...((p.eventDateTypography as TypographyStyle | undefined) ?? {}), fontFamily } }))}
+              options={HEADING_FONT_OPTIONS}
+              placeholder="Use date's default font"
+            />
+          </div>
+          <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">Event Time Typography</label>
             <TypographyControls value={rsvpContent.eventTimeTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, eventTimeTypography: v }))} showText={false} />
           </div>
@@ -274,7 +286,7 @@ export function RsvpPage() {
           </div>
         </div>
         }
-        preview={<RsvpPreview theme={event.draft_theme ?? event.theme} content={rsvpContent as unknown as Record<string, unknown>} />}
+        preview={<RsvpPreview theme={event.draft_theme ?? event.theme} content={rsvpContent as unknown as Record<string, unknown>} eventDate={event.draft_event_date ?? event.event_date} subEventDates={(subEvents ?? []).map((subEvent) => subEvent.date)} />}
       />
       )}
       <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-4">
