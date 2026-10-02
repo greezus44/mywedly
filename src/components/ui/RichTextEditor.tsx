@@ -22,6 +22,14 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
   const ref = useRef<HTMLDivElement>(null);
   const selectionRef = useRef<Range | null>(null);
   const [active, setActive] = useState<Record<string, boolean>>({});
+  const [customFontSize, setCustomFontSize] = useState("");
+
+  const applyCustomFontSize = () => {
+    if (!customFontSize) return;
+    const val = Number(customFontSize);
+    if (val >= 1) exec("fontSize", String(val));
+    setCustomFontSize("");
+  };
 
   useEffect(() => {
     if (ref.current && ref.current.innerHTML !== value) {
@@ -126,6 +134,21 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
         >
           {(pixelFontSizes ? PIXEL_FONT_SIZES : LEGACY_FONT_SIZES).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
+        {pixelFontSizes && (
+          <input
+            type="number"
+            min={1}
+            max={200}
+            value={customFontSize}
+            onMouseDown={(e) => e.stopPropagation()}
+            onChange={(e) => setCustomFontSize(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyCustomFontSize(); } }}
+            onBlur={applyCustomFontSize}
+            placeholder="px"
+            className="w-14 rounded border border-dash-border bg-dash-surface px-1.5 py-1 text-xs text-dash-text"
+            title="Custom font size (px)"
+          />
+        )}
         <select
           onMouseDown={() => saveSelection()}
           onChange={(e) => exec("fontName", e.target.value)}
