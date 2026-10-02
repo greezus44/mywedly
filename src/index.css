@@ -75,8 +75,8 @@ html { scroll-behavior:smooth;overflow-x:hidden; }
 
 @media (max-width:640px) {
   .event-themed { font-size:1rem; }
-  .event-themed .guest-section { padding:3.5rem 0.75rem 2rem; }
-  .event-themed .guest-section-tight { padding:2.75rem 0.75rem 1.25rem; }
+  .event-themed .guest-section { padding:3.5rem 1.25rem 2rem; }
+  .event-themed .guest-section-tight { padding:2.75rem 1.25rem 1.25rem; }
   .event-themed .guest-title { font-size:calc(1.75rem * var(--event-font-scale,1)); }
   .event-themed .guest-subtitle { font-size:calc(1.0625rem * var(--event-font-scale,1));max-width:100%; }
   .event-themed .event-card { padding:1.25rem; }
@@ -87,9 +87,10 @@ html { scroll-behavior:smooth;overflow-x:hidden; }
   .event-themed .rich-content h3 { font-size:calc(1.125rem * var(--event-font-scale,1)); }
 
   .event-themed .guest-home-page .guest-section,
+  .event-themed .guest-home-page .rsvp-section,
   .event-themed .guest-rsvp-page {
-    padding-left: 1.25rem;
-    padding-right: 1.25rem;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
   }
 
   .event-themed .guest-home-page > section {
