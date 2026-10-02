@@ -17,7 +17,7 @@ export function EventThemeProvider({ theme, children, className }: EventThemePro
   const cssVars = useMemo(() => themeToEventCssVars(jsonToTheme(theme)), [theme]);
   return (
     <EventThemeContext.Provider value={{ cssVars }}>
-      <div className={`event-themed${className ? ` ${className}` : ""}`} style={{ ...cssVars, ...(className ? { minHeight: "auto" } : {}) } as CSSProperties}>
+      <div className={`event-themed${className ? ` ${className}` : ""}`} style={{ ...cssVars, ...(className ? { minHeight: "auto" } : { minHeight: "100dvh" }) } as CSSProperties}>
         {children}
       </div>
     </EventThemeContext.Provider>
