@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventRsvp, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventRsvp, type SubEvent, type Json } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Badge, ColorInput } from "../../components/ui";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
@@ -101,6 +101,20 @@ export function RsvpPage() {
       return data as EventRsvp[];
     },
   });
+
+  const { data: subEvents } = useQuery({
+    queryKey: ["event-sub-events-rsvp", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("sub_events").select("id, name").eq("parent_event_id", eventId);
+      if (error) throw error;
+      return data as Pick<SubEvent, "id" | "name">[];
+    },
+  });
+
+  const subEventName = (subEventId: string | null): string => {
+    if (!subEventId) return event.name ?? "Main Event";
+    return subEvents?.find((s) => s.id === subEventId)?.name ?? "Event";
+  };
 
   const deadline = event.draft_rsvp_deadline ?? event.rsvp_deadline;
   const closed = isRsvpClosed(deadline);
@@ -265,11 +279,12 @@ export function RsvpPage() {
       ) : (
         <div className="overflow-hidden rounded-lg border border-dash-border">
           <table className="w-full">
-            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Guest</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Status</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Plus Ones</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">+1 Name</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Message</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Responded</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
+            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Guest</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Event</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Status</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Plus Ones</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">+1 Name</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Message</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Responded</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
             <tbody className="divide-y divide-dash-border bg-dash-surface">
               {filtered.map((r) => (
                 <tr key={r.id}>
                   <td className="px-4 py-2 text-sm text-dash-text">{r.guest_name ?? "—"}</td>
+                  <td className="px-4 py-2 text-sm text-dash-text">{subEventName(r.sub_event_id)}</td>
                   <td className="px-4 py-2"><Badge variant={r.status === "attending" ? "success" : r.status === "declined" ? "danger" : "default"}>{r.status}</Badge></td>
                   <td className="px-4 py-2 text-sm text-dash-muted">{r.plus_ones}</td>
                   <td className="px-4 py-2 text-sm text-dash-text">{r.plus_one_names?.[0] ?? ""}</td>
