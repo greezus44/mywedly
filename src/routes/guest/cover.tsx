@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
@@ -53,6 +54,13 @@ export default function GuestCover() {
   const eyebrow = { text: language === "bm" ? pickText(eyebrowRaw.text, eyebrowBm, autoTranslate(eyebrowRaw.text)) : eyebrowRaw.text, style: eyebrowRaw.style };
   const heading = { text: language === "bm" ? pickText(headingRaw.text, headingBm) : headingRaw.text, style: headingRaw.style };
   const subheading = { text: language === "bm" ? pickText(subheadingRaw.text, subheadingBm, autoTranslate(subheadingRaw.text)) : subheadingRaw.text, style: subheadingRaw.style };
+
+  const bodyBgColor = bgConfig.color || theme.colors.bg;
+  useEffect(() => {
+    const prev = document.body.style.backgroundColor;
+    document.body.style.backgroundColor = bodyBgColor;
+    return () => { document.body.style.backgroundColor = prev; };
+  }, [bodyBgColor]);
 
   return (
     <EventThemeProvider theme={event.theme}>
