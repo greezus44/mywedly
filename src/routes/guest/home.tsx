@@ -49,7 +49,7 @@ export default function GuestHome() {
       })}
       {(invitedSubEventIds.length > 0 || !!guest) && (
         <section className="rsvp-section text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
-          <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary" style={buttonColorsToStyle(content.rsvpButtonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(content.rsvpButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(content.rsvpButtonColors))}>{pickText(content.rsvpButtonText || "RSVP Now", (content as { rsvpButtonTextBm?: string }).rsvpButtonTextBm, autoTranslate(content.rsvpButtonText || "RSVP Now"))}</button>
+          <button onClick={() => navigate(`/e/${slug}/rsvp`)} className="event-btn-primary" style={{ ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography), ...buttonColorsToHoverStyle(content.rsvpButtonColors) })} onMouseLeave={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) })}>{pickText(content.rsvpButtonText || "RSVP Now", (content as { rsvpButtonTextBm?: string }).rsvpButtonTextBm, autoTranslate(content.rsvpButtonText || "RSVP Now"))}</button>
         </section>
       )}
     </div>

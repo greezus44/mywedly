@@ -32,6 +32,7 @@ export interface EventContent {
   rsvpButtonText?: string;
   rsvpButtonTextBm?: string;
   rsvpButtonColors?: ButtonColors;
+  rsvpButtonTypography?: import("../../lib/typography").TypographyStyle;
   wishes?: { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; };
 }
 
@@ -123,7 +124,7 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
           <section className="guest-section text-center"><div className="mx-auto max-w-md"><p className="guest-subtitle">No content yet.</p></div></section>
         )}
         <section className="rsvp-section text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
-          <button type="button" className="event-btn-primary" style={buttonColorsToStyle(content.rsvpButtonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(content.rsvpButtonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(content.rsvpButtonColors))}>{content.rsvpButtonText || "RSVP Now"}</button>
+          <button type="button" className="event-btn-primary" style={{ ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography), ...buttonColorsToHoverStyle(content.rsvpButtonColors) })} onMouseLeave={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) })}>{content.rsvpButtonText || "RSVP Now"}</button>
         </section>
       </div>
     </EventThemeProvider>
