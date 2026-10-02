@@ -69,8 +69,8 @@ function formatScheduleTimeRange(startTime: string | null | undefined, endTime: 
   const start = formatTime12(startTime);
   const end = formatTime12(endTime);
   if (!start || !end) return start || end;
-  const startPeriod = start.match(/\s(AM|PM|pagi|petang|malam|tengah hari)$/)?.[1];
-  const endPeriod = end.match(/\s(AM|PM|pagi|petang|malam|tengah hari)$/)?.[1];
+  const startPeriod = start.match(/\s(AM|PM|pagi|ptg|malam|tengah hari)$/)?.[1];
+  const endPeriod = end.match(/\s(AM|PM|pagi|ptg|malam|tengah hari)$/)?.[1];
   if (startPeriod && startPeriod === endPeriod) {
     return `${start.slice(0, -startPeriod.length).trim()} \u2013 ${end}`;
   }
@@ -270,8 +270,8 @@ export default function GuestRsvp() {
                 {formatScheduleTimeRange(item.start_time, item.end_time)}
               </div>
               <div className="guest-rsvp-schedule-title min-w-0">
-                <p className="font-medium text-sm sm:text-base leading-snug" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", overflowWrap: "break-word", ...programmeItemStyle }}>{item.title}</p>
-                {item.description && <p className="text-xs sm:text-sm mt-0.5 leading-snug" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", overflowWrap: "break-word", ...programmeItemStyle }}>{item.description}</p>}
+                <p className="font-medium text-sm sm:text-base leading-snug" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", overflowWrap: "break-word", ...programmeItemStyle }}>{language === "bm" ? (item.title_bm?.trim() || item.title) : item.title}</p>
+                {(language === "bm" ? (item.description_bm?.trim() || item.description) : item.description) && <p className="text-xs sm:text-sm mt-0.5 leading-snug" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", overflowWrap: "break-word", ...programmeItemStyle }}>{language === "bm" ? (item.description_bm?.trim() || item.description) : item.description}</p>}
               </div>
             </div>
           ))}
@@ -329,7 +329,7 @@ export default function GuestRsvp() {
 
   const renderEventBlock = (eventName: string, dateStr: string | null, timeStr: string | null, venue: string | null, address: string | null, subEventId: string | null) => {
     return (
-      <div className="guest-rsvp-event flex flex-row items-start gap-0.5 sm:gap-1">
+      <div className="guest-rsvp-event flex flex-row items-start gap-1 sm:gap-1.5">
         {renderDateColumn(dateStr)}
         <div className="flex-1 min-w-0">
           {eventName && <h2 className="text-lg sm:text-2xl font-bold mb-1 break-words" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...eventNameStyle }}>{eventName}</h2>}
@@ -367,12 +367,12 @@ export default function GuestRsvp() {
             {subEvents!.map((se, i) => (
               <div key={se.id}>
                 {i > 0 && <hr className="border-0 border-t my-6 sm:my-8" style={{ borderColor: "var(--event-border)" }} />}
-                {renderEventBlock(se.name, se.date, se.time ?? se.start_time, se.venue, se.address, se.id)}
+                {renderEventBlock(language === "bm" ? (se.name_bm?.trim() || se.name) : se.name, se.date, se.time ?? se.start_time, se.venue, se.address, se.id)}
               </div>
             ))}
           </div>
         ) : (
-          renderEventBlock(event.name ?? "", event.event_date, event.event_time, event.venue, event.address, null)
+          renderEventBlock(language === "bm" ? (event.name_bm?.trim() || (event.name ?? "")) : (event.name ?? ""), event.event_date, event.event_time, event.venue, event.address, null)
         )}
 
         {contactMessageText && (

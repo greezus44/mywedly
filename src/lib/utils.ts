@@ -69,7 +69,7 @@ export function to12Hour(time24: string): string {
     let period: string;
     if (h >= 0 && h < 12) period = "pagi";
     else if (h === 12) period = "tengah hari";
-    else if (h >= 13 && h < 18) period = "petang";
+    else if (h >= 13 && h < 18) period = "ptg";
     else period = "malam";
     h = h % 12 || 12;
     return `${h}:${min} ${period}`;

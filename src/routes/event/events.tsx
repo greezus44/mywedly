@@ -14,7 +14,9 @@ interface ProgrammeItem {
   start_time: string;
   end_time: string;
   title: string;
+  title_bm: string;
   description: string;
+  description_bm: string;
 }
 
 export function EventsPage() {
@@ -26,7 +28,7 @@ export function EventsPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   // Event form state
-  const [name, setName] = useState(""); const [date, setDate] = useState(""); const [time, setTime] = useState("");
+  const [name, setName] = useState(""); const [nameBm, setNameBm] = useState(""); const [date, setDate] = useState(""); const [time, setTime] = useState("");
   const [venue, setVenue] = useState(""); const [address, setAddress] = useState(""); const [description, setDescription] = useState("");
 
   // Programme items within the event form
@@ -47,21 +49,21 @@ export function EventsPage() {
   const upcoming = (subEvents ?? []).filter((e) => (e.date ?? "") >= today);
   const previous = (subEvents ?? []).filter((e) => (e.date ?? "") < today).reverse();
 
-  const resetForm = () => { setName(""); setDate(""); setTime(""); setVenue(""); setAddress(""); setDescription(""); setEditEvent(null); setProgrammeItems([]); setFormError(null); };
+  const resetForm = () => { setName(""); setNameBm(""); setDate(""); setTime(""); setVenue(""); setAddress(""); setDescription(""); setEditEvent(null); setProgrammeItems([]); setFormError(null); };
   const openAdd = () => { resetForm(); setShowForm(true); };
 
   const openEdit = async (e: SubEvent) => {
-    setEditEvent(e); setName(e.name ?? ""); setDate(e.date ?? ""); setTime(e.time ?? e.start_time ?? ""); setVenue(e.venue ?? ""); setAddress(e.address ?? ""); setDescription(e.description ?? ""); setFormError(null);
+    setEditEvent(e); setName(e.name ?? ""); setNameBm(e.name_bm ?? ""); setDate(e.date ?? ""); setTime(e.time ?? e.start_time ?? ""); setVenue(e.venue ?? ""); setAddress(e.address ?? ""); setDescription(e.description ?? ""); setFormError(null);
     // Load existing programme items for this sub-event
     const items = (allSchedule ?? []).filter((s) => s.sub_event_id === e.id).map((s) => ({
-      id: s.id, start_time: s.start_time ?? "", end_time: s.end_time ?? "", title: s.title, description: s.description ?? "",
+      id: s.id, start_time: s.start_time ?? "", end_time: s.end_time ?? "", title: s.title, title_bm: s.title_bm ?? "", description: s.description ?? "", description_bm: s.description_bm ?? "",
     }));
     setProgrammeItems(items);
     setShowForm(true);
   };
 
   const addProgrammeItem = () => {
-    setProgrammeItems((p) => [...p, { start_time: "", end_time: "", title: "", description: "" }]);
+    setProgrammeItems((p) => [...p, { start_time: "", end_time: "", title: "", title_bm: "", description: "", description_bm: "" }]);
   };
   const updateProgrammeItem = (index: number, patch: Partial<ProgrammeItem>) => {
     setProgrammeItems((p) => p.map((item, i) => i === index ? { ...item, ...patch } : item));
@@ -82,7 +84,7 @@ export function EventsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSubmitting(true); setFormError(null);
     try {
-      const payload = { parent_event_id: eventId, name, date: date || null, time: time || null, venue: venue || null, address: address || null, description: description || null, rsvp_enabled: true };
+      const payload = { parent_event_id: eventId, name, name_bm: nameBm || null, date: date || null, time: time || null, venue: venue || null, address: address || null, description: description || null, rsvp_enabled: true };
       let subEventId: string;
       if (editEvent) {
         const { error } = await supabase.from("sub_events").update(payload).eq("id", editEvent.id);
@@ -107,11 +109,11 @@ export function EventsPage() {
         if (!item.title.trim()) continue;
         const itemPayload = {
           event_id: eventId, sub_event_id: subEventId,
-          title: item.title,
+          title: item.title, title_bm: item.title_bm || null,
           schedule_date: date || null,
           start_time: item.start_time || null,
           end_time: item.end_time || null,
-          description: item.description || null,
+          description: item.description || null, description_bm: item.description_bm || null,
           order_index: i,
         };
         if (item.id) {
@@ -186,7 +188,8 @@ export function EventsPage() {
       {/* Event Form Modal with integrated Programme editor */}
       <Modal open={showForm} onClose={() => { setShowForm(false); resetForm(); }} title={editEvent ? "Edit Event" : "Add Event"}>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Input label="Event Name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+          <Input label="Event Name (English)" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+          <Input label="Event Name (Malay)" value={nameBm} onChange={(e) => setNameBm(e.target.value)} placeholder="e.g. Majlis Resepsi" />
           <div className="grid grid-cols-2 gap-3"><Input label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /><Input label="Time" type="time" value={time} onChange={(e) => setTime(e.target.value)} /></div>
           <Input label="Venue" value={venue} onChange={(e) => setVenue(e.target.value)} /><Input label="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
           <div><label className="mb-1.5 block text-sm font-medium text-dash-text">Description</label><textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-dash-text focus:border-dash-primary focus:outline-none" /></div>
@@ -215,8 +218,10 @@ export function EventsPage() {
                       <Input label="Start Time" type="time" value={item.start_time} onChange={(e) => updateProgrammeItem(index, { start_time: e.target.value })} />
                       <Input label="End Time (optional)" type="time" value={item.end_time} onChange={(e) => updateProgrammeItem(index, { end_time: e.target.value })} />
                     </div>
-                    <Input label="Title" value={item.title} onChange={(e) => updateProgrammeItem(index, { title: e.target.value })} placeholder="e.g. Arrival of Guests" />
-                    <div><label className="mb-1 block text-xs font-medium text-dash-muted">Description (optional)</label><textarea value={item.description} onChange={(e) => updateProgrammeItem(index, { description: e.target.value })} rows={2} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" /></div>
+                    <Input label="Title (English)" value={item.title} onChange={(e) => updateProgrammeItem(index, { title: e.target.value })} placeholder="e.g. Arrival of Guests" />
+                    <Input label="Title (Malay)" value={item.title_bm} onChange={(e) => updateProgrammeItem(index, { title_bm: e.target.value })} placeholder="e.g. Ketibaan Tetamu" />
+                    <div><label className="mb-1 block text-xs font-medium text-dash-muted">Description (English, optional)</label><textarea value={item.description} onChange={(e) => updateProgrammeItem(index, { description: e.target.value })} rows={2} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" /></div>
+                    <div><label className="mb-1 block text-xs font-medium text-dash-muted">Description (Malay, optional)</label><textarea value={item.description_bm} onChange={(e) => updateProgrammeItem(index, { description_bm: e.target.value })} rows={2} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" /></div>
                   </div>
                 ))}
               </div>

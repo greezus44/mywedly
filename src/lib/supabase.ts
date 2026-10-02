@@ -12,7 +12,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 export interface Profile { id: string; display_name: string | null; avatar_url: string | null; created_at: string; updated_at: string; }
 
 export interface UserEvent {
-  id: string; creator_id: string; name: string | null; draft_name: string | null;
+  id: string; creator_id: string; name: string | null; name_bm: string | null; draft_name: string | null;
   event_type: string | null; draft_event_type: string | null;
   event_date: string | null; draft_event_date: string | null;
   event_time: string | null; draft_event_time: string | null;
@@ -39,7 +39,7 @@ export interface EventGuest {
 }
 
 export interface SubEvent {
-  id: string; parent_event_id: string; name: string; date: string | null; time: string | null;
+  id: string; parent_event_id: string; name: string; name_bm: string | null; date: string | null; time: string | null;
   venue: string | null; address: string | null; description: string | null; dress_code: string | null;
   rsvp_deadline: string | null; rsvp_enabled: boolean; order_index: number; created_at: string;
   updated_at: string; start_time: string | null; end_time: string | null; display_order: number;
@@ -58,7 +58,7 @@ export interface EventRsvp {
 
 // FIX #1: event_schedule uses `schedule_date` for the date, `start_time`/`end_time` for times
 export interface EventSchedule {
-  id: string; event_id: string; title: string; description: string | null;
+  id: string; event_id: string; title: string; title_bm: string | null; description: string | null; description_bm: string | null;
   schedule_date: string | null; start_time: string | null; end_time: string | null;
   venue: string | null; address: string | null; dress_code: string | null;
   category: string | null; cover_image: string | null; order_index: number;
