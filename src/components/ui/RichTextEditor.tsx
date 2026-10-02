@@ -7,16 +7,18 @@ interface RichTextEditorProps {
   onChange: (html: string) => void;
   placeholder?: string;
   className?: string;
+  pixelFontSizes?: boolean;
 }
 
-const FONT_SIZES = [
+const PIXEL_FONT_SIZES = [12, 14, 16, 18, 20, 24, 28, 32].map((size) => ({ label: `${size}px`, value: String(size) }));
+const LEGACY_FONT_SIZES = [
   { label: "Small", value: "2" },
   { label: "Normal", value: "3" },
   { label: "Large", value: "5" },
   { label: "Huge", value: "7" },
 ];
 
-export function RichTextEditor({ value, onChange, placeholder, className }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, placeholder, className, pixelFontSizes = false }: RichTextEditorProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<Record<string, boolean>>({});
 
@@ -26,9 +28,28 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
     }
   }, [value]);
 
+  const normalizeFontSizes = (fontSize: string) => {
+    if (!ref.current) return;
+    const selection = document.getSelection();
+    const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    ref.current.querySelectorAll("font[size]").forEach((font) => {
+      if (range && !range.intersectsNode(font)) return;
+      const span = document.createElement("span");
+      span.style.fontSize = `${fontSize}px`;
+      span.innerHTML = font.innerHTML;
+      font.replaceWith(span);
+    });
+  };
+
   const exec = (cmd: string, val?: string) => {
-    if (cmd === "fontSize") document.execCommand("styleWithCSS", false, "true");
-    document.execCommand(cmd, false, val);
+    if (cmd === "fontSize" && pixelFontSizes) {
+      document.execCommand("styleWithCSS", false, "false");
+      document.execCommand(cmd, false, "7");
+      normalizeFontSizes(val ?? "16");
+    } else {
+      if (cmd === "fontSize") document.execCommand("styleWithCSS", false, "true");
+      document.execCommand(cmd, false, val);
+    }
     ref.current?.focus();
     updateActive();
     if (ref.current) onChange(ref.current.innerHTML);
@@ -78,9 +99,9 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
           onMouseDown={(e) => e.preventDefault()}
           onChange={(e) => exec("fontSize", e.target.value)}
           className="rounded border border-dash-border bg-dash-surface px-1.5 py-1 text-xs text-dash-text"
-          defaultValue="3"
+          defaultValue={pixelFontSizes ? "16" : "3"}
         >
-          {FONT_SIZES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          {(pixelFontSizes ? PIXEL_FONT_SIZES : LEGACY_FONT_SIZES).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
         <select
           onMouseDown={(e) => e.preventDefault()}

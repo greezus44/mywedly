@@ -72,9 +72,9 @@ export function HomeEditor() {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-dash-muted">Body Content (English)</label>
-                  <RichTextEditor value={section.body ?? ""} onChange={(html) => updateSection(i, { body: html })} placeholder="Enter the English body content" />
+                  <RichTextEditor value={section.body ?? ""} onChange={(html) => updateSection(i, { body: html })} placeholder="Enter the English body content" pixelFontSizes />
                   <label className="mb-1 mt-3 block text-xs font-medium text-dash-muted">Body Content (Bahasa Melayu)</label>
-                  <RichTextEditor value={section.bodyBm ?? ""} onChange={(html) => updateSection(i, { bodyBm: html })} placeholder="Enter the Bahasa Melayu body content" />
+                  <RichTextEditor value={section.bodyBm ?? ""} onChange={(html) => updateSection(i, { bodyBm: html })} placeholder="Enter the Bahasa Melayu body content" pixelFontSizes />
                   <div className="mt-3">
                     <TypographyControls
                       label="Body Typography"
