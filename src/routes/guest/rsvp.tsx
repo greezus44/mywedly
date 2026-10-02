@@ -117,7 +117,8 @@ export default function GuestRsvp() {
         .from("sub_events")
         .select("*")
         .in("id", invitedSubEventIds)
-        .order("display_order", { ascending: true });
+        .order("display_order", { ascending: true })
+        .order("date", { ascending: true });
       if (error) throw error;
       return data as SubEvent[];
     },

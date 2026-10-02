@@ -28,7 +28,7 @@ export async function resolveGuestInvitations(supabase: SupabaseClient, guestId:
 
     // Load sub-events
     const { data: subEvents, error: subError } = await supabase
-      .from("sub_events").select("id, name").eq("parent_event_id", parentEventId).order("display_order", { ascending: true });
+      .from("sub_events").select("id, name").eq("parent_event_id", parentEventId).order("display_order", { ascending: true }).order("date", { ascending: true });
     if (subError) return { invitations: [], hasMainEventAccess, error: subError.message };
 
     // No sub-events: guest still has main event access if they have an event_guests record
