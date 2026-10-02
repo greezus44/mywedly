@@ -39,7 +39,7 @@ export default function GuestHome() {
           : {};
         const displayBody = language === "bm" && section.bodyBm?.trim() ? section.bodyBm : section.body;
         return (
-          <section key={i} className="guest-section">
+          <section key={i} className="guest-section" style={i === 0 ? { paddingTop: 0 } : undefined}>
             <div className="mx-auto max-w-3xl">
               {displayHeading && <h2 className="guest-title mb-4" style={{ whiteSpace: "pre-wrap", ...headingStyle }}>{displayHeading}</h2>}
               {displayBody && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: displayBody }} />}
