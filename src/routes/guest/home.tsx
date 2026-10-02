@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
@@ -32,11 +33,15 @@ export default function GuestHome() {
         const headingStyle = getTypographyStyle(section.heading);
         const headingBm = (section as { headingBm?: string }).headingBm || "";
         const displayHeading = language === "bm" ? pickText(headingText, headingBm) : headingText;
+        const bodyStyle = getTypographyStyle(section.bodyTypography);
+        const bodySpacingStyle = section.bodyTypography?.paragraphSpacing !== undefined
+          ? { "--rich-paragraph-spacing": `${section.bodyTypography.paragraphSpacing}em` }
+          : {};
         return (
           <section key={i} className="guest-section">
             <div className="mx-auto max-w-3xl">
               {displayHeading && <h2 className="guest-title mb-4" style={{ whiteSpace: "pre-wrap", ...headingStyle }}>{displayHeading}</h2>}
-              {section.body && <div className="rich-content" dangerouslySetInnerHTML={{ __html: section.body }} />}
+              {section.body && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: section.body }} />}
             </div>
           </section>
         );

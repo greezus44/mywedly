@@ -73,6 +73,14 @@ export function HomeEditor() {
                 <div>
                   <label className="mb-1 block text-xs font-medium text-dash-muted">Body Content</label>
                   <RichTextEditor value={section.body ?? ""} onChange={(html) => updateSection(i, { body: html })} />
+                  <div className="mt-3">
+                    <TypographyControls
+                      label="Body Typography"
+                      value={section.bodyTypography ?? {}}
+                      onChange={(v) => updateSection(i, { bodyTypography: v })}
+                      showSpacing
+                    />
+                  </div>
                 </div>
               </div>
             ))}

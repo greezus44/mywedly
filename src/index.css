@@ -33,7 +33,7 @@ body { @apply bg-dash-bg text-dash-text font-sans antialiased; }
 .event-themed .rich-content h1 { font-size:calc(2rem * var(--event-font-scale,1));font-weight:700;margin:0.5em 0; }
 .event-themed .rich-content h2 { font-size:calc(1.5rem * var(--event-font-scale,1));font-weight:600;margin:0.5em 0; }
 .event-themed .rich-content h3 { font-size:calc(1.25rem * var(--event-font-scale,1));font-weight:600;margin:0.5em 0; }
-.event-themed .rich-content p { margin:0.8em 0; }
+.event-themed .rich-content p,.event-themed .rich-content > div { margin:var(--rich-paragraph-spacing,0.8em) 0; }
 .event-themed .rich-content ul,.event-themed .rich-content ol { padding-left:1.75em;margin:0.8em 0; }
 .event-themed .rich-content a { color:var(--event-primary);text-decoration:underline; }
 .event-themed .rich-content img { max-width:100%;border-radius:var(--event-radius);margin:1em 0; }

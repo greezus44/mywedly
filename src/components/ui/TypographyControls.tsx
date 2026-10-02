@@ -14,6 +14,7 @@ interface TypographyControlsProps {
   onChange: (value: TypographyStyle) => void;
   showText?: boolean;
   multiline?: boolean;
+  showSpacing?: boolean;
 }
 
 const WEIGHTS = [400, 500, 700];
@@ -23,7 +24,7 @@ const ALIGNS = [
   { value: "right", label: "R" },
 ];
 
-export function TypographyControls({ label, value, onChange, showText, multiline }: TypographyControlsProps) {
+export function TypographyControls({ label, value, onChange, showText, multiline, showSpacing }: TypographyControlsProps) {
   const update = (patch: Partial<TypographyStyle>) => onChange({ ...value, ...patch });
 
   return (
@@ -161,6 +162,26 @@ export function TypographyControls({ label, value, onChange, showText, multiline
         max={3}
         step={0.1}
       />
+      {showSpacing && (
+        <>
+          <RangeInput
+            label="Letter Spacing (em)"
+            value={value.letterSpacing ?? 0}
+            onChange={(v) => update({ letterSpacing: v })}
+            min={-0.05}
+            max={0.2}
+            step={0.01}
+          />
+          <RangeInput
+            label="Paragraph Spacing (em)"
+            value={value.paragraphSpacing ?? 0.8}
+            onChange={(v) => update({ paragraphSpacing: v })}
+            min={0.2}
+            max={2}
+            step={0.1}
+          />
+        </>
+      )}
     </div>
   );
 }

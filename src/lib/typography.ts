@@ -5,12 +5,13 @@ export interface TypographyStyle {
   fontFamily?: string; fontWeight?: number; lineHeight?: number;
   letterSpacing?: number; italic?: boolean; underline?: boolean;
   backgroundColor?: string; borderColor?: string; borderWidth?: number; borderRadius?: number; padding?: string;
+  paragraphSpacing?: number;
 }
 
 export function isTypographyObject(value: unknown): value is TypographyStyle {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   if (typeof (value as { $$typeof?: unknown }).$$typeof === "symbol") return false;
-  const keys = ["text","align","color","fontSize","fontFamily","fontWeight","lineHeight","letterSpacing","italic","underline","backgroundColor","borderColor","borderWidth","borderRadius","padding"];
+  const keys = ["text","align","color","fontSize","fontFamily","fontWeight","lineHeight","letterSpacing","italic","underline","backgroundColor","borderColor","borderWidth","borderRadius","padding","paragraphSpacing"];
   return keys.some((k) => k in (value as Record<string, unknown>));
 }
 

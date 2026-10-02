@@ -22,7 +22,7 @@ export interface CoverConfig {
 export interface LogoConfig { url?: string | null; size?: number; align?: string; marginTop?: number; marginBottom?: number; }
 export interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; buttonLabelBm?: string; }
 export interface HomeLogo { url?: string | null; size?: number; marginTop?: number; marginBottom?: number; }
-export interface HomeSection { heading?: unknown; body?: string; headingBm?: string; }
+export interface HomeSection { heading?: unknown; body?: string; bodyTypography?: import("../../lib/typography").TypographyStyle; headingBm?: string; }
 export interface EventContent {
   logo?: HomeLogo | null;
   heading?: unknown;
@@ -104,11 +104,16 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
         )}
         {sections.map((section, i) => {
           const heading = resolveTypography(section.heading, "");
+          const bodyStyle = resolveTypography(section.bodyTypography, "").style;
+          const bodyTypography = section.bodyTypography;
+          const bodySpacingStyle = bodyTypography?.paragraphSpacing !== undefined
+            ? { "--rich-paragraph-spacing": `${bodyTypography.paragraphSpacing}em` }
+            : {};
           return (
             <section key={i} className="guest-section">
               <div className="mx-auto max-w-3xl">
                 {heading.text && <h2 className="guest-title mb-4" style={heading.style}>{heading.text}</h2>}
-                {section.body && <div className="rich-content" dangerouslySetInnerHTML={{ __html: section.body }} />}
+                {section.body && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: section.body }} />}
               </div>
             </section>
           );
