@@ -71,8 +71,10 @@ export function HomeEditor() {
                   <input type="text" value={section.headingBm ?? ""} onChange={(e) => updateSection(i, { headingBm: e.target.value })} placeholder="Auto-translate if empty" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-dash-muted">Body Content</label>
-                  <RichTextEditor value={section.body ?? ""} onChange={(html) => updateSection(i, { body: html })} />
+                  <label className="mb-1 block text-xs font-medium text-dash-muted">Body Content (English)</label>
+                  <RichTextEditor value={section.body ?? ""} onChange={(html) => updateSection(i, { body: html })} placeholder="Enter the English body content" />
+                  <label className="mb-1 mt-3 block text-xs font-medium text-dash-muted">Body Content (Bahasa Melayu)</label>
+                  <RichTextEditor value={section.bodyBm ?? ""} onChange={(html) => updateSection(i, { bodyBm: html })} placeholder="Enter the Bahasa Melayu body content" />
                   <div className="mt-3">
                     <TypographyControls
                       label="Body Typography"

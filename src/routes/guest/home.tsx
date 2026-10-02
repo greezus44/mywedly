@@ -37,11 +37,12 @@ export default function GuestHome() {
         const bodySpacingStyle = section.bodyTypography?.paragraphSpacing !== undefined
           ? { "--rich-paragraph-spacing": `${section.bodyTypography.paragraphSpacing}em` }
           : {};
+        const displayBody = language === "bm" && section.bodyBm?.trim() ? section.bodyBm : section.body;
         return (
           <section key={i} className="guest-section">
             <div className="mx-auto max-w-3xl">
               {displayHeading && <h2 className="guest-title mb-4" style={{ whiteSpace: "pre-wrap", ...headingStyle }}>{displayHeading}</h2>}
-              {section.body && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: section.body }} />}
+              {displayBody && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: displayBody }} />}
             </div>
           </section>
         );

@@ -22,7 +22,7 @@ export interface CoverConfig {
 export interface LogoConfig { url?: string | null; size?: number; align?: string; marginTop?: number; marginBottom?: number; }
 export interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; buttonLabelBm?: string; }
 export interface HomeLogo { url?: string | null; size?: number; marginTop?: number; marginBottom?: number; }
-export interface HomeSection { heading?: unknown; body?: string; bodyTypography?: import("../../lib/typography").TypographyStyle; headingBm?: string; }
+export interface HomeSection { heading?: unknown; body?: string; bodyBm?: string; bodyTypography?: import("../../lib/typography").TypographyStyle; headingBm?: string; }
 export interface EventContent {
   logo?: HomeLogo | null;
   heading?: unknown;
