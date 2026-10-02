@@ -39,6 +39,8 @@ interface RsvpContent {
   rsvpDeadlinePrefix?: string;
   contactMessage?: string;
   contactMessageTypography?: unknown;
+  attendingButtonTypography?: unknown;
+  declinedButtonTypography?: unknown;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -214,6 +216,8 @@ export default function GuestRsvp() {
   const additionalInfoBodyStyle = getTypographyStyle(rsvpContent.additionalInfoBodyTypography);
   const contactMessageText = rsvpContent.contactMessage?.trim() ?? "";
   const contactMessageStyle = getTypographyStyle(rsvpContent.contactMessageTypography);
+  const attendingButtonFontStyle = getTypographyStyle(rsvpContent.attendingButtonTypography);
+  const declinedButtonFontStyle = getTypographyStyle(rsvpContent.declinedButtonTypography);
 
   const attendingSelectedStyle = (isSelected: boolean): React.CSSProperties => {
     if (!isSelected) return buttonColorsToStyle(rsvpContent.attendingButtonColors);
@@ -292,22 +296,22 @@ export default function GuestRsvp() {
     const isDeclined = current.status === "declined";
     return (
       <div className="mt-4 sm:mt-6">
-        <div className="flex flex-wrap gap-2 sm:gap-3 justify-center sm:justify-start">
+        <div className="flex flex-wrap gap-2 sm:gap-3 justify-start">
           <button
             onClick={() => handleRsvp(subEventId, "attending")}
             className="event-btn-primary"
-            style={{ opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending) }}
+            style={{ opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...attendingButtonFontStyle }}
             onMouseEnter={(e) => { if (!isAttending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.attendingButtonColors)); }}
-            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending) })}
+            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...attendingButtonFontStyle })}
           >
             {tr(rsvpContent.attendingText || "Attending", "attendingText")}
           </button>
           <button
             onClick={() => handleRsvp(subEventId, "declined")}
             className="event-btn-secondary"
-            style={{ opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined) }}
+            style={{ opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...declinedButtonFontStyle }}
             onMouseEnter={(e) => { if (!isDeclined) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.declinedButtonColors)); }}
-            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined) })}
+            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...declinedButtonFontStyle })}
           >
             {tr(rsvpContent.declinedText || "Declined", "declinedText")}
           </button>

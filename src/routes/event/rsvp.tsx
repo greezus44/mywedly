@@ -52,6 +52,8 @@ export interface RsvpContent {
   plusOneNoSelectedButtonColors?: ButtonColors;
   contactMessage?: string;
   contactMessageTypography?: unknown;
+  attendingButtonTypography?: unknown;
+  declinedButtonTypography?: unknown;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -221,6 +223,26 @@ export function RsvpPage() {
           <ButtonColourEditor label="Attending Selected Button Colours" value={rsvpContent.attendingSelectedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, attendingSelectedButtonColors: v }))} />
           <ButtonColourEditor label="Declined Button Colours" value={rsvpContent.declinedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, declinedButtonColors: v }))} />
           <ButtonColourEditor label="Declined Selected Button Colours" value={rsvpContent.declinedSelectedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, declinedSelectedButtonColors: v }))} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-dash-muted">Attending Button Font</label>
+              <FontSelect
+                value={(rsvpContent.attendingButtonTypography as TypographyStyle | undefined)?.fontFamily ?? ""}
+                onChange={(fontFamily) => setRsvpContent((p) => ({ ...p, attendingButtonTypography: { ...((p.attendingButtonTypography as TypographyStyle | undefined) ?? {}), fontFamily } }))}
+                options={HEADING_FONT_OPTIONS}
+                placeholder="Use theme button font"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-dash-muted">Declined Button Font</label>
+              <FontSelect
+                value={(rsvpContent.declinedButtonTypography as TypographyStyle | undefined)?.fontFamily ?? ""}
+                onChange={(fontFamily) => setRsvpContent((p) => ({ ...p, declinedButtonTypography: { ...((p.declinedButtonTypography as TypographyStyle | undefined) ?? {}), fontFamily } }))}
+                options={HEADING_FONT_OPTIONS}
+                placeholder="Use theme button font"
+              />
+            </div>
+          </div>
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">Guest Name Typography</label>
             <TypographyControls value={rsvpContent.guestNameTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, guestNameTypography: v }))} />

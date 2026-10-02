@@ -132,7 +132,7 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
 
 interface RsvpPreviewProps { theme: unknown; content?: Record<string, unknown> | null; eventDate?: string | null; subEventDates?: (string | null)[]; }
 export function RsvpPreview({ theme, content, eventDate, subEventDates = [] }: RsvpPreviewProps) {
-  const c = content as { title?: string; subtitle?: string; scheduleHeading?: unknown; attendingText?: string; declinedText?: string; contactMessage?: string; eventDateTypography?: unknown } | null;
+  const c = content as { title?: string; subtitle?: string; scheduleHeading?: unknown; attendingText?: string; declinedText?: string; contactMessage?: string; eventDateTypography?: unknown; attendingButtonTypography?: unknown; declinedButtonTypography?: unknown } | null;
   const scheduleHeading = resolveTypography(c?.scheduleHeading, "Program");
   const eventDateStyle = getTypographyStyle(c?.eventDateTypography);
   const eventDateFontStyle = eventDateStyle.fontFamily ? { fontFamily: eventDateStyle.fontFamily } : {};
@@ -148,8 +148,8 @@ export function RsvpPreview({ theme, content, eventDate, subEventDates = [] }: R
           <div className="event-card space-y-3">
             <p className="guest-subtitle" style={{ fontSize: "1rem" }}>Guest Name</p>
             <div className="flex justify-center gap-3">
-              <button type="button" className="event-btn-primary" style={{ opacity: 0.6 }}>{c?.attendingText || "Attending"}</button>
-              <button type="button" className="event-btn-secondary" style={{ opacity: 0.6 }}>{c?.declinedText || "Decline"}</button>
+              <button type="button" className="event-btn-primary" style={{ opacity: 0.6, ...getTypographyStyle(c?.attendingButtonTypography) }}>{c?.attendingText || "Attending"}</button>
+              <button type="button" className="event-btn-secondary" style={{ opacity: 0.6, ...getTypographyStyle(c?.declinedButtonTypography) }}>{c?.declinedText || "Decline"}</button>
             </div>
           </div>
           {c?.contactMessage?.trim() && (
