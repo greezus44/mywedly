@@ -241,10 +241,10 @@ export default function GuestRsvp() {
         <div className="space-y-3 sm:space-y-4">
           {items.map((item) => (
             <div key={item.id} className="guest-rsvp-schedule-row grid grid-cols-[8rem_1fr] gap-3 items-start sm:grid-cols-[10rem_1fr] md:grid-cols-[12rem_1fr] sm:gap-6">
-              <div className="text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", whiteSpace: "nowrap", ...programmeItemStyle }}>
+              <div className="guest-rsvp-schedule-time text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", ...programmeItemStyle }}>
                 {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
               </div>
-              <div className="min-w-0">
+              <div className="guest-rsvp-schedule-title min-w-0">
                 <p className="font-medium text-sm sm:text-base leading-snug" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", overflowWrap: "break-word", ...programmeItemStyle }}>{item.title}</p>
                 {item.description && <p className="text-xs sm:text-sm mt-0.5 leading-snug" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", overflowWrap: "break-word", ...programmeItemStyle }}>{item.description}</p>}
               </div>
