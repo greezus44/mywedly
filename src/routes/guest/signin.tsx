@@ -32,10 +32,14 @@ export default function GuestSignIn() {
     e.preventDefault();
     if (!event || !username.trim()) return;
     setError(null); setSubmitting(true);
-    const result = await signIn(event.id, username.trim());
-    setSubmitting(false);
-    if (result.error) setError(result.error);
-    else navigate(`/e/${slug}/home`, { replace: true });
+    try {
+      const result = await signIn(event.id, username.trim());
+      if (result.error) { setError(result.error); setSubmitting(false); }
+      else navigate(`/e/${slug}/home`, { replace: true });
+    } catch {
+      setError("Unable to sign in. Please try again.");
+      setSubmitting(false);
+    }
   };
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
@@ -68,7 +72,7 @@ export default function GuestSignIn() {
             {subheading.text && <p className="guest-subtitle" style={subheading.style}>{subheading.text}</p>}
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus style={{ textAlign: "center" }} />
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={{ textAlign: "center" }} />
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
             <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1, ...buttonColorsToStyle(buttonColors) }} onMouseEnter={(e) => { if (!submitting) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(buttonColors))}>{submitting ? (language === "bm" ? "Sedang log masuk..." : "Signing in...") : buttonLabel}</button>
           </form>

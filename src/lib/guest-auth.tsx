@@ -31,7 +31,7 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
           const { data, error } = await supabase
             .from("event_guests").select("*").eq("id", session.guestId).eq("event_id", session.eventId).maybeSingle();
           if (!cancelled && !error && data) { setGuest(data as EventGuest); setEventId(session.eventId); }
-          else if (!cancelled) localStorage.removeItem(STORAGE_KEY);
+          else if (!cancelled) { try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ } }
         }
       } catch { /* ignore */ }
       if (!cancelled) setLoading(false);
@@ -41,20 +41,22 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(async (targetEventId: string, username: string): Promise<{ error: string | null }> => {
     if (!username.trim()) return { error: "Please enter your username" };
-    const trimmed = username.trim();
+    // Normalize: replace non-breaking spaces and other Unicode whitespace, collapse multiple spaces, trim
+    const normalized = username.replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, " ").replace(/\s+/g, " ").trim();
+    if (!normalized) return { error: "Please enter your username" };
     // Escape ILIKE wildcards so the input is matched literally (case-insensitively)
-    const escaped = trimmed.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+    const escaped = normalized.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
     const { data, error } = await supabase
       .from("event_guests").select("*").eq("event_id", targetEventId).ilike("username", escaped).maybeSingle();
     if (error) return { error: "Unable to sign in. Please try again." };
     if (!data) return { error: "Username not found. Please check and try again." };
     const guestData = data as EventGuest;
     setGuest(guestData); setEventId(targetEventId);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ guestId: guestData.id, eventId: targetEventId }));
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ guestId: guestData.id, eventId: targetEventId })); } catch { /* localStorage may throw in iOS Safari private mode */ }
     return { error: null };
   }, []);
 
-  const signOut = useCallback(() => { setGuest(null); setEventId(null); localStorage.removeItem(STORAGE_KEY); }, []);
+  const signOut = useCallback(() => { setGuest(null); setEventId(null); try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ } }, []);
 
   return <GuestAuthContext.Provider value={{ guest, eventId, loading, signIn, signOut }}>{children}</GuestAuthContext.Provider>;
 }
