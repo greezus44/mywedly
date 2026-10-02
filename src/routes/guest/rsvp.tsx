@@ -240,7 +240,7 @@ export default function GuestRsvp() {
         <h3 className="mb-3 sm:mb-4" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...scheduleHeadingStyle }}>{scheduleHeadingText || tr("Schedule", "scheduleHeading")}</h3>
         <div className="space-y-3 sm:space-y-4">
           {items.map((item) => (
-            <div key={item.id} className="guest-rsvp-schedule-row grid grid-cols-[8rem_1fr] gap-3 items-start sm:grid-cols-[10rem_1fr] md:grid-cols-[12rem_1fr] sm:gap-6">
+            <div key={item.id} className="guest-rsvp-schedule-row grid items-start">
               <div className="guest-rsvp-schedule-time text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", ...programmeItemStyle }}>
                 {item.start_time ? formatTime12(item.start_time) : ""}{item.end_time ? ` \u2013 ${formatTime12(item.end_time)}` : ""}
               </div>
