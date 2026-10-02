@@ -20,6 +20,7 @@ const LEGACY_FONT_SIZES = [
 
 export function RichTextEditor({ value, onChange, placeholder, className, pixelFontSizes = false }: RichTextEditorProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const selectionRef = useRef<Range | null>(null);
   const [active, setActive] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -27,6 +28,26 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
       ref.current.innerHTML = value || "";
     }
   }, [value]);
+
+  const saveSelection = () => {
+    const selection = window.getSelection();
+    const editor = ref.current;
+    if (!selection || !editor || !selection.rangeCount || !selection.anchorNode || !selection.focusNode) return;
+    if (!editor.contains(selection.anchorNode) || !editor.contains(selection.focusNode)) return;
+    selectionRef.current = selection.getRangeAt(0).cloneRange();
+  };
+
+  const restoreSelection = () => {
+    const selection = window.getSelection();
+    const range = selectionRef.current;
+    if (!selection || !range) {
+      ref.current?.focus();
+      return;
+    }
+    ref.current?.focus();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  };
 
   const normalizeFontSizes = (fontSize: string) => {
     if (!ref.current) return;
@@ -42,14 +63,16 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
   };
 
   const exec = (cmd: string, val?: string) => {
+    restoreSelection();
     if (cmd === "fontSize" && pixelFontSizes) {
       document.execCommand("styleWithCSS", false, "false");
       document.execCommand(cmd, false, "7");
       normalizeFontSizes(val ?? "16");
     } else {
-      if (cmd === "fontSize") document.execCommand("styleWithCSS", false, "true");
+      document.execCommand("styleWithCSS", false, "true");
       document.execCommand(cmd, false, val);
     }
+    saveSelection();
     ref.current?.focus();
     updateActive();
     if (ref.current) onChange(ref.current.innerHTML);
@@ -80,7 +103,7 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
   const btn = (onClick: () => void, label: string, isActive = false) => (
     <button
       type="button"
-      onMouseDown={(e) => e.preventDefault()}
+      onMouseDown={(e) => { e.preventDefault(); saveSelection(); }}
       onClick={onClick}
       className={cn("rounded px-2 py-1 text-sm transition-colors hover:bg-dash-bg", isActive && "bg-dash-primary/10 text-dash-primary")}
     >
@@ -96,7 +119,7 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
         {btn(() => exec("underline"), "U", active.underline)}
         <div className="mx-1 h-5 w-px bg-dash-border" />
         <select
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={() => saveSelection()}
           onChange={(e) => exec("fontSize", e.target.value)}
           className="rounded border border-dash-border bg-dash-surface px-1.5 py-1 text-xs text-dash-text"
           defaultValue={pixelFontSizes ? "16" : "3"}
@@ -104,7 +127,7 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
           {(pixelFontSizes ? PIXEL_FONT_SIZES : LEGACY_FONT_SIZES).map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
         </select>
         <select
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={() => saveSelection()}
           onChange={(e) => exec("fontName", e.target.value)}
           className="rounded border border-dash-border bg-dash-surface px-1.5 py-1 text-xs text-dash-text"
           defaultValue=""
@@ -116,7 +139,7 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
           <span className="text-dash-muted">A</span>
           <input
             type="color"
-            onMouseDown={(e) => e.preventDefault()}
+            onMouseDown={() => saveSelection()}
             onChange={(e) => exec("foreColor", e.target.value)}
             className="h-5 w-5 cursor-pointer border-0 p-0"
           />
@@ -135,8 +158,9 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
         contentEditable
         suppressContentEditableWarning
         onInput={handleInput}
-        onKeyUp={updateActive}
-        onMouseUp={updateActive}
+        onKeyUp={() => { updateActive(); saveSelection(); }}
+        onMouseUp={() => { updateActive(); saveSelection(); }}
+        onSelect={saveSelection}
         onKeyDown={handleKey}
         onBlur={handleInput}
         data-placeholder={placeholder}
