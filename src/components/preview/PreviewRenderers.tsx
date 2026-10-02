@@ -131,13 +131,15 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
 
 interface RsvpPreviewProps { theme: unknown; content?: Record<string, unknown> | null; }
 export function RsvpPreview({ theme, content }: RsvpPreviewProps) {
-  const c = content as { title?: string; subtitle?: string; attendingText?: string; declinedText?: string; contactMessage?: string } | null;
+  const c = content as { title?: string; subtitle?: string; scheduleHeading?: unknown; attendingText?: string; declinedText?: string; contactMessage?: string } | null;
+  const scheduleHeading = resolveTypography(c?.scheduleHeading, "Program");
   return (
     <EventThemeProvider theme={theme}>
       <div className="guest-section">
         <div className="mx-auto max-w-md text-center">
           <h1 className="guest-title mb-2">{c?.title || "RSVP"}</h1>
           {c?.subtitle && <p className="guest-subtitle mb-6">{c.subtitle}</p>}
+          {scheduleHeading.text && <h3 className="guest-subtitle mb-4" style={scheduleHeading.style}>{scheduleHeading.text}</h3>}
           <div className="event-card space-y-3">
             <p className="guest-subtitle" style={{ fontSize: "1rem" }}>Guest Name</p>
             <div className="flex justify-center gap-3">

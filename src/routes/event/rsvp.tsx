@@ -8,6 +8,7 @@ import { ButtonColourEditor, type ButtonColors } from "../../components/ui/Butto
 import { Input } from "../../components/ui/Input";
 import { Textarea } from "../../components/ui/Input";
 import { TypographyControls } from "../../components/ui/TypographyControls";
+import type { TypographyStyle } from "../../lib/typography";
 import { formatDate, formatDateTime, isRsvpClosed } from "../../lib/utils";
 import { DateTimePicker } from "../../components/ui";
 import { SplitEditor } from "../../components/preview/SplitEditor";
@@ -31,6 +32,7 @@ export interface RsvpContent {
   attendingSelectedButtonColors?: ButtonColors;
   declinedSelectedButtonColors?: ButtonColors;
   scheduleHeading?: unknown;
+  scheduleHeadingTypographyBm?: unknown;
   guestNameTypography?: unknown;
   additionalInfoHeading?: unknown;
   additionalInfoBody?: string;
@@ -50,11 +52,17 @@ export interface RsvpContent {
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
+  scheduleHeading: { text: "Program" },
   attendingText: "Attending",
   declinedText: "Decline",
   attendingColor: "#16a34a",
   declinedColor: "#dc2626",
 };
+
+function getScheduleHeadingTypography(value: unknown, fallbackText: string): TypographyStyle {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as TypographyStyle;
+  return { text: typeof value === "string" ? value : fallbackText };
+}
 
 export function RsvpPage() {
   const { event, eventId } = useOutletContext<EventContextValue>();
@@ -168,6 +176,21 @@ export function RsvpPage() {
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">Subtitle Typography</label>
             <TypographyControls value={rsvpContent.subtitleTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, subtitleTypography: v }))} showText={false} />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-xs font-medium text-dash-muted">Programme Title (English)</label>
+            <TypographyControls
+              value={getScheduleHeadingTypography(rsvpContent.scheduleHeading, "Program")}
+              onChange={(v) => setRsvpContent((p) => ({ ...p, scheduleHeading: v }))}
+              showText
+            />
+            <Input label="Programme Title (Bahasa Melayu)" value={rsvpBm.scheduleHeading ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, scheduleHeading: e.target.value }))} placeholder="Aturcara" />
+            <TypographyControls
+              label="Programme Title (Malay) Typography"
+              value={getScheduleHeadingTypography(rsvpContent.scheduleHeadingTypographyBm, "")}
+              onChange={(v) => setRsvpContent((p) => ({ ...p, scheduleHeadingTypographyBm: v }))}
+              showText={false}
+            />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Attending Button Text" value={rsvpContent.attendingText ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, attendingText: e.target.value }))} />

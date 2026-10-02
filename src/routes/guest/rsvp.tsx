@@ -25,6 +25,7 @@ interface RsvpContent {
   attendingSelectedButtonColors?: ButtonColors;
   declinedSelectedButtonColors?: ButtonColors;
   scheduleHeading?: unknown;
+  scheduleHeadingTypographyBm?: unknown;
   guestNameTypography?: unknown;
   additionalInfoHeading?: unknown;
   additionalInfoBody?: string;
@@ -241,15 +242,19 @@ export default function GuestRsvp() {
     );
   };
 
-  const scheduleHeadingText = getTypographyText(rsvpContent.scheduleHeading, "");
-  const scheduleHeadingStyle = getTypographyStyle(rsvpContent.scheduleHeading);
+  const scheduleHeadingText = language === "bm"
+    ? rsvpBm.scheduleHeading?.trim() || tr("Program", "scheduleHeading")
+    : getTypographyText(rsvpContent.scheduleHeading, "Program");
+  const scheduleHeadingStyle = language === "bm"
+    ? getTypographyStyle(rsvpContent.scheduleHeadingTypographyBm)
+    : getTypographyStyle(rsvpContent.scheduleHeading);
 
   const renderSchedule = (subEventId: string | null) => {
     const items = (schedule ?? []).filter((s) => (subEventId ? s.sub_event_id === subEventId : !s.sub_event_id));
     if (items.length === 0) return null;
     return (
       <div className="mt-4 sm:mt-6">
-        <h3 className="mb-3 sm:mb-4" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...scheduleHeadingStyle }}>{scheduleHeadingText || tr("Schedule", "scheduleHeading")}</h3>
+        <h3 className="mb-3 sm:mb-4" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...scheduleHeadingStyle }}>{scheduleHeadingText}</h3>
         <div className="space-y-3 sm:space-y-4">
           {items.map((item) => (
             <div key={item.id} className="guest-rsvp-schedule-row grid items-start">

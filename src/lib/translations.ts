@@ -89,6 +89,7 @@ export const AUTO_BM: Record<string, string> = {
   "Check back soon for updates.": "Sila semak semula nanti untuk kemas kini.",
   "Sign Out": "Log Keluar",
   "Schedule": "Aturcara",
+  "Program": "Aturcara",
 };
 
 /**
