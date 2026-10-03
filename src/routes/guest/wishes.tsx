@@ -75,7 +75,7 @@ export default function GuestWishes() {
   return (
     <div className="guest-section">
       <div className="mx-auto max-w-2xl">
-        <div className="mb-8 text-center">
+        <div className="pt-8 sm:pt-12 mb-8 text-center">
           {heading && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...getTypographyStyle(wishesContent?.headingTypography) }}>{heading}</h1>}
           {subheading && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap" }}>{subheading}</p>}
         </div>
