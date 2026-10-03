@@ -4,13 +4,13 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
-import { resolveTypography } from "../../lib/typography";
+import { getTypographyStyle, resolveTypography } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/ui/ButtonColourEditor";
 import { LanguageToggle } from "../../components/site/LanguageToggle";
 import { useLanguage } from "../../lib/language";
 import { pickText, autoTranslate, setCurrentLanguage } from "../../lib/translations";
 
-interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; }
+interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; placeholderTypography?: import("../../lib/typography").TypographyStyle; buttonLabel?: string; }
 
 export default function GuestSignIn() {
   const { slug } = useParams<{ slug: string }>();
@@ -75,7 +75,7 @@ export default function GuestSignIn() {
             {subheading.text && <p className="guest-subtitle" style={subheading.style}>{subheading.text}</p>}
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={{ textAlign: "center", fontFamily: "var(--event-font-heading)" }} />
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={{ textAlign: "center", ...getTypographyStyle(loginConfig.placeholderTypography), fontFamily: loginConfig.placeholderTypography?.fontFamily || "var(--event-font-heading)" }} />
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
             <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1, ...buttonColorsToStyle(buttonColors) }} onMouseEnter={(e) => { if (!submitting) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(buttonColors))}>{submitting ? (language === "bm" ? "Sedang log masuk..." : "Signing in...") : buttonLabel}</button>
           </form>

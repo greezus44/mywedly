@@ -22,7 +22,7 @@ export interface CoverConfig {
   ctaTextBm?: string;
 }
 export interface LogoConfig { url?: string | null; size?: number; align?: string; marginTop?: number; marginBottom?: number; }
-export interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; buttonLabelBm?: string; }
+export interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; placeholderTypography?: import("../../lib/typography").TypographyStyle; buttonLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; buttonLabelBm?: string; }
 export interface HomeLogo { url?: string | null; size?: number; marginTop?: number; marginBottom?: number; }
 export interface HomeSection { heading?: unknown; body?: string; bodyBm?: string; bodyTypography?: import("../../lib/typography").TypographyStyle; headingBm?: string; }
 export interface EventContent {
@@ -84,7 +84,7 @@ export function LoginPreview({ config, theme, eventName }: LoginPreviewProps) {
           </div>
           <div className="event-card space-y-3">
             <label className="block text-center text-sm font-medium" style={{ color: "var(--event-text)" }}>{placeholder}</label>
-            <input type="text" className="event-input" placeholder={placeholder} style={{ textAlign: "center" }} disabled />
+            <input type="text" className="event-input" placeholder={placeholder} style={{ textAlign: "center", ...getTypographyStyle(config.placeholderTypography) }} disabled />
             <button type="button" className="event-btn-primary w-full" style={buttonColorsToStyle(config.buttonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(config.buttonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(config.buttonColors))}>{buttonLabel}</button>
           </div>
         </div>

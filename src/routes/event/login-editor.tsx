@@ -6,6 +6,8 @@ import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui";
 import { TypographyControls } from "../../components/ui/TypographyControls";
 import { ButtonColourEditor } from "../../components/ui/ButtonColourEditor";
+import { FontSelect } from "../../components/ui/FontSelect";
+import { HEADING_FONT_OPTIONS } from "../../lib/theme";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { LoginPreview, type LoginConfig } from "../../components/preview/PreviewRenderers";
 import type { TypographyStyle } from "../../lib/typography";
@@ -48,6 +50,7 @@ export function LoginEditor() {
             <Input label="Subheading (Bahasa Melayu)" value={config.subheadingBm ?? ""} onChange={(e) => update({ subheadingBm: e.target.value })} placeholder="Auto-translate if empty" />
             <Input label="Placeholder" value={config.placeholder ?? ""} onChange={(e) => update({ placeholder: e.target.value })} placeholder="Enter your username" />
             <Input label="Placeholder (Bahasa Melayu)" value={config.placeholderBm ?? ""} onChange={(e) => update({ placeholderBm: e.target.value })} placeholder="Auto-translate if empty" />
+            <FontSelect label="Username Placeholder Font" value={config.placeholderTypography?.fontFamily ?? ""} onChange={(fontFamily) => update({ placeholderTypography: { ...config.placeholderTypography, fontFamily } })} options={HEADING_FONT_OPTIONS} placeholder="Use event font" />
             <Input label="Button Label" value={config.buttonLabel ?? ""} onChange={(e) => update({ buttonLabel: e.target.value })} placeholder="Sign In" />
             <Input label="Button Label (Bahasa Melayu)" value={config.buttonLabelBm ?? ""} onChange={(e) => update({ buttonLabelBm: e.target.value })} placeholder="Auto-translate if empty" />
             <ButtonColourEditor label="Button Colours" value={config.buttonColors ?? {}} onChange={(v) => update({ buttonColors: v })} />
