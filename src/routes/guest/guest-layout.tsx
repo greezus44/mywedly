@@ -85,7 +85,7 @@ export default function GuestLayout() {
   const navLinks = [
     { label: t("Home", "Utama"), to: `/e/${slug}/home` },
     ...(hasRsvpAccess(invitations ?? { invitations: [], hasMainEventAccess: false, error: null }) ? [{ label: "RSVP", to: `/e/${slug}/rsvp` }] : []),
-    ...(((event.content as Record<string, unknown> | null)?.messagesEnabled !== false) ? [{ label: t("Messages", "Mesej"), to: `/e/${slug}/wishes` }] : []),
+    ...(((event.content as Record<string, unknown> | null)?.wishes as Record<string, unknown> | null)?.enabled !== false ? [{ label: t("Messages", "Mesej"), to: `/e/${slug}/wishes` }] : []),
     ...(customPages ?? []).map((p) => ({ label: p.title, to: `/e/${slug}/p/${p.slug}` })),
   ];
 

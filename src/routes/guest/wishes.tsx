@@ -16,7 +16,8 @@ export default function GuestWishes() {
   const { slug } = useParams<{ slug: string }>();
   const location = useLocation();
   const { guest } = useGuestAuth();
-  const messagesEnabled = ((event.content as Record<string, unknown> | null) ?? {}).messagesEnabled !== false;
+  const wishesConfig = ((event.content as Record<string, unknown> | null) ?? {}).wishes as Record<string, unknown> | null;
+  const messagesEnabled = wishesConfig?.enabled !== false;
   if (!messagesEnabled) { const prefix = location.pathname.startsWith("/r/") ? `/r/${slug}` : `/e/${slug}`; return <Navigate to={`${prefix}/home`} replace />; }
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
