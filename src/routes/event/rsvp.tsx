@@ -11,7 +11,7 @@ import { TypographyControls } from "../../components/ui/TypographyControls";
 import { FontSelect } from "../../components/ui/FontSelect";
 import { HEADING_FONT_OPTIONS } from "../../lib/theme";
 import type { TypographyStyle } from "../../lib/typography";
-import { formatDate, formatDateTime, isRsvpClosed } from "../../lib/utils";
+import { formatDate, isRsvpClosed } from "../../lib/utils";
 import { DateTimePicker } from "../../components/ui";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { RsvpPreview } from "../../components/preview/PreviewRenderers";
@@ -55,10 +55,6 @@ export interface RsvpContent {
   programmeItemTypography?: unknown;
   rsvpDeadlineTypography?: unknown;
   rsvpDeadlinePrefix?: string;
-  plusOneYesButtonColors?: ButtonColors;
-  plusOneNoButtonColors?: ButtonColors;
-  plusOneYesSelectedButtonColors?: ButtonColors;
-  plusOneNoSelectedButtonColors?: ButtonColors;
   contactMessage?: string;
   contactMessageTypography?: unknown;
   attendingButtonTypography?: unknown;
@@ -356,13 +352,6 @@ export function RsvpPage() {
             <label className="block text-xs font-medium text-dash-muted">Programme Item Typography</label>
             <TypographyControls value={rsvpContent.programmeItemTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, programmeItemTypography: v }))} showText={false} />
           </div>
-          <div className="space-y-2 border-t border-dash-border pt-3">
-            <label className="block text-xs font-semibold text-dash-text">+1 Button Colours</label>
-          </div>
-          <ButtonColourEditor label="+1 Yes Button Colours" value={rsvpContent.plusOneYesButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, plusOneYesButtonColors: v }))} />
-          <ButtonColourEditor label="+1 Yes Selected Button Colours" value={rsvpContent.plusOneYesSelectedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, plusOneYesSelectedButtonColors: v }))} />
-          <ButtonColourEditor label="+1 No Button Colours" value={rsvpContent.plusOneNoButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, plusOneNoButtonColors: v }))} />
-          <ButtonColourEditor label="+1 No Selected Button Colours" value={rsvpContent.plusOneNoSelectedButtonColors ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, plusOneNoSelectedButtonColors: v }))} />
           <Input label="RSVP Deadline Prefix Text" value={rsvpContent.rsvpDeadlinePrefix ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, rsvpDeadlinePrefix: e.target.value }))} placeholder="e.g. Please RSVP before, Kindly respond before" />
           <Input label="Deadline Prefix (BM)" value={rsvpBm.rsvpDeadlinePrefix ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, rsvpDeadlinePrefix: e.target.value }))} placeholder="Auto-translate if empty" />
           <div className="space-y-2">
@@ -401,6 +390,10 @@ export function RsvpPage() {
       {!guests || guests.length === 0 ? (
         <EmptyState title="No guests" description="Add guests from the Guests page to see their RSVP status here." />
       ) : (
+        <>
+        <div className="text-xs text-dash-muted">
+          <span className="text-green-600 font-bold">&#10003;</span> Attending &nbsp; <span className="text-red-500 font-bold">&#10007;</span> Declined &nbsp; <span className="font-bold">=</span> Pending &nbsp; <span>&mdash;</span> Not invited
+        </div>
         <div className="overflow-x-auto rounded-lg border border-dash-border">
           <table className="w-full">
             <thead className="bg-dash-bg">
@@ -413,14 +406,11 @@ export function RsvpPage() {
                 ) : (
                   <th className="px-4 py-2 text-center text-xs font-medium text-dash-muted">Status</th>
                 )}
-                <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Responded</th>
                 <th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-dash-border bg-dash-surface">
               {guests.map((g) => {
-                const guestRsvps = (rsvps ?? []).filter((r) => r.guest_id === g.id);
-                const lastResponse = guestRsvps.map((r) => r.responded_at).filter(Boolean).sort().pop();
                 return (
                   <tr key={g.id}>
                     <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
@@ -431,7 +421,6 @@ export function RsvpPage() {
                     ) : (
                       <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
                     )}
-                    <td className="px-4 py-2 text-xs text-dash-muted">{lastResponse ? formatDateTime(lastResponse) : "—"}</td>
                     <td className="px-4 py-2 text-right">
                       <select value={g.rsvp_status} onChange={(e) => updateGuestStatusMutation.mutate({ guestId: g.id, status: e.target.value })} className="rounded border border-dash-border bg-dash-bg px-2 py-1 text-xs text-dash-text">
                         <option value="pending">Pending</option><option value="attending">Attending</option><option value="declined">Declined</option>
@@ -443,6 +432,7 @@ export function RsvpPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

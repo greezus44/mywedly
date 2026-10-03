@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventGuest, type GuestGroup, type SubEvent, type EventRsvp } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventGuest, type SubEvent, type EventRsvp } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
 import { GuestForm, type GuestFormValues } from "./guest-form";
@@ -35,10 +35,6 @@ export function GuestsPage() {
     queryKey: ["event-guests", eventId],
     queryFn: async () => { const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId).order("created_at", { ascending: true }); if (error) throw error; return data as EventGuest[]; },
   });
-  const { data: groups } = useQuery({
-    queryKey: ["guest-groups", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("guest_groups").select("*").eq("event_id", eventId).order("name", { ascending: true }); if (error) throw error; return data as GuestGroup[]; },
-  });
   const { data: subEvents } = useQuery({
     queryKey: ["sub-events", eventId],
     queryFn: async () => { const { data, error } = await supabase.from("sub_events").select("*").eq("parent_event_id", eventId).order("display_order", { ascending: true }); if (error) throw error; return data as SubEvent[]; },
@@ -48,16 +44,11 @@ export function GuestsPage() {
     queryFn: async () => { const { data, error } = await supabase.from("guest_event_invites").select("guest_id, sub_event_id, invite_type").eq("event_id", eventId); if (error) throw error; return data ?? []; },
   });
 
-  const { data: groupAssignments } = useQuery({
-    queryKey: ["group-assignments", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("sub_event_group_assignments").select("group_id, sub_event_id"); if (error) throw error; return data ?? []; },
-  });
-
   const { data: allOverrides } = useQuery({
     queryKey: ["all-guest-invitation-overrides", eventId],
     queryFn: async () => {
       if (!guests || guests.length === 0) return [];
-      const { data, error } = await supabase.from("guest_invitation_overrides").select("guest_id, sub_event_id, is_invited, allow_plus_one").in("guest_id", guests.map((g) => g.id));
+      const { data, error } = await supabase.from("guest_invitation_overrides").select("guest_id, sub_event_id, is_invited").in("guest_id", guests.map((g) => g.id));
       if (error) throw error;
       return data ?? [];
     },
@@ -75,9 +66,6 @@ export function GuestsPage() {
   if (subEvents && subEvents.length > 0) {
     for (const g of (guests ?? [])) {
       const invited = new Set<string>();
-      if (g.group_id) {
-        (groupAssignments ?? []).filter((a) => a.group_id === g.group_id).forEach((a) => invited.add(a.sub_event_id as string));
-      }
       (existingInvites ?? []).filter((inv) => inv.guest_id === g.id && inv.invite_type === "include" && inv.sub_event_id).forEach((inv) => invited.add(inv.sub_event_id as string));
       (allOverrides ?? []).filter((o) => o.guest_id === g.id).forEach((o) => {
         const seId = o.sub_event_id as string;
@@ -97,17 +85,13 @@ export function GuestsPage() {
     inner.set(key, r.status);
   }
 
-  // Determine status for a guest in a given tab (sub_event_id or "__main__")
   const statusFor = (guestId: string, tabKey: string): GuestStatus => {
     if (tabKey === "__main__") {
-      // Main event: use the guest's overall rsvp_status
       const g = guests?.find((gg) => gg.id === guestId);
       const s = g?.rsvp_status;
       if (s === "attending") return "attending";
       if (s === "declined") return "declined";
-      // If no sub-events exist, pending means invited (all guests are implicitly invited to main)
       if (!subEvents || subEvents.length === 0) return "pending";
-      // With sub-events, main event is a fallback - check if they have any response
       return "pending";
     }
     const invited = invitedEventsByGuest.get(guestId);
@@ -119,10 +103,8 @@ export function GuestsPage() {
     return "pending";
   };
 
-  const subEventNameById = new Map<string, string>((subEvents ?? []).map((se) => [se.id, se.name ?? "Untitled"]));
   const tabLabel = (se: SubEvent) => se.tab_name?.trim() || (se.name ?? "Untitled");
 
-  // Build event columns: one per sub-event (plus Main Event if sub-events exist)
   const eventColumns: Array<{ key: string; label: string }> = [];
   if (subEvents && subEvents.length > 0) {
     eventColumns.push({ key: "__main__", label: "Main Event" });
@@ -131,20 +113,17 @@ export function GuestsPage() {
     eventColumns.push({ key: se.id, label: tabLabel(se) });
   }
 
-  // Filter guests for the active tab: show all guests (they may or may not be invited)
-  // but we show their status icon for this event
   const visibleGuests = guests ?? [];
 
   const { data: editGuestOverrides } = useQuery({
     queryKey: ["guest-invitation-overrides", editGuest?.id],
     queryFn: async () => {
-      if (!editGuest) return { invited: {} as Record<string, boolean>, plusOne: {} as Record<string, boolean> };
-      const { data, error } = await supabase.from("guest_invitation_overrides").select("sub_event_id, is_invited, allow_plus_one").eq("guest_id", editGuest.id);
+      if (!editGuest) return { invited: {} as Record<string, boolean> };
+      const { data, error } = await supabase.from("guest_invitation_overrides").select("sub_event_id, is_invited").eq("guest_id", editGuest.id);
       if (error) throw error;
       const invited: Record<string, boolean> = {};
-      const plusOne: Record<string, boolean> = {};
-      (data ?? []).forEach((o) => { invited[o.sub_event_id as string] = o.is_invited as boolean; if (o.allow_plus_one) plusOne[o.sub_event_id as string] = o.allow_plus_one as boolean; });
-      return { invited, plusOne };
+      (data ?? []).forEach((o) => { invited[o.sub_event_id as string] = o.is_invited as boolean; });
+      return { invited };
     },
     enabled: !!editGuest,
   });
@@ -183,26 +162,21 @@ export function GuestsPage() {
     try {
       let guestId: string;
       if (editGuest) {
-        const { error } = await supabase.from("event_guests").update({ name: values.name, username: values.username, group_name: values.group_name, group_id: values.group_id, allow_plus_one: values.allow_plus_one }).eq("id", editGuest.id);
+        const { error } = await supabase.from("event_guests").update({ name: values.name, username: values.username }).eq("id", editGuest.id);
         if (error) throw error;
         guestId = editGuest.id;
       } else {
-        const { data: newGuest, error } = await supabase.from("event_guests").insert({ event_id: eventId, name: values.name, username: values.username || generateUsername(values.name), group_name: values.group_name, group_id: values.group_id, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0, allow_plus_one: values.allow_plus_one }).select("id").single();
+        const { data: newGuest, error } = await supabase.from("event_guests").insert({ event_id: eventId, name: values.name, username: values.username || generateUsername(values.name), token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0 }).select("id").single();
         if (error) throw error;
         guestId = newGuest.id;
-      }
-      await supabase.from("guest_group_members").delete().eq("guest_id", guestId);
-      if (values.group_id) {
-        await supabase.from("guest_group_members").insert({ guest_id: guestId, group_id: values.group_id });
       }
 
       if (subEvents && subEvents.length > 0) {
         await supabase.from("guest_invitation_overrides").delete().eq("guest_id", guestId);
-        const overridesToInsert: Array<{ guest_id: string; sub_event_id: string; is_invited: boolean; allow_plus_one: boolean }> = [];
+        const overridesToInsert: Array<{ guest_id: string; sub_event_id: string; is_invited: boolean }> = [];
         for (const se of subEvents) {
           const isInvited = values.eventInvitations[se.id] ?? false;
-          const allowPlusOne = values.plusOnePerEvent[se.id] ?? false;
-          overridesToInsert.push({ guest_id: guestId, sub_event_id: se.id, is_invited: isInvited, allow_plus_one: allowPlusOne });
+          overridesToInsert.push({ guest_id: guestId, sub_event_id: se.id, is_invited: isInvited });
         }
         if (overridesToInsert.length > 0) {
           const { error: overrideError } = await supabase.from("guest_invitation_overrides").insert(overridesToInsert);
@@ -235,6 +209,10 @@ export function GuestsPage() {
         <EmptyState title="No guests yet" description="Add guests to invite them to your event." action={<Button size="sm" onClick={() => { setEditGuest(null); setShowForm(true); }}>Add Guest</Button>} />
       ) : (
         <>
+          <div className="text-xs text-dash-muted">
+            <span className="text-green-600 font-bold">&#10003;</span> Attending &nbsp; <span className="text-red-500 font-bold">&#10007;</span> Declined &nbsp; <span className="font-bold">=</span> Pending &nbsp; <span>&mdash;</span> Not invited
+          </div>
+
           <div className="overflow-x-auto rounded-lg border border-dash-border">
             <table className="w-full">
               <thead className="bg-dash-bg">
@@ -244,7 +222,6 @@ export function GuestsPage() {
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Name</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Group</th>
                   {eventColumns.length > 0 ? (
                     eventColumns.map((col) => (
                       <th key={col.key} className="px-4 py-2 text-center text-xs font-medium text-dash-muted whitespace-nowrap">{col.label}</th>
@@ -262,7 +239,6 @@ export function GuestsPage() {
                       <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
                       <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
                       <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
-                      <td className="px-4 py-2 text-sm text-dash-muted">{g.group_name ?? "\u2014"}</td>
                       {eventColumns.length > 0 ? (
                         eventColumns.map((col) => (
                           <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
@@ -288,10 +264,8 @@ export function GuestsPage() {
         <GuestForm
           eventId={eventId}
           guest={editGuest}
-          groups={groups ?? []}
           subEvents={subEvents ?? []}
           existingInvitations={editGuest ? editGuestOverrides?.invited : undefined}
-          existingPlusOnePerEvent={editGuest ? editGuestOverrides?.plusOne : undefined}
           onSubmit={handleAddOrUpdate}
           onCancel={() => { setShowForm(false); setEditGuest(null); setFormError(null); }}
           submitting={submitting}
@@ -331,7 +305,7 @@ export function GuestsPage() {
         onClose={() => setShowBulkImport(false)}
         existingUsernames={new Set((guests ?? []).map((g) => (g.username ?? "").toLowerCase()).filter(Boolean))}
         onImport={async (importGuests) => {
-          const rows = importGuests.map((g) => ({ event_id: eventId, name: g.name, username: g.username, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0, allow_plus_one: false }));
+          const rows = importGuests.map((g) => ({ event_id: eventId, name: g.name, username: g.username, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0 }));
           const { error } = await supabase.from("event_guests").insert(rows);
           if (error) throw error;
           queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });

@@ -10,7 +10,7 @@ export function useEventContext(): EventContextValue { return useOutletContext<E
 
 const navTabs = [
   { label: "Cover", to: "" }, { label: "Login", to: "login" }, { label: "Home", to: "home" },
-  { label: "Events", to: "events" }, { label: "Guests", to: "guests" }, { label: "Guest Groups", to: "groups" },
+  { label: "Events", to: "events" }, { label: "Guests", to: "guests" },
   { label: "RSVP", to: "rsvp" }, { label: "Pages", to: "pages" },
   { label: "Messages", to: "wishes" }, { label: "Theme", to: "theme" },
   { label: "Settings", to: "settings" },

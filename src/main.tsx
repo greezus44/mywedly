@@ -17,7 +17,7 @@ import { LoginEditor } from "./routes/event/login-editor";
 import { HomeEditor } from "./routes/event/home-editor";
 import { EventsPage } from "./routes/event/events";
 import { GuestsPage } from "./routes/event/guests";
-import { GroupsPage } from "./routes/event/groups";
+
 import { RsvpPage } from "./routes/event/rsvp";
 import { PagesPage } from "./routes/event/pages";
 import { PageBuilder } from "./routes/event/page-builder";
@@ -59,7 +59,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 <Route path="home" element={<HomeEditor />} />
                 <Route path="events" element={<EventsPage />} />
                 <Route path="guests" element={<GuestsPage />} />
-                <Route path="groups" element={<GroupsPage />} />
+
                 <Route path="rsvp" element={<RsvpPage />} />
                 <Route path="pages" element={<PagesPage />} />
                 <Route path="pages/:pageId" element={<PageBuilder />} />
