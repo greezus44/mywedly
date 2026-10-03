@@ -3,7 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventRsvp, type EventGuest, type SubEvent, type Json } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { LoadingSpinner, ErrorState, EmptyState, Badge, ColorInput } from "../../components/ui";
+import { LoadingSpinner, ErrorState, EmptyState, Badge, ColorInput, Modal } from "../../components/ui";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { Input } from "../../components/ui/Input";
 import { Textarea } from "../../components/ui/Input";
@@ -86,6 +86,8 @@ export function RsvpPage() {
     return ((content?.rsvpBm as Record<string, string>) ?? {});
   });
   const [showEditor, setShowEditor] = useState(false);
+  const [statusEditGuest, setStatusEditGuest] = useState<EventGuest | null>(null);
+  const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
   const [rsvpDeadline, setRsvpDeadline] = useState(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "");
   useEffect(() => { setRsvpDeadline(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? ""); }, [event.draft_rsvp_deadline, event.rsvp_deadline]);
 
@@ -210,28 +212,36 @@ export function RsvpPage() {
   const deadline = event.draft_rsvp_deadline ?? event.rsvp_deadline;
   const closed = isRsvpClosed(deadline);
 
-  const updateGuestStatusMutation = useMutation({
-    mutationFn: async ({ guestId, status }: { guestId: string; status: string }) => {
-      const { error } = await supabase.from("event_guests").update({ rsvp_status: status }).eq("id", guestId);
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event-guests-rsvp", eventId] }); queryClient.invalidateQueries({ queryKey: ["event-rsvps-admin", eventId] }); },
-  });
-
-  const updateSubEventRsvpMutation = useMutation({
-    mutationFn: async ({ guestId, subEventId, status }: { guestId: string; subEventId: string; status: string }) => {
+  const batchUpdateStatusMutation = useMutation({
+    mutationFn: async ({ guestId, drafts }: { guestId: string; drafts: Record<string, string> }) => {
       const guest = guests?.find((g) => g.id === guestId);
       const guestName = guest?.name ?? "";
-      const { data: existing } = await supabase.from("event_rsvps").select("id").eq("event_id", eventId).eq("guest_id", guestId).eq("sub_event_id", subEventId).maybeSingle();
-      if (existing) {
-        const { error } = await supabase.from("event_rsvps").update({ status, responded_at: new Date().toISOString() }).eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("event_rsvps").insert({ event_id: eventId, guest_id: guestId, guest_name: guestName, status, sub_event_id: subEventId, plus_ones: 0, responded_at: new Date().toISOString() });
-        if (error) throw error;
+      const tasks: Promise<void>[] = [];
+      for (const [eventKey, status] of Object.entries(drafts)) {
+        if (status === "not_invited") continue;
+        if (eventKey === "__main__") {
+          tasks.push((async () => { const { error } = await supabase.from("event_guests").update({ rsvp_status: status }).eq("id", guestId); if (error) throw error; })());
+        } else {
+          tasks.push((async () => {
+            const { data: existing } = await supabase.from("event_rsvps").select("id").eq("event_id", eventId).eq("guest_id", guestId).eq("sub_event_id", eventKey).maybeSingle();
+            if (existing) {
+              const { error } = await supabase.from("event_rsvps").update({ status, responded_at: new Date().toISOString() }).eq("id", existing.id);
+              if (error) throw error;
+            } else {
+              const { error } = await supabase.from("event_rsvps").insert({ event_id: eventId, guest_id: guestId, guest_name: guestName, status, sub_event_id: eventKey, plus_ones: 0, responded_at: new Date().toISOString() });
+              if (error) throw error;
+            }
+          })());
+        }
       }
+      await Promise.all(tasks);
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event-rsvps-admin", eventId] }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event-guests-rsvp", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["event-rsvps-admin", eventId] });
+      setStatusEditGuest(null);
+      setStatusDrafts({});
+    },
   });
 
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
@@ -446,32 +456,22 @@ export function RsvpPage() {
                       <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
                     )}
                     <td className="px-4 py-2 text-right">
-                      {eventColumns.length > 0 ? (
-                        <div className="flex flex-col gap-1">
-                          {eventColumns.map((col) => {
-                            const currentStatus = statusFor(g.id, col.key);
-                            const selectValue = currentStatus === "not_invited" ? "not_invited" : currentStatus;
-                            return (
-                              <select key={col.key} value={selectValue} disabled={currentStatus === "not_invited"} onChange={(e) => {
-                                if (col.key === "__main__") {
-                                  updateGuestStatusMutation.mutate({ guestId: g.id, status: e.target.value });
-                                } else {
-                                  updateSubEventRsvpMutation.mutate({ guestId: g.id, subEventId: col.key, status: e.target.value });
-                                }
-                              }} className="rounded border border-dash-border bg-dash-bg px-2 py-1 text-xs text-dash-text">
-                                <option value="not_invited" disabled>Not invited</option>
-                                <option value="pending">Pending</option>
-                                <option value="attending">Attending</option>
-                                <option value="declined">Declined</option>
-                              </select>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <select value={g.rsvp_status} onChange={(e) => updateGuestStatusMutation.mutate({ guestId: g.id, status: e.target.value })} className="rounded border border-dash-border bg-dash-bg px-2 py-1 text-xs text-dash-text">
-                          <option value="pending">Pending</option><option value="attending">Attending</option><option value="declined">Declined</option>
-                        </select>
-                      )}
+                      <button
+                        onClick={() => {
+                          const drafts: Record<string, string> = {};
+                          if (eventColumns.length > 0) {
+                            for (const col of eventColumns) {
+                              const s = statusFor(g.id, col.key);
+                              drafts[col.key] = s === "not_invited" ? "not_invited" : s;
+                            }
+                          } else {
+                            drafts["__main__"] = g.rsvp_status ?? "pending";
+                          }
+                          setStatusDrafts(drafts);
+                          setStatusEditGuest(g);
+                        }}
+                        className="text-xs text-dash-primary hover:underline"
+                      >Change Status</button>
                     </td>
                   </tr>
                 );
@@ -481,6 +481,37 @@ export function RsvpPage() {
         </div>
         </>
       )}
+      <Modal open={!!statusEditGuest} onClose={() => { setStatusEditGuest(null); setStatusDrafts({}); }} title={statusEditGuest?.name ?? "Change Status"}>
+        <div className="space-y-4">
+          {batchUpdateStatusMutation.isError && <p className="text-sm text-dash-danger">{batchUpdateStatusMutation.error instanceof Error ? batchUpdateStatusMutation.error.message : "Failed to save"}</p>}
+          <div className="space-y-3">
+            {(eventColumns.length > 0 ? eventColumns : [{ key: "__main__", label: "Status" }]).map((col) => {
+              const currentDraft = statusDrafts[col.key] ?? "pending";
+              const isNotInvited = currentDraft === "not_invited";
+              return (
+                <div key={col.key} className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-dash-text">{col.label}</span>
+                  <select
+                    value={currentDraft}
+                    disabled={isNotInvited}
+                    onChange={(e) => setStatusDrafts((p) => ({ ...p, [col.key]: e.target.value }))}
+                    className="rounded border border-dash-border bg-dash-bg px-2 py-1 text-xs text-dash-text"
+                  >
+                    {isNotInvited && <option value="not_invited" disabled>Not invited</option>}
+                    <option value="pending">Pending</option>
+                    <option value="attending">Attending</option>
+                    <option value="declined">Declined</option>
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-end gap-2 border-t border-dash-border pt-3">
+            <Button size="sm" variant="secondary" onClick={() => { setStatusEditGuest(null); setStatusDrafts({}); }}>Cancel</Button>
+            <Button size="sm" onClick={() => batchUpdateStatusMutation.mutate({ guestId: statusEditGuest!.id, drafts: statusDrafts })} loading={batchUpdateStatusMutation.isPending}>Save</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
