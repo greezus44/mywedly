@@ -324,22 +324,22 @@ export default function GuestRsvp() {
     const isDeclined = current.status === "declined";
     return (
       <div className="mt-4 sm:mt-6">
-        <div className="flex flex-wrap gap-2 sm:gap-3 justify-start">
+        <div className="flex gap-2 sm:gap-3">
           <button
             onClick={() => handleRsvp(subEventId, "attending")}
-            className="event-btn-primary"
-            style={{ opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...attendingButtonFontStyle }}
+            className="event-btn-primary rsvp-toggle-btn"
+            style={{ flex: 1, opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...attendingButtonFontStyle }}
             onMouseEnter={(e) => { if (!isAttending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.attendingButtonColors)); }}
-            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...attendingButtonFontStyle })}
+            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...attendingButtonFontStyle })}
           >
             {tr(rsvpContent.attendingText || "Attending", "attendingText")}
           </button>
           <button
             onClick={() => handleRsvp(subEventId, "declined")}
-            className="event-btn-secondary"
-            style={{ opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...declinedButtonFontStyle }}
+            className="event-btn-secondary rsvp-toggle-btn"
+            style={{ flex: 1, opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...declinedButtonFontStyle }}
             onMouseEnter={(e) => { if (!isDeclined) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.declinedButtonColors)); }}
-            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...declinedButtonFontStyle })}
+            onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...declinedButtonFontStyle })}
           >
             {tr(rsvpContent.declinedText || "Declined", "declinedText")}
           </button>
