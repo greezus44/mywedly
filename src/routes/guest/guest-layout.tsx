@@ -115,9 +115,9 @@ export default function GuestLayout() {
             </div>
             <nav className="flex flex-col gap-1 px-3 pb-8">
               {navLinks.map((link) => (
-                <NavLink key={link.to} to={link.to} onClick={closeMenu} className={({ isActive }) => `rounded-lg px-4 py-3 text-base font-medium transition-colors ${isActive ? "opacity-100" : "opacity-70 hover:opacity-100"}`} style={({ isActive }) => ({ color: isActive ? "var(--event-primary)" : "var(--event-text)", backgroundColor: isActive ? "var(--event-surface-alt)" : "transparent" })}>{link.label}</NavLink>
+                <NavLink key={link.to} to={link.to} onClick={closeMenu} className={({ isActive }) => `rounded-lg px-4 py-3 text-base font-medium transition-colors ${isActive ? "opacity-100" : "opacity-70 hover:opacity-100"}`} style={({ isActive }) => ({ color: isActive ? "var(--event-primary)" : "var(--event-text)", backgroundColor: isActive ? "var(--event-surface-alt)" : "transparent", fontFamily: "Tahoma, sans-serif" })}>{link.label}</NavLink>
               ))}
-              <button onClick={() => { signOut(); navigate(`/e/${slug}/signin`, { replace: true }); }} className="mt-4 rounded-lg px-4 py-3 text-left text-base font-medium opacity-70 transition-colors hover:opacity-100" style={{ color: "var(--event-text)" }}>{t("Sign Out", "Log Keluar")}</button>
+              <button onClick={() => { signOut(); navigate(`/e/${slug}/signin`, { replace: true }); }} className="mt-4 rounded-lg px-4 py-3 text-left text-base font-medium opacity-70 transition-colors hover:opacity-100" style={{ color: "var(--event-text)", fontFamily: "Tahoma, sans-serif" }}>{t("Sign Out", "Log Keluar")}</button>
             </nav>
           </div>
         </div>

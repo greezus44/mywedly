@@ -21,7 +21,7 @@ export function LanguageToggle() {
       className="absolute right-4 top-4 z-40 flex items-stretch rounded-lg overflow-hidden"
       style={{
         border: "1px solid var(--event-border)",
-        fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+        fontFamily: "Tahoma, sans-serif",
       }}
     >
       {opt("en", "English")}

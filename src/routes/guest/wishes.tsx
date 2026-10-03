@@ -101,7 +101,7 @@ export default function GuestWishes() {
             />
             {submitError && <p className="text-sm text-center" style={{ color: "var(--event-primary)" }}>{submitError}</p>}
             <div className="text-center">
-              <button type="submit" disabled={submitMutation.isPending} className="event-btn-primary" style={{ opacity: submitMutation.isPending ? 0.6 : 1, ...buttonColorsToStyle(wishesContent?.buttonColors) }} onMouseEnter={(e) => { if (!submitMutation.isPending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(wishesContent?.buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(wishesContent?.buttonColors))}>
+              <button type="submit" disabled={submitMutation.isPending} className="event-btn-primary" style={{ opacity: submitMutation.isPending ? 0.6 : 1, fontFamily: wishesContent?.placeholderTypography?.fontFamily || "var(--event-font-body)", ...buttonColorsToStyle(wishesContent?.buttonColors) }} onMouseEnter={(e) => { if (!submitMutation.isPending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(wishesContent?.buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, { fontFamily: wishesContent?.placeholderTypography?.fontFamily || "var(--event-font-body)", ...buttonColorsToStyle(wishesContent?.buttonColors) })}>
                 {submitMutation.isPending ? (language === "bm" ? "Menghantar..." : "Sending...") : submitLabel}
               </button>
             </div>
