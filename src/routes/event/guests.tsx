@@ -30,7 +30,6 @@ export function GuestsPage() {
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [selectedGuestIds, setSelectedGuestIds] = useState<Set<string>>(new Set());
   const [inviteSubEventId, setInviteSubEventId] = useState<string>("");
-  const [activeTab, setActiveTab] = useState<string>("__main__");
 
   const { data: guests, isLoading, isError, error } = useQuery({
     queryKey: ["event-guests", eventId],
@@ -123,13 +122,13 @@ export function GuestsPage() {
   const subEventNameById = new Map<string, string>((subEvents ?? []).map((se) => [se.id, se.name ?? "Untitled"]));
   const tabLabel = (se: SubEvent) => se.tab_name?.trim() || (se.name ?? "Untitled");
 
-  // Build tab list: Main Event tab + one per sub-event
-  const tabs: Array<{ key: string; label: string }> = [];
+  // Build event columns: one per sub-event (plus Main Event if sub-events exist)
+  const eventColumns: Array<{ key: string; label: string }> = [];
   if (subEvents && subEvents.length > 0) {
-    tabs.push({ key: "__main__", label: "Main Event" });
+    eventColumns.push({ key: "__main__", label: "Main Event" });
   }
   for (const se of (subEvents ?? [])) {
-    tabs.push({ key: se.id, label: tabLabel(se) });
+    eventColumns.push({ key: se.id, label: tabLabel(se) });
   }
 
   // Filter guests for the active tab: show all guests (they may or may not be invited)
@@ -236,25 +235,6 @@ export function GuestsPage() {
         <EmptyState title="No guests yet" description="Add guests to invite them to your event." action={<Button size="sm" onClick={() => { setEditGuest(null); setShowForm(true); }}>Add Guest</Button>} />
       ) : (
         <>
-          {/* Event tabs */}
-          {tabs.length > 0 && (
-            <div className="flex flex-wrap gap-1 border-b border-dash-border">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => { setActiveTab(tab.key); setSelectedGuestIds(new Set()); }}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === tab.key
-                      ? "border-dash-primary text-dash-primary"
-                      : "border-transparent text-dash-muted hover:text-dash-text"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          )}
-
           <div className="overflow-x-auto rounded-lg border border-dash-border">
             <table className="w-full">
               <thead className="bg-dash-bg">
@@ -265,20 +245,31 @@ export function GuestsPage() {
                   <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Name</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Group</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-dash-muted">Status</th>
+                  {eventColumns.length > 0 ? (
+                    eventColumns.map((col) => (
+                      <th key={col.key} className="px-4 py-2 text-center text-xs font-medium text-dash-muted whitespace-nowrap">{col.label}</th>
+                    ))
+                  ) : (
+                    <th className="px-4 py-2 text-center text-xs font-medium text-dash-muted">Status</th>
+                  )}
                   <th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dash-border bg-dash-surface">
                 {visibleGuests.map((g) => {
-                  const status = statusFor(g.id, activeTab);
                   return (
                     <tr key={g.id}>
                       <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
                       <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
                       <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
                       <td className="px-4 py-2 text-sm text-dash-muted">{g.group_name ?? "\u2014"}</td>
-                      <td className="px-4 py-2 text-center"><StatusIcon status={status} /></td>
+                      {eventColumns.length > 0 ? (
+                        eventColumns.map((col) => (
+                          <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
+                        ))
+                      ) : (
+                        <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
+                      )}
                       <td className="px-4 py-2 text-right">
                         <button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button>
                         <button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button>

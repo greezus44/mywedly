@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventRsvp, type SubEvent, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventRsvp, type EventGuest, type SubEvent, type Json } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Badge, ColorInput } from "../../components/ui";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
@@ -17,6 +17,15 @@ import { SplitEditor } from "../../components/preview/SplitEditor";
 import { RsvpPreview } from "../../components/preview/PreviewRenderers";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
+
+type GuestStatus = "not_invited" | "pending" | "attending" | "declined";
+
+function StatusIcon({ status }: { status: GuestStatus }) {
+  if (status === "attending") return <span className="text-green-600 font-bold text-base" title="Attending">&#10003;</span>;
+  if (status === "declined") return <span className="text-red-500 font-bold text-base" title="Declined">&#10007;</span>;
+  if (status === "pending") return <span className="text-dash-muted font-bold text-base" title="Pending">=</span>;
+  return <span className="text-dash-muted text-base" title="Not invited">&mdash;</span>;
+}
 
 export interface RsvpContent {
   title?: string;
@@ -72,7 +81,6 @@ function getScheduleHeadingTypography(value: unknown, fallbackText: string): Typ
 export function RsvpPage() {
   const { event, eventId } = useOutletContext<EventContextValue>();
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState<string>("all");
   const [rsvpContent, setRsvpContent] = useState<RsvpContent>(() => {
     const content = (event.draft_content ?? event.content) as Record<string, unknown> | null;
     return { ...DEFAULT_RSVP_CONTENT, ...((content?.rsvp as Partial<RsvpContent>) ?? {}) };
@@ -117,38 +125,102 @@ export function RsvpPage() {
 
   const { data: subEvents } = useQuery({
     queryKey: ["event-sub-events-rsvp", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("sub_events").select("id, name, date").eq("parent_event_id", eventId);
-      if (error) throw error;
-      return data as Pick<SubEvent, "id" | "name" | "date">[];
-    },
+    queryFn: async () => { const { data, error } = await supabase.from("sub_events").select("*").eq("parent_event_id", eventId).order("display_order", { ascending: true }); if (error) throw error; return data as SubEvent[]; },
   });
 
-  const subEventName = (subEventId: string | null): string => {
-    if (!subEventId) return event.name ?? "Main Event";
-    return subEvents?.find((s) => s.id === subEventId)?.name ?? "Event";
+  const { data: guests } = useQuery({
+    queryKey: ["event-guests-rsvp", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId).order("created_at", { ascending: true }); if (error) throw error; return data as EventGuest[]; },
+  });
+  const { data: existingInvites } = useQuery({
+    queryKey: ["guest-event-invites-rsvp", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("guest_event_invites").select("guest_id, sub_event_id, invite_type").eq("event_id", eventId); if (error) throw error; return data ?? []; },
+  });
+  const { data: groupAssignments } = useQuery({
+    queryKey: ["group-assignments-rsvp", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("sub_event_group_assignments").select("group_id, sub_event_id"); if (error) throw error; return data ?? []; },
+  });
+  const { data: allOverrides } = useQuery({
+    queryKey: ["all-guest-invitation-overrides-rsvp", eventId],
+    queryFn: async () => {
+      if (!guests || guests.length === 0) return [];
+      const { data, error } = await supabase.from("guest_invitation_overrides").select("guest_id, sub_event_id, is_invited").in("guest_id", guests.map((g) => g.id));
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!guests && guests.length > 0,
+  });
+
+  const invitedEventsByGuest = new Map<string, Set<string>>();
+  if (subEvents && subEvents.length > 0) {
+    for (const g of (guests ?? [])) {
+      const invited = new Set<string>();
+      if (g.group_id) {
+        (groupAssignments ?? []).filter((a) => a.group_id === g.group_id).forEach((a) => invited.add(a.sub_event_id as string));
+      }
+      (existingInvites ?? []).filter((inv) => inv.guest_id === g.id && inv.invite_type === "include" && inv.sub_event_id).forEach((inv) => invited.add(inv.sub_event_id as string));
+      (allOverrides ?? []).filter((o) => o.guest_id === g.id).forEach((o) => {
+        const seId = o.sub_event_id as string;
+        if (o.is_invited) { invited.add(seId); }
+        else { invited.delete(seId); }
+      });
+      invitedEventsByGuest.set(g.id, invited);
+    }
+  }
+
+  const rsvpStatusByGuest = new Map<string, Map<string, string>>();
+  for (const r of (rsvps ?? [])) {
+    let inner = rsvpStatusByGuest.get(r.guest_id);
+    if (!inner) { inner = new Map(); rsvpStatusByGuest.set(r.guest_id, inner); }
+    const key = r.sub_event_id ?? "__main__";
+    inner.set(key, r.status);
+  }
+
+  const statusFor = (guestId: string, eventKey: string): GuestStatus => {
+    if (eventKey === "__main__") {
+      const g = guests?.find((gg) => gg.id === guestId);
+      const s = g?.rsvp_status;
+      if (s === "attending") return "attending";
+      if (s === "declined") return "declined";
+      if (!subEvents || subEvents.length === 0) return "pending";
+      return "pending";
+    }
+    const invited = invitedEventsByGuest.get(guestId);
+    if (!invited || !invited.has(eventKey)) return "not_invited";
+    const rsvpMap = rsvpStatusByGuest.get(guestId);
+    const status = rsvpMap?.get(eventKey);
+    if (status === "attending") return "attending";
+    if (status === "declined") return "declined";
+    return "pending";
   };
+
+  const tabLabel = (se: SubEvent) => se.tab_name?.trim() || (se.name ?? "Untitled");
+  const eventColumns: Array<{ key: string; label: string }> = [];
+  if (subEvents && subEvents.length > 0) {
+    eventColumns.push({ key: "__main__", label: "Main Event" });
+  }
+  for (const se of (subEvents ?? [])) {
+    eventColumns.push({ key: se.id, label: tabLabel(se) });
+  }
 
   const deadline = event.draft_rsvp_deadline ?? event.rsvp_deadline;
   const closed = isRsvpClosed(deadline);
 
-  const filtered = (rsvps ?? []).filter((r) => filter === "all" || r.status === filter);
-
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from("event_rsvps").update({ status, responded_at: new Date().toISOString() }).eq("id", id);
+  const updateGuestStatusMutation = useMutation({
+    mutationFn: async ({ guestId, status }: { guestId: string; status: string }) => {
+      const { error } = await supabase.from("event_guests").update({ rsvp_status: status }).eq("id", guestId);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event-rsvps-admin", eventId] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event-guests-rsvp", eventId] }); queryClient.invalidateQueries({ queryKey: ["event-rsvps-admin", eventId] }); },
   });
 
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
   if (isError) return <ErrorState title="Failed to load RSVPs" message={error instanceof Error ? error.message : "Unknown error"} />;
 
   const counts = {
-    attending: (rsvps ?? []).filter((r) => r.status === "attending").length,
-    declined: (rsvps ?? []).filter((r) => r.status === "declined").length,
-    pending: (rsvps ?? []).filter((r) => r.status === "pending").length,
+    attending: (guests ?? []).filter((g) => g.rsvp_status === "attending").length,
+    declined: (guests ?? []).filter((g) => g.rsvp_status === "declined").length,
+    pending: (guests ?? []).filter((g) => g.rsvp_status === "pending").length,
   };
 
   return (
@@ -326,34 +398,48 @@ export function RsvpPage() {
         <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-red-600">{counts.declined}</p><p className="text-xs text-dash-muted">Declined</p></div>
         <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-gray-600">{counts.pending}</p><p className="text-xs text-dash-muted">Pending</p></div>
       </div>
-      <div className="flex gap-2">
-        {["all", "attending", "declined", "pending"].map((f) => (
-          <button key={f} onClick={() => setFilter(f)} className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${filter === f ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted hover:text-dash-text"}`}>{f}</button>
-        ))}
-      </div>
-      {!filtered || filtered.length === 0 ? (
-        <EmptyState title="No RSVPs" description="No responses match this filter." />
+      {!guests || guests.length === 0 ? (
+        <EmptyState title="No guests" description="Add guests from the Guests page to see their RSVP status here." />
       ) : (
-        <div className="overflow-hidden rounded-lg border border-dash-border">
+        <div className="overflow-x-auto rounded-lg border border-dash-border">
           <table className="w-full">
-            <thead className="bg-dash-bg"><tr><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Guest</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Event</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Status</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Plus Ones</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">+1 Name</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Message</th><th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Responded</th><th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th></tr></thead>
+            <thead className="bg-dash-bg">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Guest</th>
+                {eventColumns.length > 0 ? (
+                  eventColumns.map((col) => (
+                    <th key={col.key} className="px-4 py-2 text-center text-xs font-medium text-dash-muted whitespace-nowrap">{col.label}</th>
+                  ))
+                ) : (
+                  <th className="px-4 py-2 text-center text-xs font-medium text-dash-muted">Status</th>
+                )}
+                <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Responded</th>
+                <th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th>
+              </tr>
+            </thead>
             <tbody className="divide-y divide-dash-border bg-dash-surface">
-              {filtered.map((r) => (
-                <tr key={r.id}>
-                  <td className="px-4 py-2 text-sm text-dash-text">{r.guest_name ?? "—"}</td>
-                  <td className="px-4 py-2 text-sm text-dash-text">{subEventName(r.sub_event_id)}</td>
-                  <td className="px-4 py-2"><Badge variant={r.status === "attending" ? "success" : r.status === "declined" ? "danger" : "default"}>{r.status}</Badge></td>
-                  <td className="px-4 py-2 text-sm text-dash-muted">{r.plus_ones}</td>
-                  <td className="px-4 py-2 text-sm text-dash-text">{r.plus_one_names?.[0] ?? ""}</td>
-                  <td className="px-4 py-2 text-sm text-dash-muted max-w-xs truncate">{r.message ?? "—"}</td>
-                  <td className="px-4 py-2 text-xs text-dash-muted">{r.responded_at ? formatDateTime(r.responded_at) : "—"}</td>
-                  <td className="px-4 py-2 text-right">
-                    <select value={r.status} onChange={(e) => updateMutation.mutate({ id: r.id, status: e.target.value })} className="rounded border border-dash-border bg-dash-bg px-2 py-1 text-xs text-dash-text">
-                      <option value="pending">Pending</option><option value="attending">Attending</option><option value="declined">Declined</option>
-                    </select>
-                  </td>
-                </tr>
-              ))}
+              {guests.map((g) => {
+                const guestRsvps = (rsvps ?? []).filter((r) => r.guest_id === g.id);
+                const lastResponse = guestRsvps.map((r) => r.responded_at).filter(Boolean).sort().pop();
+                return (
+                  <tr key={g.id}>
+                    <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
+                    {eventColumns.length > 0 ? (
+                      eventColumns.map((col) => (
+                        <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
+                      ))
+                    ) : (
+                      <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
+                    )}
+                    <td className="px-4 py-2 text-xs text-dash-muted">{lastResponse ? formatDateTime(lastResponse) : "—"}</td>
+                    <td className="px-4 py-2 text-right">
+                      <select value={g.rsvp_status} onChange={(e) => updateGuestStatusMutation.mutate({ guestId: g.id, status: e.target.value })} className="rounded border border-dash-border bg-dash-bg px-2 py-1 text-xs text-dash-text">
+                        <option value="pending">Pending</option><option value="attending">Attending</option><option value="declined">Declined</option>
+                      </select>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
