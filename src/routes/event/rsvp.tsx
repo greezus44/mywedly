@@ -210,6 +210,22 @@ export function RsvpPage() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event-guests-rsvp", eventId] }); queryClient.invalidateQueries({ queryKey: ["event-rsvps-admin", eventId] }); },
   });
 
+  const updateSubEventRsvpMutation = useMutation({
+    mutationFn: async ({ guestId, subEventId, status }: { guestId: string; subEventId: string; status: string }) => {
+      const guest = guests?.find((g) => g.id === guestId);
+      const guestName = guest?.name ?? "";
+      const { data: existing } = await supabase.from("event_rsvps").select("id").eq("event_id", eventId).eq("guest_id", guestId).eq("sub_event_id", subEventId).maybeSingle();
+      if (existing) {
+        const { error } = await supabase.from("event_rsvps").update({ status, responded_at: new Date().toISOString() }).eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("event_rsvps").insert({ event_id: eventId, guest_id: guestId, guest_name: guestName, status, sub_event_id: subEventId, plus_ones: 0, responded_at: new Date().toISOString() });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event-rsvps-admin", eventId] }); },
+  });
+
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
   if (isError) return <ErrorState title="Failed to load RSVPs" message={error instanceof Error ? error.message : "Unknown error"} />;
 
@@ -406,7 +422,7 @@ export function RsvpPage() {
                 ) : (
                   <th className="px-4 py-2 text-center text-xs font-medium text-dash-muted">Status</th>
                 )}
-                <th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Actions</th>
+                <th className="px-4 py-2 text-right text-xs font-medium text-dash-muted">Change Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-dash-border bg-dash-surface">
@@ -422,9 +438,32 @@ export function RsvpPage() {
                       <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
                     )}
                     <td className="px-4 py-2 text-right">
-                      <select value={g.rsvp_status} onChange={(e) => updateGuestStatusMutation.mutate({ guestId: g.id, status: e.target.value })} className="rounded border border-dash-border bg-dash-bg px-2 py-1 text-xs text-dash-text">
-                        <option value="pending">Pending</option><option value="attending">Attending</option><option value="declined">Declined</option>
-                      </select>
+                      {eventColumns.length > 0 ? (
+                        <div className="flex flex-col gap-1">
+                          {eventColumns.map((col) => {
+                            const currentStatus = statusFor(g.id, col.key);
+                            const selectValue = currentStatus === "not_invited" ? "not_invited" : currentStatus;
+                            return (
+                              <select key={col.key} value={selectValue} disabled={currentStatus === "not_invited"} onChange={(e) => {
+                                if (col.key === "__main__") {
+                                  updateGuestStatusMutation.mutate({ guestId: g.id, status: e.target.value });
+                                } else {
+                                  updateSubEventRsvpMutation.mutate({ guestId: g.id, subEventId: col.key, status: e.target.value });
+                                }
+                              }} className="rounded border border-dash-border bg-dash-bg px-2 py-1 text-xs text-dash-text">
+                                <option value="not_invited" disabled>Not invited</option>
+                                <option value="pending">Pending</option>
+                                <option value="attending">Attending</option>
+                                <option value="declined">Declined</option>
+                              </select>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <select value={g.rsvp_status} onChange={(e) => updateGuestStatusMutation.mutate({ guestId: g.id, status: e.target.value })} className="rounded border border-dash-border bg-dash-bg px-2 py-1 text-xs text-dash-text">
+                          <option value="pending">Pending</option><option value="attending">Attending</option><option value="declined">Declined</option>
+                        </select>
+                      )}
                     </td>
                   </tr>
                 );
