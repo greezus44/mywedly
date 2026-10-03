@@ -123,8 +123,8 @@ export default function GuestRsvp() {
         .from("sub_events")
         .select("*")
         .in("id", invitedSubEventIds)
-        .order("display_order", { ascending: true })
-        .order("date", { ascending: true });
+        .order("date", { ascending: true, nullsFirst: false })
+        .order("display_order", { ascending: true });
       if (error) throw error;
       return data as SubEvent[];
     },
@@ -371,7 +371,15 @@ export default function GuestRsvp() {
     );
   };
 
-  const hasSubEvents = subEvents && subEvents.length > 0;
+  const sortedSubEvents = [...(subEvents ?? [])].sort((a, b) => {
+    const aDate = a.date ?? "";
+    const bDate = b.date ?? "";
+    if (!aDate && !bDate) return 0;
+    if (!aDate) return 1;
+    if (!bDate) return -1;
+    return aDate.localeCompare(bDate);
+  });
+  const hasSubEvents = sortedSubEvents.length > 0;
 
   return (
     <div className="guest-section guest-rsvp-page">
@@ -391,7 +399,7 @@ export default function GuestRsvp() {
         {/* Multiple sub-events or single main event */}
         {hasSubEvents ? (
           <div className="space-y-6 sm:space-y-8">
-            {subEvents!.map((se, i) => (
+            {sortedSubEvents.map((se, i) => (
               <div key={se.id}>
                 {i > 0 && <hr className="border-0 border-t my-6 sm:my-8" style={{ borderColor: "var(--event-border)" }} />}
                 {renderEventBlock(language === "bm" ? (se.name_bm?.trim() || se.name) : se.name, se.date, se.time ?? se.start_time, se.venue, se.address, se.id)}
