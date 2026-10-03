@@ -417,7 +417,7 @@ export default function GuestRsvp() {
               onMouseEnter={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography), ...buttonColorsToHoverStyle(content.rsvpButtonColors) })}
               onMouseLeave={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) })}
             >
-              {nextPageRouteLabel} <span style={{ marginLeft: "0.5rem" }}>&gt;</span>
+              <span>&gt;</span>
             </button>
           </div>
         )}

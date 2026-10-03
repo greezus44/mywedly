@@ -89,7 +89,7 @@ export default function GuestWishes() {
         </div>
 
         {!submitted ? (
-          <form onSubmit={handleSubmit} className="event-card mb-8 space-y-4">
+          <form onSubmit={handleSubmit} className="mb-8 space-y-4">
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -99,13 +99,15 @@ export default function GuestWishes() {
               style={{ textAlign: "left" }}
               required
             />
-            {submitError && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{submitError}</p>}
-            <button type="submit" disabled={submitMutation.isPending} className="event-btn-primary" style={{ opacity: submitMutation.isPending ? 0.6 : 1, ...buttonColorsToStyle(wishesContent?.buttonColors) }} onMouseEnter={(e) => { if (!submitMutation.isPending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(wishesContent?.buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(wishesContent?.buttonColors))}>
-              {submitMutation.isPending ? (language === "bm" ? "Menghantar..." : "Sending...") : submitLabel}
-            </button>
+            {submitError && <p className="text-sm text-center" style={{ color: "var(--event-primary)" }}>{submitError}</p>}
+            <div className="text-center">
+              <button type="submit" disabled={submitMutation.isPending} className="event-btn-primary" style={{ opacity: submitMutation.isPending ? 0.6 : 1, ...buttonColorsToStyle(wishesContent?.buttonColors) }} onMouseEnter={(e) => { if (!submitMutation.isPending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(wishesContent?.buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(wishesContent?.buttonColors))}>
+                {submitMutation.isPending ? (language === "bm" ? "Menghantar..." : "Sending...") : submitLabel}
+              </button>
+            </div>
           </form>
         ) : (
-          <div className="event-card mb-8 text-center">
+          <div className="mb-8 text-center">
             <p style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>
               {language === "bm" ? "Terima kasih atas pesanan anda!" : "Thank you for your message!"}
             </p>
@@ -121,7 +123,7 @@ export default function GuestWishes() {
               onMouseEnter={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography), ...buttonColorsToHoverStyle(content.rsvpButtonColors) })}
               onMouseLeave={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) })}
             >
-              {customPages![0].nav_label || customPages![0].title} <span style={{ marginLeft: "0.5rem" }}>&gt;</span>
+              <span>&gt;</span>
             </button>
           </div>
         )}
