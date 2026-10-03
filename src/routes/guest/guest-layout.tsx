@@ -38,7 +38,7 @@ export default function GuestLayout() {
     queryKey: ["custom-pages-nav", event?.id],
     queryFn: async () => {
       if (!event) return [];
-      const { data, error } = await supabase.from("custom_pages").select("id, title, slug, show_in_nav, is_published").eq("event_id", event.id).eq("is_published", true).eq("show_in_nav", true).order("title", { ascending: true });
+      const { data, error } = await supabase.from("custom_pages").select("id, title, slug, show_in_nav, is_published, nav_label").eq("event_id", event.id).eq("is_published", true).eq("show_in_nav", true).order("title", { ascending: true });
       if (error) throw error;
       return (data ?? []) as CustomPage[];
     },
@@ -82,11 +82,18 @@ export default function GuestLayout() {
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><p className="text-dash-muted">This invitation website could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
   if (!guest || eventId !== event.id) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><LoadingSpinner /></div>;
 
+  const wishesConfig = (event.content as Record<string, unknown> | null)?.wishes as Record<string, unknown> | null;
+  const messagesNavLabel = wishesConfig
+    ? (language === "bm"
+      ? (wishesConfig.navLabelBm as string | undefined) || (wishesConfig.navLabel as string | undefined) || t("Messages", "Mesej")
+      : (wishesConfig.navLabel as string | undefined) || t("Messages", "Mesej"))
+    : t("Messages", "Mesej");
+
   const navLinks = [
     { label: t("Home", "Utama"), to: `/e/${slug}/home` },
     ...(hasRsvpAccess(invitations ?? { invitations: [], hasMainEventAccess: false, error: null }) ? [{ label: "RSVP", to: `/e/${slug}/rsvp` }] : []),
-    ...(((event.content as Record<string, unknown> | null)?.wishes as Record<string, unknown> | null)?.enabled !== false ? [{ label: t("Messages", "Mesej"), to: `/e/${slug}/wishes` }] : []),
-    ...(customPages ?? []).map((p) => ({ label: p.title, to: `/e/${slug}/p/${p.slug}` })),
+    ...(wishesConfig?.enabled !== false ? [{ label: messagesNavLabel, to: `/e/${slug}/wishes` }] : []),
+    ...(customPages ?? []).map((p) => ({ label: p.nav_label || p.title, to: `/e/${slug}/p/${p.slug}` })),
   ];
 
   return (

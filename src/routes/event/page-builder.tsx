@@ -19,6 +19,8 @@ export function PageBuilder() {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
+  const [navLabel, setNavLabel] = useState("");
+  const [headingTypography, setHeadingTypography] = useState<TypographyStyle>({});
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
 
@@ -36,6 +38,8 @@ export function PageBuilder() {
     if (page) {
       setTitle(page.title);
       setSlug(page.slug);
+      setNavLabel(page.nav_label ?? "");
+      setHeadingTypography((page.heading_typography as TypographyStyle | null) ?? {});
       setBlocks(jsonToBlocks(page.blocks));
     }
   }, [page]);
@@ -60,7 +64,7 @@ export function PageBuilder() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("custom_pages").update({
-        title, slug, blocks: blocksToJson(blocks),
+        title, slug, nav_label: navLabel || null, heading_typography: Object.keys(headingTypography).length > 0 ? headingTypography : null, blocks: blocksToJson(blocks),
       }).eq("id", pageId!);
       if (error) throw error;
     },
@@ -89,7 +93,10 @@ export function PageBuilder() {
       <div className="grid gap-4 rounded-lg border border-dash-border bg-dash-surface p-4 sm:grid-cols-2">
         <Input label="Page Title" value={title} onChange={(e) => setTitle(e.target.value)} />
         <Input label="Slug" value={slug} onChange={(e) => setSlug(e.target.value)} />
+        <Input label="Nav Label (menu text)" value={navLabel} onChange={(e) => setNavLabel(e.target.value)} placeholder="Defaults to Page Title if empty" />
       </div>
+
+      <TypographyControls label="Heading Typography" value={headingTypography} onChange={setHeadingTypography} />
 
       <div className="space-y-3">
         {blocks.map((block, i) => (

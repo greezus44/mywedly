@@ -6,10 +6,11 @@ import { supabase, type EventMessage } from "../../lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDateTime } from "../../lib/utils";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
+import { getTypographyStyle, type TypographyStyle } from "../../lib/typography";
 import { useLanguage } from "../../lib/language";
 import { pickText, autoTranslate, setCurrentLanguage } from "../../lib/translations";
 
-interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; }
+interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; }
 
 export default function GuestWishes() {
   const { event } = useGuestOutletContext();
@@ -75,7 +76,7 @@ export default function GuestWishes() {
     <div className="guest-section">
       <div className="mx-auto max-w-2xl">
         <div className="mb-8 text-center">
-          {heading && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap" }}>{heading}</h1>}
+          {heading && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...getTypographyStyle(wishesContent?.headingTypography) }}>{heading}</h1>}
           {subheading && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap" }}>{subheading}</p>}
         </div>
 

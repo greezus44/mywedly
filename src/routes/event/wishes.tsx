@@ -5,10 +5,12 @@ import { supabase, type UserEvent, type EventMessage } from "../../lib/supabase"
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, Modal, ColorInput } from "../../components/ui";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
+import { TypographyControls } from "../../components/ui/TypographyControls";
+import type { TypographyStyle } from "../../lib/typography";
 import { formatDateTime } from "../../lib/utils";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
-interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; enabled?: boolean; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; }
+interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; enabled?: boolean; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; }
 
 export function MessagesPage() {
   const { event, eventId } = useOutletContext<EventContextValue>();
@@ -115,6 +117,15 @@ export function MessagesPage() {
             <p className="mt-1 text-xs text-dash-muted">When enabled, guests can submit messages. When disabled, the Messages page is hidden from guests.</p>
           </div>
           <div>
+            <label className="mb-1 block text-xs font-medium text-dash-muted">Nav Label (menu text)</label>
+            <input type="text" value={wishesContent.navLabel ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, navLabel: e.target.value }))} placeholder="Messages" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+            <p className="mt-1 text-xs text-dash-muted">The text shown in the guest menu. Defaults to "Messages" if empty.</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-dash-muted">Nav Label (Bahasa Melayu)</label>
+            <input type="text" value={wishesContent.navLabelBm ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, navLabelBm: e.target.value }))} placeholder="Auto-translate if empty" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+          </div>
+          <div>
             <label className="mb-1 block text-xs font-medium text-dash-muted">Page Heading</label>
             <input type="text" value={wishesContent.heading ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, heading: e.target.value }))} placeholder="Messages" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
           </div>
@@ -146,6 +157,7 @@ export function MessagesPage() {
             <label className="mb-1 block text-xs font-medium text-dash-muted">Submit Button Label (Bahasa Melayu)</label>
             <input type="text" value={wishesContent.submitLabelBm ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, submitLabelBm: e.target.value }))} placeholder="Auto-translate if empty" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
           </div>
+          <TypographyControls label="Heading Typography" value={wishesContent.headingTypography ?? {}} onChange={(v) => setWishesContent((p) => ({ ...p, headingTypography: v }))} />
           <ButtonColourEditor label="Submit Button Colours" value={wishesContent.buttonColors ?? {}} onChange={(v) => setWishesContent((p) => ({ ...p, buttonColors: v }))} />
           <div className="flex items-center gap-3 pt-2">
             <Button size="sm" onClick={saveSettings} loading={saving}>Save</Button>

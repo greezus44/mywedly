@@ -8,6 +8,7 @@ import { LoadingSpinner } from "../../components/ui";
 import { useLanguage } from "../../lib/language";
 import { setCurrentLanguage } from "../../lib/translations";
 import { sanitizeHtml } from "../../lib/sanitize";
+import { getTypographyStyle, type TypographyStyle } from "../../lib/typography";
 
 export default function GuestCustomPage() {
   const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
@@ -45,7 +46,7 @@ export default function GuestCustomPage() {
   return (
     <div className="guest-section">
       <div className="mx-auto max-w-3xl">
-        <h1 className="guest-title mb-6 text-center">{page.title}</h1>
+        <h1 className="guest-title mb-6 text-center" style={getTypographyStyle(page.heading_typography as TypographyStyle | null)}>{page.title}</h1>
         {blocks.length > 0 ? (
           <div className="space-y-6">
             {blocks.map((block) => <BlockRenderer key={block.id} block={block} eventId={event.id} />)}
