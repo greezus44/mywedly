@@ -126,7 +126,7 @@ export function RsvpPage() {
 
   const { data: guests } = useQuery({
     queryKey: ["event-guests-rsvp", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId).order("created_at", { ascending: true }); if (error) throw error; return data as EventGuest[]; },
+    queryFn: async () => { const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId).order("name", { ascending: true }); if (error) throw error; return data as EventGuest[]; },
   });
   const { data: existingInvites } = useQuery({
     queryKey: ["guest-event-invites-rsvp", eventId],
