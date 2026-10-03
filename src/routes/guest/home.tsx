@@ -43,7 +43,7 @@ export default function GuestHome() {
           <section key={i} className="guest-section" style={i === 0 ? { paddingTop: 0 } : undefined}>
             <div className="mx-auto max-w-3xl">
               {displayHeading && <h2 className="guest-title mb-4" style={{ whiteSpace: "pre-wrap", ...headingStyle }}>{displayHeading}</h2>}
-              {displayBody && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: sanitizeHtml(displayBody, { stripTypography: true }) }} />}
+              {displayBody && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: sanitizeHtml(displayBody) }} />}
             </div>
           </section>
         );

@@ -27,7 +27,7 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
   const applyCustomFontSize = () => {
     if (!customFontSize) return;
     const val = Number(customFontSize);
-    if (val >= 1) exec("fontSize", String(val));
+    if (val >= 1 && val <= 200) exec("fontSize", String(val));
     setCustomFontSize("");
   };
 
@@ -108,9 +108,11 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
     }
   };
 
-  const btn = (onClick: () => void, label: string, isActive = false) => (
+  const btn = (onClick: () => void, label: string, isActive = false, title = label) => (
     <button
       type="button"
+      title={title}
+      aria-label={title}
       onMouseDown={(e) => { e.preventDefault(); saveSelection(); }}
       onClick={onClick}
       className={cn("rounded px-2 py-1 text-sm transition-colors hover:bg-dash-bg", isActive && "bg-dash-primary/10 text-dash-primary")}
@@ -122,13 +124,15 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
   return (
     <div className={cn("rounded-lg border border-dash-border bg-dash-surface", className)}>
       <div className="flex flex-wrap items-center gap-1 border-b border-dash-border p-2">
-        {btn(() => exec("bold"), "B", active.bold)}
-        {btn(() => exec("italic"), "I", active.italic)}
-        {btn(() => exec("underline"), "U", active.underline)}
+        {btn(() => exec("bold"), "B", active.bold, "Bold")}
+        {btn(() => exec("italic"), "I", active.italic, "Italic")}
+        {btn(() => exec("underline"), "U", active.underline, "Underline")}
         <div className="mx-1 h-5 w-px bg-dash-border" />
         <select
           onMouseDown={() => saveSelection()}
           onChange={(e) => exec("fontSize", e.target.value)}
+          title="Font size for selected text"
+          aria-label="Font size for selected text"
           className="rounded border border-dash-border bg-dash-surface px-1.5 py-1 text-xs text-dash-text"
           defaultValue={pixelFontSizes ? "16" : "3"}
         >
@@ -140,7 +144,7 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
             min={1}
             max={200}
             value={customFontSize}
-            onMouseDown={(e) => e.stopPropagation()}
+            onMouseDown={() => saveSelection()}
             onChange={(e) => setCustomFontSize(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyCustomFontSize(); } }}
             onBlur={applyCustomFontSize}
@@ -152,6 +156,8 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
         <select
           onMouseDown={() => saveSelection()}
           onChange={(e) => exec("fontName", e.target.value)}
+          title="Font family for selected text"
+          aria-label="Font family for selected text"
           className="rounded border border-dash-border bg-dash-surface px-1.5 py-1 text-xs text-dash-text"
           defaultValue=""
         >
@@ -164,17 +170,20 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
             type="color"
             onMouseDown={() => saveSelection()}
             onChange={(e) => exec("foreColor", e.target.value)}
+            title="Text colour for selected text"
+            aria-label="Text colour for selected text"
             className="h-5 w-5 cursor-pointer border-0 p-0"
           />
         </label>
         <div className="mx-1 h-5 w-px bg-dash-border" />
-        {btn(() => { const url = prompt("Enter URL:"); if (url) exec("createLink", url); }, "Link")}
-        {btn(() => exec("insertUnorderedList"), "• List", active.insertUnorderedList)}
-        {btn(() => exec("insertOrderedList"), "1. List", active.insertOrderedList)}
+        {btn(() => { const url = prompt("Enter URL:"); if (url) exec("createLink", url); }, "Link", false, "Add link")}
+        {btn(() => exec("insertUnorderedList"), "• List", active.insertUnorderedList, "Bulleted list")}
+        {btn(() => exec("insertOrderedList"), "1. List", active.insertOrderedList, "Numbered list")}
         <div className="mx-1 h-5 w-px bg-dash-border" />
-        {btn(() => exec("justifyLeft"), "L")}
-        {btn(() => exec("justifyCenter"), "C")}
-        {btn(() => exec("justifyRight"), "R")}
+        {btn(() => exec("justifyLeft"), "L", false, "Align left")}
+        {btn(() => exec("justifyCenter"), "C", false, "Align centre")}
+        {btn(() => exec("justifyRight"), "R", false, "Align right")}
+        {btn(() => exec("removeFormat"), "Clear", false, "Clear formatting from selected text")}
       </div>
       <div
         ref={ref}

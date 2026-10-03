@@ -74,8 +74,10 @@ export function HomeEditor() {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-medium text-dash-muted">Body Content (English)</label>
+                  <p className="mb-2 text-xs text-dash-muted">Select any text, then use the toolbar to change only that selection. Body Typography below sets the default style.</p>
                   <RichTextEditor value={section.body ?? ""} onChange={(html) => updateSection(i, { body: html })} placeholder="Enter the English body content" pixelFontSizes />
                   <label className="mb-1 mt-3 block text-xs font-medium text-dash-muted">Body Content (Bahasa Melayu)</label>
+                  <p className="mb-2 text-xs text-dash-muted">Select any text, then use the toolbar to change only that selection.</p>
                   <RichTextEditor value={section.bodyBm ?? ""} onChange={(html) => updateSection(i, { bodyBm: html })} placeholder="Enter the Bahasa Melayu body content" pixelFontSizes />
                   <div className="mt-3">
                     <TypographyControls
