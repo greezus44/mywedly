@@ -8,6 +8,7 @@ import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from
 import { getTypographyStyle, type TypographyStyle } from "../../lib/typography";
 import { useLanguage } from "../../lib/language";
 import { pickText, autoTranslate, setCurrentLanguage } from "../../lib/translations";
+import { cn } from "../../lib/utils";
 import type { EventContent } from "../../components/preview/PreviewRenderers";
 
 interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; placeholderTypography?: TypographyStyle; }
@@ -83,8 +84,8 @@ export default function GuestWishes() {
   return (
     <div className="guest-section">
       <div className="mx-auto max-w-2xl">
-        <div className="pt-8 sm:pt-12 mb-8 text-center">
-          {heading && <h1 className="guest-title mb-2 text-center" style={{ whiteSpace: "pre-wrap", ...getTypographyStyle(wishesContent?.headingTypography) }}>{heading}</h1>}
+        <div className={cn("pt-8 sm:pt-12 text-center", (heading || subheading) && "mb-12 sm:mb-16")}>
+          {heading && <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0, ...getTypographyStyle(wishesContent?.headingTypography) }}>{heading}</h1>}
           {subheading && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap" }}>{subheading}</p>}
         </div>
 

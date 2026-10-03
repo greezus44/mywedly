@@ -46,8 +46,8 @@ export default function GuestCustomPage() {
   return (
     <div className="guest-section">
       <div className="mx-auto max-w-3xl">
-        <div className="pt-8 sm:pt-12">
-          <h1 className="guest-title mb-6 text-center" style={getTypographyStyle(page.heading_typography as TypographyStyle | null)}>{page.title}</h1>
+        <div className="pt-8 sm:pt-12 mb-12 sm:mb-16">
+          <h1 className="guest-title text-center" style={{ ...getTypographyStyle(page.heading_typography as TypographyStyle | null), marginBottom: 0 }}>{page.title}</h1>
         </div>
         {blocks.length > 0 ? (
           <div className="space-y-6">
