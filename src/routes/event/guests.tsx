@@ -260,7 +260,7 @@ export function GuestsPage() {
         <GuestForm
           eventId={eventId}
           guest={editGuest}
-          subEvents={subEvents ?? []}
+          subEvents={sortedSubEvents}
           existingInvitations={editGuest ? Object.fromEntries([...(invitedEventsByGuest.get(editGuest.id) ?? [])].map((id) => [id, true])) : undefined}
           onSubmit={handleAddOrUpdate}
           onCancel={() => { setShowForm(false); setEditGuest(null); setFormError(null); }}
@@ -274,7 +274,7 @@ export function GuestsPage() {
           <div className="flex items-center gap-2">
             <select value={inviteSubEventId} onChange={(e) => setInviteSubEventId(e.target.value)} className="flex-1 rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text">
               <option value="">Main Event</option>
-              {(subEvents ?? []).map((se) => <option key={se.id} value={se.id}>{se.name}</option>)}
+              {sortedSubEvents.map((se) => <option key={se.id} value={se.id}>{se.name}</option>)}
             </select>
             <Button size="sm" onClick={() => inviteMutation.mutate({ guestIds: [...selectedGuestIds], subEventId: inviteSubEventId || null })} disabled={selectedGuestIds.size === 0} loading={inviteMutation.isPending}>Invite</Button>
           </div>
