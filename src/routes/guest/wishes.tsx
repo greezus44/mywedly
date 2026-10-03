@@ -10,7 +10,7 @@ import { useLanguage } from "../../lib/language";
 import { pickText, autoTranslate, setCurrentLanguage } from "../../lib/translations";
 import type { EventContent } from "../../components/preview/PreviewRenderers";
 
-interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; }
+interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; placeholderTypography?: TypographyStyle; }
 
 export default function GuestWishes() {
   const { event } = useGuestOutletContext();
@@ -96,7 +96,7 @@ export default function GuestWishes() {
               placeholder={placeholder}
               rows={4}
               className="event-input"
-              style={{ textAlign: "left" }}
+              style={{ textAlign: "left", ...getTypographyStyle(wishesContent?.placeholderTypography), fontFamily: wishesContent?.placeholderTypography?.fontFamily || "var(--event-font-body)" }}
               required
             />
             {submitError && <p className="text-sm text-center" style={{ color: "var(--event-primary)" }}>{submitError}</p>}

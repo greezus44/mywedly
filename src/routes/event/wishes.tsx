@@ -6,11 +6,13 @@ import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, Modal, ColorInput } from "../../components/ui";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { TypographyControls } from "../../components/ui/TypographyControls";
+import { FontSelect } from "../../components/ui/FontSelect";
+import { HEADING_FONT_OPTIONS } from "../../lib/theme";
 import type { TypographyStyle } from "../../lib/typography";
 import { formatDateTime } from "../../lib/utils";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
-interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; enabled?: boolean; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; }
+interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; enabled?: boolean; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; placeholderTypography?: TypographyStyle; }
 
 export function MessagesPage() {
   const { event, eventId } = useOutletContext<EventContextValue>();
@@ -158,6 +160,7 @@ export function MessagesPage() {
             <input type="text" value={wishesContent.submitLabelBm ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, submitLabelBm: e.target.value }))} placeholder="Auto-translate if empty" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
           </div>
           <TypographyControls label="Heading Typography" value={wishesContent.headingTypography ?? {}} onChange={(v) => setWishesContent((p) => ({ ...p, headingTypography: v }))} />
+          <FontSelect label="Message Placeholder Font" value={wishesContent.placeholderTypography?.fontFamily ?? ""} onChange={(fontFamily) => setWishesContent((p) => ({ ...p, placeholderTypography: { ...p.placeholderTypography, fontFamily } }))} options={HEADING_FONT_OPTIONS} placeholder="Use event font" />
           <ButtonColourEditor label="Submit Button Colours" value={wishesContent.buttonColors ?? {}} onChange={(v) => setWishesContent((p) => ({ ...p, buttonColors: v }))} />
           <div className="flex items-center gap-3 pt-2">
             <Button size="sm" onClick={saveSettings} loading={saving}>Save</Button>

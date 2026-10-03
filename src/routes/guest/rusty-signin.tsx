@@ -5,13 +5,13 @@ import { supabase, type UserEvent } from "../../lib/supabase";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { RUSTY_THEME } from "../../lib/theme";
-import { resolveTypography } from "../../lib/typography";
+import { resolveTypography, getTypographyStyle } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle } from "../../components/ui/ButtonColourEditor";
 import { LanguageToggle } from "../../components/site/LanguageToggle";
 import { useLanguage } from "../../lib/language";
 import { pickText, autoTranslate } from "../../lib/translations";
 
-interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; buttonLabel?: string; headingBm?: string; subheadingBm?: string; placeholderBm?: string; buttonLabelBm?: string; }
+interface LoginConfig { heading?: unknown; subheading?: unknown; placeholder?: string; placeholderTypography?: import("../../lib/typography").TypographyStyle; buttonLabel?: string; headingBm?: string; subheadingBm?: string; placeholderBm?: string; buttonLabelBm?: string; }
 
 export default function RustySignIn() {
   const { slug } = useParams<{ slug: string }>();
@@ -71,7 +71,7 @@ export default function RustySignIn() {
             {subheading.text && <p className="guest-subtitle" style={subheading.style}>{subheading.text}</p>}
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={{ textAlign: "center" }} />
+            <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={{ textAlign: "center", ...getTypographyStyle(loginConfig.placeholderTypography), fontFamily: loginConfig.placeholderTypography?.fontFamily || "var(--event-font-heading)" }} />
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
             <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1, ...buttonColorsToStyle(buttonColors) }} onMouseEnter={(e) => { if (!submitting) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(buttonColors))}>{submitting ? (language === "bm" ? "Sedang log masuk..." : "Signing in...") : buttonLabel}</button>
           </form>
