@@ -105,11 +105,19 @@ export function GuestsPage() {
 
   const tabLabel = (se: SubEvent) => se.tab_name?.trim() || (se.name ?? "Untitled");
 
+  const sortedSubEvents = [...(subEvents ?? [])].sort((a, b) => {
+    const aDate = a.date ?? "";
+    const bDate = b.date ?? "";
+    if (!aDate && !bDate) return 0;
+    if (!aDate) return 1;
+    if (!bDate) return -1;
+    return aDate.localeCompare(bDate);
+  });
   const eventColumns: Array<{ key: string; label: string }> = [];
-  if (subEvents && subEvents.length > 0) {
+  if (sortedSubEvents.length > 0) {
     eventColumns.push({ key: "__main__", label: "Main Event" });
   }
-  for (const se of (subEvents ?? [])) {
+  for (const se of sortedSubEvents) {
     eventColumns.push({ key: se.id, label: tabLabel(se) });
   }
 
