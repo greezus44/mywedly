@@ -90,7 +90,7 @@ export default function GuestLayout() {
     : t("Messages", "Mesej");
 
   const navLinks = [
-    { label: t("Home", "Utama"), to: `/e/${slug}/home` },
+    { label: t("Home", "Laman Utama"), to: `/e/${slug}/home` },
     ...(hasRsvpAccess(invitations ?? { invitations: [], hasMainEventAccess: false, error: null }) ? [{ label: "RSVP", to: `/e/${slug}/rsvp` }] : []),
     ...(wishesConfig?.enabled !== false ? [{ label: messagesNavLabel, to: `/e/${slug}/wishes` }] : []),
     ...(customPages ?? []).map((p) => ({ label: p.nav_label || p.title, to: `/e/${slug}/p/${p.slug}` })),
