@@ -44,8 +44,8 @@ export default function GuestCustomPage() {
   const blocks = jsonToBlocks(page.blocks);
 
   return (
-    <div className="guest-section">
-      <div className="mx-auto max-w-3xl">
+    <div className="guest-section guest-rsvp-page">
+      <div className="mx-auto max-w-3xl guest-rsvp-content">
         <div className="pt-8 sm:pt-12 mb-12 sm:mb-16">
           <h1 className="guest-title text-center" style={{ ...getTypographyStyle(page.heading_typography as TypographyStyle | null), marginBottom: 0 }}>{page.title}</h1>
         </div>
