@@ -77,7 +77,7 @@ export default function GuestSignIn() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="event-input" placeholder={placeholder} required autoFocus autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false} style={{ textAlign: "center", ...getTypographyStyle(loginConfig.placeholderTypography), fontFamily: loginConfig.placeholderTypography?.fontFamily || "var(--event-font-heading)" }} />
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
-            <button type="submit" disabled={submitting} className="event-btn-primary w-full" style={{ opacity: submitting ? 0.6 : 1, ...buttonColorsToStyle(buttonColors) }} onMouseEnter={(e) => { if (!submitting) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(buttonColors))}>{submitting ? (language === "bm" ? "Sedang log masuk..." : "Signing in...") : buttonLabel}</button>
+            <div className="text-center"><button type="submit" disabled={submitting} className="event-btn-primary" style={{ opacity: submitting ? 0.6 : 1, ...buttonColorsToStyle(buttonColors) }} onMouseEnter={(e) => { if (!submitting) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(buttonColors))}>{submitting ? (language === "bm" ? "Sedang log masuk..." : "Signing in...") : buttonLabel}</button></div>
           </form>
         </div>
       </div>

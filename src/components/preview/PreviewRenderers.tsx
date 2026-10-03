@@ -85,7 +85,7 @@ export function LoginPreview({ config, theme, eventName }: LoginPreviewProps) {
           <div className="event-card space-y-3">
             <label className="block text-center text-sm font-medium" style={{ color: "var(--event-text)" }}>{placeholder}</label>
             <input type="text" className="event-input" placeholder={placeholder} style={{ textAlign: "center", ...getTypographyStyle(config.placeholderTypography), fontFamily: config.placeholderTypography?.fontFamily || "var(--event-font-heading)" }} disabled />
-            <button type="button" className="event-btn-primary w-full" style={buttonColorsToStyle(config.buttonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(config.buttonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(config.buttonColors))}>{buttonLabel}</button>
+            <div className="text-center"><button type="button" className="event-btn-primary" style={buttonColorsToStyle(config.buttonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(config.buttonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(config.buttonColors))}>{buttonLabel}</button></div>
           </div>
         </div>
       </div>
