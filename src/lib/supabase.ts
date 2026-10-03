@@ -43,7 +43,7 @@ export interface SubEvent {
   venue: string | null; address: string | null; description: string | null; dress_code: string | null;
   rsvp_deadline: string | null; rsvp_enabled: boolean; order_index: number; created_at: string;
   updated_at: string; start_time: string | null; end_time: string | null; display_order: number;
-  wedding_id: string | null;
+  wedding_id: string | null; tab_name: string | null;
 }
 
 export interface GuestGroup { id: string; wedding_id: string | null; event_id: string | null; name: string; sort_order: number; created_at: string; updated_at: string; }
