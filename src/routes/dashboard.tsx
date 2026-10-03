@@ -32,9 +32,17 @@ export function DashboardPage() {
   const { data: events, isLoading, isError, error } = useQuery({
     queryKey: ["events", session?.user.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("creator_id", session!.user.id).order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("user_events").select("*").eq("creator_id", session!.user.id);
       if (error) throw error;
-      return data as UserEvent[];
+      const sorted = [...(data as UserEvent[])].sort((a, b) => {
+        const aDate = a.draft_event_date || a.event_date || "";
+        const bDate = b.draft_event_date || b.event_date || "";
+        if (!aDate && !bDate) return 0;
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return aDate.localeCompare(bDate);
+      });
+      return sorted;
     },
     enabled: !!session?.user.id,
   });
