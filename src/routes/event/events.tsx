@@ -47,8 +47,16 @@ export function EventsPage() {
   });
 
   const today = new Date().toISOString().split("T")[0];
-  const upcoming = (subEvents ?? []).filter((e) => (e.date ?? "") >= today);
-  const previous = (subEvents ?? []).filter((e) => (e.date ?? "") < today).reverse();
+  const sortByDate = (a: SubEvent, b: SubEvent) => {
+    const aDate = a.date ?? "";
+    const bDate = b.date ?? "";
+    if (!aDate && !bDate) return 0;
+    if (!aDate) return 1;
+    if (!bDate) return -1;
+    return aDate.localeCompare(bDate);
+  };
+  const upcoming = (subEvents ?? []).filter((e) => (e.date ?? "") >= today).sort(sortByDate);
+  const previous = (subEvents ?? []).filter((e) => (e.date ?? "") < today).sort((a, b) => sortByDate(b, a));
 
   const resetForm = () => { setName(""); setNameBm(""); setDate(""); setTime(""); setVenue(""); setAddress(""); setDescription(""); setTabName(""); setEditEvent(null); setProgrammeItems([]); setFormError(null); };
   const openAdd = () => { resetForm(); setShowForm(true); };
