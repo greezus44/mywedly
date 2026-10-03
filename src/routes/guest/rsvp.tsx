@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { supabase, type EventRsvp, type EventSchedule, type SubEvent, type Json } from "../../lib/supabase";
+import { supabase, type EventRsvp, type EventSchedule, type SubEvent, type CustomPage, type Json } from "../../lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatTime12, formatDateLong, cn } from "../../lib/utils";
 import { getTypographyText, getTypographyStyle } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { useLanguage } from "../../lib/language";
 import { pickText, autoTranslate, getCurrentLanguage, setCurrentLanguage } from "../../lib/translations";
+import type { EventContent } from "../../components/preview/PreviewRenderers";
 
 interface RsvpContent {
   title?: string;
@@ -81,8 +83,12 @@ export default function GuestRsvp() {
   const { event, slug, invitedSubEventIds } = useGuestOutletContext();
   const { guest } = useGuestAuth();
   const { language } = useLanguage();
+  const location = useLocation();
+  const navigate = useNavigate();
   setCurrentLanguage(language);
   const queryClient = useQueryClient();
+  const prefix = location.pathname.startsWith("/r/") ? `/r/${slug}` : `/e/${slug}`;
+  const content = (event.content ?? {}) as EventContent;
 
   const rsvpContent: RsvpContent = {
     ...DEFAULT_RSVP_CONTENT,
@@ -135,6 +141,37 @@ export default function GuestRsvp() {
     },
     enabled: !!guest,
   });
+
+  const wishesConfig = ((event.content as Record<string, unknown> | null) ?? {}).wishes as Record<string, unknown> | null;
+  const messagesEnabled = wishesConfig?.enabled !== false;
+
+  const { data: customPages } = useQuery({
+    queryKey: ["custom-pages-nav", event.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("custom_pages")
+        .select("id, title, slug, show_in_nav, is_published, nav_label")
+        .eq("event_id", event.id)
+        .eq("is_published", true)
+        .eq("show_in_nav", true)
+        .order("title", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as CustomPage[];
+    },
+  });
+
+  const nextPageRoute = messagesEnabled
+    ? `${prefix}/wishes`
+    : customPages && customPages.length > 0
+      ? `${prefix}/p/${customPages[0].slug}`
+      : null;
+  const nextPageRouteLabel = messagesEnabled
+    ? (language === "bm"
+      ? (wishesConfig?.navLabelBm as string | undefined) || (wishesConfig?.navLabel as string | undefined) || "Mesej"
+      : (wishesConfig?.navLabel as string | undefined) || "Messages")
+    : customPages && customPages.length > 0
+      ? customPages[0].nav_label || customPages[0].title
+      : null;
 
   const [responses, setResponses] = useState<Record<string, { status: string; plus_ones: number; message: string }>>({});
 
@@ -368,6 +405,20 @@ export default function GuestRsvp() {
         {contactMessageText && (
           <div className="mt-8 sm:mt-10 text-center">
             <p style={{ whiteSpace: "pre-wrap", color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...contactMessageStyle }}>{tr(contactMessageText, "contactMessage")}</p>
+          </div>
+        )}
+
+        {nextPageRoute && nextPageRouteLabel && (
+          <div className="text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
+            <button
+              onClick={() => navigate(nextPageRoute)}
+              className="event-btn-primary"
+              style={{ ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) }}
+              onMouseEnter={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography), ...buttonColorsToHoverStyle(content.rsvpButtonColors) })}
+              onMouseLeave={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) })}
+            >
+              {nextPageRouteLabel} <span style={{ marginLeft: "0.5rem" }}>&gt;</span>
+            </button>
           </div>
         )}
       </div>

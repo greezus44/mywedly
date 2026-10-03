@@ -1,14 +1,14 @@
 import { useState } from "react";
-import { Navigate, useParams, useLocation } from "react-router-dom";
+import { Navigate, useParams, useLocation, useNavigate } from "react-router-dom";
 import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
-import { supabase, type EventMessage } from "../../lib/supabase";
+import { supabase, type CustomPage } from "../../lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { formatDateTime } from "../../lib/utils";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { getTypographyStyle, type TypographyStyle } from "../../lib/typography";
 import { useLanguage } from "../../lib/language";
 import { pickText, autoTranslate, setCurrentLanguage } from "../../lib/translations";
+import type { EventContent } from "../../components/preview/PreviewRenderers";
 
 interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; }
 
@@ -16,38 +16,43 @@ export default function GuestWishes() {
   const { event } = useGuestOutletContext();
   const { slug } = useParams<{ slug: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const { guest } = useGuestAuth();
   const wishesConfig = ((event.content as Record<string, unknown> | null) ?? {}).wishes as Record<string, unknown> | null;
   const messagesEnabled = wishesConfig?.enabled !== false;
-  if (!messagesEnabled) { const prefix = location.pathname.startsWith("/r/") ? `/r/${slug}` : `/e/${slug}`; return <Navigate to={`${prefix}/home`} replace />; }
+  const prefix = location.pathname.startsWith("/r/") ? `/r/${slug}` : `/e/${slug}`;
+  if (!messagesEnabled) { return <Navigate to={`${prefix}/home`} replace />; }
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
 
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   setCurrentLanguage(language);
+  const content = (event.content ?? {}) as EventContent;
   const wishesContent = ((event.content as Record<string, unknown> | null) ?? {}).wishes as WishesContent | undefined;
   const heading = language === "bm" ? pickText(wishesContent?.heading, wishesContent?.headingBm, autoTranslate(wishesContent?.heading ?? "")) : wishesContent?.heading;
   const subheading = language === "bm" ? pickText(wishesContent?.subheading, wishesContent?.subheadingBm, autoTranslate(wishesContent?.subheading ?? "")) : wishesContent?.subheading;
   const placeholder = language === "bm" ? pickText(wishesContent?.placeholder || "Write your message here...", wishesContent?.placeholderBm, autoTranslate(wishesContent?.placeholder || "Write your message here...")) : (wishesContent?.placeholder || "Write your message here...");
   const submitLabel = language === "bm" ? pickText(wishesContent?.submitLabel || "Send", wishesContent?.submitLabelBm, autoTranslate(wishesContent?.submitLabel || "Send")) : (wishesContent?.submitLabel || "Send");
 
-  const { data: messages, isLoading } = useQuery({
-    queryKey: ["event-messages-public", event.id],
+  const { data: customPages } = useQuery({
+    queryKey: ["custom-pages-nav", event.id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("event_messages")
-        .select("*")
+        .from("custom_pages")
+        .select("id, title, slug, show_in_nav, is_published, nav_label")
         .eq("event_id", event.id)
-        .order("created_at", { ascending: false });
+        .eq("is_published", true)
+        .eq("show_in_nav", true)
+        .order("title", { ascending: true });
       if (error) throw error;
-      return data as EventMessage[];
+      return (data ?? []) as CustomPage[];
     },
   });
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      // FIX #1: event_messages has `guest_name` (NOT NULL), no `guest_id` column
       const { error } = await supabase.from("event_messages").insert({
         event_id: event.id,
         guest_name: guest?.name || "Guest",
@@ -59,6 +64,7 @@ export default function GuestWishes() {
       queryClient.invalidateQueries({ queryKey: ["event-messages-public", event.id] });
       setMessage("");
       setSubmitError(null);
+      setSubmitted(true);
     },
     onError: (err) => {
       console.error("Failed to submit wish", err);
@@ -72,6 +78,8 @@ export default function GuestWishes() {
     submitMutation.mutate();
   };
 
+  const nextPageRoute = customPages && customPages.length > 0 ? `${prefix}/p/${customPages[0].slug}` : null;
+
   return (
     <div className="guest-section">
       <div className="mx-auto max-w-2xl">
@@ -80,37 +88,41 @@ export default function GuestWishes() {
           {subheading && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap" }}>{subheading}</p>}
         </div>
 
-        <form onSubmit={handleSubmit} className="event-card mb-8 space-y-4">
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder={placeholder}
-            rows={4}
-            className="event-input"
-            style={{ textAlign: "left" }}
-            required
-          />
-          {submitError && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{submitError}</p>}
-          <button type="submit" disabled={submitMutation.isPending} className="event-btn-primary" style={{ opacity: submitMutation.isPending ? 0.6 : 1, ...buttonColorsToStyle(wishesContent?.buttonColors) }} onMouseEnter={(e) => { if (!submitMutation.isPending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(wishesContent?.buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(wishesContent?.buttonColors))}>
-            {submitMutation.isPending ? (language === "bm" ? "Menghantar..." : "Sending...") : submitLabel}
-          </button>
-        </form>
-
-        {isLoading ? (
-          <p className="text-center" style={{ color: "var(--event-muted)" }}>{language === "bm" ? "Memuatkan mesej..." : "Loading messages..."}</p>
-        ) : !messages || messages.length === 0 ? (
-          <p className="text-center" style={{ color: "var(--event-muted)" }}>{language === "bm" ? "Tiada mesej lagi. Jadi yang pertama meninggalkan mesej!" : "No messages yet. Be the first to leave a message!"}</p>
+        {!submitted ? (
+          <form onSubmit={handleSubmit} className="event-card mb-8 space-y-4">
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder={placeholder}
+              rows={4}
+              className="event-input"
+              style={{ textAlign: "left" }}
+              required
+            />
+            {submitError && <p className="text-sm" style={{ color: "var(--event-primary)" }}>{submitError}</p>}
+            <button type="submit" disabled={submitMutation.isPending} className="event-btn-primary" style={{ opacity: submitMutation.isPending ? 0.6 : 1, ...buttonColorsToStyle(wishesContent?.buttonColors) }} onMouseEnter={(e) => { if (!submitMutation.isPending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(wishesContent?.buttonColors)); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(wishesContent?.buttonColors))}>
+              {submitMutation.isPending ? (language === "bm" ? "Menghantar..." : "Sending...") : submitLabel}
+            </button>
+          </form>
         ) : (
-          <div className="space-y-4">
-            {messages.map((msg) => (
-              <div key={msg.id} className="event-card">
-                <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <span className="font-semibold" style={{ color: "var(--event-heading)" }}>{msg.guest_name}</span>
-                  <span className="text-sm" style={{ color: "var(--event-muted)" }}>{formatDateTime(msg.created_at)}</span>
-                </div>
-                <p className="whitespace-pre-wrap" style={{ color: "var(--event-text)" }}>{msg.message}</p>
-              </div>
-            ))}
+          <div className="event-card mb-8 text-center">
+            <p style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>
+              {language === "bm" ? "Terima kasih atas pesanan anda!" : "Thank you for your message!"}
+            </p>
+          </div>
+        )}
+
+        {nextPageRoute && (
+          <div className="text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
+            <button
+              onClick={() => navigate(nextPageRoute)}
+              className="event-btn-primary"
+              style={{ ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) }}
+              onMouseEnter={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography), ...buttonColorsToHoverStyle(content.rsvpButtonColors) })}
+              onMouseLeave={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) })}
+            >
+              {customPages![0].nav_label || customPages![0].title} <span style={{ marginLeft: "0.5rem" }}>&gt;</span>
+            </button>
           </div>
         )}
       </div>
