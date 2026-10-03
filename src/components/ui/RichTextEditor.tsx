@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import { RICH_FONT_OPTIONS } from "../../lib/theme";
+import { sanitizeHtml } from "../../lib/sanitize";
 import { cn } from "../../lib/utils";
 
 interface RichTextEditorProps {
@@ -68,6 +69,41 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
       span.innerHTML = font.innerHTML;
       font.replaceWith(span);
     });
+  };
+
+  const clearFormatting = () => {
+    restoreSelection();
+    document.execCommand("removeFormat", false);
+    const selection = document.getSelection();
+    const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    if (range && ref.current) {
+      const fragment = range.extractContents();
+      fragment.querySelectorAll("span").forEach((span) => {
+        const parent = span.parentElement;
+        if (!parent) return;
+        while (span.firstChild) parent.insertBefore(span.firstChild, span);
+        span.remove();
+      });
+      fragment.querySelectorAll("font").forEach((font) => {
+        const parent = font.parentElement;
+        if (!parent) return;
+        while (font.firstChild) parent.insertBefore(font.firstChild, font);
+        font.remove();
+      });
+      range.insertNode(fragment);
+    }
+    saveSelection();
+    ref.current?.focus();
+    updateActive();
+    if (ref.current) onChange(ref.current.innerHTML);
+  };
+
+  const handlePaste = (e: ClipboardEvent) => {
+    e.preventDefault();
+    const html = e.clipboardData.getData("text/html");
+    const text = e.clipboardData.getData("text/plain");
+    const cleaned = html ? sanitizeHtml(html) : text.replace(/\n/g, "<br>");
+    document.execCommand("insertHTML", false, cleaned);
   };
 
   const exec = (cmd: string, val?: string) => {
@@ -183,7 +219,7 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
         {btn(() => exec("justifyLeft"), "L", false, "Align left")}
         {btn(() => exec("justifyCenter"), "C", false, "Align centre")}
         {btn(() => exec("justifyRight"), "R", false, "Align right")}
-        {btn(() => exec("removeFormat"), "Clear", false, "Clear formatting from selected text")}
+        {btn(clearFormatting, "Clear", false, "Clear formatting from selected text")}
       </div>
       <div
         ref={ref}
@@ -194,6 +230,7 @@ export function RichTextEditor({ value, onChange, placeholder, className, pixelF
         onMouseUp={() => { updateActive(); saveSelection(); }}
         onSelect={saveSelection}
         onKeyDown={handleKey}
+        onPaste={handlePaste}
         onBlur={handleInput}
         data-placeholder={placeholder}
         className="rich-editor min-h-[150px] p-3 text-sm text-dash-text focus:outline-none [&[data-placeholder]:empty]:before:content-[attr(data-placeholder)] [&[data-placeholder]:empty]:before:text-dash-muted/50"

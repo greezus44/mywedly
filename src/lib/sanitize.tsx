@@ -35,6 +35,23 @@ function sanitizeStyle(style: string): string {
     .join("; ");
 }
 
+const MEANINGFUL_STYLE_PROPS = new Set([
+  "color", "background-color", "font-size", "font-family", "font-weight",
+  "font-style", "text-decoration", "text-align", "line-height",
+  "letter-spacing",
+]);
+
+function hasMeaningfulStyle(el: Element): boolean {
+  const style = el.getAttribute("style");
+  if (!style) return false;
+  return style.split(";").some((decl) => {
+    const prop = decl.split(":")[0].trim().toLowerCase();
+    return MEANINGFUL_STYLE_PROPS.has(prop);
+  });
+}
+
+const UNWRAP_TAGS = new Set(["SPAN", "DIV"]);
+
 export function sanitizeHtml(html: string): string {
   if (typeof document === "undefined") return html;
   const parser = new DOMParser();
@@ -59,6 +76,13 @@ export function sanitizeHtml(html: string): string {
         }
       }
       clean(child);
+      if (UNWRAP_TAGS.has(tag) && !hasMeaningfulStyle(child) && child.attributes.length === 0) {
+        const parent = child.parentElement;
+        if (parent) {
+          while (child.firstChild) parent.insertBefore(child.firstChild, child);
+          child.remove();
+        }
+      }
     }
   };
   clean(doc.body);
