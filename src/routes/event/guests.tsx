@@ -115,18 +115,6 @@ export function GuestsPage() {
 
   const visibleGuests = guests ?? [];
 
-  const { data: editGuestOverrides } = useQuery({
-    queryKey: ["guest-invitation-overrides", editGuest?.id],
-    queryFn: async () => {
-      if (!editGuest) return { invited: {} as Record<string, boolean> };
-      const { data, error } = await supabase.from("guest_invitation_overrides").select("sub_event_id, is_invited").eq("guest_id", editGuest.id);
-      if (error) throw error;
-      const invited: Record<string, boolean> = {};
-      (data ?? []).forEach((o) => { invited[o.sub_event_id as string] = o.is_invited as boolean; });
-      return { invited };
-    },
-    enabled: !!editGuest,
-  });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => { const { error } = await supabase.from("event_guests").delete().eq("id", id); if (error) throw error; },
@@ -265,7 +253,7 @@ export function GuestsPage() {
           eventId={eventId}
           guest={editGuest}
           subEvents={subEvents ?? []}
-          existingInvitations={editGuest ? editGuestOverrides?.invited : undefined}
+          existingInvitations={editGuest ? Object.fromEntries([...(invitedEventsByGuest.get(editGuest.id) ?? [])].map((id) => [id, true])) : undefined}
           onSubmit={handleAddOrUpdate}
           onCancel={() => { setShowForm(false); setEditGuest(null); setFormError(null); }}
           submitting={submitting}

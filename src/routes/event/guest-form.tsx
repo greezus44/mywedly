@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { type EventGuest, type SubEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui";
@@ -18,7 +18,7 @@ interface GuestFormProps {
   eventId: string;
   guest?: EventGuest | null;
   subEvents?: SubEvent[];
-  /** Existing invitation overrides for this guest: sub_event_id → is_invited */
+  /** Existing invitation state for this guest: sub_event_id → is_invited */
   existingInvitations?: Record<string, boolean>;
   onSubmit: (values: GuestFormValues) => Promise<void>;
   onCancel: () => void;
@@ -28,8 +28,24 @@ interface GuestFormProps {
 export function GuestForm({ guest, subEvents, existingInvitations, onSubmit, onCancel, submitting }: GuestFormProps) {
   const [values, setValues] = useState<GuestFormValues>(() => guest ? guestToForm(guest) : { name: "", username: "", eventInvitations: {} });
   const [error, setError] = useState<string | null>(null);
+  const [usernameTouched, setUsernameTouched] = useState(!!guest);
 
   const [invitedEvents, setInvitedEvents] = useState<Record<string, boolean>>(() => existingInvitations ?? {});
+
+  // Sync invitation ticks when the existingInvitations data arrives (async)
+  useEffect(() => {
+    if (existingInvitations) setInvitedEvents(existingInvitations);
+  }, [existingInvitations]);
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const name = e.target.value;
+    setValues((p) => ({ ...p, name, username: usernameTouched ? p.username : name }));
+  };
+
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUsernameTouched(true);
+    setValues((p) => ({ ...p, username: e.target.value }));
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault(); setError(null);
@@ -39,8 +55,8 @@ export function GuestForm({ guest, subEvents, existingInvitations, onSubmit, onC
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <Input label="Guest Name" value={values.name} onChange={(e) => setValues((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. John Smith" required autoFocus />
-      <Input label="Username" value={values.username} onChange={(e) => setValues((p) => ({ ...p, username: e.target.value }))} placeholder="Auto-generated if left blank" />
+      <Input label="Guest Name" value={values.name} onChange={handleNameChange} placeholder="e.g. John Smith" required autoFocus />
+      <Input label="Username" value={values.username} onChange={handleUsernameChange} placeholder="Auto-filled with guest name" />
 
       {subEvents && subEvents.length > 0 && (
         <div className="border-t border-dash-border pt-4">
