@@ -116,7 +116,7 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
             <section key={i} className="guest-section">
               <div className="mx-auto max-w-3xl">
                 {heading.text && <h2 className="guest-title mb-4" style={heading.style}>{heading.text}</h2>}
-                {section.body && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.body) }} />}
+                {section.body && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.body, { stripTypography: true }) }} />}
               </div>
             </section>
           );

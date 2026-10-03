@@ -23,19 +23,20 @@ const ALLOWED_STYLE_PROPS = new Set([
   "letter-spacing", "margin", "padding",
 ]);
 
-function sanitizeStyle(style: string): string {
+function sanitizeStyle(style: string, stripTypography: boolean): string {
+  const typographyProps = new Set(["color", "font-size", "font-family"]);
   return style
     .split(";")
     .map((decl) => decl.trim())
     .filter((decl) => {
       if (!decl) return false;
       const prop = decl.split(":")[0].trim().toLowerCase();
-      return ALLOWED_STYLE_PROPS.has(prop);
+      return ALLOWED_STYLE_PROPS.has(prop) && !(stripTypography && typographyProps.has(prop));
     })
     .join("; ");
 }
 
-export function sanitizeHtml(html: string): string {
+export function sanitizeHtml(html: string, options?: { stripTypography?: boolean }): string {
   if (typeof document === "undefined") return html;
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
@@ -53,7 +54,7 @@ export function sanitizeHtml(html: string): string {
         if (!allowed.includes(attr.name.toLowerCase())) {
           child.removeAttribute(attr.name);
         } else if (attr.name.toLowerCase() === "style") {
-          child.setAttribute("style", sanitizeStyle(attr.value));
+          child.setAttribute("style", sanitizeStyle(attr.value, options?.stripTypography === true));
         } else if (attr.name.toLowerCase() === "href" && attr.value.toLowerCase().startsWith("javascript:")) {
           child.removeAttribute("href");
         }
