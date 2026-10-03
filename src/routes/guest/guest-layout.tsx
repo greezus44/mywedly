@@ -108,16 +108,16 @@ export default function GuestLayout() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={closeMenu} />
           <div className="absolute left-0 top-0 h-full w-full max-w-sm overflow-y-auto shadow-2xl scrollbar-thin" style={{ backgroundColor: "var(--event-bg)", borderRight: "1px solid var(--event-border)" }}>
             <div className="flex items-center justify-between p-5">
-              <h2 className="text-lg font-semibold" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{event.name || "Menu"}</h2>
+              <h2 className="text-lg font-semibold" style={{ color: "var(--event-heading)", fontFamily: "Tahoma, sans-serif", textTransform: "uppercase" }}>{event.name || "Menu"}</h2>
               <button onClick={closeMenu} aria-label="Close navigation menu" className="flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:opacity-70" style={{ color: "var(--event-text)", backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}>
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <nav className="flex flex-col gap-1 px-3 pb-8">
               {navLinks.map((link) => (
-                <NavLink key={link.to} to={link.to} onClick={closeMenu} className={({ isActive }) => `rounded-lg px-4 py-3 text-base font-medium transition-colors ${isActive ? "opacity-100" : "opacity-70 hover:opacity-100"}`} style={({ isActive }) => ({ color: isActive ? "var(--event-primary)" : "var(--event-text)", backgroundColor: isActive ? "var(--event-surface-alt)" : "transparent", fontFamily: "Tahoma, sans-serif" })}>{link.label}</NavLink>
+                <NavLink key={link.to} to={link.to} onClick={closeMenu} className={({ isActive }) => `rounded-lg px-4 py-3 text-base font-medium transition-colors ${isActive ? "opacity-100" : "opacity-70 hover:opacity-100"}`} style={({ isActive }) => ({ color: isActive ? "var(--event-primary)" : "var(--event-text)", backgroundColor: isActive ? "var(--event-surface-alt)" : "transparent", fontFamily: "Tahoma, sans-serif", textTransform: "uppercase" })}>{link.label}</NavLink>
               ))}
-              <button onClick={() => { signOut(); navigate(`/e/${slug}/signin`, { replace: true }); }} className="mt-4 rounded-lg px-4 py-3 text-left text-base font-medium opacity-70 transition-colors hover:opacity-100" style={{ color: "var(--event-text)", fontFamily: "Tahoma, sans-serif" }}>{t("Sign Out", "Log Keluar")}</button>
+              <button onClick={() => { signOut(); navigate(`/e/${slug}/signin`, { replace: true }); }} className="mt-4 rounded-lg px-4 py-3 text-left text-base font-medium opacity-70 transition-colors hover:opacity-100" style={{ color: "var(--event-text)", fontFamily: "Tahoma, sans-serif", textTransform: "uppercase" }}>{t("Sign Out", "Log Keluar")}</button>
             </nav>
           </div>
         </div>
