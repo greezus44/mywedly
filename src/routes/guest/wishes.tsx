@@ -84,7 +84,7 @@ export default function GuestWishes() {
   return (
     <div className="guest-section guest-rsvp-page">
       <div className="mx-auto max-w-2xl guest-rsvp-content">
-        <div className={cn("pt-8 sm:pt-12 text-center", (heading || subheading) && "mb-12 sm:mb-16")}>
+        <div className={cn("pt-16 sm:pt-20 text-center", (heading || subheading) && "mb-12 sm:mb-16")}>
           {heading && <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0, ...getTypographyStyle(wishesContent?.headingTypography) }}>{heading}</h1>}
           {subheading && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap" }}>{subheading}</p>}
         </div>
