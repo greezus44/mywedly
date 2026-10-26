@@ -56,7 +56,7 @@ export function EventLayout() {
   return (
     <div className="min-h-screen bg-dash-bg">
       <header className="sticky top-0 z-30 border-b border-dash-border bg-dash-surface">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6" style={{ backgroundColor: "#f8ecd5" }}>
           <div className="flex items-center gap-4">
             <Link to="/dashboard" className="text-sm font-medium text-dash-muted hover:text-dash-text">← Dashboard</Link>
             <div className="hidden h-6 w-px bg-dash-border sm:block" />
@@ -64,11 +64,11 @@ export function EventLayout() {
           </div>
           <div className="flex items-center gap-2">
             {event.is_published && <a href={`${window.location.origin}/e/${event.slug}`} target="_blank" rel="noopener noreferrer" className="text-sm text-dash-primary hover:underline">View Live →</a>}
-            <Button size="sm" onClick={() => setShowPublish(true)} disabled={publishMutation.isPending}>{publishMutation.isPending ? "Publishing..." : "Publish"}</Button>
+            <Button size="sm" onClick={() => setShowPublish(true)} disabled={publishMutation.isPending} style={{ backgroundColor: "#d2ae4b" }}>{publishMutation.isPending ? "Publishing..." : "Publish"}</Button>
           </div>
         </div>
-        <nav className="mx-auto hidden max-w-7xl items-center gap-1 px-4 pb-2 sm:flex sm:px-6 overflow-x-auto scrollbar-thin">
-          {navTabs.map((tab) => <NavLink key={tab.to} to={tab.to} end={tab.to === ""} className={({ isActive }) => `whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${isActive ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"}`}>{tab.label}</NavLink>)}
+        <nav className="mx-auto hidden max-w-7xl items-center gap-1 px-4 pb-2 sm:flex sm:px-6 overflow-x-auto scrollbar-thin" style={{ backgroundColor: "#f8ecd5" }}>
+          {navTabs.map((tab) => <NavLink key={tab.to} to={tab.to} end={tab.to === ""} className={({ isActive }) => `whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${isActive ? "bg-dash-primary/10" : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"}`} style={({ isActive }) => isActive ? { color: "#030712" } : undefined}>{tab.label}</NavLink>)}
         </nav>
       </header>
       <div className="sm:hidden">
