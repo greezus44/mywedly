@@ -44,6 +44,12 @@ interface PageConfig {
   plusOneYesLabelBm?: string;
   plusOneNoLabel?: string;
   plusOneNoLabelBm?: string;
+  nameWeight?: number;
+  attendingWeight?: number;
+  decliningWeight?: number;
+  submitWeight?: number;
+  plusOneYesWeight?: number;
+  plusOneNoWeight?: number;
 }
 
 const BLACK_TEXT = "#1a1a1a";
@@ -290,6 +296,12 @@ export default function GuestJoin() {
   const scheduleHeadingText = language === "bm"
     ? (pageConfig.scheduleHeadingBm?.trim() || "Aturcara")
     : (pageConfig.scheduleHeading?.trim() || "Program");
+  const nameWeight = pageConfig.nameWeight ?? 600;
+  const attendingWeight = pageConfig.attendingWeight ?? 600;
+  const decliningWeight = pageConfig.decliningWeight ?? 600;
+  const submitWeight = pageConfig.submitWeight ?? 600;
+  const plusOneYesWeight = pageConfig.plusOneYesWeight ?? 600;
+  const plusOneNoWeight = pageConfig.plusOneNoWeight ?? 600;
 
   const renderDateColumn = (date: string | null | undefined) => {
     const parts = getDateParts(date);
@@ -360,7 +372,7 @@ export default function GuestJoin() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-center text-sm font-semibold" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{nameLabel}</label>
+              <label className="mb-1.5 block text-center text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", fontWeight: nameWeight }}>{nameLabel}</label>
               <input
                 type="text"
                 value={name}
@@ -373,7 +385,7 @@ export default function GuestJoin() {
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                style={{ textAlign: "center", fontFamily: "var(--event-font-heading)", fontWeight: 600 }}
+                style={{ textAlign: "center", fontFamily: "var(--event-font-heading)", fontWeight: nameWeight }}
               />
             </div>
 
@@ -387,7 +399,7 @@ export default function GuestJoin() {
                   onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "attending" ? 1 : 0.6, ...attendingBtnStyle(status === "attending"), ...attendingBtnHover(status === "attending") })}
                   onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "attending" ? 1 : 0.6, ...attendingBtnStyle(status === "attending") })}
                 >
-                  <span style={{ fontWeight: 600 }}>{attendingLabel}</span>
+                  <span style={{ fontWeight: attendingWeight }}>{attendingLabel}</span>
                 </button>
                 <button
                   type="button"
@@ -397,7 +409,7 @@ export default function GuestJoin() {
                   onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "declined" ? 1 : 0.6, ...declinedBtnStyle(status === "declined"), ...declinedBtnHover(status === "declined") })}
                   onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "declined" ? 1 : 0.6, ...declinedBtnStyle(status === "declined") })}
                 >
-                  <span style={{ fontWeight: 600 }}>{decliningLabel}</span>
+                  <span style={{ fontWeight: decliningWeight }}>{decliningLabel}</span>
                 </button>
               </div>
             </div>
@@ -414,7 +426,7 @@ export default function GuestJoin() {
                     onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...plusOneYesBtnStyle(bringingPlusOne === "yes"), ...plusOneYesBtnHover(bringingPlusOne === "yes") })}
                     onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...plusOneYesBtnStyle(bringingPlusOne === "yes") })}
                   >
-                    {language === "bm" ? (pageConfig.plusOneYesLabelBm?.trim() || "Ya") : (pageConfig.plusOneYesLabel?.trim() || "Yes")}
+                    <span style={{ fontWeight: plusOneYesWeight }}>{language === "bm" ? (pageConfig.plusOneYesLabelBm?.trim() || "Ya") : (pageConfig.plusOneYesLabel?.trim() || "Yes")}</span>
                   </button>
                   <button
                     type="button"
@@ -424,7 +436,7 @@ export default function GuestJoin() {
                     onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...plusOneNoBtnStyle(bringingPlusOne === "no"), ...plusOneNoBtnHover(bringingPlusOne === "no") })}
                     onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...plusOneNoBtnStyle(bringingPlusOne === "no") })}
                   >
-                    {language === "bm" ? (pageConfig.plusOneNoLabelBm?.trim() || "Tidak") : (pageConfig.plusOneNoLabel?.trim() || "No")}
+                    <span style={{ fontWeight: plusOneNoWeight }}>{language === "bm" ? (pageConfig.plusOneNoLabelBm?.trim() || "Tidak") : (pageConfig.plusOneNoLabel?.trim() || "No")}</span>
                   </button>
                 </div>
               </div>
@@ -433,7 +445,7 @@ export default function GuestJoin() {
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
             <div className="text-center pt-2">
               <button type="submit" disabled={submitting || !status || !name.trim() || (status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne)} className="event-btn-primary" style={{ opacity: submitting || !status || !name.trim() || (status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne) ? 0.6 : 1, ...btnStyle }} onMouseEnter={(e) => { if (!submitting && status && name.trim() && !(status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne)) Object.assign(e.currentTarget.style, btnHoverStyle); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, btnStyle)}>
-                <span style={{ fontWeight: 600 }}>{submitting ? (language === "bm" ? "Menghantar..." : "Submitting...") : submitLabel}</span>
+                <span style={{ fontWeight: submitWeight }}>{submitting ? (language === "bm" ? "Menghantar..." : "Submitting...") : submitLabel}</span>
               </button>
             </div>
           </form>

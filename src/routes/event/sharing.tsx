@@ -43,6 +43,12 @@ interface PageConfig {
   plusOneYesLabelBm?: string;
   plusOneNoLabel?: string;
   plusOneNoLabelBm?: string;
+  nameWeight?: number;
+  attendingWeight?: number;
+  decliningWeight?: number;
+  submitWeight?: number;
+  plusOneYesWeight?: number;
+  plusOneNoWeight?: number;
 }
 
 const DEFAULT_PAGE_CONFIG: PageConfig = {
@@ -362,6 +368,7 @@ export function SharingPage() {
             <LabeledInput label="English" value={editConfig.nameLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, nameLabel: v }))} />
             <LabeledInput label="Bahasa Melayu" value={editConfig.nameLabelBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, nameLabelBm: v }))} />
           </div>
+          <WeightSelect label="Name weight (label & input)" value={editConfig.nameWeight} onChange={(v) => setEditConfig((p) => ({ ...p, nameWeight: v }))} />
           <SectionLabel>Name placeholder</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
             <LabeledInput label="English" value={editConfig.namePlaceholder ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, namePlaceholder: v }))} />
@@ -372,10 +379,12 @@ export function SharingPage() {
             <div className="space-y-2">
               <LabeledInput label="Attending (EN)" value={editConfig.attendingLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, attendingLabel: v }))} />
               <LabeledInput label="Attending (BM)" value={editConfig.attendingLabelBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, attendingLabelBm: v }))} />
+              <WeightSelect label="Attending weight" value={editConfig.attendingWeight} onChange={(v) => setEditConfig((p) => ({ ...p, attendingWeight: v }))} />
             </div>
             <div className="space-y-2">
               <LabeledInput label="Declined (EN)" value={editConfig.decliningLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, decliningLabel: v }))} />
               <LabeledInput label="Declined (BM)" value={editConfig.decliningLabelBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, decliningLabelBm: v }))} />
+              <WeightSelect label="Declined weight" value={editConfig.decliningWeight} onChange={(v) => setEditConfig((p) => ({ ...p, decliningWeight: v }))} />
             </div>
           </div>
           <SectionLabel>Submit button label</SectionLabel>
@@ -383,6 +392,7 @@ export function SharingPage() {
             <LabeledInput label="English" value={editConfig.submitLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, submitLabel: v }))} />
             <LabeledInput label="Bahasa Melayu" value={editConfig.submitLabelBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, submitLabelBm: v }))} />
           </div>
+          <WeightSelect label="Submit weight" value={editConfig.submitWeight} onChange={(v) => setEditConfig((p) => ({ ...p, submitWeight: v }))} />
           <SectionLabel>Schedule / programme heading</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
             <LabeledInput label="English" value={editConfig.scheduleHeading ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, scheduleHeading: v }))} />
@@ -408,10 +418,12 @@ export function SharingPage() {
             <div className="space-y-2">
               <LabeledInput label="Yes (EN)" value={editConfig.plusOneYesLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneYesLabel: v }))} />
               <LabeledInput label="Yes (BM)" value={editConfig.plusOneYesLabelBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneYesLabelBm: v }))} />
+              <WeightSelect label="+1 Yes weight" value={editConfig.plusOneYesWeight} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneYesWeight: v }))} />
             </div>
             <div className="space-y-2">
               <LabeledInput label="No (EN)" value={editConfig.plusOneNoLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneNoLabel: v }))} />
               <LabeledInput label="No (BM)" value={editConfig.plusOneNoLabelBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneNoLabelBm: v }))} />
+              <WeightSelect label="+1 No weight" value={editConfig.plusOneNoWeight} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneNoWeight: v }))} />
             </div>
           </div>
           <SectionLabel>Selected button colours</SectionLabel>
@@ -457,6 +469,28 @@ function LabeledInput({ label, value, onChange }: { label: string; value: string
     <div>
       <label className="mb-1 block text-xs font-medium text-dash-muted">{label}</label>
       <Input value={value} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+const WEIGHT_OPTIONS = [
+  { value: 400, label: "Normal" },
+  { value: 500, label: "Medium" },
+  { value: 600, label: "Semibold" },
+  { value: 700, label: "Bold" },
+];
+
+function WeightSelect({ label, value, onChange }: { label: string; value: number | undefined; onChange: (v: number) => void }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-dash-muted">{label}</label>
+      <select
+        value={value ?? 600}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full rounded-lg border border-dash-border bg-dash-bg px-2 py-1.5 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+      >
+        {WEIGHT_OPTIONS.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}
+      </select>
     </div>
   );
 }
