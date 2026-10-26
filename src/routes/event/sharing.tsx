@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type SharingEvent, type SubEvent, type OpenRsvpLink, type Json } from "../../lib/supabase";
-import { Button, Input, Toggle, Modal, LoadingSpinner, Badge, ColorInput } from "../../components/ui";
+import { Button, Input, Toggle, Modal, LoadingSpinner, Badge } from "../../components/ui";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { generateQrDataUrl, downloadQrCode, downloadQrSvg } from "../../lib/qr";
 import { useEffect } from "react";
@@ -33,6 +33,10 @@ interface PageConfig {
   attendingColor?: string;
   declinedColor?: string;
   buttonColors?: ButtonColors;
+  attendingColors?: ButtonColors;
+  declinedColors?: ButtonColors;
+  plusOneYesColors?: ButtonColors;
+  plusOneNoColors?: ButtonColors;
 }
 
 const DEFAULT_PAGE_CONFIG: PageConfig = {
@@ -303,16 +307,10 @@ export function SharingPage() {
             </div>
           </div>
           <SectionLabel>Selected button colours</SectionLabel>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-dash-muted">Attending colour</label>
-              <ColorInput value={editConfig.attendingColor ?? "#16a34a"} onChange={(v) => setEditConfig((p) => ({ ...p, attendingColor: v }))} />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-dash-muted">Declined colour</label>
-              <ColorInput value={editConfig.declinedColor ?? "#dc2626"} onChange={(v) => setEditConfig((p) => ({ ...p, declinedColor: v }))} />
-            </div>
-          </div>
+          <ButtonColourEditor label="Attending (selected)" value={editConfig.attendingColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, attendingColors: v }))} />
+          <ButtonColourEditor label="Declined (selected)" value={editConfig.declinedColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, declinedColors: v }))} />
+          <ButtonColourEditor label="+1 Yes (selected)" value={editConfig.plusOneYesColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneYesColors: v }))} />
+          <ButtonColourEditor label="+1 No (selected)" value={editConfig.plusOneNoColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneNoColors: v }))} />
           <ButtonColourEditor label="Base Button Colours (unselected)" value={editConfig.buttonColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, buttonColors: v }))} />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setEditingLink(null)}>Cancel</Button>

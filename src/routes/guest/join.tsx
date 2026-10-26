@@ -34,6 +34,10 @@ interface PageConfig {
   attendingColor?: string;
   declinedColor?: string;
   buttonColors?: ButtonColors;
+  attendingColors?: ButtonColors;
+  declinedColors?: ButtonColors;
+  plusOneYesColors?: ButtonColors;
+  plusOneNoColors?: ButtonColors;
 }
 
 const BLACK_TEXT = "#1a1a1a";
@@ -145,8 +149,14 @@ export default function GuestJoin() {
   const pageButtonColors = pageConfig.buttonColors;
   const attendingColor = pageConfig.attendingColor || "#16a34a";
   const declinedColor = pageConfig.declinedColor || "#dc2626";
-  const attendingSelectedColors: ButtonColors = { bgColor: attendingColor, textColor: "#ffffff", borderColor: attendingColor, hoverBgColor: attendingColor, hoverTextColor: "#ffffff", hoverBorderColor: attendingColor };
-  const declinedSelectedColors: ButtonColors = { bgColor: declinedColor, textColor: "#ffffff", borderColor: declinedColor, hoverBgColor: declinedColor, hoverTextColor: "#ffffff", hoverBorderColor: declinedColor };
+  const attendingSelectedColors: ButtonColors = { bgColor: attendingColor, textColor: BLACK_TEXT, borderColor: attendingColor, hoverBgColor: attendingColor, hoverTextColor: BLACK_TEXT, hoverBorderColor: attendingColor };
+  const declinedSelectedColors: ButtonColors = { bgColor: declinedColor, textColor: BLACK_TEXT, borderColor: declinedColor, hoverBgColor: declinedColor, hoverTextColor: BLACK_TEXT, hoverBorderColor: declinedColor };
+  const plusOneYesSelectedColors: ButtonColors = pageConfig.plusOneYesColors
+    ? { textColor: BLACK_TEXT, ...pageConfig.plusOneYesColors }
+    : { bgColor: attendingColor, textColor: BLACK_TEXT, borderColor: attendingColor, hoverBgColor: attendingColor, hoverTextColor: BLACK_TEXT, hoverBorderColor: attendingColor };
+  const plusOneNoSelectedColors: ButtonColors = pageConfig.plusOneNoColors
+    ? { textColor: BLACK_TEXT, ...pageConfig.plusOneNoColors }
+    : { bgColor: declinedColor, textColor: BLACK_TEXT, borderColor: declinedColor, hoverBgColor: declinedColor, hoverTextColor: BLACK_TEXT, hoverBorderColor: declinedColor };
   const baseButtonColors = pageButtonColors ?? loginConfig.buttonColors;
   const btnStyle = buttonColorsToStyle(baseButtonColors);
   const btnHoverStyle = buttonColorsToHoverStyle(baseButtonColors);
@@ -162,6 +172,10 @@ export default function GuestJoin() {
   const declinedBtnStyle = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToStyle(declinedSelectedColors) : unselectedBtnStyle();
   const attendingBtnHover = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToHoverStyle(attendingSelectedColors) : btnHoverStyle;
   const declinedBtnHover = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToHoverStyle(declinedSelectedColors) : btnHoverStyle;
+  const plusOneYesBtnStyle = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToStyle(plusOneYesSelectedColors) : unselectedBtnStyle();
+  const plusOneNoBtnStyle = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToStyle(plusOneNoSelectedColors) : unselectedBtnStyle();
+  const plusOneYesBtnHover = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToHoverStyle(plusOneYesSelectedColors) : btnHoverStyle;
+  const plusOneNoBtnHover = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToHoverStyle(plusOneNoSelectedColors) : btnHoverStyle;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -310,9 +324,9 @@ export default function GuestJoin() {
               {renderDateColumn(dateStr)}
               <div className="flex-1 min-w-0">
                 {subEventName && <h2 className="text-lg sm:text-2xl font-bold mb-1 break-words" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>{subEventName}</h2>}
-                {timeStr && <p className="text-xs sm:text-sm mb-1" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", whiteSpace: "nowrap" }}>{formatTime12(timeStr)}</p>}
-                {subEvent.venue && <p className="text-xs sm:text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{subEvent.venue}</p>}
-                {subEvent.address && <p className="text-xs sm:text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{subEvent.address}</p>}
+                {timeStr && <p className="text-xs sm:text-sm mb-1" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)", whiteSpace: "nowrap" }}>{formatTime12(timeStr)}</p>}
+                {subEvent.venue && <p className="text-xs sm:text-sm" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)" }}>{subEvent.venue}</p>}
+                {subEvent.address && <p className="text-xs sm:text-sm" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)" }}>{subEvent.address}</p>}
                 {renderSchedule()}
               </div>
             </div>
@@ -368,9 +382,9 @@ export default function GuestJoin() {
                     type="button"
                     onClick={() => setBringingPlusOne("yes")}
                     className="event-btn-primary rsvp-toggle-btn"
-                    style={{ flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...attendingBtnStyle(bringingPlusOne === "yes") }}
-                    onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...attendingBtnStyle(bringingPlusOne === "yes"), ...attendingBtnHover(bringingPlusOne === "yes") })}
-                    onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...attendingBtnStyle(bringingPlusOne === "yes") })}
+                    style={{ flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...plusOneYesBtnStyle(bringingPlusOne === "yes") }}
+                    onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...plusOneYesBtnStyle(bringingPlusOne === "yes"), ...plusOneYesBtnHover(bringingPlusOne === "yes") })}
+                    onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...plusOneYesBtnStyle(bringingPlusOne === "yes") })}
                   >
                     {language === "bm" ? "Ya" : "Yes"}
                   </button>
@@ -378,9 +392,9 @@ export default function GuestJoin() {
                     type="button"
                     onClick={() => setBringingPlusOne("no")}
                     className="event-btn-secondary rsvp-toggle-btn"
-                    style={{ flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...declinedBtnStyle(bringingPlusOne === "no") }}
-                    onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...declinedBtnStyle(bringingPlusOne === "no"), ...declinedBtnHover(bringingPlusOne === "no") })}
-                    onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...declinedBtnStyle(bringingPlusOne === "no") })}
+                    style={{ flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...plusOneNoBtnStyle(bringingPlusOne === "no") }}
+                    onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...plusOneNoBtnStyle(bringingPlusOne === "no"), ...plusOneNoBtnHover(bringingPlusOne === "no") })}
+                    onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...plusOneNoBtnStyle(bringingPlusOne === "no") })}
                   >
                     {language === "bm" ? "Tidak" : "No"}
                   </button>
