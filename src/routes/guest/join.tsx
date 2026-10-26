@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type EventGuest, type Json } from "../../lib/supabase";
+import { supabase, type EventGuest, type EventSchedule, type Json } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { useSignInGuest } from "../../lib/guest-auth";
 import { LanguageToggle } from "../../components/site/LanguageToggle";
 import { useLanguage } from "../../lib/language";
-import { setCurrentLanguage } from "../../lib/translations";
+import { setCurrentLanguage, getCurrentLanguage } from "../../lib/translations";
 import { formatDateLong, formatTime12 } from "../../lib/utils";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 
@@ -16,8 +16,6 @@ interface PageConfig {
   nameLabel?: string;
   attendingLabel?: string;
   decliningLabel?: string;
-  plusOneLabel?: string;
-  plusOnePlaceholder?: string;
   submitLabel?: string;
   thankYouAttending?: string;
   thankYouDeclined?: string;
@@ -59,6 +57,33 @@ interface LookupResult {
 
 type Step = "form" | "done";
 
+function getDateParts(dateStr: string | null | undefined): { weekday: string; day: string; month: string; year: string } | null {
+  if (!dateStr) return null;
+  const date = new Date(dateStr + (dateStr.length === 10 ? "T00:00:00" : ""));
+  if (isNaN(date.getTime())) return null;
+  const bm = getCurrentLanguage() === "bm";
+  const bmMonths = ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"];
+  const bmWeekdays = ["Ahad", "Isnin", "Selasa", "Rabu", "Khamis", "Jumaat", "Sabtu"];
+  return {
+    weekday: bm ? bmWeekdays[date.getDay()] : date.toLocaleDateString("en-US", { weekday: "long" }),
+    day: date.toLocaleDateString("en-US", { day: "numeric" }),
+    month: bm ? bmMonths[date.getMonth()] : date.toLocaleDateString("en-US", { month: "long" }),
+    year: date.toLocaleDateString("en-US", { year: "numeric" }),
+  };
+}
+
+function formatScheduleTimeRange(startTime: string | null | undefined, endTime: string | null | undefined): string {
+  const start = formatTime12(startTime);
+  const end = formatTime12(endTime);
+  if (!start || !end) return start || end;
+  const startPeriod = start.match(/\s(AM|PM|pagi|ptg|malam|tengah hari)$/)?.[1];
+  const endPeriod = end.match(/\s(AM|PM|pagi|ptg|malam|tengah hari)$/)?.[1];
+  if (startPeriod && startPeriod === endPeriod) {
+    return `${start.slice(0, -startPeriod.length).trim()} \u2013 ${end}`;
+  }
+  return `${start} \u2013 ${end}`;
+}
+
 export default function GuestJoin() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
@@ -68,7 +93,6 @@ export default function GuestJoin() {
 
   const [name, setName] = useState("");
   const [status, setStatus] = useState<"attending" | "declined" | "">("");
-  const [plusOneName, setPlusOneName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState<Step>("form");
@@ -83,10 +107,23 @@ export default function GuestJoin() {
     enabled: !!token,
   });
 
+  const { data: schedule } = useQuery({
+    queryKey: ["open-rsvp-schedule", lookup?.event?.id, lookup?.sub_event?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("event_schedule")
+        .select("*")
+        .eq("event_id", lookup!.event.id)
+        .order("order_index", { ascending: true });
+      if (error) throw error;
+      return data as EventSchedule[];
+    },
+    enabled: !!lookup?.event?.id,
+  });
+
   const pageConfig = (lookup?.link?.page_config ?? {}) as PageConfig;
   const subEvent = lookup?.sub_event;
   const event = lookup?.event;
-  const allowPlusOne = lookup?.link?.allow_plus_one ?? false;
   const loginConfig = (event?.login_config ?? {}) as { buttonColors?: ButtonColors };
   const buttonColors = loginConfig.buttonColors;
   const btnStyle = buttonColorsToStyle(buttonColors);
@@ -104,7 +141,7 @@ export default function GuestJoin() {
         p_token: token,
         p_name: name.trim(),
         p_status: status,
-        p_plus_one_name: status === "attending" && allowPlusOne ? plusOneName.trim() : "",
+        p_plus_one_name: "",
       });
       if (rpcError) throw rpcError;
       const result = (data ?? {}) as { error?: string; guest?: EventGuest; event_slug?: string };
@@ -113,7 +150,6 @@ export default function GuestJoin() {
           link_not_found: "This link is no longer available.",
           invalid_name: "Please enter a valid name.",
           invalid_status: "Please choose Attending or Declined.",
-          invalid_plus_one_name: "Please enter a valid +1 name.",
         };
         setError(messages[result.error] ?? "Something went wrong. Please try again.");
         setSubmitting(false);
@@ -138,8 +174,6 @@ export default function GuestJoin() {
   const namePlaceholder = pageConfig.namePlaceholder || "Enter your full name";
   const attendingLabel = pageConfig.attendingLabel || "Attending";
   const decliningLabel = pageConfig.decliningLabel || "Declined";
-  const plusOneLabel = pageConfig.plusOneLabel || "Bringing a +1? Enter their name";
-  const plusOnePlaceholder = pageConfig.plusOnePlaceholder || "+1 full name";
   const submitLabel = pageConfig.submitLabel || "Submit RSVP";
   const thankYou = status === "attending"
     ? (pageConfig.thankYouAttending || "Thank you! We look forward to seeing you.")
@@ -165,30 +199,69 @@ export default function GuestJoin() {
     );
   }
 
-  const dateStr = subEvent.date ? formatDateLong(subEvent.date) : null;
+  const dateStr = subEvent.date;
   const timeStr = subEvent.time || subEvent.start_time || null;
+  const subEventName = language === "bm" ? (subEvent.name_bm?.trim() || subEvent.name) : subEvent.name;
+  const scheduleHeadingText = language === "bm" ? "Program" : "Program";
+
+  const renderDateColumn = (date: string | null | undefined) => {
+    const parts = getDateParts(date);
+    if (!parts) return null;
+    return (
+      <div className="flex flex-col items-center text-center flex-shrink-0" style={{ minWidth: "64px", textTransform: "uppercase" }}>
+        <span className="text-[0.6875rem] sm:text-xs uppercase tracking-wide" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.weekday.toLocaleUpperCase()}</span>
+        <span className="text-3xl sm:text-3xl font-bold leading-tight" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{parts.day}</span>
+        <span className="text-sm sm:text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{parts.month.toLocaleUpperCase()}</span>
+        <span className="text-sm sm:text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.year}</span>
+      </div>
+    );
+  };
+
+  const renderSchedule = () => {
+    const items = (schedule ?? []).filter((s) => s.sub_event_id === subEvent.id);
+    if (items.length === 0) return null;
+    return (
+      <div className="mt-4 sm:mt-6">
+        <h3 className="mb-3 sm:mb-4" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>{scheduleHeadingText}</h3>
+        <div className="space-y-3 sm:space-y-4">
+          {items.map((item) => (
+            <div key={item.id} className="guest-rsvp-schedule-row grid items-start">
+              <div className="guest-rsvp-schedule-time text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)" }}>
+                {formatScheduleTimeRange(item.start_time, item.end_time)}
+              </div>
+              <div className="guest-rsvp-schedule-title min-w-0">
+                <p className="font-medium text-sm sm:text-base leading-snug" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", overflowWrap: "break-word" }}>{language === "bm" ? (item.title_bm?.trim() || item.title) : item.title}</p>
+                {(language === "bm" ? (item.description_bm?.trim() || item.description) : item.description) && <p className="text-xs sm:text-sm mt-0.5 leading-snug" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>{language === "bm" ? (item.description_bm?.trim() || item.description) : item.description}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <EventThemeProvider theme={event.theme}>
       <LanguageToggle />
-      <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
-        <div className="w-full max-w-md">
-          <div className="mb-8 text-center">
-            <h1 className="guest-title mb-2">{heading}</h1>
-            {intro && <p className="guest-subtitle" style={{ whiteSpace: "pre-wrap" }}>{intro}</p>}
+      <div className="guest-section guest-rsvp-page">
+        <div className="mx-auto max-w-2xl guest-rsvp-content">
+          <div className="text-center pt-8 sm:pt-12 mb-12 sm:mb-16">
+            <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>{heading}</h1>
+            {intro && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap" }}>{intro}</p>}
           </div>
 
-          <div className="mb-8 rounded-lg p-4 text-center" style={{ backgroundColor: "var(--event-surface)", border: "1px solid var(--event-border)" }}>
-            <h2 className="text-lg font-bold mb-1" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>
-              {language === "bm" ? (subEvent.name_bm?.trim() || subEvent.name) : subEvent.name}
-            </h2>
-            {dateStr && <p className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", textTransform: "uppercase" }}>{dateStr}</p>}
-            {timeStr && <p className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{formatTime12(timeStr)}</p>}
-            {subEvent.venue && <p className="text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{subEvent.venue}</p>}
-            {subEvent.address && <p className="text-xs" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{subEvent.address}</p>}
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="guest-rsvp-event flex flex-row items-start gap-1 sm:gap-1.5">
+              {renderDateColumn(dateStr)}
+              <div className="flex-1 min-w-0">
+                {subEventName && <h2 className="text-lg sm:text-2xl font-bold mb-1 break-words" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>{subEventName}</h2>}
+                {timeStr && <p className="text-xs sm:text-sm mb-1" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", whiteSpace: "nowrap" }}>{formatTime12(timeStr)}</p>}
+                {subEvent.venue && <p className="text-xs sm:text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{subEvent.venue}</p>}
+                {subEvent.address && <p className="text-xs sm:text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{subEvent.address}</p>}
+                {renderSchedule()}
+              </div>
+            </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-center text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{nameLabel}</label>
               <input
@@ -221,7 +294,7 @@ export default function GuestJoin() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setStatus("declined"); setPlusOneName(""); }}
+                  onClick={() => setStatus("declined")}
                   className="event-btn-secondary rsvp-toggle-btn"
                   style={{ flex: 1, opacity: status === "declined" ? 1 : 0.6 }}
                 >
@@ -230,27 +303,8 @@ export default function GuestJoin() {
               </div>
             </div>
 
-            {allowPlusOne && status === "attending" && (
-              <div className="animate-fadeIn">
-                <label className="mb-1.5 block text-center text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{plusOneLabel}</label>
-                <input
-                  type="text"
-                  value={plusOneName}
-                  onChange={(e) => setPlusOneName(e.target.value)}
-                  className="event-input"
-                  placeholder={plusOnePlaceholder}
-                  autoComplete="off"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  style={{ textAlign: "center", fontFamily: "var(--event-font-heading)" }}
-                />
-              </div>
-            )}
-
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
-            <div className="h-4" />
-            <div className="text-center">
+            <div className="text-center pt-2">
               <button type="submit" disabled={submitting || !status || !name.trim()} className="event-btn-primary" style={{ opacity: submitting || !status || !name.trim() ? 0.6 : 1, ...btnStyle }} onMouseEnter={(e) => { if (!submitting && status && name.trim()) Object.assign(e.currentTarget.style, btnHoverStyle); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, btnStyle)}>
                 {submitting ? (language === "bm" ? "Menghantar..." : "Submitting...") : submitLabel}
               </button>

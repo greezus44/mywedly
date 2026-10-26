@@ -14,12 +14,10 @@ interface PageConfig {
   nameLabel?: string;
   attendingLabel?: string;
   decliningLabel?: string;
-  plusOneLabel?: string;
   submitLabel?: string;
   thankYouAttending?: string;
   thankYouDeclined?: string;
   namePlaceholder?: string;
-  plusOnePlaceholder?: string;
 }
 
 const DEFAULT_PAGE_CONFIG: PageConfig = {
@@ -28,7 +26,6 @@ const DEFAULT_PAGE_CONFIG: PageConfig = {
   nameLabel: "Your Name",
   attendingLabel: "Attending",
   decliningLabel: "Declined",
-  plusOneLabel: "Bringing a +1? Enter their name",
   submitLabel: "Submit RSVP",
   thankYouAttending: "Thank you! We look forward to seeing you.",
   thankYouDeclined: "Thank you for letting us know.",
@@ -41,7 +38,6 @@ export function SharingPage() {
   const [copied, setCopied] = useState(false);
   const [editingLink, setEditingLink] = useState<OpenRsvpLink | null>(null);
   const [editConfig, setEditConfig] = useState<PageConfig>(DEFAULT_PAGE_CONFIG);
-  const [editAllowPlusOne, setEditAllowPlusOne] = useState(false);
   const [editEnabled, setEditEnabled] = useState(true);
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -119,7 +115,6 @@ export function SharingPage() {
   const openEditor = (link: OpenRsvpLink) => {
     setEditingLink(link);
     setEditConfig({ ...DEFAULT_PAGE_CONFIG, ...((link.page_config ?? {}) as PageConfig) });
-    setEditAllowPlusOne(link.allow_plus_one);
     setEditEnabled(link.is_enabled);
   };
 
@@ -128,7 +123,7 @@ export function SharingPage() {
     setSavingEdit(true);
     const { error } = await supabase
       .from("open_rsvp_links")
-      .update({ page_config: editConfig as unknown as Json, allow_plus_one: editAllowPlusOne, is_enabled: editEnabled })
+      .update({ page_config: editConfig as unknown as Json, is_enabled: editEnabled })
       .eq("id", editingLink.id);
     setSavingEdit(false);
     if (!error) {
@@ -165,7 +160,7 @@ export function SharingPage() {
 
       <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
         <h3 className="mb-1 text-sm font-semibold text-dash-text">Open RSVP Links</h3>
-        <p className="mb-4 text-sm text-dash-muted">Create a unique link for each event. Guests fill in their name, RSVP, and optionally bring a +1 — they're added to your guest list under an "Open Link RSVP" group, invited only to that one event.</p>
+        <p className="mb-4 text-sm text-dash-muted">Create a unique link for each event. Guests fill in their name and RSVP yes or no — they're added to your guest list under an "Open Link RSVP" group, invited only to that one event.</p>
         {createLink.isPending && <div className="mb-3"><LoadingSpinner className="h-6 w-6" /></div>}
         {(!subEvents || subEvents.length === 0) ? (
           <p className="text-sm text-dash-muted">No events found. Create events first in the Events tab.</p>
@@ -180,7 +175,6 @@ export function SharingPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-dash-text">{se.name}</span>
                       {link && <Badge variant={link.is_enabled ? "success" : "default"}>{link.is_enabled ? "Enabled" : "Disabled"}</Badge>}
-                      {link?.allow_plus_one && <Badge variant="default">+1 allowed</Badge>}
                     </div>
                     <div className="flex gap-2">
                       {!link ? (
@@ -227,10 +221,6 @@ export function SharingPage() {
             <span className="text-sm font-medium text-dash-text">Link enabled</span>
             <Toggle checked={editEnabled} onChange={setEditEnabled} />
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-dash-text">Allow +1</span>
-            <Toggle checked={editAllowPlusOne} onChange={setEditAllowPlusOne} />
-          </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-dash-text">Heading</label>
             <Input value={editConfig.heading ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, heading: e.target.value }))} />
@@ -257,18 +247,6 @@ export function SharingPage() {
               <Input value={editConfig.decliningLabel ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, decliningLabel: e.target.value }))} />
             </div>
           </div>
-          {editAllowPlusOne && (
-            <>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-dash-text">+1 prompt label</label>
-                <Input value={editConfig.plusOneLabel ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, plusOneLabel: e.target.value }))} />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-dash-text">+1 placeholder</label>
-                <Input value={editConfig.plusOnePlaceholder ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, plusOnePlaceholder: e.target.value }))} />
-              </div>
-            </>
-          )}
           <div>
             <label className="mb-1 block text-sm font-medium text-dash-text">Submit button label</label>
             <Input value={editConfig.submitLabel ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, submitLabel: e.target.value }))} />
