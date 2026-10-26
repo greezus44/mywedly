@@ -406,13 +406,13 @@ export default function GuestJoin() {
   return (
     <EventThemeProvider theme={event.theme}>
       <LanguageToggle />
-      {pageConfig.logoUrl && (
-        <div className="flex justify-center mb-6 sm:mb-8">
-          <img src={pageConfig.logoUrl} alt="" className="max-h-32 sm:max-h-40 w-auto object-contain" />
-        </div>
-      )}
       <div className="guest-section guest-rsvp-page">
         <div className="mx-auto max-w-2xl guest-rsvp-content">
+          {pageConfig.logoUrl && (
+            <div className="flex justify-center pt-8 sm:pt-12 mb-6 sm:mb-8">
+              <img src={pageConfig.logoUrl} alt="" className="max-h-32 sm:max-h-40 w-auto object-contain" />
+            </div>
+          )}
           <div className="text-center pt-8 sm:pt-12 mb-12 sm:mb-16">
             <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0, ...headingStyle }}>{heading}</h1>
             {subEvent.rsvp_deadline && (
