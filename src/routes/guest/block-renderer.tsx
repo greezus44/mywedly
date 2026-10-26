@@ -24,13 +24,20 @@ export function BlockRenderer({ block, eventId }: BlockRendererProps) {
   const { language } = useLanguage();
   setCurrentLanguage(language);
   const c = block.content;
+  const isBm = language === "bm";
+  const text = isBm && c.textBm ? c.textBm : c.text;
+  const label = isBm && c.labelBm ? c.labelBm : c.label;
+  const items = isBm && c.itemsBm ? c.itemsBm : c.items;
+  const colText = (col: { text?: string; textBm?: string }) => isBm && col.textBm ? col.textBm : col.text;
+  const venueTitle = isBm && c.titleBm ? c.titleBm : c.title;
+  const venueAddress = isBm && c.addressBm ? c.addressBm : c.address;
   switch (block.type) {
     case "heading": {
       const Tag = (`h${c.level ?? 2}`) as "h1" | "h2" | "h3";
-      return <Tag className="guest-title" style={{ fontSize: c.level === 1 ? "clamp(1.75rem,5vw,2.5rem)" : c.level === 2 ? "clamp(1.5rem,4vw,2rem)" : "clamp(1.25rem,3vw,1.5rem)", ...blockTypoStyle(c) }}>{c.text ?? ""}</Tag>;
+      return <Tag className="guest-title" style={{ fontSize: c.level === 1 ? "clamp(1.75rem,5vw,2.5rem)" : c.level === 2 ? "clamp(1.5rem,4vw,2rem)" : "clamp(1.25rem,3vw,1.5rem)", ...blockTypoStyle(c) }}>{text ?? ""}</Tag>;
     }
     case "paragraph":
-      return <p className="rich-content" style={{ whiteSpace: "pre-wrap", ...blockTypoStyle(c) }}>{c.text ?? ""}</p>;
+      return <p className="rich-content" style={{ whiteSpace: "pre-wrap", ...blockTypoStyle(c) }}>{text ?? ""}</p>;
     case "image":
       return c.url ? <img src={c.url} alt={c.alt ?? ""} className="mx-auto max-w-full rounded-lg" /> : null;
     case "spacer":
@@ -46,13 +53,13 @@ export function BlockRenderer({ block, eventId }: BlockRendererProps) {
       return <div className="aspect-video w-full overflow-hidden rounded-lg"><iframe src={embed} className="h-full w-full" allowFullScreen title="Video" /></div>;
     }
     case "button":
-      return <div className="text-center"><a href={c.href ?? "#"} className="event-btn-primary inline-block" style={buttonColorsToStyle(c.buttonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(c.buttonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(c.buttonColors))}>{c.label ?? "Button"}</a></div>;
+      return <div className="text-center"><a href={c.href ?? "#"} className="event-btn-primary inline-block" style={buttonColorsToStyle(c.buttonColors)} onMouseEnter={(e) => Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(c.buttonColors))} onMouseLeave={(e) => Object.assign(e.currentTarget.style, buttonColorsToStyle(c.buttonColors))}>{label ?? "Button"}</a></div>;
     case "columns":
-      return <div className="grid gap-4 sm:grid-cols-2">{(c.columns ?? []).map((col, i) => <div key={i} className="rich-content" style={{ whiteSpace: "pre-wrap" }}>{col.text ?? ""}</div>)}</div>;
+      return <div className="grid gap-4 sm:grid-cols-2">{(c.columns ?? []).map((col, i) => <div key={i} className="rich-content" style={{ whiteSpace: "pre-wrap" }}>{colText(col) ?? ""}</div>)}</div>;
     case "list":
-      return <ul className="rich-content list-disc pl-6" style={{ whiteSpace: "pre-wrap", ...blockTypoStyle(c) }}>{(c.items ?? []).map((item, i) => <li key={i}>{item}</li>)}</ul>;
+      return <ul className="rich-content list-disc pl-6" style={{ whiteSpace: "pre-wrap", ...blockTypoStyle(c) }}>{(items ?? []).map((item, i) => <li key={i}>{item}</li>)}</ul>;
     case "quote":
-      return <blockquote className="rich-content border-l-4 pl-4 italic" style={{ borderColor: "var(--event-border)", whiteSpace: "pre-wrap", ...blockTypoStyle(c) }}>{c.text ?? ""}</blockquote>;
+      return <blockquote className="rich-content border-l-4 pl-4 italic" style={{ borderColor: "var(--event-border)", whiteSpace: "pre-wrap", ...blockTypoStyle(c) }}>{text ?? ""}</blockquote>;
     case "countdown":
       return <CountdownBlock targetDate={c.targetDate ?? ""} />;
     case "map":
@@ -64,9 +71,9 @@ export function BlockRenderer({ block, eventId }: BlockRendererProps) {
     case "schedule":
       return eventId ? <ScheduleBlock eventId={eventId} /> : null;
     case "venue":
-      return <div className="event-card text-center"><h3 className="guest-title mb-2">{c.title ?? "Venue"}</h3><p className="text-dash-muted" style={{ whiteSpace: "pre-wrap" }}>{c.address ?? ""}</p></div>;
+      return <div className="event-card text-center"><h3 className="guest-title mb-2">{venueTitle ?? "Venue"}</h3><p className="text-dash-muted" style={{ whiteSpace: "pre-wrap" }}>{venueAddress ?? ""}</p></div>;
     case "faq":
-      return <div className="space-y-3">{(c.questions ?? []).map((q, i) => <div key={i} className="event-card"><h4 className="font-semibold" style={{ color: "var(--event-heading)", whiteSpace: "pre-wrap" }}>{q.question}</h4><p className="mt-1 text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{q.answer}</p></div>)}</div>;
+      return <div className="space-y-3">{(c.questions ?? []).map((q, i) => <div key={i} className="event-card"><h4 className="font-semibold" style={{ color: "var(--event-heading)", whiteSpace: "pre-wrap" }}>{isBm && q.questionBm ? q.questionBm : q.question}</h4><p className="mt-1 text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{isBm && q.answerBm ? q.answerBm : q.answer}</p></div>)}</div>;
     default:
       return null;
   }

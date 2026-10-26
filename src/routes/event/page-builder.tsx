@@ -18,8 +18,10 @@ export function PageBuilder() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
+  const [titleBm, setTitleBm] = useState("");
   const [slug, setSlug] = useState("");
   const [navLabel, setNavLabel] = useState("");
+  const [navLabelBm, setNavLabelBm] = useState("");
   const [headingTypography, setHeadingTypography] = useState<TypographyStyle>({});
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
@@ -37,8 +39,10 @@ export function PageBuilder() {
   useEffect(() => {
     if (page) {
       setTitle(page.title);
+      setTitleBm(page.title_bm ?? "");
       setSlug(page.slug);
       setNavLabel(page.nav_label ?? "");
+      setNavLabelBm(page.nav_label_bm ?? "");
       setHeadingTypography((page.heading_typography as TypographyStyle | null) ?? {});
       setBlocks(jsonToBlocks(page.blocks));
     }
@@ -64,7 +68,7 @@ export function PageBuilder() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("custom_pages").update({
-        title, slug, nav_label: navLabel || null, heading_typography: Object.keys(headingTypography).length > 0 ? headingTypography : null, blocks: blocksToJson(blocks),
+        title, title_bm: titleBm.trim() || null, slug, nav_label: navLabel || null, nav_label_bm: navLabelBm.trim() || null, heading_typography: Object.keys(headingTypography).length > 0 ? headingTypography : null, blocks: blocksToJson(blocks),
       }).eq("id", pageId!);
       if (error) throw error;
     },
@@ -92,8 +96,10 @@ export function PageBuilder() {
 
       <div className="grid gap-4 rounded-lg border border-dash-border bg-dash-surface p-4 sm:grid-cols-2">
         <Input label="Page Title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <Input label="Page Title (Bahasa Melayu)" value={titleBm} onChange={(e) => setTitleBm(e.target.value)} placeholder="Auto-translate if empty" />
         <Input label="Slug" value={slug} onChange={(e) => setSlug(e.target.value)} />
         <Input label="Nav Label (menu text)" value={navLabel} onChange={(e) => setNavLabel(e.target.value)} placeholder="Defaults to Page Title if empty" />
+        <Input label="Nav Label (Bahasa Melayu)" value={navLabelBm} onChange={(e) => setNavLabelBm(e.target.value)} placeholder="Auto-translate if empty" />
       </div>
 
       <TypographyControls label="Heading Typography" value={headingTypography} onChange={setHeadingTypography} />
@@ -138,9 +144,9 @@ function BlockEditor({ block, onChange }: { block: Block; onChange: (c: Partial<
   const onTypo = (v: TypographyStyle) => onChange({ fontFamily: v.fontFamily, fontSize: v.fontSize, fontWeight: v.fontWeight, color: v.color, align: v.align, italic: v.italic, underline: v.underline, lineHeight: v.lineHeight, letterSpacing: v.letterSpacing });
   switch (block.type) {
     case "heading":
-      return <div className="space-y-2"><Input label="Text" value={c.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} /><div><label className="mb-1 block text-xs text-dash-muted">Level</label><select value={c.level ?? 2} onChange={(e) => onChange({ level: Number(e.target.value) })} className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm"><option value={1}>H1</option><option value={2}>H2</option><option value={3}>H3</option></select></div><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
+      return <div className="space-y-2"><Input label="Text" value={c.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} /><Input label="Text (Bahasa Melayu)" value={c.textBm ?? ""} onChange={(e) => onChange({ textBm: e.target.value })} placeholder="Auto-translate if empty" /><div><label className="mb-1 block text-xs text-dash-muted">Level</label><select value={c.level ?? 2} onChange={(e) => onChange({ level: Number(e.target.value) })} className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm"><option value={1}>H1</option><option value={2}>H2</option><option value={3}>H3</option></select></div><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
     case "paragraph":
-      return <div className="space-y-2"><Textarea label="Text" value={c.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} rows={4} /><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
+      return <div className="space-y-2"><Textarea label="Text" value={c.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} rows={4} /><Textarea label="Text (Bahasa Melayu)" value={c.textBm ?? ""} onChange={(e) => onChange({ textBm: e.target.value })} rows={4} placeholder="Auto-translate if empty" /><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
     case "image":
       return <div className="space-y-2"><Input label="Image URL" value={c.url ?? ""} onChange={(e) => onChange({ url: e.target.value })} /><Input label="Alt Text" value={c.alt ?? ""} onChange={(e) => onChange({ alt: e.target.value })} /></div>;
     case "spacer":
@@ -152,28 +158,30 @@ function BlockEditor({ block, onChange }: { block: Block; onChange: (c: Partial<
     case "video":
       return <Input label="Video URL (YouTube/Vimeo)" value={c.url ?? ""} onChange={(e) => onChange({ url: e.target.value })} />;
     case "button":
-      return <div className="space-y-2"><Input label="Label" value={c.label ?? ""} onChange={(e) => onChange({ label: e.target.value })} /><Input label="Link URL" value={c.href ?? ""} onChange={(e) => onChange({ href: e.target.value })} /><ButtonColourEditor label="Button Colours" value={c.buttonColors ?? {}} onChange={(v) => onChange({ buttonColors: v })} /></div>;
+      return <div className="space-y-2"><Input label="Label" value={c.label ?? ""} onChange={(e) => onChange({ label: e.target.value })} /><Input label="Label (Bahasa Melayu)" value={c.labelBm ?? ""} onChange={(e) => onChange({ labelBm: e.target.value })} placeholder="Auto-translate if empty" /><Input label="Link URL" value={c.href ?? ""} onChange={(e) => onChange({ href: e.target.value })} /><ButtonColourEditor label="Button Colours" value={c.buttonColors ?? {}} onChange={(v) => onChange({ buttonColors: v })} /></div>;
     case "list":
-      return <div className="space-y-2"><Textarea label="Items (one per line)" value={(c.items ?? []).join("\n")} onChange={(e) => onChange({ items: e.target.value.split("\n").filter(Boolean) })} rows={4} /><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
+      return <div className="space-y-2"><Textarea label="Items (one per line)" value={(c.items ?? []).join("\n")} onChange={(e) => onChange({ items: e.target.value.split("\n").filter(Boolean) })} rows={4} /><Textarea label="Items (Bahasa Melayu, one per line)" value={(c.itemsBm ?? []).join("\n")} onChange={(e) => onChange({ itemsBm: e.target.value.split("\n").filter(Boolean) })} rows={4} placeholder="Auto-translate if empty" /><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
     case "quote":
-      return <div className="space-y-2"><Textarea label="Quote Text" value={c.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} rows={3} /><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
+      return <div className="space-y-2"><Textarea label="Quote Text" value={c.text ?? ""} onChange={(e) => onChange({ text: e.target.value })} rows={3} /><Textarea label="Quote Text (Bahasa Melayu)" value={c.textBm ?? ""} onChange={(e) => onChange({ textBm: e.target.value })} rows={3} placeholder="Auto-translate if empty" /><TypographyControls label="Typography" value={typo} onChange={onTypo} /></div>;
     case "countdown":
       return <Input label="Target Date & Time" type="datetime-local" value={(c.targetDate ?? "").slice(0, 16)} onChange={(e) => onChange({ targetDate: new Date(e.target.value).toISOString() })} />;
     case "map":
       return <div className="space-y-2"><Input label="Address" value={c.address ?? ""} onChange={(e) => onChange({ address: e.target.value })} /><div><label className="mb-1 block text-xs text-dash-muted">Zoom: {c.zoom ?? 14}</label><input type="range" value={c.zoom ?? 14} onChange={(e) => onChange({ zoom: Number(e.target.value) })} min={1} max={20} className="w-full accent-dash-primary" /></div></div>;
     case "venue":
-      return <div className="space-y-2"><Input label="Venue Name" value={c.title ?? ""} onChange={(e) => onChange({ title: e.target.value })} /><Input label="Address" value={c.address ?? ""} onChange={(e) => onChange({ address: e.target.value })} /></div>;
+      return <div className="space-y-2"><Input label="Venue Name" value={c.title ?? ""} onChange={(e) => onChange({ title: e.target.value })} /><Input label="Venue Name (Bahasa Melayu)" value={c.titleBm ?? ""} onChange={(e) => onChange({ titleBm: e.target.value })} placeholder="Auto-translate if empty" /><Input label="Address" value={c.address ?? ""} onChange={(e) => onChange({ address: e.target.value })} /><Input label="Address (Bahasa Melayu)" value={c.addressBm ?? ""} onChange={(e) => onChange({ addressBm: e.target.value })} placeholder="Auto-translate if empty" /></div>;
     case "faq":
       return <div className="space-y-2">{(c.questions ?? []).map((q, i) => (
         <div key={i} className="space-y-1 rounded border border-dash-border p-2">
           <Input label={`Question ${i + 1}`} value={q.question} onChange={(e) => onChange({ questions: (c.questions ?? []).map((x, j) => j === i ? { ...x, question: e.target.value } : x) })} />
+          <Input label="Question (Bahasa Melayu)" value={q.questionBm ?? ""} onChange={(e) => onChange({ questions: (c.questions ?? []).map((x, j) => j === i ? { ...x, questionBm: e.target.value } : x) })} placeholder="Auto-translate if empty" />
           <Input label="Answer" value={q.answer} onChange={(e) => onChange({ questions: (c.questions ?? []).map((x, j) => j === i ? { ...x, answer: e.target.value } : x) })} />
+          <Input label="Answer (Bahasa Melayu)" value={q.answerBm ?? ""} onChange={(e) => onChange({ questions: (c.questions ?? []).map((x, j) => j === i ? { ...x, answerBm: e.target.value } : x) })} placeholder="Auto-translate if empty" />
           <button onClick={() => onChange({ questions: (c.questions ?? []).filter((_, j) => j !== i) })} className="text-xs text-dash-danger hover:underline">Remove</button>
         </div>
       ))}<Button size="sm" variant="secondary" onClick={() => onChange({ questions: [...(c.questions ?? []), { question: "", answer: "" }] })}>+ Add Q&A</Button></div>;
     case "columns":
       return <div className="space-y-2">{(c.columns ?? []).map((col, i) => (
-        <div key={i} className="flex gap-2"><Input label={`Column ${i + 1}`} value={col.text ?? ""} onChange={(e) => onChange({ columns: (c.columns ?? []).map((x, j) => j === i ? { ...x, text: e.target.value } : x) })} /><button onClick={() => onChange({ columns: (c.columns ?? []).filter((_, j) => j !== i) })} className="mt-6 text-xs text-dash-danger">✕</button></div>
+        <div key={i} className="space-y-1"><div className="flex gap-2"><Input label={`Column ${i + 1}`} value={col.text ?? ""} onChange={(e) => onChange({ columns: (c.columns ?? []).map((x, j) => j === i ? { ...x, text: e.target.value } : x) })} /><button onClick={() => onChange({ columns: (c.columns ?? []).filter((_, j) => j !== i) })} className="mt-6 text-xs text-dash-danger">✕</button></div><Input label={`Column ${i + 1} (Bahasa Melayu)`} value={col.textBm ?? ""} onChange={(e) => onChange({ columns: (c.columns ?? []).map((x, j) => j === i ? { ...x, textBm: e.target.value } : x) })} placeholder="Auto-translate if empty" /></div>
       ))}<Button size="sm" variant="secondary" onClick={() => onChange({ columns: [...(c.columns ?? []), { text: "" }] })}>+ Add Column</Button></div>;
     default:
       return <p className="text-sm text-dash-muted">No editor available for this block type.</p>;

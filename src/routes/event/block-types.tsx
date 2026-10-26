@@ -8,6 +8,7 @@ export type BlockType =
 
 export interface BlockContent {
   text?: string;
+  textBm?: string;
   html?: string;
   level?: number;
   url?: string;
@@ -15,14 +16,18 @@ export interface BlockContent {
   images?: string[];
   height?: number;
   label?: string;
+  labelBm?: string;
   href?: string;
   columns?: BlockContent[];
   items?: string[];
+  itemsBm?: string[];
   targetDate?: string;
   address?: string;
+  addressBm?: string;
   zoom?: number;
-  questions?: { question: string; answer: string }[];
+  questions?: { question: string; answer: string; questionBm?: string; answerBm?: string }[];
   title?: string;
+  titleBm?: string;
   description?: string;
   fontFamily?: string;
   fontSize?: number;

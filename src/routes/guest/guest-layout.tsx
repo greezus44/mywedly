@@ -38,7 +38,7 @@ export default function GuestLayout() {
     queryKey: ["custom-pages-nav", event?.id],
     queryFn: async () => {
       if (!event) return [];
-      const { data, error } = await supabase.from("custom_pages").select("id, title, slug, show_in_nav, is_published, nav_label").eq("event_id", event.id).eq("is_published", true).eq("show_in_nav", true).order("title", { ascending: true });
+      const { data, error } = await supabase.from("custom_pages").select("id, title, title_bm, slug, show_in_nav, is_published, nav_label, nav_label_bm").eq("event_id", event.id).eq("is_published", true).eq("show_in_nav", true).order("title", { ascending: true });
       if (error) throw error;
       return (data ?? []) as CustomPage[];
     },
@@ -93,7 +93,7 @@ export default function GuestLayout() {
     { label: t("Home", "Laman Utama"), to: `/e/${slug}/home` },
     ...(hasRsvpAccess(invitations ?? { invitations: [], hasMainEventAccess: false, error: null }) ? [{ label: "RSVP", to: `/e/${slug}/rsvp` }] : []),
     ...(wishesConfig?.enabled !== false ? [{ label: messagesNavLabel, to: `/e/${slug}/wishes` }] : []),
-    ...(customPages ?? []).map((p) => ({ label: p.nav_label || p.title, to: `/e/${slug}/p/${p.slug}` })),
+    ...(customPages ?? []).map((p) => ({ label: language === "bm" ? (p.nav_label_bm || p.nav_label || p.title) : (p.nav_label || p.title), to: `/e/${slug}/p/${p.slug}` })),
   ];
 
   return (

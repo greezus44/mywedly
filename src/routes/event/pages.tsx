@@ -14,6 +14,7 @@ export function PagesPage() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
+  const [titleBm, setTitleBm] = useState("");
   const [slug, setSlug] = useState("");
   const [showInNav, setShowInNav] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -33,7 +34,7 @@ export function PagesPage() {
       if (!title.trim()) throw new Error("Title is required");
       const finalSlug = slug || slugify(title);
       const { error } = await supabase.from("custom_pages").insert({
-        event_id: eventId, title: title.trim(), slug: finalSlug,
+        event_id: eventId, title: title.trim(), title_bm: titleBm.trim() || null, slug: finalSlug,
         body: "", blocks: [], is_published: false,
         show_in_nav: showInNav, sort_order: (pages?.length ?? 0),
       });
@@ -41,7 +42,7 @@ export function PagesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom-pages", eventId] });
-      setShowForm(false); setTitle(""); setSlug(""); setShowInNav(true); setFormError(null);
+      setShowForm(false); setTitle(""); setTitleBm(""); setSlug(""); setShowInNav(true); setFormError(null);
     },
     onError: (e) => setFormError(e instanceof Error ? e.message : "Failed to create page"),
   });
@@ -93,6 +94,7 @@ export function PagesPage() {
       <Modal open={showForm} onClose={() => setShowForm(false)} title="Add Page">
         <div className="space-y-4">
           <Input label="Page Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Travel & Accommodation" autoFocus />
+          <Input label="Page Title (Bahasa Melayu)" value={titleBm} onChange={(e) => setTitleBm(e.target.value)} placeholder="Auto-translate if empty" />
           <Input label="Slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="auto-generated from title" />
           <Toggle checked={showInNav} onChange={setShowInNav} label="Show in navigation" />
           {formError && <p className="text-sm text-dash-danger">{formError}</p>}
