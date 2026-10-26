@@ -397,7 +397,7 @@ export default function GuestJoin() {
             <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0, ...headingStyle }}>{heading}</h1>
             {subEvent.rsvp_deadline && (
               <p className="text-center" style={{ whiteSpace: "pre-wrap", marginTop: "4px", marginBottom: 0, ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)", textTransform: "uppercase" }}>
-                {(language === "bm" ? "RSVP sebelum" : "RSVP by").toLocaleUpperCase()} {formatDateLong(subEvent.rsvp_deadline).toLocaleUpperCase()}
+                {(language === "bm" ? "Sebelum" : "Before").toLocaleUpperCase()} {formatDateLong(subEvent.rsvp_deadline).toLocaleUpperCase()}
               </p>
             )}
             {intro && !rsvpDeadlinePassed && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...introStyle }}>{intro}</p>}
