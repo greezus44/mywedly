@@ -93,6 +93,7 @@ export default function GuestJoin() {
 
   const [name, setName] = useState("");
   const [status, setStatus] = useState<"attending" | "declined" | "">("");
+  const [bringingPlusOne, setBringingPlusOne] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState<Step>("form");
@@ -141,7 +142,7 @@ export default function GuestJoin() {
         p_token: token,
         p_name: name.trim(),
         p_status: status,
-        p_plus_one_name: "",
+        p_plus_ones: status === "attending" && bringingPlusOne ? 1 : 0,
       });
       if (rpcError) throw rpcError;
       const result = (data ?? {}) as { error?: string; guest?: EventGuest; event_slug?: string };
@@ -294,7 +295,7 @@ export default function GuestJoin() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStatus("declined")}
+                  onClick={() => { setStatus("declined"); setBringingPlusOne(false); }}
                   className="event-btn-secondary rsvp-toggle-btn"
                   style={{ flex: 1, opacity: status === "declined" ? 1 : 0.6 }}
                 >
@@ -302,6 +303,21 @@ export default function GuestJoin() {
                 </button>
               </div>
             </div>
+
+            {status === "attending" && lookup?.link?.allow_plus_one && (
+              <div className="flex justify-center pt-1">
+                <label className="flex items-center gap-2 text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>
+                  <input
+                    type="checkbox"
+                    checked={bringingPlusOne}
+                    onChange={(e) => setBringingPlusOne(e.target.checked)}
+                    className="accent-dash-primary"
+                    style={{ accentColor: "var(--event-primary)" }}
+                  />
+                  {language === "bm" ? "Saya membawa tetamu +1" : "I'm bringing a +1"}
+                </label>
+              </div>
+            )}
 
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
             <div className="text-center pt-2">

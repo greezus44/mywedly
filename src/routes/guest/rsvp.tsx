@@ -223,6 +223,16 @@ export default function GuestRsvp() {
     rsvpMutation.mutate({ subEventId, status, plus_ones: updated.plus_ones, message: updated.message });
   };
 
+  const handlePlusOneToggle = (subEventId: string | null, value: boolean) => {
+    const key = subEventId || "main";
+    const current = responses[key] ?? { status: "pending", plus_ones: 0, message: "" };
+    const updated = { ...current, plus_ones: value ? 1 : 0 };
+    setResponses((p) => ({ ...p, [key]: updated }));
+    if (current.status === "attending") {
+      rsvpMutation.mutate({ subEventId, status: current.status, plus_ones: updated.plus_ones, message: updated.message });
+    }
+  };
+
   const guestNameText = guest?.name ? getTypographyText(rsvpContent.guestNameTypography, guest.name) : "";
   const guestNameStyle = getTypographyStyle(rsvpContent.guestNameTypography);
   const additionalInfoHeadingText = getTypographyText(rsvpContent.additionalInfoHeading, "");
@@ -346,6 +356,19 @@ export default function GuestRsvp() {
         </div>
         {isAttending && rsvpContent.attendingMessage && (
           <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{tr(rsvpContent.attendingMessage, "attendingMessage")}</p>
+        )}
+        {isAttending && guest?.allow_plus_one && (
+          <div className="mt-3 flex justify-center">
+            <label className="flex items-center gap-2 text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>
+              <input
+                type="checkbox"
+                checked={current.plus_ones > 0}
+                onChange={(e) => handlePlusOneToggle(subEventId, e.target.checked)}
+                style={{ accentColor: "var(--event-primary)" }}
+              />
+              {tr("I'm bringing a +1")}
+            </label>
+          </div>
         )}
         {isDeclined && rsvpContent.declinedMessage && (
           <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{tr(rsvpContent.declinedMessage, "declinedMessage")}</p>
