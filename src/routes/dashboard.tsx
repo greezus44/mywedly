@@ -94,12 +94,12 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-dash-bg">
+    <div className="min-h-screen bg-dash-bg" style={{ backgroundColor: "#f8ecd5" }}>
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-dash-text">Your Events</h1>
-          <Button onClick={() => setShowCreate(true)}>Create Event</Button>
+          <Button onClick={() => setShowCreate(true)} style={{ backgroundColor: "#d2ae4b" }}>Create Event</Button>
         </div>
         {isLoading ? <div className="flex justify-center py-12"><LoadingSpinner /></div>
         : isError ? <ErrorState title="Failed to load events" message={error instanceof Error ? error.message : "Unknown error"} />
@@ -108,7 +108,7 @@ export function DashboardPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {events.map((ev) => (
-              <Link key={ev.id} to={`/event/${ev.id}`} className="rounded-lg border border-dash-border bg-dash-surface p-4 transition-shadow hover:shadow-md">
+              <Link key={ev.id} to={`/event/${ev.id}`} className="rounded-lg border border-dash-border bg-dash-surface p-4 transition-shadow hover:shadow-md" style={{ backgroundColor: "#f8ecd5" }}>
                 <h3 className="mb-1 font-semibold text-dash-text">{ev.draft_name || ev.name || "Untitled Event"}</h3>
                 <p className="text-sm text-dash-muted">{ev.draft_event_date || ev.event_date || "No date set"}</p>
                 <p className="mt-2 text-xs text-dash-muted">{ev.is_published ? "Published" : "Draft"}</p>
