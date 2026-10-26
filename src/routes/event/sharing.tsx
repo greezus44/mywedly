@@ -73,6 +73,9 @@ export function SharingPage() {
   const [editConfig, setEditConfig] = useState<PageConfig>(DEFAULT_PAGE_CONFIG);
   const [editEnabled, setEditEnabled] = useState(true);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [editToken, setEditToken] = useState("");
+  const [tokenError, setTokenError] = useState<string | null>(null);
+  const [tokenChecking, setTokenChecking] = useState(false);
 
   const publicUrl = event.slug ? `${window.location.origin}/e/${event.slug}` : "";
 
@@ -149,20 +152,61 @@ export function SharingPage() {
     setEditingLink(link);
     setEditConfig({ ...DEFAULT_PAGE_CONFIG, ...((link.page_config ?? {}) as PageConfig) });
     setEditEnabled(link.is_enabled);
+    setEditToken(link.token);
+    setTokenError(null);
+  };
+
+  const joinPrefix = `${window.location.origin}/join/`;
+
+  const validateToken = async (token: string): Promise<string | null> => {
+    const trimmed = token.trim();
+    if (trimmed.length < 3) return "Link ending must be at least 3 characters.";
+    if (trimmed.length > 60) return "Link ending must be 60 characters or fewer.";
+    if (!/^[a-zA-Z0-9-]+$/.test(trimmed)) return "Use only letters, numbers, and hyphens.";
+    if (trimmed === editingLink?.token) return null;
+    setTokenChecking(true);
+    try {
+      const { data, error } = await supabase.from("open_rsvp_links").select("id").eq("token", trimmed).maybeSingle();
+      if (error) return "Could not verify the link ending. Please try again.";
+      if (data) return "This link ending is already in use. Please choose another.";
+      return null;
+    } finally {
+      setTokenChecking(false);
+    }
   };
 
   const saveEdit = async () => {
     if (!editingLink) return;
+    const trimmedToken = editToken.trim();
+    let tokenToSave: string | null = null;
+    if (trimmedToken !== editingLink.token) {
+      const tokenErr = await validateToken(trimmedToken);
+      if (tokenErr) {
+        setTokenError(tokenErr);
+        return;
+      }
+      tokenToSave = trimmedToken;
+    } else {
+      setTokenError(null);
+    }
     setSavingEdit(true);
+    const updates: Record<string, unknown> = { page_config: editConfig as unknown as Json, is_enabled: editEnabled };
+    if (tokenToSave) updates.token = tokenToSave;
     const { error } = await supabase
       .from("open_rsvp_links")
-      .update({ page_config: editConfig as unknown as Json, is_enabled: editEnabled })
+      .update(updates)
       .eq("id", editingLink.id);
     setSavingEdit(false);
-    if (!error) {
-      queryClient.invalidateQueries({ queryKey: ["open-rsvp-links", eventId] });
-      setEditingLink(null);
+    if (error) {
+      if (error.code === "23505") {
+        setTokenError("This link ending is already in use. Please choose another.");
+      } else {
+        setTokenError("Could not save the link ending. Please try again.");
+      }
+      return;
     }
+    queryClient.invalidateQueries({ queryKey: ["open-rsvp-links", eventId] });
+    setEditingLink(null);
   };
 
   return (
@@ -254,6 +298,26 @@ export function SharingPage() {
             <span className="text-sm font-medium text-dash-text">Link enabled</span>
             <Toggle checked={editEnabled} onChange={setEditEnabled} />
           </div>
+          <SectionLabel>Link ending</SectionLabel>
+          <div>
+            <div className="flex items-center gap-1 rounded-md border border-dash-border bg-dash-bg px-2 py-1.5">
+              <span className="select-none text-sm text-dash-muted">{joinPrefix}</span>
+              <input
+                type="text"
+                value={editToken}
+                onChange={(e) => { setEditToken(e.target.value); setTokenError(null); }}
+                placeholder="your-rsvp"
+                className="flex-1 bg-transparent text-sm text-dash-text outline-none"
+              />
+            </div>
+            {tokenError ? (
+              <p className="mt-1.5 text-xs text-red-600">{tokenError}</p>
+            ) : (
+              <p className="mt-1.5 text-xs text-dash-muted">
+                Letters, numbers, and hyphens only. Changing this breaks any previously printed or shared QR codes for this link.
+              </p>
+            )}
+          </div>
           <SectionLabel>Heading</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
             <LabeledInput label="English" value={editConfig.heading ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, heading: v }))} />
@@ -314,7 +378,7 @@ export function SharingPage() {
           <ButtonColourEditor label="Base Button Colours (unselected)" value={editConfig.buttonColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, buttonColors: v }))} />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setEditingLink(null)}>Cancel</Button>
-            <Button onClick={saveEdit} disabled={savingEdit}>{savingEdit ? "Saving..." : "Save"}</Button>
+            <Button onClick={saveEdit} disabled={savingEdit || tokenChecking}>{savingEdit ? "Saving..." : "Save"}</Button>
           </div>
         </div>
       </Modal>
