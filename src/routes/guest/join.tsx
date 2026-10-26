@@ -149,14 +149,23 @@ export default function GuestJoin() {
   const pageButtonColors = pageConfig.buttonColors;
   const attendingColor = pageConfig.attendingColor || "#16a34a";
   const declinedColor = pageConfig.declinedColor || "#dc2626";
-  const attendingSelectedColors: ButtonColors = { bgColor: attendingColor, textColor: BLACK_TEXT, borderColor: attendingColor, hoverBgColor: attendingColor, hoverTextColor: BLACK_TEXT, hoverBorderColor: attendingColor };
-  const declinedSelectedColors: ButtonColors = { bgColor: declinedColor, textColor: BLACK_TEXT, borderColor: declinedColor, hoverBgColor: declinedColor, hoverTextColor: BLACK_TEXT, hoverBorderColor: declinedColor };
+  const singleToFull = (color: string): ButtonColors => ({ bgColor: color, textColor: BLACK_TEXT, borderColor: color, hoverBgColor: color, hoverTextColor: BLACK_TEXT, hoverBorderColor: color });
+  const attendingSelectedColors: ButtonColors = pageConfig.attendingColors
+    ? { textColor: BLACK_TEXT, ...pageConfig.attendingColors }
+    : singleToFull(attendingColor);
+  const declinedSelectedColors: ButtonColors = pageConfig.declinedColors
+    ? { textColor: BLACK_TEXT, ...pageConfig.declinedColors }
+    : singleToFull(declinedColor);
   const plusOneYesSelectedColors: ButtonColors = pageConfig.plusOneYesColors
     ? { textColor: BLACK_TEXT, ...pageConfig.plusOneYesColors }
-    : { bgColor: attendingColor, textColor: BLACK_TEXT, borderColor: attendingColor, hoverBgColor: attendingColor, hoverTextColor: BLACK_TEXT, hoverBorderColor: attendingColor };
+    : pageConfig.attendingColors
+      ? { textColor: BLACK_TEXT, ...pageConfig.attendingColors }
+      : singleToFull(attendingColor);
   const plusOneNoSelectedColors: ButtonColors = pageConfig.plusOneNoColors
     ? { textColor: BLACK_TEXT, ...pageConfig.plusOneNoColors }
-    : { bgColor: declinedColor, textColor: BLACK_TEXT, borderColor: declinedColor, hoverBgColor: declinedColor, hoverTextColor: BLACK_TEXT, hoverBorderColor: declinedColor };
+    : pageConfig.declinedColors
+      ? { textColor: BLACK_TEXT, ...pageConfig.declinedColors }
+      : singleToFull(declinedColor);
   const baseButtonColors = pageButtonColors ?? loginConfig.buttonColors;
   const btnStyle = buttonColorsToStyle(baseButtonColors);
   const btnHoverStyle = buttonColorsToHoverStyle(baseButtonColors);
