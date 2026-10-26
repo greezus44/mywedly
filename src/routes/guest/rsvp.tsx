@@ -56,9 +56,18 @@ const DEFAULT_RSVP_CONTENT: RsvpContent = {
   declinedColor: "#dc2626",
 };
 
+function toDateForDisplay(d: string): Date {
+  if (d.length === 10) return new Date(d + "T00:00:00");
+  if (/T\d{2}:\d{2}([:.]\d{2})?Z?$/.test(d)) {
+    const date = new Date(d);
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(), date.getUTCMilliseconds()));
+  }
+  return new Date(d);
+}
+
 function getDateParts(dateStr: string | null | undefined): { weekday: string; day: string; month: string; year: string } | null {
   if (!dateStr) return null;
-  const date = new Date(dateStr + (dateStr.length === 10 ? "T00:00:00" : ""));
+  const date = toDateForDisplay(dateStr);
   if (isNaN(date.getTime())) return null;
   const bm = getCurrentLanguage() === "bm";
   const bmMonths = ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos", "September", "Oktober", "November", "Disember"];

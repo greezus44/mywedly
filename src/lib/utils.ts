@@ -10,9 +10,21 @@ const BM_MONTHS = ["Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai",
 const BM_WEEKDAYS = ["Ahad", "Isnin", "Selasa", "Rabu", "Khamis", "Jumaat", "Sabtu"];
 
 
+function toDateForDisplay(d: string | Date): Date {
+  if (typeof d === "string") {
+    if (d.length === 10) return new Date(d + "T00:00:00");
+    if (/T\d{2}:\d{2}([:.]\d{2})?Z?$/.test(d)) {
+      const date = new Date(d);
+      return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(), date.getUTCMilliseconds()));
+    }
+    return new Date(d);
+  }
+  return d;
+}
+
 export function formatDate(d: string | Date | null | undefined): string {
   if (!d) return "";
-  const date = typeof d === "string" ? new Date(d + (d.length === 10 ? "T00:00:00" : "")) : d;
+  const date = toDateForDisplay(d);
   if (isNaN(date.getTime())) return "";
   if (getCurrentLanguage() === "bm") return `${BM_WEEKDAYS[date.getDay()]}, ${date.getDate()} ${BM_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
   return date.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
@@ -20,7 +32,7 @@ export function formatDate(d: string | Date | null | undefined): string {
 
 export function formatDateShort(d: string | Date | null | undefined): string {
   if (!d) return "";
-  const date = typeof d === "string" ? new Date(d + (d.length === 10 ? "T00:00:00" : "")) : d;
+  const date = toDateForDisplay(d);
   if (isNaN(date.getTime())) return "";
   if (getCurrentLanguage() === "bm") return `${date.getDate()} ${BM_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -28,7 +40,7 @@ export function formatDateShort(d: string | Date | null | undefined): string {
 
 export function formatDateLong(d: string | Date | null | undefined): string {
   if (!d) return "";
-  const date = typeof d === "string" ? new Date(d + (d.length === 10 ? "T00:00:00" : "")) : d;
+  const date = toDateForDisplay(d);
   if (isNaN(date.getTime())) return "";
   if (getCurrentLanguage() === "bm") return `${date.getDate()} ${BM_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
   const EN_MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
