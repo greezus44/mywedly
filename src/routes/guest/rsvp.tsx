@@ -303,7 +303,7 @@ export default function GuestRsvp() {
         <div className="space-y-3 sm:space-y-4">
           {items.map((item) => (
             <div key={item.id} className="guest-rsvp-schedule-row grid items-start">
-              <div className="guest-rsvp-schedule-time text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)", ...programmeItemStyle }}>
+              <div className="guest-rsvp-schedule-time text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-body)", ...programmeItemStyle }}>
                 {formatScheduleTimeRange(item.start_time, item.end_time)}
               </div>
               <div className="guest-rsvp-schedule-title min-w-0">
@@ -358,16 +358,30 @@ export default function GuestRsvp() {
           <p className="mt-2 text-center text-sm" style={{ color: "var(--event-muted)", whiteSpace: "pre-wrap" }}>{tr(rsvpContent.attendingMessage, "attendingMessage")}</p>
         )}
         {isAttending && guest?.allow_plus_one && (
-          <div className="mt-3 flex justify-center">
-            <label className="flex items-center gap-2 text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>
-              <input
-                type="checkbox"
-                checked={current.plus_ones > 0}
-                onChange={(e) => handlePlusOneToggle(subEventId, e.target.checked)}
-                style={{ accentColor: "var(--event-primary)" }}
-              />
-              {tr("I'm bringing a +1")}
-            </label>
+          <div className="mt-4">
+            <p className="mb-2 text-center text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{tr("Bringing a +1?")}</p>
+            <div className="flex gap-2 sm:gap-3">
+              <button
+                type="button"
+                onClick={() => handlePlusOneToggle(subEventId, true)}
+                className="event-btn-primary rsvp-toggle-btn"
+                style={{ flex: 1, opacity: current.plus_ones > 0 ? 1 : 0.6, ...attendingSelectedStyle(current.plus_ones > 0), ...attendingButtonFontStyle }}
+                onMouseEnter={(e) => { if (!(current.plus_ones > 0)) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.attendingButtonColors)); }}
+                onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: current.plus_ones > 0 ? 1 : 0.6, ...attendingSelectedStyle(current.plus_ones > 0), ...attendingButtonFontStyle })}
+              >
+                {tr("Yes")}
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePlusOneToggle(subEventId, false)}
+                className="event-btn-secondary rsvp-toggle-btn"
+                style={{ flex: 1, opacity: current.plus_ones === 0 ? 1 : 0.6, ...declinedSelectedStyle(current.plus_ones === 0), ...declinedButtonFontStyle }}
+                onMouseEnter={(e) => { if (!(current.plus_ones === 0)) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.declinedButtonColors)); }}
+                onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: current.plus_ones === 0 ? 1 : 0.6, ...declinedSelectedStyle(current.plus_ones === 0), ...declinedButtonFontStyle })}
+              >
+                {tr("No")}
+              </button>
+            </div>
           </div>
         )}
         {isDeclined && rsvpContent.declinedMessage && (

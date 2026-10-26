@@ -22,6 +22,9 @@ interface PageConfig {
   namePlaceholder?: string;
 }
 
+const ATTENDING_SELECTED_COLORS: ButtonColors = { bgColor: "#16a34a", textColor: "#ffffff", borderColor: "#16a34a", hoverBgColor: "#15803d", hoverTextColor: "#ffffff", hoverBorderColor: "#15803d" };
+const DECLINED_SELECTED_COLORS: ButtonColors = { bgColor: "#dc2626", textColor: "#ffffff", borderColor: "#dc2626", hoverBgColor: "#b91c1c", hoverTextColor: "#ffffff", hoverBorderColor: "#b91c1c" };
+
 interface LookupResult {
   link: {
     id: string;
@@ -93,7 +96,7 @@ export default function GuestJoin() {
 
   const [name, setName] = useState("");
   const [status, setStatus] = useState<"attending" | "declined" | "">("");
-  const [bringingPlusOne, setBringingPlusOne] = useState(false);
+  const [bringingPlusOne, setBringingPlusOne] = useState<"yes" | "no" | "">("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState<Step>("form");
@@ -135,6 +138,7 @@ export default function GuestJoin() {
     if (!token || !lookup) return;
     if (!name.trim()) { setError("Please enter your name."); return; }
     if (!status) { setError("Please choose Attending or Declined."); return; }
+    if (status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne) { setError("Please choose Yes or No for bringing a +1."); return; }
     setError(null);
     setSubmitting(true);
     try {
@@ -142,7 +146,7 @@ export default function GuestJoin() {
         p_token: token,
         p_name: name.trim(),
         p_status: status,
-        p_plus_ones: status === "attending" && bringingPlusOne ? 1 : 0,
+        p_plus_ones: status === "attending" && bringingPlusOne === "yes" ? 1 : 0,
       });
       if (rpcError) throw rpcError;
       const result = (data ?? {}) as { error?: string; guest?: EventGuest; event_slug?: string };
@@ -227,7 +231,7 @@ export default function GuestJoin() {
         <div className="space-y-3 sm:space-y-4">
           {items.map((item) => (
             <div key={item.id} className="guest-rsvp-schedule-row grid items-start">
-              <div className="guest-rsvp-schedule-time text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-primary)", fontFamily: "var(--event-font-body)" }}>
+              <div className="guest-rsvp-schedule-time text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-body)" }}>
                 {formatScheduleTimeRange(item.start_time, item.end_time)}
               </div>
               <div className="guest-rsvp-schedule-title min-w-0">
@@ -287,17 +291,19 @@ export default function GuestJoin() {
                   type="button"
                   onClick={() => setStatus("attending")}
                   className="event-btn-primary rsvp-toggle-btn"
-                  style={{ flex: 1, opacity: status === "attending" ? 1 : 0.6, ...btnStyle }}
-                  onMouseEnter={(e) => { if (status === "attending") Object.assign(e.currentTarget.style, btnHoverStyle); }}
-                  onMouseLeave={(e) => Object.assign(e.currentTarget.style, btnStyle)}
+                  style={{ flex: 1, opacity: status === "attending" ? 1 : 0.6, ...(status === "attending" ? buttonColorsToStyle(ATTENDING_SELECTED_COLORS) : {}) }}
+                  onMouseEnter={(e) => { if (status === "attending") Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(ATTENDING_SELECTED_COLORS)); }}
+                  onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "attending" ? 1 : 0.6, ...(status === "attending" ? buttonColorsToStyle(ATTENDING_SELECTED_COLORS) : {}) })}
                 >
                   {attendingLabel}
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setStatus("declined"); setBringingPlusOne(false); }}
+                  onClick={() => { setStatus("declined"); setBringingPlusOne(""); }}
                   className="event-btn-secondary rsvp-toggle-btn"
-                  style={{ flex: 1, opacity: status === "declined" ? 1 : 0.6 }}
+                  style={{ flex: 1, opacity: status === "declined" ? 1 : 0.6, ...(status === "declined" ? buttonColorsToStyle(DECLINED_SELECTED_COLORS) : {}) }}
+                  onMouseEnter={(e) => { if (status === "declined") Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(DECLINED_SELECTED_COLORS)); }}
+                  onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "declined" ? 1 : 0.6, ...(status === "declined" ? buttonColorsToStyle(DECLINED_SELECTED_COLORS) : {}) })}
                 >
                   {decliningLabel}
                 </button>
@@ -305,23 +311,36 @@ export default function GuestJoin() {
             </div>
 
             {status === "attending" && lookup?.link?.allow_plus_one && (
-              <div className="flex justify-center pt-1">
-                <label className="flex items-center gap-2 text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>
-                  <input
-                    type="checkbox"
-                    checked={bringingPlusOne}
-                    onChange={(e) => setBringingPlusOne(e.target.checked)}
-                    className="accent-dash-primary"
-                    style={{ accentColor: "var(--event-primary)" }}
-                  />
-                  {language === "bm" ? "Saya membawa tetamu +1" : "I'm bringing a +1"}
-                </label>
+              <div>
+                <p className="mb-2 text-center text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{language === "bm" ? "Membawa +1?" : "Bringing a +1?"}</p>
+                <div className="flex gap-2 sm:gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setBringingPlusOne("yes")}
+                    className="event-btn-primary rsvp-toggle-btn"
+                    style={{ flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...(bringingPlusOne === "yes" ? buttonColorsToStyle(ATTENDING_SELECTED_COLORS) : {}) }}
+                    onMouseEnter={(e) => { if (bringingPlusOne === "yes") Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(ATTENDING_SELECTED_COLORS)); }}
+                    onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...(bringingPlusOne === "yes" ? buttonColorsToStyle(ATTENDING_SELECTED_COLORS) : {}) })}
+                  >
+                    {language === "bm" ? "Ya" : "Yes"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBringingPlusOne("no")}
+                    className="event-btn-secondary rsvp-toggle-btn"
+                    style={{ flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...(bringingPlusOne === "no" ? buttonColorsToStyle(DECLINED_SELECTED_COLORS) : {}) }}
+                    onMouseEnter={(e) => { if (bringingPlusOne === "no") Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(DECLINED_SELECTED_COLORS)); }}
+                    onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...(bringingPlusOne === "no" ? buttonColorsToStyle(DECLINED_SELECTED_COLORS) : {}) })}
+                  >
+                    {language === "bm" ? "Tidak" : "No"}
+                  </button>
+                </div>
               </div>
             )}
 
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
             <div className="text-center pt-2">
-              <button type="submit" disabled={submitting || !status || !name.trim()} className="event-btn-primary" style={{ opacity: submitting || !status || !name.trim() ? 0.6 : 1, ...btnStyle }} onMouseEnter={(e) => { if (!submitting && status && name.trim()) Object.assign(e.currentTarget.style, btnHoverStyle); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, btnStyle)}>
+              <button type="submit" disabled={submitting || !status || !name.trim() || (status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne)} className="event-btn-primary" style={{ opacity: submitting || !status || !name.trim() || (status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne) ? 0.6 : 1, ...btnStyle }} onMouseEnter={(e) => { if (!submitting && status && name.trim() && !(status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne)) Object.assign(e.currentTarget.style, btnHoverStyle); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, btnStyle)}>
                 {submitting ? (language === "bm" ? "Menghantar..." : "Submitting...") : submitLabel}
               </button>
             </div>
