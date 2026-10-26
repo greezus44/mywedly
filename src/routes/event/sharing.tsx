@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type SharingEvent, type SubEvent, type OpenRsvpLink, type Json } from "../../lib/supabase";
-import { Button, Input, Toggle, Modal, LoadingSpinner, Badge } from "../../components/ui";
+import { Button, Input, Toggle, Modal, LoadingSpinner, Badge, DateTimePicker } from "../../components/ui";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { generateQrDataUrl, downloadQrCode, downloadQrSvg } from "../../lib/qr";
 import { useEffect } from "react";
@@ -76,6 +76,7 @@ export function SharingPage() {
   const [editToken, setEditToken] = useState("");
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [tokenChecking, setTokenChecking] = useState(false);
+  const [editRsvpDeadline, setEditRsvpDeadline] = useState("");
 
   const publicUrl = event.slug ? `${window.location.origin}/e/${event.slug}` : "";
 
@@ -154,6 +155,8 @@ export function SharingPage() {
     setEditEnabled(link.is_enabled);
     setEditToken(link.token);
     setTokenError(null);
+    const se = (subEvents ?? []).find((s) => s.id === link.sub_event_id);
+    setEditRsvpDeadline(se?.rsvp_deadline ?? "");
   };
 
   const joinPrefix = `${window.location.origin}/join/`;
@@ -196,16 +199,23 @@ export function SharingPage() {
       .from("open_rsvp_links")
       .update(updates)
       .eq("id", editingLink.id);
-    setSavingEdit(false);
     if (error) {
       if (error.code === "23505") {
         setTokenError("This link ending is already in use. Please choose another.");
       } else {
         setTokenError("Could not save the link ending. Please try again.");
       }
+      setSavingEdit(false);
       return;
     }
+    const subEventDeadline = editRsvpDeadline || null;
+    const currentSub = (subEvents ?? []).find((s) => s.id === editingLink.sub_event_id);
+    if (currentSub && (currentSub.rsvp_deadline ?? null) !== subEventDeadline) {
+      await supabase.from("sub_events").update({ rsvp_deadline: subEventDeadline }).eq("id", editingLink.sub_event_id);
+      queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] });
+    }
     queryClient.invalidateQueries({ queryKey: ["open-rsvp-links", eventId] });
+    setSavingEdit(false);
     setEditingLink(null);
   };
 
@@ -317,6 +327,13 @@ export function SharingPage() {
                 Letters, numbers, and hyphens only. Changing this breaks any previously printed or shared QR codes for this link.
               </p>
             )}
+          </div>
+          <div>
+            <SectionLabel>RSVP Deadline</SectionLabel>
+            <div className="mt-1.5">
+              <DateTimePicker label="Deadline for this event's open RSVP (optional)" value={editRsvpDeadline} onChange={setEditRsvpDeadline} />
+              <p className="mt-1.5 text-xs text-dash-muted">Leave blank to keep this link open indefinitely. After the deadline, guests see a closed message and submissions are rejected.</p>
+            </div>
           </div>
           <SectionLabel>Heading</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
