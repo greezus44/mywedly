@@ -75,6 +75,7 @@ interface PageConfig {
   plusOneYesTypography?: TypographyStyle;
   plusOneNoTypography?: TypographyStyle;
   submitTypography?: TypographyStyle;
+  logoUrl?: string;
 }
 
 const BLACK_TEXT = "#1a1a1a";
@@ -306,6 +307,11 @@ export default function GuestJoin() {
     return (
       <EventThemeProvider theme={event.theme}>
         <LanguageToggle />
+        {pageConfig.logoUrl && (
+          <div className="flex justify-center mb-6">
+            <img src={pageConfig.logoUrl} alt="" className="max-h-32 w-auto object-contain" />
+          </div>
+        )}
         <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
           <div className="w-full max-w-md text-center">
             <h1 className="guest-title mb-4">{thankYou}</h1>
@@ -400,6 +406,11 @@ export default function GuestJoin() {
   return (
     <EventThemeProvider theme={event.theme}>
       <LanguageToggle />
+      {pageConfig.logoUrl && (
+        <div className="flex justify-center mb-6 sm:mb-8">
+          <img src={pageConfig.logoUrl} alt="" className="max-h-32 sm:max-h-40 w-auto object-contain" />
+        </div>
+      )}
       <div className="guest-section guest-rsvp-page">
         <div className="mx-auto max-w-2xl guest-rsvp-content">
           <div className="text-center pt-8 sm:pt-12 mb-12 sm:mb-16">

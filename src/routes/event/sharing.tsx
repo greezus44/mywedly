@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type SharingEvent, type SubEvent, type OpenRsvpLink, type Json } from "../../lib/supabase";
 import { Button, Input, Toggle, Modal, LoadingSpinner, Badge, DateTimePicker, ColorInput } from "../../components/ui";
+import { ImageUpload } from "../../components/ui/ImageUpload";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { TypographyControls } from "../../components/ui/TypographyControls";
 import { generateQrDataUrl, downloadQrCode, downloadQrSvg } from "../../lib/qr";
@@ -74,6 +75,7 @@ interface PageConfig {
   plusOneYesTypography?: TypographyStyle;
   plusOneNoTypography?: TypographyStyle;
   submitTypography?: TypographyStyle;
+  logoUrl?: string;
 }
 
 const DEFAULT_PAGE_CONFIG: PageConfig = {
@@ -378,6 +380,8 @@ export function SharingPage() {
               <p className="mt-1.5 text-xs text-dash-muted">Leave blank to keep this link open indefinitely. After the deadline, guests see a closed message and submissions are rejected.</p>
             </div>
           </div>
+          <SectionLabel>Logo</SectionLabel>
+          <ImageUpload userId={event.creator_id} value={editConfig.logoUrl ?? null} onChange={(url) => setEditConfig((p) => ({ ...p, logoUrl: url ?? undefined }))} label="Logo shown at the top of the RSVP page" />
           <SectionLabel>Heading</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
             <LabeledInput label="English" value={editConfig.heading ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, heading: v }))} />
