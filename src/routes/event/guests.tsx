@@ -12,11 +12,20 @@ interface EventContextValue { event: UserEvent; eventId: string; }
 
 type GuestStatus = "not_invited" | "pending" | "attending" | "declined";
 
-function StatusIcon({ status }: { status: GuestStatus }) {
-  if (status === "attending") return <span className="text-green-600 font-bold text-base" title="Attending">&#10003;</span>;
-  if (status === "declined") return <span className="text-red-500 font-bold text-base" title="Declined">&#10007;</span>;
-  if (status === "pending") return <span className="text-dash-muted font-bold text-base" title="Pending">=</span>;
-  return <span className="text-dash-muted text-base" title="Not invited">&mdash;</span>;
+function StatusIcon({ status, plusOneLabel }: { status: GuestStatus; plusOneLabel?: string | null }) {
+  let icon: React.ReactNode;
+  if (status === "attending") icon = <span className="text-green-600 font-bold text-base" title="Attending">&#10003;</span>;
+  else if (status === "declined") icon = <span className="text-red-500 font-bold text-base" title="Declined">&#10007;</span>;
+  else if (status === "pending") icon = <span className="text-dash-muted font-bold text-base" title="Pending">=</span>;
+  else icon = <span className="text-dash-muted text-base" title="Not invited">&mdash;</span>;
+  if (!plusOneLabel) return icon;
+  const isPlusOne = plusOneLabel === "+1";
+  return (
+    <span className="inline-flex items-center gap-1">
+      {icon}
+      <span className={`text-xs font-semibold ${isPlusOne ? "text-green-600" : "text-dash-muted"}`} title={isPlusOne ? "Bringing +1" : "No +1"}>{plusOneLabel}</span>
+    </span>
+  );
 }
 
 const UNGROUPED_KEY = "__ungrouped__";
@@ -83,7 +92,7 @@ export function GuestsPage() {
 
   const { data: allRsvps } = useQuery({
     queryKey: ["event-rsvps-full", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("event_rsvps").select("guest_id, sub_event_id, status").eq("event_id", eventId); if (error) throw error; return (data ?? []) as Pick<EventRsvp, "guest_id" | "sub_event_id" | "status">[]; },
+    queryFn: async () => { const { data, error } = await supabase.from("event_rsvps").select("guest_id, sub_event_id, status, plus_ones").eq("event_id", eventId); if (error) throw error; return (data ?? []) as Pick<EventRsvp, "guest_id" | "sub_event_id" | "status" | "plus_ones">[]; },
   });
 
   const invitedEventsByGuest = new Map<string, Set<string>>();
@@ -101,11 +110,15 @@ export function GuestsPage() {
   }
 
   const rsvpStatusByGuest = new Map<string, Map<string, string>>();
+  const rsvpPlusOnesByGuest = new Map<string, Map<string, number>>();
   for (const r of (allRsvps ?? [])) {
     let inner = rsvpStatusByGuest.get(r.guest_id);
     if (!inner) { inner = new Map(); rsvpStatusByGuest.set(r.guest_id, inner); }
     const key = r.sub_event_id ?? "__main__";
     inner.set(key, r.status);
+    let pInner = rsvpPlusOnesByGuest.get(r.guest_id);
+    if (!pInner) { pInner = new Map(); rsvpPlusOnesByGuest.set(r.guest_id, pInner); }
+    pInner.set(key, r.plus_ones);
   }
 
   const statusFor = (guestId: string, tabKey: string): GuestStatus => {
@@ -124,6 +137,26 @@ export function GuestsPage() {
     if (status === "attending") return "attending";
     if (status === "declined") return "declined";
     return "pending";
+  };
+
+  const plusOneLabelFor = (guestId: string, tabKey: string): string | null => {
+    const g = guests?.find((gg) => gg.id === guestId);
+    if (!g) return null;
+    if (tabKey === "__main__") {
+      const s = g.rsvp_status;
+      if (s !== "attending" && s !== "declined") return null;
+      if (!g.allow_plus_one) return null;
+      return g.plus_ones > 0 ? "+1" : "0";
+    }
+    const invited = invitedEventsByGuest.get(guestId);
+    if (!invited || !invited.has(tabKey)) return null;
+    const rsvpMap = rsvpStatusByGuest.get(guestId);
+    const status = rsvpMap?.get(tabKey);
+    if (status !== "attending" && status !== "declined") return null;
+    const pMap = rsvpPlusOnesByGuest.get(guestId);
+    const plusOnes = pMap?.get(tabKey) ?? 0;
+    if (!g.allow_plus_one) return null;
+    return plusOnes > 0 ? "+1" : "0";
   };
 
   const tabLabel = (se: SubEvent) => se.tab_name?.trim() || (se.name ?? "Untitled");
@@ -294,7 +327,7 @@ export function GuestsPage() {
       ) : (
         <>
           <div className="text-xs text-dash-muted">
-            <span className="text-green-600 font-bold">&#10003;</span> Attending &nbsp; <span className="text-red-500 font-bold">&#10007;</span> Declined &nbsp; <span className="font-bold">=</span> Pending &nbsp; <span>&mdash;</span> Not invited
+            <span className="text-green-600 font-bold">&#10003;</span> Attending &nbsp; <span className="text-red-500 font-bold">&#10007;</span> Declined &nbsp; <span className="font-bold">=</span> Pending &nbsp; <span>&mdash;</span> Not invited &nbsp; <span className="text-green-600 font-semibold">+1</span>/<span className="text-dash-muted font-semibold">0</span> Plus-one choice
           </div>
 
           {selectedGuestIds.size > 0 && sortedGroups.length > 0 && (
@@ -337,7 +370,7 @@ export function GuestsPage() {
                       <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}</td>
                       <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
                       <td className="px-4 py-2 text-sm text-dash-muted">—</td>
-                      <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
+                      <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} plusOneLabel={plusOneLabelFor(g.id, "__main__")} /></td>
                       <td className="px-4 py-2 text-right">
                         <button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button>
                         <button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button>
@@ -360,10 +393,10 @@ export function GuestsPage() {
                         <td className="px-4 py-2 text-sm text-dash-muted">{groupName(g.group_id) ?? "—"}</td>
                         {eventColumns.length > 0 ? (
                           eventColumns.map((col) => (
-                            <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
+                            <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} plusOneLabel={plusOneLabelFor(g.id, col.key)} /></td>
                           ))
                         ) : (
-                          <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
+                          <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} plusOneLabel={plusOneLabelFor(g.id, "__main__")} /></td>
                         )}
                         <td className="px-4 py-2 text-right">
                           <button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button>
