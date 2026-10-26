@@ -66,6 +66,14 @@ interface PageConfig {
   scheduleHeadingTypography?: TypographyStyle;
   programmeItemTypography?: TypographyStyle;
   rsvpDeadlineTypography?: TypographyStyle;
+  nameLabelTypography?: TypographyStyle;
+  nameInputTypography?: TypographyStyle;
+  attendingTypography?: TypographyStyle;
+  declinedTypography?: TypographyStyle;
+  plusOneQuestionTypography?: TypographyStyle;
+  plusOneYesTypography?: TypographyStyle;
+  plusOneNoTypography?: TypographyStyle;
+  submitTypography?: TypographyStyle;
 }
 
 const DEFAULT_PAGE_CONFIG: PageConfig = {
@@ -389,6 +397,8 @@ export function SharingPage() {
             <WeightSelect label="Name weight (label & input)" value={editConfig.nameWeight} onChange={(v) => setEditConfig((p) => ({ ...p, nameWeight: v }))} />
             <LabeledColor label="Name text colour" value={editConfig.nameColor} onChange={(v) => setEditConfig((p) => ({ ...p, nameColor: v }))} />
           </div>
+          <TypographyControls label="Name label typography" value={editConfig.nameLabelTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, nameLabelTypography: v }))} showText={false} />
+          <TypographyControls label="Name input typography" value={editConfig.nameInputTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, nameInputTypography: v }))} showText={false} />
           <SectionLabel>Name placeholder</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
             <LabeledInput label="English" value={editConfig.namePlaceholder ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, namePlaceholder: v }))} />
@@ -409,6 +419,8 @@ export function SharingPage() {
               <LabeledColor label="Declined text colour" value={editConfig.decliningTextColor} onChange={(v) => setEditConfig((p) => ({ ...p, decliningTextColor: v }))} />
             </div>
           </div>
+          <TypographyControls label="Attending button typography" value={editConfig.attendingTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, attendingTypography: v }))} showText={false} />
+          <TypographyControls label="Declined button typography" value={editConfig.declinedTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, declinedTypography: v }))} showText={false} />
           <SectionLabel>Submit button label</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
             <LabeledInput label="English" value={editConfig.submitLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, submitLabel: v }))} />
@@ -418,6 +430,7 @@ export function SharingPage() {
             <WeightSelect label="Submit weight" value={editConfig.submitWeight} onChange={(v) => setEditConfig((p) => ({ ...p, submitWeight: v }))} />
             <LabeledColor label="Submit text colour" value={editConfig.submitTextColor} onChange={(v) => setEditConfig((p) => ({ ...p, submitTextColor: v }))} />
           </div>
+          <TypographyControls label="Submit button typography" value={editConfig.submitTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, submitTypography: v }))} showText={false} />
           <SectionLabel>Schedule / programme heading</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
             <LabeledInput label="English" value={editConfig.scheduleHeading ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, scheduleHeading: v }))} />
@@ -448,6 +461,9 @@ export function SharingPage() {
             <LabeledInput label="Question (BM)" value={editConfig.plusOneQuestionBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneQuestionBm: v }))} />
           </div>
           <LabeledColor label="+1 question text colour" value={editConfig.plusOneQuestionColor} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneQuestionColor: v }))} />
+          <TypographyControls label="+1 question typography" value={editConfig.plusOneQuestionTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneQuestionTypography: v }))} showText={false} />
+          <TypographyControls label="+1 Yes button typography" value={editConfig.plusOneYesTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneYesTypography: v }))} showText={false} />
+          <TypographyControls label="+1 No button typography" value={editConfig.plusOneNoTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneNoTypography: v }))} showText={false} />
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <LabeledInput label="Yes (EN)" value={editConfig.plusOneYesLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneYesLabel: v }))} />
