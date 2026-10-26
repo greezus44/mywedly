@@ -50,6 +50,13 @@ interface PageConfig {
   submitWeight?: number;
   plusOneYesWeight?: number;
   plusOneNoWeight?: number;
+  nameColor?: string;
+  attendingTextColor?: string;
+  decliningTextColor?: string;
+  submitTextColor?: string;
+  plusOneYesTextColor?: string;
+  plusOneNoTextColor?: string;
+  plusOneQuestionColor?: string;
 }
 
 const BLACK_TEXT = "#1a1a1a";
@@ -302,6 +309,13 @@ export default function GuestJoin() {
   const submitWeight = pageConfig.submitWeight ?? 600;
   const plusOneYesWeight = pageConfig.plusOneYesWeight ?? 600;
   const plusOneNoWeight = pageConfig.plusOneNoWeight ?? 600;
+  const nameColor = pageConfig.nameColor || "var(--event-text)";
+  const attendingTextColor = pageConfig.attendingTextColor || undefined;
+  const decliningTextColor = pageConfig.decliningTextColor || undefined;
+  const submitTextColor = pageConfig.submitTextColor || undefined;
+  const plusOneYesTextColor = pageConfig.plusOneYesTextColor || undefined;
+  const plusOneNoTextColor = pageConfig.plusOneNoTextColor || undefined;
+  const plusOneQuestionColor = pageConfig.plusOneQuestionColor || "var(--event-text)";
 
   const renderDateColumn = (date: string | null | undefined) => {
     const parts = getDateParts(date);
@@ -372,7 +386,7 @@ export default function GuestJoin() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-center text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", fontWeight: nameWeight }}>{nameLabel}</label>
+              <label className="mb-1.5 block text-center text-sm" style={{ color: nameColor, fontFamily: "var(--event-font-body)", fontWeight: nameWeight }}>{nameLabel}</label>
               <input
                 type="text"
                 value={name}
@@ -385,7 +399,7 @@ export default function GuestJoin() {
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                style={{ textAlign: "center", fontFamily: "var(--event-font-heading)", fontWeight: nameWeight }}
+                style={{ textAlign: "center", fontFamily: "var(--event-font-heading)", fontWeight: nameWeight, color: nameColor === "var(--event-text)" ? undefined : nameColor }}
               />
             </div>
 
@@ -399,7 +413,7 @@ export default function GuestJoin() {
                   onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "attending" ? 1 : 0.6, ...attendingBtnStyle(status === "attending"), ...attendingBtnHover(status === "attending") })}
                   onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "attending" ? 1 : 0.6, ...attendingBtnStyle(status === "attending") })}
                 >
-                  <span style={{ fontWeight: attendingWeight }}>{attendingLabel}</span>
+                  <span style={{ fontWeight: attendingWeight, color: attendingTextColor }}>{attendingLabel}</span>
                 </button>
                 <button
                   type="button"
@@ -409,14 +423,14 @@ export default function GuestJoin() {
                   onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "declined" ? 1 : 0.6, ...declinedBtnStyle(status === "declined"), ...declinedBtnHover(status === "declined") })}
                   onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "declined" ? 1 : 0.6, ...declinedBtnStyle(status === "declined") })}
                 >
-                  <span style={{ fontWeight: decliningWeight }}>{decliningLabel}</span>
+                  <span style={{ fontWeight: decliningWeight, color: decliningTextColor }}>{decliningLabel}</span>
                 </button>
               </div>
             </div>
 
             {status === "attending" && lookup?.link?.allow_plus_one && (
               <div>
-                <p className="mb-2 text-center text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{language === "bm" ? (pageConfig.plusOneQuestionBm?.trim() || "Membawa +1?") : (pageConfig.plusOneQuestion?.trim() || "Bringing a +1?")}</p>
+                <p className="mb-2 text-center text-sm" style={{ color: plusOneQuestionColor, fontFamily: "var(--event-font-body)" }}>{language === "bm" ? (pageConfig.plusOneQuestionBm?.trim() || "Membawa +1?") : (pageConfig.plusOneQuestion?.trim() || "Bringing a +1?")}</p>
                 <div className="flex gap-2 sm:gap-3">
                   <button
                     type="button"
@@ -426,7 +440,7 @@ export default function GuestJoin() {
                     onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...plusOneYesBtnStyle(bringingPlusOne === "yes"), ...plusOneYesBtnHover(bringingPlusOne === "yes") })}
                     onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...plusOneYesBtnStyle(bringingPlusOne === "yes") })}
                   >
-                    <span style={{ fontWeight: plusOneYesWeight }}>{language === "bm" ? (pageConfig.plusOneYesLabelBm?.trim() || "Ya") : (pageConfig.plusOneYesLabel?.trim() || "Yes")}</span>
+                    <span style={{ fontWeight: plusOneYesWeight, color: plusOneYesTextColor }}>{language === "bm" ? (pageConfig.plusOneYesLabelBm?.trim() || "Ya") : (pageConfig.plusOneYesLabel?.trim() || "Yes")}</span>
                   </button>
                   <button
                     type="button"
@@ -436,7 +450,7 @@ export default function GuestJoin() {
                     onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...plusOneNoBtnStyle(bringingPlusOne === "no"), ...plusOneNoBtnHover(bringingPlusOne === "no") })}
                     onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...plusOneNoBtnStyle(bringingPlusOne === "no") })}
                   >
-                    <span style={{ fontWeight: plusOneNoWeight }}>{language === "bm" ? (pageConfig.plusOneNoLabelBm?.trim() || "Tidak") : (pageConfig.plusOneNoLabel?.trim() || "No")}</span>
+                    <span style={{ fontWeight: plusOneNoWeight, color: plusOneNoTextColor }}>{language === "bm" ? (pageConfig.plusOneNoLabelBm?.trim() || "Tidak") : (pageConfig.plusOneNoLabel?.trim() || "No")}</span>
                   </button>
                 </div>
               </div>
@@ -445,7 +459,7 @@ export default function GuestJoin() {
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
             <div className="text-center pt-2">
               <button type="submit" disabled={submitting || !status || !name.trim() || (status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne)} className="event-btn-primary" style={{ opacity: submitting || !status || !name.trim() || (status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne) ? 0.6 : 1, ...btnStyle }} onMouseEnter={(e) => { if (!submitting && status && name.trim() && !(status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne)) Object.assign(e.currentTarget.style, btnHoverStyle); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, btnStyle)}>
-                <span style={{ fontWeight: submitWeight }}>{submitting ? (language === "bm" ? "Menghantar..." : "Submitting...") : submitLabel}</span>
+                <span style={{ fontWeight: submitWeight, color: submitTextColor }}>{submitting ? (language === "bm" ? "Menghantar..." : "Submitting...") : submitLabel}</span>
               </button>
             </div>
           </form>
