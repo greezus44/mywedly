@@ -76,6 +76,7 @@ interface PageConfig {
   plusOneNoTypography?: TypographyStyle;
   submitTypography?: TypographyStyle;
   logoUrl?: string;
+  logoSize?: number;
 }
 
 const DEFAULT_PAGE_CONFIG: PageConfig = {
@@ -382,6 +383,22 @@ export function SharingPage() {
           </div>
           <SectionLabel>Logo</SectionLabel>
           <ImageUpload userId={event.creator_id} value={editConfig.logoUrl ?? null} onChange={(url) => setEditConfig((p) => ({ ...p, logoUrl: url ?? undefined }))} label="Logo shown at the top of the RSVP page" />
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <label htmlFor="logo-size" className="text-xs font-medium text-dash-muted">Logo size</label>
+              <span className="text-xs text-dash-muted">{editConfig.logoSize ?? 160} px</span>
+            </div>
+            <input
+              id="logo-size"
+              type="range"
+              min="48"
+              max="320"
+              step="4"
+              value={editConfig.logoSize ?? 160}
+              onChange={(e) => setEditConfig((p) => ({ ...p, logoSize: Number(e.target.value) }))}
+              className="w-full accent-dash-primary"
+            />
+          </div>
           <SectionLabel>Heading</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
             <LabeledInput label="English" value={editConfig.heading ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, heading: v }))} />

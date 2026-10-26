@@ -76,6 +76,7 @@ interface PageConfig {
   plusOneNoTypography?: TypographyStyle;
   submitTypography?: TypographyStyle;
   logoUrl?: string;
+  logoSize?: number;
 }
 
 const BLACK_TEXT = "#1a1a1a";
@@ -309,7 +310,7 @@ export default function GuestJoin() {
         <LanguageToggle />
         {pageConfig.logoUrl && (
           <div className="flex justify-center mb-6">
-            <img src={pageConfig.logoUrl} alt="" className="max-h-32 w-auto object-contain" />
+            <img src={pageConfig.logoUrl} alt="" className="h-auto max-w-full object-contain" style={{ width: `${pageConfig.logoSize ?? 160}px` }} />
           </div>
         )}
         <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
@@ -410,10 +411,10 @@ export default function GuestJoin() {
         <div className="mx-auto max-w-2xl guest-rsvp-content">
           {pageConfig.logoUrl && (
             <div className="flex justify-center pt-8 sm:pt-12 mb-6 sm:mb-8">
-              <img src={pageConfig.logoUrl} alt="" className="max-h-32 sm:max-h-40 w-auto object-contain" />
+              <img src={pageConfig.logoUrl} alt="" className="h-auto max-w-full object-contain" style={{ width: `${pageConfig.logoSize ?? 160}px` }} />
             </div>
           )}
-          <div className="text-center pt-8 sm:pt-12 mb-12 sm:mb-16">
+          <div className="text-center pt-4 sm:pt-6 mb-12 sm:mb-16">
             <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0, ...headingStyle }}>{heading}</h1>
             {subEvent.rsvp_deadline && (
               <p className="text-center" style={{ whiteSpace: "pre-wrap", marginTop: "4px", marginBottom: 0, ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)", textTransform: "uppercase" }}>
