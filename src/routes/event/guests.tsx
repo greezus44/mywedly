@@ -324,7 +324,7 @@ export function GuestsPage() {
                   (guests ?? []).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")).map((g) => (
                     <tr key={g.id}>
                       <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
-                      <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
+                      <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}</td>
                       <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
                       <td className="px-4 py-2 text-sm text-dash-muted">—</td>
                       <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
@@ -342,7 +342,7 @@ export function GuestsPage() {
                     ...section.guests.map((g) => (
                       <tr key={g.id}>
                         <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
-                        <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
+                        <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}</td>
                         <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
                         <td className="px-4 py-2 text-sm text-dash-muted">{groupName(g.group_id) ?? "—"}</td>
                         {eventColumns.length > 0 ? (
