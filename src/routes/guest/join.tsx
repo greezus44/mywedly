@@ -409,21 +409,21 @@ export default function GuestJoin() {
                   type="button"
                   onClick={() => setStatus("attending")}
                   className="event-btn-primary rsvp-toggle-btn"
-                  style={{ flex: 1, opacity: status === "attending" ? 1 : 0.6, ...attendingBtnStyle(status === "attending") }}
-                  onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "attending" ? 1 : 0.6, ...attendingBtnStyle(status === "attending"), ...attendingBtnHover(status === "attending") })}
-                  onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "attending" ? 1 : 0.6, ...attendingBtnStyle(status === "attending") })}
+                  style={{ flex: 1, ...attendingBtnStyle(status === "attending") }}
+                  onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...attendingBtnStyle(status === "attending"), ...attendingBtnHover(status === "attending") })}
+                  onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...attendingBtnStyle(status === "attending") })}
                 >
-                  <span style={{ fontWeight: attendingWeight, color: attendingTextColor }}>{attendingLabel}</span>
+                  <span style={{ fontWeight: status === "attending" ? attendingWeight : 700, color: attendingTextColor }}>{attendingLabel}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => { setStatus("declined"); setBringingPlusOne(""); }}
                   className="event-btn-secondary rsvp-toggle-btn"
-                  style={{ flex: 1, opacity: status === "declined" ? 1 : 0.6, ...declinedBtnStyle(status === "declined") }}
-                  onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "declined" ? 1 : 0.6, ...declinedBtnStyle(status === "declined"), ...declinedBtnHover(status === "declined") })}
-                  onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "declined" ? 1 : 0.6, ...declinedBtnStyle(status === "declined") })}
+                  style={{ flex: 1, ...declinedBtnStyle(status === "declined") }}
+                  onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...declinedBtnStyle(status === "declined"), ...declinedBtnHover(status === "declined") })}
+                  onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...declinedBtnStyle(status === "declined") })}
                 >
-                  <span style={{ fontWeight: decliningWeight, color: decliningTextColor }}>{decliningLabel}</span>
+                  <span style={{ fontWeight: status === "declined" ? decliningWeight : 700, color: decliningTextColor }}>{decliningLabel}</span>
                 </button>
               </div>
             </div>
@@ -436,21 +436,21 @@ export default function GuestJoin() {
                     type="button"
                     onClick={() => setBringingPlusOne("yes")}
                     className="event-btn-primary rsvp-toggle-btn"
-                    style={{ flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...plusOneYesBtnStyle(bringingPlusOne === "yes") }}
-                    onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...plusOneYesBtnStyle(bringingPlusOne === "yes"), ...plusOneYesBtnHover(bringingPlusOne === "yes") })}
-                    onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...plusOneYesBtnStyle(bringingPlusOne === "yes") })}
+                    style={{ flex: 1, ...plusOneYesBtnStyle(bringingPlusOne === "yes") }}
+                    onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...plusOneYesBtnStyle(bringingPlusOne === "yes"), ...plusOneYesBtnHover(bringingPlusOne === "yes") })}
+                    onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...plusOneYesBtnStyle(bringingPlusOne === "yes") })}
                   >
-                    <span style={{ fontWeight: plusOneYesWeight, color: plusOneYesTextColor }}>{language === "bm" ? (pageConfig.plusOneYesLabelBm?.trim() || "Ya") : (pageConfig.plusOneYesLabel?.trim() || "Yes")}</span>
+                    <span style={{ fontWeight: bringingPlusOne === "yes" ? plusOneYesWeight : 700, color: plusOneYesTextColor }}>{language === "bm" ? (pageConfig.plusOneYesLabelBm?.trim() || "Ya") : (pageConfig.plusOneYesLabel?.trim() || "Yes")}</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setBringingPlusOne("no")}
                     className="event-btn-secondary rsvp-toggle-btn"
-                    style={{ flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...plusOneNoBtnStyle(bringingPlusOne === "no") }}
-                    onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...plusOneNoBtnStyle(bringingPlusOne === "no"), ...plusOneNoBtnHover(bringingPlusOne === "no") })}
-                    onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...plusOneNoBtnStyle(bringingPlusOne === "no") })}
+                    style={{ flex: 1, ...plusOneNoBtnStyle(bringingPlusOne === "no") }}
+                    onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...plusOneNoBtnStyle(bringingPlusOne === "no"), ...plusOneNoBtnHover(bringingPlusOne === "no") })}
+                    onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...plusOneNoBtnStyle(bringingPlusOne === "no") })}
                   >
-                    <span style={{ fontWeight: plusOneNoWeight, color: plusOneNoTextColor }}>{language === "bm" ? (pageConfig.plusOneNoLabelBm?.trim() || "Tidak") : (pageConfig.plusOneNoLabel?.trim() || "No")}</span>
+                    <span style={{ fontWeight: bringingPlusOne === "no" ? plusOneNoWeight : 700, color: plusOneNoTextColor }}>{language === "bm" ? (pageConfig.plusOneNoLabelBm?.trim() || "Tidak") : (pageConfig.plusOneNoLabel?.trim() || "No")}</span>
                   </button>
                 </div>
               </div>
