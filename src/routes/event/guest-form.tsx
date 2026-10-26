@@ -1,23 +1,24 @@
 import { useState, useEffect, type FormEvent } from "react";
-import { type EventGuest, type SubEvent } from "../../lib/supabase";
+import { type EventGuest, type SubEvent, type GuestGroup } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui";
 import { generateUsername } from "../../lib/utils";
 
 export interface GuestFormValues {
-  name: string; username: string;
+  name: string; username: string; groupId: string | null;
   /** sub_event_id → invited? */
   eventInvitations: Record<string, boolean>;
 }
 
 export function guestToForm(g: EventGuest): GuestFormValues {
-  return { name: g.name ?? "", username: g.username ?? "", eventInvitations: {} };
+  return { name: g.name ?? "", username: g.username ?? "", groupId: g.group_id ?? null, eventInvitations: {} };
 }
 
 interface GuestFormProps {
   eventId: string;
   guest?: EventGuest | null;
   subEvents?: SubEvent[];
+  groups?: GuestGroup[];
   /** Existing invitation state for this guest: sub_event_id → is_invited */
   existingInvitations?: Record<string, boolean>;
   onSubmit: (values: GuestFormValues) => Promise<void>;
@@ -25,8 +26,8 @@ interface GuestFormProps {
   submitting?: boolean;
 }
 
-export function GuestForm({ guest, subEvents, existingInvitations, onSubmit, onCancel, submitting }: GuestFormProps) {
-  const [values, setValues] = useState<GuestFormValues>(() => guest ? guestToForm(guest) : { name: "", username: "", eventInvitations: {} });
+export function GuestForm({ guest, subEvents, groups, existingInvitations, onSubmit, onCancel, submitting }: GuestFormProps) {
+  const [values, setValues] = useState<GuestFormValues>(() => guest ? guestToForm(guest) : { name: "", username: "", groupId: null, eventInvitations: {} });
   const [error, setError] = useState<string | null>(null);
   const [usernameTouched, setUsernameTouched] = useState(!!guest);
 
@@ -50,13 +51,22 @@ export function GuestForm({ guest, subEvents, existingInvitations, onSubmit, onC
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault(); setError(null);
     if (!values.name.trim()) { setError("Name is required"); return; }
-    await onSubmit({ ...values, username: values.username.trim() || generateUsername(values.name), eventInvitations: invitedEvents });
+    await onSubmit({ ...values, username: values.username.trim() || generateUsername(values.name), groupId: values.groupId || null, eventInvitations: invitedEvents });
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <Input label="Guest Name" value={values.name} onChange={handleNameChange} placeholder="e.g. John Smith" required autoFocus />
       <Input label="Username" value={values.username} onChange={handleUsernameChange} placeholder="Auto-filled with guest name" />
+      {groups && groups.length > 0 && (
+        <div>
+          <label className="mb-1 block text-xs text-dash-muted">Group</label>
+          <select value={values.groupId ?? ""} onChange={(e) => setValues((p) => ({ ...p, groupId: e.target.value || null }))} className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text">
+            <option value="">Ungrouped</option>
+            {groups.map((gr) => <option key={gr.id} value={gr.id}>{gr.name}</option>)}
+          </select>
+        </div>
+      )}
 
       {subEvents && subEvents.length > 0 && (
         <div className="border-t border-dash-border pt-4">

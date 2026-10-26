@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventGuest, type SubEvent, type EventRsvp } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventGuest, type SubEvent, type EventRsvp, type GuestGroup, type GroupEventInvite } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
 import { GuestForm, type GuestFormValues } from "./guest-form";
@@ -19,6 +19,8 @@ function StatusIcon({ status }: { status: GuestStatus }) {
   return <span className="text-dash-muted text-base" title="Not invited">&mdash;</span>;
 }
 
+const UNGROUPED_KEY = "__ungrouped__";
+
 export function GuestsPage() {
   const { eventId } = useOutletContext<EventContextValue>();
   const queryClient = useQueryClient();
@@ -28,8 +30,12 @@ export function GuestsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [showInvites, setShowInvites] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
+  const [showGroups, setShowGroups] = useState(false);
   const [selectedGuestIds, setSelectedGuestIds] = useState<Set<string>>(new Set());
   const [inviteSubEventId, setInviteSubEventId] = useState<string>("");
+  const [bulkGroupId, setBulkGroupId] = useState<string>("");
+  const [newGroupName, setNewGroupName] = useState("");
+  const [groupError, setGroupError] = useState<string | null>(null);
 
   const { data: guests, isLoading, isError, error } = useQuery({
     queryKey: ["event-guests", eventId],
@@ -44,6 +50,16 @@ export function GuestsPage() {
     queryFn: async () => { const { data, error } = await supabase.from("guest_event_invites").select("guest_id, sub_event_id, invite_type").eq("event_id", eventId); if (error) throw error; return data ?? []; },
   });
 
+  const { data: groups } = useQuery({
+    queryKey: ["guest-groups", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("guest_groups").select("*").eq("event_id", eventId).order("sort_order", { ascending: true }); if (error) throw error; return data as GuestGroup[]; },
+  });
+
+  const { data: groupEventInvites } = useQuery({
+    queryKey: ["group-event-invites", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("group_event_invites").select("*").eq("event_id", eventId); if (error) throw error; return (data ?? []) as GroupEventInvite[]; },
+  });
+
   const { data: allOverrides } = useQuery({
     queryKey: ["all-guest-invitation-overrides", eventId],
     queryFn: async () => {
@@ -55,13 +71,11 @@ export function GuestsPage() {
     enabled: !!guests && guests.length > 0,
   });
 
-  // Fetch all RSVPs for this event (including sub_event_id and status)
   const { data: allRsvps } = useQuery({
     queryKey: ["event-rsvps-full", eventId],
     queryFn: async () => { const { data, error } = await supabase.from("event_rsvps").select("guest_id, sub_event_id, status").eq("event_id", eventId); if (error) throw error; return (data ?? []) as Pick<EventRsvp, "guest_id" | "sub_event_id" | "status">[]; },
   });
 
-  // Compute invited events per guest
   const invitedEventsByGuest = new Map<string, Set<string>>();
   if (subEvents && subEvents.length > 0) {
     for (const g of (guests ?? [])) {
@@ -76,7 +90,6 @@ export function GuestsPage() {
     }
   }
 
-  // Compute RSVP status per guest per sub_event
   const rsvpStatusByGuest = new Map<string, Map<string, string>>();
   for (const r of (allRsvps ?? [])) {
     let inner = rsvpStatusByGuest.get(r.guest_id);
@@ -121,8 +134,19 @@ export function GuestsPage() {
     eventColumns.push({ key: se.id, label: tabLabel(se) });
   }
 
-  const visibleGuests = guests ?? [];
+  const sortedGroups = [...(groups ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+  const groupName = (id: string | null) => sortedGroups.find((g) => g.id === id)?.name ?? null;
 
+  // Group guests: ordered by group sort_order, then "Ungrouped" last; within each group, alphabetical by name
+  const groupedGuests: Array<{ key: string; label: string; guests: EventGuest[] }> = [];
+  for (const gr of sortedGroups) {
+    const gs = (guests ?? []).filter((g) => g.group_id === gr.id).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    if (gs.length > 0) groupedGuests.push({ key: gr.id, label: gr.name, guests: gs });
+  }
+  const ungrouped = (guests ?? []).filter((g) => !g.group_id).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  if (ungrouped.length > 0) groupedGuests.push({ key: UNGROUPED_KEY, label: "Ungrouped", guests: ungrouped });
+
+  const visibleGuests = guests ?? [];
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => { const { error } = await supabase.from("event_guests").delete().eq("id", id); if (error) throw error; },
@@ -149,6 +173,56 @@ export function GuestsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] }),
   });
 
+  const createGroupMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const sortOrder = (groups ?? []).length;
+      const { error } = await supabase.from("guest_groups").insert({ event_id: eventId, name, sort_order: sortOrder });
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] }); setNewGroupName(""); },
+  });
+
+  const renameGroupMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { error } = await supabase.from("guest_groups").update({ name }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] }),
+  });
+
+  const deleteGroupMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await supabase.from("event_guests").update({ group_id: null }).eq("group_id", id).eq("event_id", eventId);
+      const { error } = await supabase.from("guest_groups").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] }); queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }); },
+  });
+
+  const bulkAssignGroupMutation = useMutation({
+    mutationFn: async ({ guestIds, groupId }: { guestIds: string[]; groupId: string | null }) => {
+      if (guestIds.length === 0) return;
+      const { error } = await supabase.from("event_guests").update({ group_id: groupId }).in("id", guestIds);
+      if (error) throw error;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }); setSelectedGuestIds(new Set()); setBulkGroupId(""); },
+  });
+
+  const toggleGroupEventInviteMutation = useMutation({
+    mutationFn: async ({ groupId, subEventId, checked }: { groupId: string; subEventId: string | null; checked: boolean }) => {
+      if (checked) {
+        const { error } = await supabase.from("group_event_invites").insert({ group_id: groupId, event_id: eventId, sub_event_id: subEventId });
+        if (error) throw error;
+      } else {
+        let q = supabase.from("group_event_invites").delete().eq("group_id", groupId).eq("event_id", eventId);
+        if (subEventId) q = q.eq("sub_event_id", subEventId); else q = q.is("sub_event_id", null);
+        const { error } = await q;
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["group-event-invites", eventId] }),
+  });
+
   const toggleGuestSelection = (id: string) => {
     setSelectedGuestIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
@@ -158,11 +232,11 @@ export function GuestsPage() {
     try {
       let guestId: string;
       if (editGuest) {
-        const { error } = await supabase.from("event_guests").update({ name: values.name, username: values.username }).eq("id", editGuest.id);
+        const { error } = await supabase.from("event_guests").update({ name: values.name, username: values.username, group_id: values.groupId || null }).eq("id", editGuest.id);
         if (error) throw error;
         guestId = editGuest.id;
       } else {
-        const { data: newGuest, error } = await supabase.from("event_guests").insert({ event_id: eventId, name: values.name, username: values.username || generateUsername(values.name), token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0 }).select("id").single();
+        const { data: newGuest, error } = await supabase.from("event_guests").insert({ event_id: eventId, name: values.name, username: values.username || generateUsername(values.name), token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0, group_id: values.groupId || null }).select("id").single();
         if (error) throw error;
         guestId = newGuest.id;
       }
@@ -187,6 +261,9 @@ export function GuestsPage() {
     finally { setSubmitting(false); }
   };
 
+  const groupInviteChecked = (groupId: string, subEventId: string | null) =>
+    (groupEventInvites ?? []).some((gi) => gi.group_id === groupId && (gi.sub_event_id ?? null) === (subEventId ?? null));
+
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
   if (isError) return <ErrorState title="Failed to load guests" message={error instanceof Error ? error.message : "Unknown error"} />;
 
@@ -196,6 +273,7 @@ export function GuestsPage() {
         <h2 className="text-lg font-semibold text-dash-text">Guests</h2>
         <div className="flex gap-2">
           <Button size="sm" variant="secondary" onClick={() => setShowBulkImport(true)}>Bulk Import</Button>
+          <Button size="sm" variant="secondary" onClick={() => setShowGroups(true)}>Manage Groups</Button>
           <Button size="sm" variant="secondary" onClick={() => setShowInvites(true)} disabled={!guests || guests.length === 0}>Manage Invitations</Button>
           <Button size="sm" onClick={() => { setEditGuest(null); setShowForm(true); }}>Add Guest</Button>
         </div>
@@ -209,6 +287,18 @@ export function GuestsPage() {
             <span className="text-green-600 font-bold">&#10003;</span> Attending &nbsp; <span className="text-red-500 font-bold">&#10007;</span> Declined &nbsp; <span className="font-bold">=</span> Pending &nbsp; <span>&mdash;</span> Not invited
           </div>
 
+          {selectedGuestIds.size > 0 && sortedGroups.length > 0 && (
+            <div className="flex items-center gap-2 rounded-lg border border-dash-border bg-dash-bg px-3 py-2">
+              <span className="text-xs text-dash-muted">{selectedGuestIds.size} selected</span>
+              <select value={bulkGroupId} onChange={(e) => setBulkGroupId(e.target.value)} className="flex-1 rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text">
+                <option value="">Assign to group…</option>
+                <option value={UNGROUPED_KEY}>Ungrouped</option>
+                {sortedGroups.map((gr) => <option key={gr.id} value={gr.id}>{gr.name}</option>)}
+              </select>
+              <Button size="sm" onClick={() => bulkAssignGroupMutation.mutate({ guestIds: [...selectedGuestIds], groupId: bulkGroupId === UNGROUPED_KEY ? null : bulkGroupId || null })} disabled={!bulkGroupId} loading={bulkAssignGroupMutation.isPending}>Assign</Button>
+            </div>
+          )}
+
           <div className="overflow-x-auto rounded-lg border border-dash-border">
             <table className="w-full">
               <thead className="bg-dash-bg">
@@ -218,6 +308,7 @@ export function GuestsPage() {
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Name</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Group</th>
                   {eventColumns.length > 0 ? (
                     eventColumns.map((col) => (
                       <th key={col.key} className="px-4 py-2 text-center text-xs font-medium text-dash-muted whitespace-nowrap">{col.label}</th>
@@ -229,26 +320,46 @@ export function GuestsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-dash-border bg-dash-surface">
-                {visibleGuests.map((g) => {
-                  return (
+                {groupedGuests.length === 0 ? (
+                  (guests ?? []).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")).map((g) => (
                     <tr key={g.id}>
                       <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
                       <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
                       <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
-                      {eventColumns.length > 0 ? (
-                        eventColumns.map((col) => (
-                          <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
-                        ))
-                      ) : (
-                        <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
-                      )}
+                      <td className="px-4 py-2 text-sm text-dash-muted">—</td>
+                      <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
                       <td className="px-4 py-2 text-right">
                         <button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button>
                         <button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button>
                       </td>
                     </tr>
-                  );
-                })}
+                  ))
+                ) : (
+                  groupedGuests.flatMap((section) => [
+                    <tr key={`sep-${section.key}`}>
+                      <td colSpan={eventColumns.length > 0 ? eventColumns.length + 5 : 6} className="bg-dash-bg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-dash-text">{section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span></td>
+                    </tr>,
+                    ...section.guests.map((g) => (
+                      <tr key={g.id}>
+                        <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
+                        <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
+                        <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
+                        <td className="px-4 py-2 text-sm text-dash-muted">{groupName(g.group_id) ?? "—"}</td>
+                        {eventColumns.length > 0 ? (
+                          eventColumns.map((col) => (
+                            <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
+                          ))
+                        ) : (
+                          <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
+                        )}
+                        <td className="px-4 py-2 text-right">
+                          <button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button>
+                          <button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button>
+                        </td>
+                      </tr>
+                    )),
+                  ])
+                )}
               </tbody>
             </table>
           </div>
@@ -261,6 +372,7 @@ export function GuestsPage() {
           eventId={eventId}
           guest={editGuest}
           subEvents={sortedSubEvents}
+          groups={sortedGroups}
           existingInvitations={editGuest ? Object.fromEntries([...(invitedEventsByGuest.get(editGuest.id) ?? [])].map((id) => [id, true])) : undefined}
           onSubmit={handleAddOrUpdate}
           onCancel={() => { setShowForm(false); setEditGuest(null); setFormError(null); }}
@@ -292,6 +404,50 @@ export function GuestsPage() {
                 })}
               </div>
             </div>
+          )}
+        </div>
+      </Modal>
+
+      <Modal open={showGroups} onClose={() => { setShowGroups(false); setGroupError(null); setNewGroupName(""); }} title="Manage Groups">
+        <div className="space-y-4">
+          {groupError && <p className="text-sm text-dash-danger">{groupError}</p>}
+          <div className="flex items-center gap-2">
+            <input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="New group name" className="flex-1 rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text" />
+            <Button size="sm" onClick={() => { setGroupError(null); createGroupMutation.mutate(newGroupName.trim(), { onError: (e) => setGroupError(e instanceof Error ? e.message : "Failed to create group") }); }} disabled={!newGroupName.trim()} loading={createGroupMutation.isPending}>Add</Button>
+          </div>
+
+          {sortedGroups.length > 0 && (
+            <div className="space-y-3 border-t border-dash-border pt-3">
+              {sortedSubEvents.length > 0 && (
+                <p className="text-xs text-dash-muted">Tick which events each group is invited to. Guests in the group inherit these invitations.</p>
+              )}
+              {sortedGroups.map((gr) => (
+                <div key={gr.id} className="space-y-2 rounded-lg border border-dash-border bg-dash-bg p-3">
+                  <div className="flex items-center gap-2">
+                    <input defaultValue={gr.name} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== gr.name) renameGroupMutation.mutate({ id: gr.id, name: v }); }} className="flex-1 rounded border border-dash-border bg-dash-surface px-2 py-1 text-sm text-dash-text" />
+                    <button onClick={() => deleteGroupMutation.mutate(gr.id)} className="text-xs text-dash-danger hover:underline" title="Delete group (guests become ungrouped)">Delete</button>
+                  </div>
+                  {sortedSubEvents.length > 0 && (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 pl-1">
+                      <label className="flex items-center gap-1.5 text-xs text-dash-text">
+                        <input type="checkbox" checked={groupInviteChecked(gr.id, null)} onChange={(e) => toggleGroupEventInviteMutation.mutate({ groupId: gr.id, subEventId: null, checked: e.target.checked })} className="accent-dash-primary" />
+                        Main Event
+                      </label>
+                      {sortedSubEvents.map((se) => (
+                        <label key={se.id} className="flex items-center gap-1.5 text-xs text-dash-text">
+                          <input type="checkbox" checked={groupInviteChecked(gr.id, se.id)} onChange={(e) => toggleGroupEventInviteMutation.mutate({ groupId: gr.id, subEventId: se.id, checked: e.target.checked })} className="accent-dash-primary" />
+                          {tabLabel(se)}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {sortedGroups.length === 0 && (
+            <p className="text-sm text-dash-muted">No groups yet. Create one above to start grouping your guests.</p>
           )}
         </div>
       </Modal>
