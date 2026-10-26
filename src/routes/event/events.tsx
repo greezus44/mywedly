@@ -3,9 +3,9 @@ import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type SubEvent, type EventSchedule } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui";
+import { Input, DateTimePicker } from "../../components/ui";
 import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
-import { formatDate, formatTime12 } from "../../lib/utils";
+import { formatDate, formatTime12, formatDateTime } from "../../lib/utils";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
 
@@ -31,6 +31,7 @@ export function EventsPage() {
   const [name, setName] = useState(""); const [nameBm, setNameBm] = useState(""); const [date, setDate] = useState(""); const [time, setTime] = useState("");
   const [venue, setVenue] = useState(""); const [address, setAddress] = useState(""); const [description, setDescription] = useState("");
   const [tabName, setTabName] = useState("");
+  const [rsvpDeadline, setRsvpDeadline] = useState("");
 
   // Programme items within the event form
   const [programmeItems, setProgrammeItems] = useState<ProgrammeItem[]>([]);
@@ -58,11 +59,11 @@ export function EventsPage() {
   const upcoming = (subEvents ?? []).filter((e) => (e.date ?? "") >= today).sort(sortByDate);
   const previous = (subEvents ?? []).filter((e) => (e.date ?? "") < today).sort((a, b) => sortByDate(b, a));
 
-  const resetForm = () => { setName(""); setNameBm(""); setDate(""); setTime(""); setVenue(""); setAddress(""); setDescription(""); setTabName(""); setEditEvent(null); setProgrammeItems([]); setFormError(null); };
+  const resetForm = () => { setName(""); setNameBm(""); setDate(""); setTime(""); setVenue(""); setAddress(""); setDescription(""); setTabName(""); setRsvpDeadline(""); setEditEvent(null); setProgrammeItems([]); setFormError(null); };
   const openAdd = () => { resetForm(); setShowForm(true); };
 
   const openEdit = async (e: SubEvent) => {
-    setEditEvent(e); setName(e.name ?? ""); setNameBm(e.name_bm ?? ""); setDate(e.date ?? ""); setTime(e.time ?? e.start_time ?? ""); setVenue(e.venue ?? ""); setAddress(e.address ?? ""); setDescription(e.description ?? ""); setTabName(e.tab_name ?? ""); setFormError(null);
+    setEditEvent(e); setName(e.name ?? ""); setNameBm(e.name_bm ?? ""); setDate(e.date ?? ""); setTime(e.time ?? e.start_time ?? ""); setVenue(e.venue ?? ""); setAddress(e.address ?? ""); setDescription(e.description ?? ""); setTabName(e.tab_name ?? ""); setRsvpDeadline(e.rsvp_deadline ?? ""); setFormError(null);
     // Load existing programme items for this sub-event
     const items = (allSchedule ?? []).filter((s) => s.sub_event_id === e.id).map((s) => ({
       id: s.id, start_time: s.start_time ?? "", end_time: s.end_time ?? "", title: s.title, title_bm: s.title_bm ?? "", description: s.description ?? "", description_bm: s.description_bm ?? "",
@@ -93,7 +94,7 @@ export function EventsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSubmitting(true); setFormError(null);
     try {
-      const payload = { parent_event_id: eventId, name, name_bm: nameBm || null, date: date || null, time: time || null, venue: venue || null, address: address || null, description: description || null, rsvp_enabled: true, tab_name: tabName.trim() || null };
+      const payload = { parent_event_id: eventId, name, name_bm: nameBm || null, date: date || null, time: time || null, venue: venue || null, address: address || null, description: description || null, rsvp_enabled: true, tab_name: tabName.trim() || null, rsvp_deadline: rsvpDeadline || null };
       let subEventId: string;
       if (editEvent) {
         const { error } = await supabase.from("sub_events").update(payload).eq("id", editEvent.id);
@@ -164,6 +165,7 @@ export function EventsPage() {
             {e.venue && <p className="text-sm text-dash-muted">{e.venue}</p>}
             {e.address && <p className="text-sm text-dash-muted">{e.address}</p>}
             {e.description && <p className="mt-2 text-sm text-dash-muted">{e.description}</p>}
+            {e.rsvp_deadline && <p className="mt-1 text-xs font-medium text-dash-muted">RSVP by {formatDateTime(e.rsvp_deadline)}</p>}
             {items.length > 0 && (
               <div className="mt-3 border-t border-dash-border pt-3">
                 <p className="mb-2 text-xs font-semibold text-dash-muted">Programme</p>
@@ -202,6 +204,7 @@ export function EventsPage() {
           <Input label="Short Tab Name (optional)" value={tabName} onChange={(e) => setTabName(e.target.value)} placeholder="e.g. Akad — used on the guest list tabs" />
           <div className="grid grid-cols-2 gap-3"><Input label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} /><Input label="Time" type="time" value={time} onChange={(e) => setTime(e.target.value)} /></div>
           <Input label="Venue" value={venue} onChange={(e) => setVenue(e.target.value)} /><Input label="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
+          <DateTimePicker label="RSVP Deadline (optional)" value={rsvpDeadline} onChange={setRsvpDeadline} />
           <div><label className="mb-1.5 block text-sm font-medium text-dash-text">Description</label><textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-dash-text focus:border-dash-primary focus:outline-none" /></div>
 
           {/* Programme section */}

@@ -208,6 +208,7 @@ export default function GuestJoin() {
           link_not_found: "This link is no longer available.",
           invalid_name: "Please enter a valid name.",
           invalid_status: "Please choose Attending or Declined.",
+          closed: language === "bm" ? "Tempoh RSVP untuk acara ini telah tamat." : "RSVP for this event is now closed.",
         };
         setError(messages[result.error] ?? "Something went wrong. Please try again.");
         setSubmitting(false);
@@ -278,6 +279,8 @@ export default function GuestJoin() {
   const dateStr = subEvent.date;
   const timeStr = subEvent.time || subEvent.start_time || null;
   const subEventName = language === "bm" ? (subEvent.name_bm?.trim() || subEvent.name) : subEvent.name;
+  const rsvpDeadlinePassed = !!subEvent.rsvp_deadline && new Date(subEvent.rsvp_deadline).getTime() < Date.now();
+  const closedMessage = language === "bm" ? "Tempoh RSVP untuk acara ini telah tamat." : "RSVP for this event is now closed.";
   const scheduleHeadingText = language === "bm"
     ? (pageConfig.scheduleHeadingBm?.trim() || "Aturcara")
     : (pageConfig.scheduleHeading?.trim() || "Program");
@@ -330,9 +333,14 @@ export default function GuestJoin() {
                 {(language === "bm" ? "RSVP sebelum" : "RSVP by").toLocaleUpperCase()} {formatDateLong(subEvent.rsvp_deadline).toLocaleUpperCase()}
               </p>
             )}
-            {intro && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap" }}>{intro}</p>}
+            {intro && !rsvpDeadlinePassed && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap" }}>{intro}</p>}
           </div>
 
+          {rsvpDeadlinePassed ? (
+            <div className="text-center">
+              <p className="guest-subtitle" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{closedMessage}</p>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="guest-rsvp-event flex flex-row items-start gap-1 sm:gap-1.5">
               {renderDateColumn(dateStr)}
@@ -423,6 +431,7 @@ export default function GuestJoin() {
               </button>
             </div>
           </form>
+          )}
         </div>
       </div>
     </EventThemeProvider>
