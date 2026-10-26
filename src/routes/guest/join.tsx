@@ -12,18 +12,30 @@ import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from
 
 interface PageConfig {
   heading?: string;
+  headingBm?: string;
   intro?: string;
+  introBm?: string;
   nameLabel?: string;
+  nameLabelBm?: string;
   attendingLabel?: string;
+  attendingLabelBm?: string;
   decliningLabel?: string;
+  decliningLabelBm?: string;
   submitLabel?: string;
+  submitLabelBm?: string;
   thankYouAttending?: string;
+  thankYouAttendingBm?: string;
   thankYouDeclined?: string;
+  thankYouDeclinedBm?: string;
   namePlaceholder?: string;
+  namePlaceholderBm?: string;
+  scheduleHeading?: string;
+  scheduleHeadingBm?: string;
+  attendingColor?: string;
+  declinedColor?: string;
+  buttonColors?: ButtonColors;
 }
 
-const ATTENDING_SELECTED_COLORS: ButtonColors = { bgColor: "#16a34a", textColor: "#ffffff", borderColor: "#16a34a", hoverBgColor: "#15803d", hoverTextColor: "#ffffff", hoverBorderColor: "#15803d" };
-const DECLINED_SELECTED_COLORS: ButtonColors = { bgColor: "#dc2626", textColor: "#ffffff", borderColor: "#dc2626", hoverBgColor: "#b91c1c", hoverTextColor: "#ffffff", hoverBorderColor: "#b91c1c" };
 const BLACK_TEXT = "#1a1a1a";
 
 interface LookupResult {
@@ -130,9 +142,14 @@ export default function GuestJoin() {
   const subEvent = lookup?.sub_event;
   const event = lookup?.event;
   const loginConfig = (event?.login_config ?? {}) as { buttonColors?: ButtonColors };
-  const buttonColors = loginConfig.buttonColors;
-  const btnStyle = buttonColorsToStyle(buttonColors);
-  const btnHoverStyle = buttonColorsToHoverStyle(buttonColors);
+  const pageButtonColors = pageConfig.buttonColors;
+  const attendingColor = pageConfig.attendingColor || "#16a34a";
+  const declinedColor = pageConfig.declinedColor || "#dc2626";
+  const attendingSelectedColors: ButtonColors = { bgColor: attendingColor, textColor: "#ffffff", borderColor: attendingColor, hoverBgColor: attendingColor, hoverTextColor: "#ffffff", hoverBorderColor: attendingColor };
+  const declinedSelectedColors: ButtonColors = { bgColor: declinedColor, textColor: "#ffffff", borderColor: declinedColor, hoverBgColor: declinedColor, hoverTextColor: "#ffffff", hoverBorderColor: declinedColor };
+  const baseButtonColors = pageButtonColors ?? loginConfig.buttonColors;
+  const btnStyle = buttonColorsToStyle(baseButtonColors);
+  const btnHoverStyle = buttonColorsToHoverStyle(baseButtonColors);
 
   const unselectedBtnStyle = (): React.CSSProperties => {
     const base: React.CSSProperties = { ...btnStyle };
@@ -141,10 +158,10 @@ export default function GuestJoin() {
     if (!base.color) base.color = "var(--event-text)";
     return base;
   };
-  const attendingBtnStyle = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToStyle(ATTENDING_SELECTED_COLORS) : unselectedBtnStyle();
-  const declinedBtnStyle = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToStyle(DECLINED_SELECTED_COLORS) : unselectedBtnStyle();
-  const attendingBtnHover = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToHoverStyle(ATTENDING_SELECTED_COLORS) : btnHoverStyle;
-  const declinedBtnHover = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToHoverStyle(DECLINED_SELECTED_COLORS) : btnHoverStyle;
+  const attendingBtnStyle = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToStyle(attendingSelectedColors) : unselectedBtnStyle();
+  const declinedBtnStyle = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToStyle(declinedSelectedColors) : unselectedBtnStyle();
+  const attendingBtnHover = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToHoverStyle(attendingSelectedColors) : btnHoverStyle;
+  const declinedBtnHover = (isSelected: boolean): React.CSSProperties => isSelected ? buttonColorsToHoverStyle(declinedSelectedColors) : btnHoverStyle;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,16 +203,34 @@ export default function GuestJoin() {
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
   if (!lookup || !subEvent || !event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Link Not Found</h1><p className="text-dash-muted">This RSVP link could not be found or is no longer available.</p><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
 
-  const heading = pageConfig.heading || (language === "bm" ? `RSVP — ${subEvent.name_bm || subEvent.name}` : `RSVP — ${subEvent.name}`);
-  const intro = pageConfig.intro || "";
-  const nameLabel = pageConfig.nameLabel || "Your Name";
-  const namePlaceholder = pageConfig.namePlaceholder || "Enter your full name";
-  const attendingLabel = pageConfig.attendingLabel || "Attending";
-  const decliningLabel = pageConfig.decliningLabel || "Declined";
-  const submitLabel = pageConfig.submitLabel || "Submit RSVP";
+  const heading = language === "bm"
+    ? (pageConfig.headingBm?.trim() || pageConfig.heading || `RSVP — ${subEvent.name_bm || subEvent.name}`)
+    : (pageConfig.heading || `RSVP — ${subEvent.name}`);
+  const intro = language === "bm"
+    ? (pageConfig.introBm?.trim() || pageConfig.intro || "")
+    : (pageConfig.intro || "");
+  const nameLabel = language === "bm"
+    ? (pageConfig.nameLabelBm?.trim() || pageConfig.nameLabel || "Nama Anda")
+    : (pageConfig.nameLabel || "Your Name");
+  const namePlaceholder = language === "bm"
+    ? (pageConfig.namePlaceholderBm?.trim() || pageConfig.namePlaceholder || "Masukkan nama penuh anda")
+    : (pageConfig.namePlaceholder || "Enter your full name");
+  const attendingLabel = language === "bm"
+    ? (pageConfig.attendingLabelBm?.trim() || pageConfig.attendingLabel || "Hadir")
+    : (pageConfig.attendingLabel || "Attending");
+  const decliningLabel = language === "bm"
+    ? (pageConfig.decliningLabelBm?.trim() || pageConfig.decliningLabel || "Tidak Hadir")
+    : (pageConfig.decliningLabel || "Declined");
+  const submitLabel = language === "bm"
+    ? (pageConfig.submitLabelBm?.trim() || pageConfig.submitLabel || "Hantar RSVP")
+    : (pageConfig.submitLabel || "Submit RSVP");
   const thankYou = status === "attending"
-    ? (pageConfig.thankYouAttending || "Thank you! We look forward to seeing you.")
-    : (pageConfig.thankYouDeclined || "Thank you for letting us know.");
+    ? (language === "bm"
+      ? (pageConfig.thankYouAttendingBm?.trim() || pageConfig.thankYouAttending || "Terima kasih! Kami menanti kehadiran anda.")
+      : (pageConfig.thankYouAttending || "Thank you! We look forward to seeing you."))
+    : (language === "bm"
+      ? (pageConfig.thankYouDeclinedBm?.trim() || pageConfig.thankYouDeclined || "Terima kasih kerana memberitahu kami.")
+      : (pageConfig.thankYouDeclined || "Thank you for letting us know."));
 
   if (step === "done") {
     return (
@@ -220,7 +255,9 @@ export default function GuestJoin() {
   const dateStr = subEvent.date;
   const timeStr = subEvent.time || subEvent.start_time || null;
   const subEventName = language === "bm" ? (subEvent.name_bm?.trim() || subEvent.name) : subEvent.name;
-  const scheduleHeadingText = language === "bm" ? "Program" : "Program";
+  const scheduleHeadingText = language === "bm"
+    ? (pageConfig.scheduleHeadingBm?.trim() || "Aturcara")
+    : (pageConfig.scheduleHeading?.trim() || "Program");
 
   const renderDateColumn = (date: string | null | undefined) => {
     const parts = getDateParts(date);

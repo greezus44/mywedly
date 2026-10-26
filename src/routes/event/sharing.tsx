@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type SharingEvent, type SubEvent, type OpenRsvpLink, type Json } from "../../lib/supabase";
-import { Button, Input, Toggle, Modal, LoadingSpinner, Badge } from "../../components/ui";
+import { Button, Input, Toggle, Modal, LoadingSpinner, Badge, ColorInput } from "../../components/ui";
+import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { generateQrDataUrl, downloadQrCode, downloadQrSvg } from "../../lib/qr";
 import { useEffect } from "react";
 
@@ -10,25 +11,53 @@ interface EventContextValue { event: UserEvent; eventId: string; }
 
 interface PageConfig {
   heading?: string;
+  headingBm?: string;
   intro?: string;
+  introBm?: string;
   nameLabel?: string;
+  nameLabelBm?: string;
   attendingLabel?: string;
+  attendingLabelBm?: string;
   decliningLabel?: string;
+  decliningLabelBm?: string;
   submitLabel?: string;
+  submitLabelBm?: string;
   thankYouAttending?: string;
+  thankYouAttendingBm?: string;
   thankYouDeclined?: string;
+  thankYouDeclinedBm?: string;
   namePlaceholder?: string;
+  namePlaceholderBm?: string;
+  scheduleHeading?: string;
+  scheduleHeadingBm?: string;
+  attendingColor?: string;
+  declinedColor?: string;
+  buttonColors?: ButtonColors;
 }
 
 const DEFAULT_PAGE_CONFIG: PageConfig = {
   heading: "RSVP",
+  headingBm: "RSVP",
   intro: "Please let us know if you can make it.",
+  introBm: "Sila beritahu kami sama ada anda boleh hadir.",
   nameLabel: "Your Name",
+  nameLabelBm: "Nama Anda",
+  namePlaceholder: "Enter your full name",
+  namePlaceholderBm: "Masukkan nama penuh anda",
   attendingLabel: "Attending",
+  attendingLabelBm: "Hadir",
   decliningLabel: "Declined",
+  decliningLabelBm: "Tidak Hadir",
   submitLabel: "Submit RSVP",
+  submitLabelBm: "Hantar RSVP",
+  scheduleHeading: "Program",
+  scheduleHeadingBm: "Aturcara",
   thankYouAttending: "Thank you! We look forward to seeing you.",
+  thankYouAttendingBm: "Terima kasih! Kami menanti kehadiran anda.",
   thankYouDeclined: "Thank you for letting us know.",
+  thankYouDeclinedBm: "Terima kasih kerana memberitahu kami.",
+  attendingColor: "#16a34a",
+  declinedColor: "#dc2626",
 };
 
 export function SharingPage() {
@@ -221,44 +250,70 @@ export function SharingPage() {
             <span className="text-sm font-medium text-dash-text">Link enabled</span>
             <Toggle checked={editEnabled} onChange={setEditEnabled} />
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-dash-text">Heading</label>
-            <Input value={editConfig.heading ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, heading: e.target.value }))} />
+          <SectionLabel>Heading</SectionLabel>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <LabeledInput label="English" value={editConfig.heading ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, heading: v }))} />
+            <LabeledInput label="Bahasa Melayu" value={editConfig.headingBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, headingBm: v }))} />
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-dash-text">Intro text</label>
-            <Input value={editConfig.intro ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, intro: e.target.value }))} />
+          <SectionLabel>Intro text</SectionLabel>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <LabeledInput label="English" value={editConfig.intro ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, intro: v }))} />
+            <LabeledInput label="Bahasa Melayu" value={editConfig.introBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, introBm: v }))} />
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-dash-text">Name field label</label>
-            <Input value={editConfig.nameLabel ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, nameLabel: e.target.value }))} />
+          <SectionLabel>Name field label</SectionLabel>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <LabeledInput label="English" value={editConfig.nameLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, nameLabel: v }))} />
+            <LabeledInput label="Bahasa Melayu" value={editConfig.nameLabelBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, nameLabelBm: v }))} />
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-dash-text">Name placeholder</label>
-            <Input value={editConfig.namePlaceholder ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, namePlaceholder: e.target.value }))} />
+          <SectionLabel>Name placeholder</SectionLabel>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <LabeledInput label="English" value={editConfig.namePlaceholder ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, namePlaceholder: v }))} />
+            <LabeledInput label="Bahasa Melayu" value={editConfig.namePlaceholderBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, namePlaceholderBm: v }))} />
           </div>
+          <SectionLabel>RSVP button labels</SectionLabel>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <LabeledInput label="Attending (EN)" value={editConfig.attendingLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, attendingLabel: v }))} />
+              <LabeledInput label="Attending (BM)" value={editConfig.attendingLabelBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, attendingLabelBm: v }))} />
+            </div>
+            <div className="space-y-2">
+              <LabeledInput label="Declined (EN)" value={editConfig.decliningLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, decliningLabel: v }))} />
+              <LabeledInput label="Declined (BM)" value={editConfig.decliningLabelBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, decliningLabelBm: v }))} />
+            </div>
+          </div>
+          <SectionLabel>Submit button label</SectionLabel>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <LabeledInput label="English" value={editConfig.submitLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, submitLabel: v }))} />
+            <LabeledInput label="Bahasa Melayu" value={editConfig.submitLabelBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, submitLabelBm: v }))} />
+          </div>
+          <SectionLabel>Schedule / programme heading</SectionLabel>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <LabeledInput label="English" value={editConfig.scheduleHeading ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, scheduleHeading: v }))} />
+            <LabeledInput label="Bahasa Melayu" value={editConfig.scheduleHeadingBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, scheduleHeadingBm: v }))} />
+          </div>
+          <SectionLabel>Thank-you messages</SectionLabel>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <LabeledInput label="Attending (EN)" value={editConfig.thankYouAttending ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, thankYouAttending: v }))} />
+              <LabeledInput label="Attending (BM)" value={editConfig.thankYouAttendingBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, thankYouAttendingBm: v }))} />
+            </div>
+            <div className="space-y-2">
+              <LabeledInput label="Declined (EN)" value={editConfig.thankYouDeclined ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, thankYouDeclined: v }))} />
+              <LabeledInput label="Declined (BM)" value={editConfig.thankYouDeclinedBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, thankYouDeclinedBm: v }))} />
+            </div>
+          </div>
+          <SectionLabel>Selected button colours</SectionLabel>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-dash-text">Attending label</label>
-              <Input value={editConfig.attendingLabel ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, attendingLabel: e.target.value }))} />
+              <label className="mb-1 block text-xs font-medium text-dash-muted">Attending colour</label>
+              <ColorInput value={editConfig.attendingColor ?? "#16a34a"} onChange={(v) => setEditConfig((p) => ({ ...p, attendingColor: v }))} />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-dash-text">Declined label</label>
-              <Input value={editConfig.decliningLabel ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, decliningLabel: e.target.value }))} />
+              <label className="mb-1 block text-xs font-medium text-dash-muted">Declined colour</label>
+              <ColorInput value={editConfig.declinedColor ?? "#dc2626"} onChange={(v) => setEditConfig((p) => ({ ...p, declinedColor: v }))} />
             </div>
           </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-dash-text">Submit button label</label>
-            <Input value={editConfig.submitLabel ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, submitLabel: e.target.value }))} />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-dash-text">Thank-you message (attending)</label>
-            <Input value={editConfig.thankYouAttending ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, thankYouAttending: e.target.value }))} />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-dash-text">Thank-you message (declined)</label>
-            <Input value={editConfig.thankYouDeclined ?? ""} onChange={(e) => setEditConfig((p) => ({ ...p, thankYouDeclined: e.target.value }))} />
-          </div>
+          <ButtonColourEditor label="Base Button Colours (unselected)" value={editConfig.buttonColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, buttonColors: v }))} />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setEditingLink(null)}>Cancel</Button>
             <Button onClick={saveEdit} disabled={savingEdit}>{savingEdit ? "Saving..." : "Save"}</Button>
@@ -283,6 +338,19 @@ function OpenLinkQr({ url, slug }: { url: string; slug: string }) {
         <Button size="sm" variant="secondary" onClick={() => downloadQrCode(url, `${safeSlug}-qr.png`)}>Download PNG</Button>
         <Button size="sm" variant="secondary" onClick={() => downloadQrSvg(url, `${safeSlug}-qr.svg`)}>Download SVG</Button>
       </div>
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <h4 className="text-xs font-semibold uppercase tracking-wide text-dash-muted">{children}</h4>;
+}
+
+function LabeledInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-dash-muted">{label}</label>
+      <Input value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }
