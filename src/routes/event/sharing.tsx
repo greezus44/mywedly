@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type SharingEvent, type SubEvent, type OpenRsvpLink, type Json } from "../../lib/supabase";
 import { Button, Input, Toggle, Modal, LoadingSpinner, Badge, DateTimePicker, ColorInput } from "../../components/ui";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
+import { TypographyControls } from "../../components/ui/TypographyControls";
 import { generateQrDataUrl, downloadQrCode, downloadQrSvg } from "../../lib/qr";
 import { useEffect } from "react";
+import type { TypographyStyle } from "../../lib/typography";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
 
@@ -56,6 +58,14 @@ interface PageConfig {
   plusOneYesTextColor?: string;
   plusOneNoTextColor?: string;
   plusOneQuestionColor?: string;
+  headingTypography?: TypographyStyle;
+  introTypography?: TypographyStyle;
+  eventTitleTypography?: TypographyStyle;
+  eventTimeTypography?: TypographyStyle;
+  eventAddressTypography?: TypographyStyle;
+  scheduleHeadingTypography?: TypographyStyle;
+  programmeItemTypography?: TypographyStyle;
+  rsvpDeadlineTypography?: TypographyStyle;
 }
 
 const DEFAULT_PAGE_CONFIG: PageConfig = {
@@ -413,6 +423,14 @@ export function SharingPage() {
             <LabeledInput label="English" value={editConfig.scheduleHeading ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, scheduleHeading: v }))} />
             <LabeledInput label="Bahasa Melayu" value={editConfig.scheduleHeadingBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, scheduleHeadingBm: v }))} />
           </div>
+          <TypographyControls label="Page heading typography" value={editConfig.headingTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, headingTypography: v }))} showText={false} />
+          <TypographyControls label="Intro text typography" value={editConfig.introTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, introTypography: v }))} showText={false} />
+          <TypographyControls label="Event title typography" value={editConfig.eventTitleTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, eventTitleTypography: v }))} showText={false} />
+          <TypographyControls label="Event time typography" value={editConfig.eventTimeTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, eventTimeTypography: v }))} showText={false} />
+          <TypographyControls label="Venue / address typography" value={editConfig.eventAddressTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, eventAddressTypography: v }))} showText={false} />
+          <TypographyControls label="Programme heading typography" value={editConfig.scheduleHeadingTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, scheduleHeadingTypography: v }))} showText={false} />
+          <TypographyControls label="Programme item typography" value={editConfig.programmeItemTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, programmeItemTypography: v }))} showText={false} />
+          <TypographyControls label="RSVP deadline typography" value={editConfig.rsvpDeadlineTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, rsvpDeadlineTypography: v }))} showText={false} />
           <SectionLabel>Thank-you messages</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">

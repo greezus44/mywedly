@@ -9,6 +9,8 @@ import { useLanguage } from "../../lib/language";
 import { setCurrentLanguage, getCurrentLanguage } from "../../lib/translations";
 import { formatDateLong, formatTime12 } from "../../lib/utils";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
+import type { TypographyStyle } from "../../lib/typography";
+import { getTypographyStyle } from "../../lib/typography";
 
 interface PageConfig {
   heading?: string;
@@ -57,6 +59,14 @@ interface PageConfig {
   plusOneYesTextColor?: string;
   plusOneNoTextColor?: string;
   plusOneQuestionColor?: string;
+  headingTypography?: TypographyStyle;
+  introTypography?: TypographyStyle;
+  eventTitleTypography?: TypographyStyle;
+  eventTimeTypography?: TypographyStyle;
+  eventAddressTypography?: TypographyStyle;
+  scheduleHeadingTypography?: TypographyStyle;
+  programmeItemTypography?: TypographyStyle;
+  rsvpDeadlineTypography?: TypographyStyle;
 }
 
 const BLACK_TEXT = "#1a1a1a";
@@ -317,15 +327,24 @@ export default function GuestJoin() {
   const plusOneNoTextColor = pageConfig.plusOneNoTextColor || undefined;
   const plusOneQuestionColor = pageConfig.plusOneQuestionColor || "var(--event-text)";
 
+  const headingStyle = getTypographyStyle(pageConfig.headingTypography);
+  const introStyle = getTypographyStyle(pageConfig.introTypography);
+  const eventTitleStyle = getTypographyStyle(pageConfig.eventTitleTypography);
+  const eventTimeStyle = getTypographyStyle(pageConfig.eventTimeTypography);
+  const eventAddressStyle = getTypographyStyle(pageConfig.eventAddressTypography);
+  const scheduleHeadingStyle = getTypographyStyle(pageConfig.scheduleHeadingTypography);
+  const programmeItemStyle = getTypographyStyle(pageConfig.programmeItemTypography);
+  const rsvpDeadlineStyle = getTypographyStyle(pageConfig.rsvpDeadlineTypography);
+
   const renderDateColumn = (date: string | null | undefined) => {
     const parts = getDateParts(date);
     if (!parts) return null;
     return (
       <div className="flex flex-col items-center text-center flex-shrink-0" style={{ minWidth: "64px", textTransform: "uppercase" }}>
-        <span className="text-[0.6875rem] sm:text-xs uppercase tracking-wide" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.weekday.toLocaleUpperCase()}</span>
-        <span className="text-3xl sm:text-3xl font-bold leading-tight" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{parts.day}</span>
-        <span className="text-sm sm:text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{parts.month.toLocaleUpperCase()}</span>
-        <span className="text-sm sm:text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{parts.year}</span>
+        <span className="text-[0.6875rem] sm:text-xs uppercase tracking-wide" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...eventTimeStyle }}>{parts.weekday.toLocaleUpperCase()}</span>
+        <span className="text-3xl sm:text-3xl font-bold leading-tight" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", ...eventTimeStyle }}>{parts.day}</span>
+        <span className="text-sm sm:text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)", ...eventTimeStyle }}>{parts.month.toLocaleUpperCase()}</span>
+        <span className="text-sm sm:text-sm" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...eventTimeStyle }}>{parts.year}</span>
       </div>
     );
   };
@@ -335,16 +354,16 @@ export default function GuestJoin() {
     if (items.length === 0) return null;
     return (
       <div className="mt-4 sm:mt-6">
-        <h3 className="mb-3 sm:mb-4" style={{ fontFamily: "var(--event-font-heading)", color: BLACK_TEXT }}>{scheduleHeadingText}</h3>
+        <h3 className="mb-3 sm:mb-4" style={{ fontFamily: "var(--event-font-heading)", color: BLACK_TEXT, ...scheduleHeadingStyle }}>{scheduleHeadingText}</h3>
         <div className="space-y-3 sm:space-y-4">
           {items.map((item) => (
             <div key={item.id} className="guest-rsvp-schedule-row grid items-start">
-              <div className="guest-rsvp-schedule-time text-xs sm:text-sm font-medium leading-snug" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)" }}>
+              <div className="guest-rsvp-schedule-time text-xs sm:text-sm font-medium leading-snug" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)", ...programmeItemStyle }}>
                 {formatScheduleTimeRange(item.start_time, item.end_time)}
               </div>
               <div className="guest-rsvp-schedule-title min-w-0">
-                <p className="font-medium text-sm sm:text-base leading-snug" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-heading)", overflowWrap: "break-word" }}>{language === "bm" ? (item.title_bm?.trim() || item.title) : item.title}</p>
-                {(language === "bm" ? (item.description_bm?.trim() || item.description) : item.description) && <p className="text-xs sm:text-sm mt-0.5 leading-snug" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", overflowWrap: "break-word" }}>{language === "bm" ? (item.description_bm?.trim() || item.description) : item.description}</p>}
+                <p className="font-medium text-sm sm:text-base leading-snug" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-heading)", overflowWrap: "break-word", ...programmeItemStyle }}>{language === "bm" ? (item.title_bm?.trim() || item.title) : item.title}</p>
+                {(language === "bm" ? (item.description_bm?.trim() || item.description) : item.description) && <p className="text-xs sm:text-sm mt-0.5 leading-snug" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", overflowWrap: "break-word", ...programmeItemStyle }}>{language === "bm" ? (item.description_bm?.trim() || item.description) : item.description}</p>}
               </div>
             </div>
           ))}
@@ -359,13 +378,13 @@ export default function GuestJoin() {
       <div className="guest-section guest-rsvp-page">
         <div className="mx-auto max-w-2xl guest-rsvp-content">
           <div className="text-center pt-8 sm:pt-12 mb-12 sm:mb-16">
-            <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>{heading}</h1>
+            <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0, ...headingStyle }}>{heading}</h1>
             {subEvent.rsvp_deadline && (
-              <p className="text-center" style={{ whiteSpace: "pre-wrap", marginTop: "4px", marginBottom: 0, color: "var(--event-muted)", fontFamily: "var(--event-font-body)", textTransform: "uppercase" }}>
+              <p className="text-center" style={{ whiteSpace: "pre-wrap", marginTop: "4px", marginBottom: 0, ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)", textTransform: "uppercase" }}>
                 {(language === "bm" ? "RSVP sebelum" : "RSVP by").toLocaleUpperCase()} {formatDateLong(subEvent.rsvp_deadline).toLocaleUpperCase()}
               </p>
             )}
-            {intro && !rsvpDeadlinePassed && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap" }}>{intro}</p>}
+            {intro && !rsvpDeadlinePassed && <p className="guest-subtitle text-center" style={{ margin: "0 auto", whiteSpace: "pre-wrap", ...introStyle }}>{intro}</p>}
           </div>
 
           {rsvpDeadlinePassed ? (
@@ -377,10 +396,10 @@ export default function GuestJoin() {
             <div className="guest-rsvp-event flex flex-row items-start gap-1 sm:gap-1.5">
               {renderDateColumn(dateStr)}
               <div className="flex-1 min-w-0">
-                {subEventName && <h2 className="text-lg sm:text-2xl font-bold mb-1 break-words" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)" }}>{subEventName}</h2>}
-                {timeStr && <p className="text-xs sm:text-sm mb-1" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)", whiteSpace: "nowrap" }}>{formatTime12(timeStr)}</p>}
-                {subEvent.venue && <p className="text-xs sm:text-sm" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)" }}>{subEvent.venue}</p>}
-                {subEvent.address && <p className="text-xs sm:text-sm" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)" }}>{subEvent.address}</p>}
+                {subEventName && <h2 className="text-lg sm:text-2xl font-bold mb-1 break-words" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...eventTitleStyle }}>{subEventName}</h2>}
+                {timeStr && <p className="text-xs sm:text-sm mb-1" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)", whiteSpace: "nowrap", ...eventTimeStyle }}>{formatTime12(timeStr)}</p>}
+                {subEvent.venue && <p className="text-xs sm:text-sm" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)", ...eventTimeStyle }}>{subEvent.venue}</p>}
+                {subEvent.address && <p className="text-xs sm:text-sm" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)", ...eventAddressStyle }}>{subEvent.address}</p>}
                 {renderSchedule()}
               </div>
             </div>
