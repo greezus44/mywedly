@@ -360,7 +360,7 @@ export default function GuestJoin() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-center text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{nameLabel}</label>
+              <label className="mb-1.5 block text-center text-sm font-semibold" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{nameLabel}</label>
               <input
                 type="text"
                 value={name}
@@ -373,7 +373,7 @@ export default function GuestJoin() {
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
-                style={{ textAlign: "center", fontFamily: "var(--event-font-heading)" }}
+                style={{ textAlign: "center", fontFamily: "var(--event-font-heading)", fontWeight: 600 }}
               />
             </div>
 
@@ -387,7 +387,7 @@ export default function GuestJoin() {
                   onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "attending" ? 1 : 0.6, ...attendingBtnStyle(status === "attending"), ...attendingBtnHover(status === "attending") })}
                   onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "attending" ? 1 : 0.6, ...attendingBtnStyle(status === "attending") })}
                 >
-                  {attendingLabel}
+                  <span style={{ fontWeight: 600 }}>{attendingLabel}</span>
                 </button>
                 <button
                   type="button"
@@ -397,7 +397,7 @@ export default function GuestJoin() {
                   onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "declined" ? 1 : 0.6, ...declinedBtnStyle(status === "declined"), ...declinedBtnHover(status === "declined") })}
                   onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: status === "declined" ? 1 : 0.6, ...declinedBtnStyle(status === "declined") })}
                 >
-                  {decliningLabel}
+                  <span style={{ fontWeight: 600 }}>{decliningLabel}</span>
                 </button>
               </div>
             </div>
@@ -433,7 +433,7 @@ export default function GuestJoin() {
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
             <div className="text-center pt-2">
               <button type="submit" disabled={submitting || !status || !name.trim() || (status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne)} className="event-btn-primary" style={{ opacity: submitting || !status || !name.trim() || (status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne) ? 0.6 : 1, ...btnStyle }} onMouseEnter={(e) => { if (!submitting && status && name.trim() && !(status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne)) Object.assign(e.currentTarget.style, btnHoverStyle); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, btnStyle)}>
-                {submitting ? (language === "bm" ? "Menghantar..." : "Submitting...") : submitLabel}
+                <span style={{ fontWeight: 600 }}>{submitting ? (language === "bm" ? "Menghantar..." : "Submitting...") : submitLabel}</span>
               </button>
             </div>
           </form>
