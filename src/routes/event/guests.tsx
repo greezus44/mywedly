@@ -40,6 +40,8 @@ export function GuestsPage() {
   const [showInvites, setShowInvites] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [showGroups, setShowGroups] = useState(false);
+  const [guestToDelete, setGuestToDelete] = useState<EventGuest | null>(null);
+  const [groupToDelete, setGroupToDelete] = useState<GuestGroup | null>(null);
   const [selectedGuestIds, setSelectedGuestIds] = useState<Set<string>>(new Set());
   const [inviteSubEventId, setInviteSubEventId] = useState<string>("");
   const [bulkGroupId, setBulkGroupId] = useState<string>("");
@@ -265,7 +267,10 @@ export function GuestsPage() {
   const toggleGroupEventInviteMutation = useMutation({
     mutationFn: async ({ groupId, subEventId, checked }: { groupId: string; subEventId: string | null; checked: boolean }) => {
       if (checked) {
-        const { error } = await supabase.from("group_event_invites").insert({ group_id: groupId, event_id: eventId, sub_event_id: subEventId });
+        const { error } = await supabase.from("group_event_invites").upsert(
+          { group_id: groupId, event_id: eventId, sub_event_id: subEventId },
+          { onConflict: "group_id,event_id,sub_event_id" },
+        );
         if (error) throw error;
       } else {
         let q = supabase.from("group_event_invites").delete().eq("group_id", groupId).eq("event_id", eventId);
@@ -274,7 +279,13 @@ export function GuestsPage() {
         if (error) throw error;
       }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["group-event-invites", eventId] }),
+    onSuccess: () => {
+      setGroupError(null);
+      queryClient.invalidateQueries({ queryKey: ["group-event-invites", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["all-guest-invitation-overrides", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] });
+    },
+    onError: (e) => setGroupError(e instanceof Error ? e.message : "Failed to update group invitation"),
   });
 
   const toggleGuestSelection = (id: string) => {
@@ -335,6 +346,8 @@ export function GuestsPage() {
 
       queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
       queryClient.invalidateQueries({ queryKey: ["guest-invitation-overrides", guestId] });
+      queryClient.invalidateQueries({ queryKey: ["all-guest-invitation-overrides", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] });
       setShowForm(false); setEditGuest(null);
     } catch (e) { setFormError(e instanceof Error ? e.message : "Failed to save guest"); }
     finally { setSubmitting(false); }
@@ -409,7 +422,7 @@ export function GuestsPage() {
                       <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} plusOneLabel={plusOneLabelFor(g.id, "__main__")} /></td>
                       <td className="px-4 py-2 text-right">
                         <button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button>
-                        <button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button>
+                        <button onClick={() => setGuestToDelete(g)} className="text-xs text-dash-danger hover:underline">Delete</button>
                       </td>
                     </tr>
                   ))
@@ -436,7 +449,7 @@ export function GuestsPage() {
                         )}
                         <td className="px-4 py-2 text-right">
                           <button onClick={() => { setEditGuest(g); setShowForm(true); }} className="mr-2 text-xs text-dash-primary hover:underline">Edit</button>
-                          <button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button>
+                          <button onClick={() => setGuestToDelete(g)} className="text-xs text-dash-danger hover:underline">Delete</button>
                         </td>
                       </tr>
                     ))),
@@ -536,17 +549,17 @@ export function GuestsPage() {
                 <div key={gr.id} className="space-y-2 rounded-lg border border-dash-border bg-dash-bg p-3">
                   <div className="flex items-center gap-2">
                     <input defaultValue={gr.name} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== gr.name) renameGroupMutation.mutate({ id: gr.id, name: v }); }} className="flex-1 rounded border border-dash-border bg-dash-surface px-2 py-1 text-sm text-dash-text" />
-                    <button onClick={() => deleteGroupMutation.mutate(gr.id)} className="text-xs text-dash-danger hover:underline" title="Delete group (guests become ungrouped)">Delete</button>
+                    <button onClick={() => setGroupToDelete(gr)} className="text-xs text-dash-danger hover:underline" title="Delete group (guests become ungrouped)">Delete</button>
                   </div>
                   {sortedSubEvents.length > 0 && (
                     <div className="flex flex-wrap gap-x-4 gap-y-1 pl-1">
                       <label className="flex items-center gap-1.5 text-xs text-dash-text">
-                        <input type="checkbox" checked={groupInviteChecked(gr.id, null)} onChange={(e) => toggleGroupEventInviteMutation.mutate({ groupId: gr.id, subEventId: null, checked: e.target.checked })} className="accent-dash-primary" />
+                        <input type="checkbox" checked={groupInviteChecked(gr.id, null)} onChange={(e) => { setGroupError(null); toggleGroupEventInviteMutation.mutate({ groupId: gr.id, subEventId: null, checked: e.target.checked }); }} className="accent-dash-primary" />
                         Main Event
                       </label>
                       {sortedSubEvents.map((se) => (
                         <label key={se.id} className="flex items-center gap-1.5 text-xs text-dash-text">
-                          <input type="checkbox" checked={groupInviteChecked(gr.id, se.id)} onChange={(e) => toggleGroupEventInviteMutation.mutate({ groupId: gr.id, subEventId: se.id, checked: e.target.checked })} className="accent-dash-primary" />
+                          <input type="checkbox" checked={groupInviteChecked(gr.id, se.id)} onChange={(e) => { setGroupError(null); toggleGroupEventInviteMutation.mutate({ groupId: gr.id, subEventId: se.id, checked: e.target.checked }); }} className="accent-dash-primary" />
                           {tabLabel(se)}
                         </label>
                       ))}
@@ -560,6 +573,26 @@ export function GuestsPage() {
           {sortedGroups.length === 0 && (
             <p className="text-sm text-dash-muted">No groups yet. Create one above to start grouping your guests.</p>
           )}
+        </div>
+      </Modal>
+
+      <Modal open={!!guestToDelete} onClose={() => setGuestToDelete(null)} title="Delete guest?">
+        <div className="space-y-4">
+          <p className="text-sm text-dash-text">Are you sure you want to delete <span className="font-semibold">{guestToDelete?.name ?? "this guest"}</span>? This cannot be undone, and any RSVP responses for this guest will also be removed.</p>
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setGuestToDelete(null)}>Cancel</Button>
+            <Button size="sm" variant="danger" loading={deleteMutation.isPending} onClick={() => { if (guestToDelete) { deleteMutation.mutate(guestToDelete.id, { onSuccess: () => setGuestToDelete(null) }); } }}>Delete</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!groupToDelete} onClose={() => setGroupToDelete(null)} title="Delete group?">
+        <div className="space-y-4">
+          <p className="text-sm text-dash-text">Are you sure you want to delete the group <span className="font-semibold">{groupToDelete?.name ?? ""}</span>? The guests in this group will not be deleted, but they will become ungrouped.</p>
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setGroupToDelete(null)}>Cancel</Button>
+            <Button size="sm" variant="danger" loading={deleteGroupMutation.isPending} onClick={() => { if (groupToDelete) { deleteGroupMutation.mutate(groupToDelete.id, { onSuccess: () => setGroupToDelete(null) }); } }}>Delete</Button>
+          </div>
         </div>
       </Modal>
 
