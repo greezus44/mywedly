@@ -30,7 +30,7 @@ export function CoverEditor() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("user_events").update({ draft_cover_config: config as unknown as Json, draft_cover_image: config.background?.image ?? null }).eq("id", eventId);
+      const { error } = await supabase.from("user_events").update({ draft_cover_config: config as unknown as Json, draft_cover_image: config.background?.image ?? null, draft_logo_config: (config.logo ?? null) as unknown as Json }).eq("id", eventId);
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", eventId] }),
