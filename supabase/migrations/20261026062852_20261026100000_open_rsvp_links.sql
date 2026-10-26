@@ -122,7 +122,8 @@ AS $$
       'slug', e.slug,
       'name', e.name,
       'name_bm', e.name_bm,
-      'theme', e.theme
+      'theme', e.theme,
+      'login_config', e.login_config
     )
   )
   FROM open_rsvp_links l

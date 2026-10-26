@@ -8,6 +8,7 @@ import { LanguageToggle } from "../../components/site/LanguageToggle";
 import { useLanguage } from "../../lib/language";
 import { setCurrentLanguage } from "../../lib/translations";
 import { formatDateLong, formatTime12 } from "../../lib/utils";
+import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 
 interface PageConfig {
   heading?: string;
@@ -52,6 +53,7 @@ interface LookupResult {
     name: string;
     name_bm: string | null;
     theme: Json;
+    login_config: Json | null;
   };
 }
 
@@ -85,6 +87,10 @@ export default function GuestJoin() {
   const subEvent = lookup?.sub_event;
   const event = lookup?.event;
   const allowPlusOne = lookup?.link?.allow_plus_one ?? false;
+  const loginConfig = (event?.login_config ?? {}) as { buttonColors?: ButtonColors };
+  const buttonColors = loginConfig.buttonColors;
+  const btnStyle = buttonColorsToStyle(buttonColors);
+  const btnHoverStyle = buttonColorsToHoverStyle(buttonColors);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,7 +188,7 @@ export default function GuestJoin() {
             {subEvent.address && <p className="text-xs" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{subEvent.address}</p>}
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="mb-1.5 block text-center text-sm font-medium" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{nameLabel}</label>
               <input
@@ -194,7 +200,10 @@ export default function GuestJoin() {
                 required
                 autoFocus
                 autoComplete="off"
-                style={{ textAlign: "center" }}
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                style={{ textAlign: "center", fontFamily: "var(--event-font-heading)" }}
               />
             </div>
 
@@ -204,7 +213,9 @@ export default function GuestJoin() {
                   type="button"
                   onClick={() => setStatus("attending")}
                   className="event-btn-primary rsvp-toggle-btn"
-                  style={{ flex: 1, opacity: status === "attending" ? 1 : 0.6 }}
+                  style={{ flex: 1, opacity: status === "attending" ? 1 : 0.6, ...btnStyle }}
+                  onMouseEnter={(e) => { if (status === "attending") Object.assign(e.currentTarget.style, btnHoverStyle); }}
+                  onMouseLeave={(e) => Object.assign(e.currentTarget.style, btnStyle)}
                 >
                   {attendingLabel}
                 </button>
@@ -229,15 +240,18 @@ export default function GuestJoin() {
                   className="event-input"
                   placeholder={plusOnePlaceholder}
                   autoComplete="off"
-                  style={{ textAlign: "center" }}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  style={{ textAlign: "center", fontFamily: "var(--event-font-heading)" }}
                 />
               </div>
             )}
 
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
-
-            <div className="text-center pt-2">
-              <button type="submit" disabled={submitting || !status || !name.trim()} className="event-btn-primary" style={{ opacity: submitting || !status || !name.trim() ? 0.6 : 1 }}>
+            <div className="h-4" />
+            <div className="text-center">
+              <button type="submit" disabled={submitting || !status || !name.trim()} className="event-btn-primary" style={{ opacity: submitting || !status || !name.trim() ? 0.6 : 1, ...btnStyle }} onMouseEnter={(e) => { if (!submitting && status && name.trim()) Object.assign(e.currentTarget.style, btnHoverStyle); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, btnStyle)}>
                 {submitting ? (language === "bm" ? "Menghantar..." : "Submitting...") : submitLabel}
               </button>
             </div>
