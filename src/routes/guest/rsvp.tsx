@@ -7,6 +7,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatTime12, formatDateLong, cn } from "../../lib/utils";
 import { getTypographyText, getTypographyStyle } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
+
+const ATTENDING_SELECTED_COLORS: ButtonColors = { bgColor: "#16a34a", textColor: "#ffffff", borderColor: "#16a34a", hoverBgColor: "#15803d", hoverTextColor: "#ffffff", hoverBorderColor: "#15803d" };
+const DECLINED_SELECTED_COLORS: ButtonColors = { bgColor: "#dc2626", textColor: "#ffffff", borderColor: "#dc2626", hoverBgColor: "#b91c1c", hoverTextColor: "#ffffff", hoverBorderColor: "#b91c1c" };
+const BLACK_TEXT = "#1a1a1a";
 import { useLanguage } from "../../lib/language";
 import { pickText, autoTranslate, getCurrentLanguage, setCurrentLanguage } from "../../lib/translations";
 import type { EventContent } from "../../components/preview/PreviewRenderers";
@@ -94,6 +98,9 @@ export default function GuestRsvp() {
     ...DEFAULT_RSVP_CONTENT,
     ...(((event.content as Record<string, unknown> | null)?.rsvp as Partial<RsvpContent>) ?? {}),
   };
+  const loginButtonColors = ((event.login_config as Record<string, unknown> | null)?.buttonColors as ButtonColors | undefined) ?? undefined;
+  const loginBtnStyle = buttonColorsToStyle(loginButtonColors);
+  const loginBtnHoverStyle = buttonColorsToHoverStyle(loginButtonColors);
   const rsvpBm = ((event.content as Record<string, unknown> | null)?.rsvpBm ?? {}) as Record<string, string>;
   const tr = (en: string, bmKey?: string) => {
     if (language !== "bm") return en;
@@ -258,20 +265,28 @@ export default function GuestRsvp() {
   const declinedButtonFontStyle = getTypographyStyle(rsvpContent.declinedButtonTypography);
 
   const attendingSelectedStyle = (isSelected: boolean): React.CSSProperties => {
-    if (!isSelected) return buttonColorsToStyle(rsvpContent.attendingButtonColors);
-    const selectedColors = rsvpContent.attendingSelectedButtonColors;
-    if (selectedColors) return buttonColorsToStyle(selectedColors);
-    const base: React.CSSProperties = { ...buttonColorsToStyle(rsvpContent.attendingButtonColors) };
-    if (rsvpContent.attendingColor) { base.backgroundColor = rsvpContent.attendingColor; base.borderColor = rsvpContent.attendingColor; }
+    if (isSelected) return buttonColorsToStyle(ATTENDING_SELECTED_COLORS);
+    const base: React.CSSProperties = { ...loginBtnStyle };
+    if (!base.borderColor) { base.borderColor = "var(--event-border)"; base.borderStyle = "solid"; }
+    if (!base.backgroundColor) base.backgroundColor = "transparent";
+    if (!base.color) base.color = "var(--event-text)";
     return base;
   };
   const declinedSelectedStyle = (isSelected: boolean): React.CSSProperties => {
-    if (!isSelected) return buttonColorsToStyle(rsvpContent.declinedButtonColors);
-    const selectedColors = rsvpContent.declinedSelectedButtonColors;
-    if (selectedColors) return buttonColorsToStyle(selectedColors);
-    const base: React.CSSProperties = { ...buttonColorsToStyle(rsvpContent.declinedButtonColors) };
-    if (rsvpContent.declinedColor) { base.backgroundColor = rsvpContent.declinedColor; base.borderColor = rsvpContent.declinedColor; base.color = "#fff"; }
+    if (isSelected) return buttonColorsToStyle(DECLINED_SELECTED_COLORS);
+    const base: React.CSSProperties = { ...loginBtnStyle };
+    if (!base.borderColor) { base.borderColor = "var(--event-border)"; base.borderStyle = "solid"; }
+    if (!base.backgroundColor) base.backgroundColor = "transparent";
+    if (!base.color) base.color = "var(--event-text)";
     return base;
+  };
+  const attendingHoverStyle = (isSelected: boolean): React.CSSProperties => {
+    if (isSelected) return buttonColorsToHoverStyle(ATTENDING_SELECTED_COLORS);
+    return { ...loginBtnHoverStyle };
+  };
+  const declinedHoverStyle = (isSelected: boolean): React.CSSProperties => {
+    if (isSelected) return buttonColorsToHoverStyle(DECLINED_SELECTED_COLORS);
+    return { ...loginBtnHoverStyle };
   };
 
   const renderDateColumn = (dateStr: string | null | undefined) => {
@@ -299,16 +314,16 @@ export default function GuestRsvp() {
     if (items.length === 0) return null;
     return (
       <div className="mt-4 sm:mt-6">
-        <h3 className="mb-3 sm:mb-4" style={{ fontFamily: "var(--event-font-heading)", color: "var(--event-heading)", ...scheduleHeadingStyle }}>{scheduleHeadingText}</h3>
+        <h3 className="mb-3 sm:mb-4" style={{ fontFamily: "var(--event-font-heading)", color: BLACK_TEXT, ...scheduleHeadingStyle }}>{scheduleHeadingText}</h3>
         <div className="space-y-3 sm:space-y-4">
           {items.map((item) => (
             <div key={item.id} className="guest-rsvp-schedule-row grid items-start">
-              <div className="guest-rsvp-schedule-time text-xs sm:text-sm font-medium leading-snug" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-body)", ...programmeItemStyle }}>
+              <div className="guest-rsvp-schedule-time text-xs sm:text-sm font-medium leading-snug" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)", ...programmeItemStyle }}>
                 {formatScheduleTimeRange(item.start_time, item.end_time)}
               </div>
               <div className="guest-rsvp-schedule-title min-w-0">
-                <p className="font-medium text-sm sm:text-base leading-snug" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)", overflowWrap: "break-word", ...programmeItemStyle }}>{language === "bm" ? (item.title_bm?.trim() || item.title) : item.title}</p>
-                {(language === "bm" ? (item.description_bm?.trim() || item.description) : item.description) && <p className="text-xs sm:text-sm mt-0.5 leading-snug" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", overflowWrap: "break-word", ...programmeItemStyle }}>{language === "bm" ? (item.description_bm?.trim() || item.description) : item.description}</p>}
+                <p className="font-medium text-sm sm:text-base leading-snug" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-heading)", overflowWrap: "break-word", ...programmeItemStyle }}>{language === "bm" ? (item.title_bm?.trim() || item.title) : item.title}</p>
+                {(language === "bm" ? (item.description_bm?.trim() || item.description) : item.description) && <p className="text-xs sm:text-sm mt-0.5 leading-snug" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)", whiteSpace: "pre-wrap", overflowWrap: "break-word", ...programmeItemStyle }}>{language === "bm" ? (item.description_bm?.trim() || item.description) : item.description}</p>}
               </div>
             </div>
           ))}
@@ -339,7 +354,7 @@ export default function GuestRsvp() {
             onClick={() => handleRsvp(subEventId, "attending")}
             className="event-btn-primary rsvp-toggle-btn"
             style={{ flex: 1, opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...attendingButtonFontStyle }}
-            onMouseEnter={(e) => { if (!isAttending) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.attendingButtonColors)); }}
+            onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...attendingHoverStyle(isAttending), ...attendingButtonFontStyle })}
             onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: isAttending ? 1 : 0.6, ...attendingSelectedStyle(isAttending), ...attendingButtonFontStyle })}
           >
             {tr(rsvpContent.attendingText || "Attending", "attendingText")}
@@ -348,7 +363,7 @@ export default function GuestRsvp() {
             onClick={() => handleRsvp(subEventId, "declined")}
             className="event-btn-secondary rsvp-toggle-btn"
             style={{ flex: 1, opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...declinedButtonFontStyle }}
-            onMouseEnter={(e) => { if (!isDeclined) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.declinedButtonColors)); }}
+            onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...declinedHoverStyle(isDeclined), ...declinedButtonFontStyle })}
             onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: isDeclined ? 1 : 0.6, ...declinedSelectedStyle(isDeclined), ...declinedButtonFontStyle })}
           >
             {tr(rsvpContent.declinedText || "Declined", "declinedText")}
@@ -366,7 +381,7 @@ export default function GuestRsvp() {
                 onClick={() => handlePlusOneToggle(subEventId, true)}
                 className="event-btn-primary rsvp-toggle-btn"
                 style={{ flex: 1, opacity: current.plus_ones > 0 ? 1 : 0.6, ...attendingSelectedStyle(current.plus_ones > 0), ...attendingButtonFontStyle }}
-                onMouseEnter={(e) => { if (!(current.plus_ones > 0)) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.attendingButtonColors)); }}
+                onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: current.plus_ones > 0 ? 1 : 0.6, ...attendingSelectedStyle(current.plus_ones > 0), ...attendingHoverStyle(current.plus_ones > 0), ...attendingButtonFontStyle })}
                 onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: current.plus_ones > 0 ? 1 : 0.6, ...attendingSelectedStyle(current.plus_ones > 0), ...attendingButtonFontStyle })}
               >
                 {tr("Yes")}
@@ -376,7 +391,7 @@ export default function GuestRsvp() {
                 onClick={() => handlePlusOneToggle(subEventId, false)}
                 className="event-btn-secondary rsvp-toggle-btn"
                 style={{ flex: 1, opacity: current.plus_ones === 0 ? 1 : 0.6, ...declinedSelectedStyle(current.plus_ones === 0), ...declinedButtonFontStyle }}
-                onMouseEnter={(e) => { if (!(current.plus_ones === 0)) Object.assign(e.currentTarget.style, buttonColorsToHoverStyle(rsvpContent.declinedButtonColors)); }}
+                onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: current.plus_ones === 0 ? 1 : 0.6, ...declinedSelectedStyle(current.plus_ones === 0), ...declinedHoverStyle(current.plus_ones === 0), ...declinedButtonFontStyle })}
                 onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: current.plus_ones === 0 ? 1 : 0.6, ...declinedSelectedStyle(current.plus_ones === 0), ...declinedButtonFontStyle })}
               >
                 {tr("No")}
