@@ -99,8 +99,10 @@ export default function GuestRsvp() {
     ...(((event.content as Record<string, unknown> | null)?.rsvp as Partial<RsvpContent>) ?? {}),
   };
   const loginButtonColors = ((event.login_config as Record<string, unknown> | null)?.buttonColors as ButtonColors | undefined) ?? undefined;
-  const loginBtnStyle = buttonColorsToStyle(loginButtonColors);
-  const loginBtnHoverStyle = buttonColorsToHoverStyle(loginButtonColors);
+  const attendingUnselectedColors = rsvpContent.attendingButtonColors ?? loginButtonColors;
+  const declinedUnselectedColors = rsvpContent.declinedButtonColors ?? loginButtonColors;
+  const attendingSelectedColors: ButtonColors = rsvpContent.attendingSelectedButtonColors ?? (rsvpContent.attendingColor ? { bgColor: rsvpContent.attendingColor, textColor: "#ffffff", borderColor: rsvpContent.attendingColor, hoverBgColor: rsvpContent.attendingColor } : ATTENDING_SELECTED_COLORS);
+  const declinedSelectedColors: ButtonColors = rsvpContent.declinedSelectedButtonColors ?? (rsvpContent.declinedColor ? { bgColor: rsvpContent.declinedColor, textColor: "#ffffff", borderColor: rsvpContent.declinedColor, hoverBgColor: rsvpContent.declinedColor } : DECLINED_SELECTED_COLORS);
   const rsvpBm = ((event.content as Record<string, unknown> | null)?.rsvpBm ?? {}) as Record<string, string>;
   const tr = (en: string, bmKey?: string) => {
     if (language !== "bm") return en;
@@ -265,28 +267,28 @@ export default function GuestRsvp() {
   const declinedButtonFontStyle = getTypographyStyle(rsvpContent.declinedButtonTypography);
 
   const attendingSelectedStyle = (isSelected: boolean): React.CSSProperties => {
-    if (isSelected) return buttonColorsToStyle(ATTENDING_SELECTED_COLORS);
-    const base: React.CSSProperties = { ...loginBtnStyle };
+    if (isSelected) return buttonColorsToStyle(attendingSelectedColors);
+    const base: React.CSSProperties = { ...buttonColorsToStyle(attendingUnselectedColors) };
     if (!base.borderColor) { base.borderColor = "var(--event-border)"; base.borderStyle = "solid"; }
     if (!base.backgroundColor) base.backgroundColor = "transparent";
     if (!base.color) base.color = "var(--event-text)";
     return base;
   };
   const declinedSelectedStyle = (isSelected: boolean): React.CSSProperties => {
-    if (isSelected) return buttonColorsToStyle(DECLINED_SELECTED_COLORS);
-    const base: React.CSSProperties = { ...loginBtnStyle };
+    if (isSelected) return buttonColorsToStyle(declinedSelectedColors);
+    const base: React.CSSProperties = { ...buttonColorsToStyle(declinedUnselectedColors) };
     if (!base.borderColor) { base.borderColor = "var(--event-border)"; base.borderStyle = "solid"; }
     if (!base.backgroundColor) base.backgroundColor = "transparent";
     if (!base.color) base.color = "var(--event-text)";
     return base;
   };
   const attendingHoverStyle = (isSelected: boolean): React.CSSProperties => {
-    if (isSelected) return buttonColorsToHoverStyle(ATTENDING_SELECTED_COLORS);
-    return { ...loginBtnHoverStyle };
+    if (isSelected) return buttonColorsToHoverStyle(attendingSelectedColors);
+    return { ...buttonColorsToHoverStyle(attendingUnselectedColors) };
   };
   const declinedHoverStyle = (isSelected: boolean): React.CSSProperties => {
-    if (isSelected) return buttonColorsToHoverStyle(DECLINED_SELECTED_COLORS);
-    return { ...loginBtnHoverStyle };
+    if (isSelected) return buttonColorsToHoverStyle(declinedSelectedColors);
+    return { ...buttonColorsToHoverStyle(declinedUnselectedColors) };
   };
 
   const renderDateColumn = (dateStr: string | null | undefined) => {
