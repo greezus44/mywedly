@@ -6,12 +6,13 @@ interface GuestAuthContextValue {
   eventId: string | null;
   loading: boolean;
   signIn: (eventId: string, username: string) => Promise<{ error: string | null }>;
+  signInGuest: (eventId: string, guest: EventGuest) => void;
   signOut: () => void;
 }
 
 const GuestAuthContext = createContext<GuestAuthContextValue>({
   guest: null, eventId: null, loading: true,
-  signIn: async () => ({ error: "Not implemented" }), signOut: () => {},
+  signIn: async () => ({ error: "Not implemented" }), signInGuest: () => {}, signOut: () => {},
 });
 
 const STORAGE_KEY = "guest_session";
@@ -56,11 +57,17 @@ export function GuestAuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }, []);
 
+  const signInGuest = useCallback((targetEventId: string, guestData: EventGuest) => {
+    setGuest(guestData); setEventId(targetEventId);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ guestId: guestData.id, eventId: targetEventId })); } catch { /* ignore */ }
+  }, []);
+
   const signOut = useCallback(() => { setGuest(null); setEventId(null); try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ } }, []);
 
-  return <GuestAuthContext.Provider value={{ guest, eventId, loading, signIn, signOut }}>{children}</GuestAuthContext.Provider>;
+  return <GuestAuthContext.Provider value={{ guest, eventId, loading, signIn, signInGuest, signOut }}>{children}</GuestAuthContext.Provider>;
 }
 
 export function useGuestAuth() { return useContext(GuestAuthContext); }
 export function useSignIn() { const { signIn } = useGuestAuth(); return signIn; }
 export function useGuestSignIn() { return useSignIn(); }
+export function useSignInGuest() { const { signInGuest } = useGuestAuth(); return signInGuest; }

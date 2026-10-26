@@ -27,6 +27,7 @@ import { MessagesPage } from "./routes/event/wishes";
 
 import GuestCover from "./routes/guest/cover";
 import GuestSignIn from "./routes/guest/signin";
+import GuestJoin from "./routes/guest/join";
 import GuestLayout from "./routes/guest/guest-layout";
 import GuestHome from "./routes/guest/home";
 import GuestRsvp from "./routes/guest/rsvp";
@@ -70,6 +71,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 
               <Route path="/e/:slug" element={<LanguageProvider><GuestCover /></LanguageProvider>} />
               <Route path="/e/:slug/signin" element={<LanguageProvider><GuestSignIn /></LanguageProvider>} />
+              <Route path="/join/:token" element={<LanguageProvider><GuestJoin /></LanguageProvider>} />
               <Route path="/e/:slug/home" element={<LanguageProvider><GuestLayout /></LanguageProvider>}><Route index element={<GuestHome />} /></Route>
               <Route path="/e/:slug/rsvp" element={<LanguageProvider><GuestLayout /></LanguageProvider>}><Route index element={<GuestRsvp />} /></Route>
               <Route path="/e/:slug/wishes" element={<LanguageProvider><GuestLayout /></LanguageProvider>}><Route index element={<GuestWishes />} /></Route>

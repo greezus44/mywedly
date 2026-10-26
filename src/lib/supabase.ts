@@ -81,3 +81,9 @@ export interface SubEventGroupAssignment { id: string; sub_event_id: string; gro
 export interface GroupEventInvite { id: string; group_id: string; event_id: string; sub_event_id: string | null; created_at: string; }
 export interface GuestInvitationOverride { id: string; sub_event_id: string; guest_id: string; is_invited: boolean; created_at: string; allow_plus_one: boolean; }
 export interface SharingEvent { id: string; event_id: string; type: string; metadata: Json; created_at: string; }
+
+export interface OpenRsvpLink {
+  id: string; token: string; event_id: string; sub_event_id: string;
+  allow_plus_one: boolean; is_enabled: boolean; page_config: Json;
+  created_at: string; updated_at: string;
+}
