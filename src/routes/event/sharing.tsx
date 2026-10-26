@@ -37,6 +37,12 @@ interface PageConfig {
   declinedColors?: ButtonColors;
   plusOneYesColors?: ButtonColors;
   plusOneNoColors?: ButtonColors;
+  plusOneQuestion?: string;
+  plusOneQuestionBm?: string;
+  plusOneYesLabel?: string;
+  plusOneYesLabelBm?: string;
+  plusOneNoLabel?: string;
+  plusOneNoLabelBm?: string;
 }
 
 const DEFAULT_PAGE_CONFIG: PageConfig = {
@@ -62,6 +68,12 @@ const DEFAULT_PAGE_CONFIG: PageConfig = {
   thankYouDeclinedBm: "Terima kasih kerana memberitahu kami.",
   attendingColor: "#16a34a",
   declinedColor: "#dc2626",
+  plusOneQuestion: "Bringing a +1?",
+  plusOneQuestionBm: "Membawa +1?",
+  plusOneYesLabel: "Yes",
+  plusOneYesLabelBm: "Ya",
+  plusOneNoLabel: "No",
+  plusOneNoLabelBm: "Tidak",
 };
 
 export function SharingPage() {
@@ -385,6 +397,21 @@ export function SharingPage() {
             <div className="space-y-2">
               <LabeledInput label="Declined (EN)" value={editConfig.thankYouDeclined ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, thankYouDeclined: v }))} />
               <LabeledInput label="Declined (BM)" value={editConfig.thankYouDeclinedBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, thankYouDeclinedBm: v }))} />
+            </div>
+          </div>
+          <SectionLabel>+1 question and buttons</SectionLabel>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <LabeledInput label="Question (EN)" value={editConfig.plusOneQuestion ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneQuestion: v }))} />
+            <LabeledInput label="Question (BM)" value={editConfig.plusOneQuestionBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneQuestionBm: v }))} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <LabeledInput label="Yes (EN)" value={editConfig.plusOneYesLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneYesLabel: v }))} />
+              <LabeledInput label="Yes (BM)" value={editConfig.plusOneYesLabelBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneYesLabelBm: v }))} />
+            </div>
+            <div className="space-y-2">
+              <LabeledInput label="No (EN)" value={editConfig.plusOneNoLabel ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneNoLabel: v }))} />
+              <LabeledInput label="No (BM)" value={editConfig.plusOneNoLabelBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneNoLabelBm: v }))} />
             </div>
           </div>
           <SectionLabel>Selected button colours</SectionLabel>

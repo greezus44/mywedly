@@ -38,6 +38,12 @@ interface PageConfig {
   declinedColors?: ButtonColors;
   plusOneYesColors?: ButtonColors;
   plusOneNoColors?: ButtonColors;
+  plusOneQuestion?: string;
+  plusOneQuestionBm?: string;
+  plusOneYesLabel?: string;
+  plusOneYesLabelBm?: string;
+  plusOneNoLabel?: string;
+  plusOneNoLabelBm?: string;
 }
 
 const BLACK_TEXT = "#1a1a1a";
@@ -398,7 +404,7 @@ export default function GuestJoin() {
 
             {status === "attending" && lookup?.link?.allow_plus_one && (
               <div>
-                <p className="mb-2 text-center text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{language === "bm" ? "Membawa +1?" : "Bringing a +1?"}</p>
+                <p className="mb-2 text-center text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{language === "bm" ? (pageConfig.plusOneQuestionBm?.trim() || "Membawa +1?") : (pageConfig.plusOneQuestion?.trim() || "Bringing a +1?")}</p>
                 <div className="flex gap-2 sm:gap-3">
                   <button
                     type="button"
@@ -408,7 +414,7 @@ export default function GuestJoin() {
                     onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...plusOneYesBtnStyle(bringingPlusOne === "yes"), ...plusOneYesBtnHover(bringingPlusOne === "yes") })}
                     onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "yes" ? 1 : 0.6, ...plusOneYesBtnStyle(bringingPlusOne === "yes") })}
                   >
-                    {language === "bm" ? "Ya" : "Yes"}
+                    {language === "bm" ? (pageConfig.plusOneYesLabelBm?.trim() || "Ya") : (pageConfig.plusOneYesLabel?.trim() || "Yes")}
                   </button>
                   <button
                     type="button"
@@ -418,7 +424,7 @@ export default function GuestJoin() {
                     onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...plusOneNoBtnStyle(bringingPlusOne === "no"), ...plusOneNoBtnHover(bringingPlusOne === "no") })}
                     onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: bringingPlusOne === "no" ? 1 : 0.6, ...plusOneNoBtnStyle(bringingPlusOne === "no") })}
                   >
-                    {language === "bm" ? "Tidak" : "No"}
+                    {language === "bm" ? (pageConfig.plusOneNoLabelBm?.trim() || "Tidak") : (pageConfig.plusOneNoLabel?.trim() || "No")}
                   </button>
                 </div>
               </div>
