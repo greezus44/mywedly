@@ -92,7 +92,7 @@ export function SharingPage() {
   const { data: subEvents } = useQuery({
     queryKey: ["sub-events", eventId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("sub_events").select("*").eq("parent_event_id", eventId).order("display_order", { ascending: true });
+      const { data, error } = await supabase.from("sub_events").select("*").eq("parent_event_id", eventId).order("date", { ascending: true, nullsFirst: false });
       if (error) throw error;
       return data as SubEvent[];
     },
