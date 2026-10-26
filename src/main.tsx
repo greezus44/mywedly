@@ -24,6 +24,7 @@ import { PageBuilder } from "./routes/event/page-builder";
 import { ThemeEditor } from "./routes/event/theme-editor";
 import { SettingsPage } from "./routes/event/settings";
 import { MessagesPage } from "./routes/event/wishes";
+import { SharingPage } from "./routes/event/sharing";
 
 import GuestCover from "./routes/guest/cover";
 import GuestSignIn from "./routes/guest/signin";
@@ -67,6 +68,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
                 <Route path="theme" element={<ThemeEditor />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="wishes" element={<MessagesPage />} />
+                <Route path="open-rsvp" element={<SharingPage />} />
               </Route>
 
               <Route path="/e/:slug" element={<LanguageProvider><GuestCover /></LanguageProvider>} />

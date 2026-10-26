@@ -139,7 +139,7 @@ export function SharingPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-lg font-semibold text-dash-text">Share</h2>
+      <h2 className="text-lg font-semibold text-dash-text">Open RSVP</h2>
       {!event.is_published && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">Your event is not published yet. Publish it to share with guests.</div>
       )}
