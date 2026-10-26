@@ -4,7 +4,7 @@ import { useGuestOutletContext } from "./guest-layout";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { supabase, type EventRsvp, type EventSchedule, type SubEvent, type CustomPage, type Json } from "../../lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { formatTime12, formatDateLong, cn } from "../../lib/utils";
+import { formatTime12, formatDateLong, cn, toCapitalCase } from "../../lib/utils";
 import { getTypographyText, getTypographyStyle } from "../../lib/typography";
 import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 
@@ -242,7 +242,7 @@ export default function GuestRsvp() {
     }
   };
 
-  const guestNameText = guest?.name ? getTypographyText(rsvpContent.guestNameTypography, guest.name) : "";
+  const guestNameText = guest?.name ? toCapitalCase(getTypographyText(rsvpContent.guestNameTypography, guest.name)) : "";
   const guestNameStyle = getTypographyStyle(rsvpContent.guestNameTypography);
   const additionalInfoHeadingText = getTypographyText(rsvpContent.additionalInfoHeading, "");
   const additionalInfoHeadingStyle = getTypographyStyle(rsvpContent.additionalInfoHeading);
