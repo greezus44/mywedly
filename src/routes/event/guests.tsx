@@ -133,7 +133,7 @@ export function GuestsPage() {
     mutationFn: async ({ guestIds, subEventId }: { guestIds: string[]; subEventId: string | null }) => {
       const rows = guestIds.map((gid) => ({ guest_id: gid, event_id: eventId, sub_event_id: subEventId, invite_type: "include" as const }));
       if (rows.length === 0) return;
-      const { error } = await supabase.from("guest_event_invites").insert(rows);
+      const { error } = await supabase.from("guest_event_invites").upsert(rows, { onConflict: "guest_id,event_id,sub_event_id" });
       if (error) throw error;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] }); setSelectedGuestIds(new Set()); },
