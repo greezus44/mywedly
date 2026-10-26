@@ -35,6 +35,8 @@ export interface EventContent {
   rsvpButtonColors?: ButtonColors;
   rsvpButtonTypography?: import("../../lib/typography").TypographyStyle;
   wishes?: { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; placeholderTypography?: import("../../lib/typography").TypographyStyle; };
+  homeNavLabel?: string;
+  homeNavLabelBm?: string;
 }
 
 interface CoverPreviewProps { config: CoverConfig; theme: unknown; eventName?: string; }

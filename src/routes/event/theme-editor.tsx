@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
-import { jsonToTheme, themeToEventCssVars, THEME_PRESETS, type ThemeConfig, type ThemeButtonConfig } from "../../lib/theme";
+import { jsonToTheme, themeToEventCssVars, THEME_PRESETS, type ThemeConfig, type ThemeButtonConfig, type NavTextTransform } from "../../lib/theme";
 import { Button } from "../../components/ui/Button";
 import { ColorInput } from "../../components/ui";
 import { FontSelect } from "../../components/ui/FontSelect";
@@ -29,6 +29,9 @@ export function ThemeEditor() {
   };
   const updateButton = (patch: Partial<ThemeButtonConfig>) => {
     setTheme((p) => ({ ...p, button: { ...(p.button ?? {}), ...patch } }));
+  };
+  const updateNav = (patch: Partial<ThemeConfig["nav"]>) => {
+    setTheme((p) => ({ ...p, nav: { ...(p.nav ?? {}), ...patch } }));
   };
 
   const saveMutation = useMutation({
@@ -167,6 +170,48 @@ export function ThemeEditor() {
           <div>
             <label className="mb-1 block text-xs font-medium text-dash-muted">Button Font Family</label>
             <FontSelect value={theme.button?.fontFamily ?? theme.fonts.heading} onChange={(v) => updateButton({ fontFamily: v })} options={HEADING_FONT_OPTIONS} />
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation Style */}
+      <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
+        <h3 className="mb-1 text-sm font-semibold text-dash-text">Navigation Style</h3>
+        <p className="mb-3 text-xs text-dash-muted">Controls the font and capitalisation for every item in the guest menu. Defaults to Tahoma, uppercase to match the current look.</p>
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-dash-muted">Menu Font</label>
+            <FontSelect value={theme.nav?.fontFamily ?? ""} onChange={(v) => updateNav({ fontFamily: v })} options={HEADING_FONT_OPTIONS} placeholder="Tahoma (default)" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-dash-muted">Font Weight</label>
+              <select value={theme.nav?.fontWeight ?? 500} onChange={(e) => updateNav({ fontWeight: Number(e.target.value) })} className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none">
+                <option value={400}>Normal (400)</option>
+                <option value={500}>Medium (500)</option>
+                <option value={600}>Semibold (600)</option>
+                <option value={700}>Bold (700)</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-dash-muted">Capitalisation</label>
+              <select value={theme.nav?.textTransform ?? "uppercase"} onChange={(e) => updateNav({ textTransform: e.target.value as NavTextTransform })} className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none">
+                <option value="uppercase">UPPERCASE</option>
+                <option value="capitalize">Title Case</option>
+                <option value="lowercase">lowercase</option>
+                <option value="none">Normal</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-dash-muted">Font Size</label>
+              <input type="text" value={theme.nav?.fontSize ?? ""} onChange={(e) => updateNav({ fontSize: e.target.value })} placeholder="1rem (default)" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-dash-muted">Letter Spacing</label>
+              <input type="text" value={theme.nav?.letterSpacing ?? ""} onChange={(e) => updateNav({ letterSpacing: e.target.value })} placeholder="normal (default)" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+            </div>
           </div>
         </div>
       </div>

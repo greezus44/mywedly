@@ -3,7 +3,7 @@ import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
-import { RangeInput } from "../../components/ui";
+import { RangeInput, Input } from "../../components/ui";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { RichTextEditor } from "../../components/ui/RichTextEditor";
 import { TypographyControls } from "../../components/ui/TypographyControls";
@@ -54,6 +54,12 @@ export function HomeEditor() {
       <SplitEditor
         editor={
           <div className="space-y-6">
+            <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-4">
+              <h3 className="text-sm font-semibold text-dash-text">Home Menu Label</h3>
+              <p className="text-xs text-dash-muted">The text shown for the Home item in the guest menu. Defaults to "Home" if empty.</p>
+              <Input label="Nav Label (menu text)" value={content.homeNavLabel ?? ""} onChange={(e) => setContent((p) => ({ ...p, homeNavLabel: e.target.value }))} placeholder="Home" />
+              <Input label="Nav Label (Bahasa Melayu)" value={content.homeNavLabelBm ?? ""} onChange={(e) => setContent((p) => ({ ...p, homeNavLabelBm: e.target.value }))} placeholder="Laman Utama" />
+            </div>
             <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-4">
               <h3 className="text-sm font-semibold text-dash-text">Home Page Logo</h3>
               <ImageUpload userId={event.creator_id} value={content.logo?.url ?? null} onChange={(url) => updateLogo({ url })} label="Logo Image" />

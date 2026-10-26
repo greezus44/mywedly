@@ -59,6 +59,8 @@ export interface RsvpContent {
   contactMessageTypography?: unknown;
   attendingButtonTypography?: unknown;
   declinedButtonTypography?: unknown;
+  navLabel?: string;
+  navLabelBm?: string;
 }
 
 const DEFAULT_RSVP_CONTENT: RsvpContent = {
@@ -296,6 +298,12 @@ export function RsvpPage() {
           </div>
           {saveContentMutation.isError && <p className="text-sm text-dash-danger">{saveContentMutation.error instanceof Error ? saveContentMutation.error.message : "Save failed"}</p>}
           {saveContentMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
+          <div className="space-y-2 rounded-lg border border-dash-border bg-dash-surface p-3">
+            <label className="block text-xs font-semibold text-dash-text">RSVP Menu Label</label>
+            <p className="text-xs text-dash-muted">The text shown for the RSVP item in the guest menu. Defaults to "RSVP" if empty.</p>
+            <Input label="Nav Label (menu text)" value={rsvpContent.navLabel ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, navLabel: e.target.value }))} placeholder="RSVP" />
+            <Input label="Nav Label (Bahasa Melayu)" value={rsvpContent.navLabelBm ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, navLabelBm: e.target.value }))} placeholder="RSVP" />
+          </div>
           <Input label="Page Title" value={rsvpContent.title ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, title: e.target.value }))} />
           <Input label="Page Title (Bahasa Melayu)" value={rsvpBm.title ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, title: e.target.value }))} placeholder="Auto-translate if empty" />
           <div className="space-y-2">
