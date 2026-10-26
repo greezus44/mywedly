@@ -36,6 +36,16 @@ export function GuestsPage() {
   const [bulkGroupId, setBulkGroupId] = useState<string>("");
   const [newGroupName, setNewGroupName] = useState("");
   const [groupError, setGroupError] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroupCollapse = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const { data: guests, isLoading, isError, error } = useQuery({
     queryKey: ["event-guests", eventId],
@@ -336,10 +346,13 @@ export function GuestsPage() {
                   ))
                 ) : (
                   groupedGuests.flatMap((section) => [
-                    <tr key={`sep-${section.key}`}>
-                      <td colSpan={eventColumns.length > 0 ? eventColumns.length + 5 : 6} className="bg-dash-bg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-dash-text">{section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span></td>
+                    <tr key={`sep-${section.key}`} onClick={() => toggleGroupCollapse(section.key)} className="cursor-pointer hover:bg-dash-surface/60">
+                      <td colSpan={eventColumns.length > 0 ? eventColumns.length + 5 : 6} className="bg-dash-bg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-dash-text">
+                        <span className="mr-1.5 inline-block w-3 text-dash-muted">{collapsedGroups.has(section.key) ? "\u25B6" : "\u25BC"}</span>
+                        {section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span>
+                      </td>
                     </tr>,
-                    ...section.guests.map((g) => (
+                    ...(collapsedGroups.has(section.key) ? [] : section.guests.map((g) => (
                       <tr key={g.id}>
                         <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
                         <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}</td>
@@ -357,7 +370,7 @@ export function GuestsPage() {
                           <button onClick={() => deleteMutation.mutate(g.id)} className="text-xs text-dash-danger hover:underline">Delete</button>
                         </td>
                       </tr>
-                    )),
+                    ))),
                   ])
                 )}
               </tbody>

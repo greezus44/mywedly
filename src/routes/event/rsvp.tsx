@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventRsvp, type EventGuest, type SubEvent, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventRsvp, type EventGuest, type SubEvent, type GuestGroup, type Json } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Badge, ColorInput, Modal } from "../../components/ui";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
@@ -88,6 +88,16 @@ export function RsvpPage() {
   const [showEditor, setShowEditor] = useState(false);
   const [statusEditGuest, setStatusEditGuest] = useState<EventGuest | null>(null);
   const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroupCollapse = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   const [rsvpDeadline, setRsvpDeadline] = useState(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "");
   useEffect(() => { setRsvpDeadline(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? ""); }, [event.draft_rsvp_deadline, event.rsvp_deadline]);
 
@@ -129,6 +139,10 @@ export function RsvpPage() {
   const { data: guests } = useQuery({
     queryKey: ["event-guests-rsvp", eventId],
     queryFn: async () => { const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId).order("name", { ascending: true }); if (error) throw error; return data as EventGuest[]; },
+  });
+  const { data: groups } = useQuery({
+    queryKey: ["guest-groups-rsvp", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("guest_groups").select("*").eq("event_id", eventId).order("sort_order", { ascending: true }); if (error) throw error; return data as GuestGroup[]; },
   });
   const { data: existingInvites } = useQuery({
     queryKey: ["guest-event-invites-rsvp", eventId],
@@ -208,6 +222,16 @@ export function RsvpPage() {
   for (const se of sortedSubEvents) {
     eventColumns.push({ key: se.id, label: tabLabel(se) });
   }
+
+  const UNGROUPED_KEY = "__ungrouped__";
+  const sortedGroups = [...(groups ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+  const groupedGuests: Array<{ key: string; label: string; guests: EventGuest[] }> = [];
+  for (const gr of sortedGroups) {
+    const gs = (guests ?? []).filter((g) => g.group_id === gr.id).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    if (gs.length > 0) groupedGuests.push({ key: gr.id, label: gr.name, guests: gs });
+  }
+  const ungrouped = (guests ?? []).filter((g) => !g.group_id).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  if (ungrouped.length > 0) groupedGuests.push({ key: UNGROUPED_KEY, label: "Ungrouped", guests: ungrouped });
 
   const deadline = event.draft_rsvp_deadline ?? event.rsvp_deadline;
   const closed = isRsvpClosed(deadline);
@@ -444,8 +468,8 @@ export function RsvpPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-dash-border bg-dash-surface">
-              {guests.map((g) => {
-                return (
+              {groupedGuests.length === 0 ? (
+                (guests ?? []).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")).map((g) => (
                   <tr key={g.id}>
                     <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
                     {eventColumns.length > 0 ? (
@@ -474,8 +498,47 @@ export function RsvpPage() {
                       >Change Status</button>
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              ) : (
+                groupedGuests.flatMap((section) => [
+                  <tr key={`sep-${section.key}`} onClick={() => toggleGroupCollapse(section.key)} className="cursor-pointer hover:bg-dash-surface/60">
+                    <td colSpan={eventColumns.length > 0 ? eventColumns.length + 2 : 3} className="bg-dash-bg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-dash-text">
+                      <span className="mr-1.5 inline-block w-3 text-dash-muted">{collapsedGroups.has(section.key) ? "\u25B6" : "\u25BC"}</span>
+                      {section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span>
+                    </td>
+                  </tr>,
+                  ...(collapsedGroups.has(section.key) ? [] : section.guests.map((g) => (
+                    <tr key={g.id}>
+                      <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
+                      {eventColumns.length > 0 ? (
+                        eventColumns.map((col) => (
+                          <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
+                        ))
+                      ) : (
+                        <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
+                      )}
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          onClick={() => {
+                            const drafts: Record<string, string> = {};
+                            if (eventColumns.length > 0) {
+                              for (const col of eventColumns) {
+                                const s = statusFor(g.id, col.key);
+                                drafts[col.key] = s === "not_invited" ? "not_invited" : s;
+                              }
+                            } else {
+                              drafts["__main__"] = g.rsvp_status ?? "pending";
+                            }
+                            setStatusDrafts(drafts);
+                            setStatusEditGuest(g);
+                          }}
+                          className="text-xs text-dash-primary hover:underline"
+                        >Change Status</button>
+                      </td>
+                    </tr>
+                  ))),
+                ])
+              )}
             </tbody>
           </table>
         </div>
