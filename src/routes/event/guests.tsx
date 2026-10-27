@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventGuest, type SubEvent, type EventRsvp, type GuestGroup } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventGuest, type SubEvent, type EventRsvp, type GuestGroup, type GroupEventInvite } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
 import { GuestForm, type GuestFormValues } from "./guest-form";
@@ -75,6 +75,11 @@ export function GuestsPage() {
     queryFn: async () => { const { data, error } = await supabase.from("guest_groups").select("*").eq("event_id", eventId).order("sort_order", { ascending: true }); if (error) throw error; return data as GuestGroup[]; },
   });
 
+  const { data: groupEventInvites } = useQuery({
+    queryKey: ["group-event-invites", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("group_event_invites").select("*").eq("event_id", eventId); if (error) throw error; return (data ?? []) as GroupEventInvite[]; },
+  });
+
   const { data: allOverrides } = useQuery({
     queryKey: ["all-guest-invitation-overrides", eventId],
     queryFn: async () => {
@@ -92,19 +97,42 @@ export function GuestsPage() {
   });
 
   // Build a map of invited event keys per guest. "__main__" = Main Event.
-  // Invitations come from guest_event_invites (Main Event + sub-events)
-  // and per-guest overrides (which can add or remove access).
+  // A guest is invited if they have:
+  //   1. A direct guest_event_invites row (always wins over negative overrides), OR
+  //   2. A group_event_invites row for their group, OR
+  //   3. A positive override (is_invited = true).
+  // A negative override only removes access when there is no direct invite.
+  const directInvitesByGuest = new Map<string, Set<string>>();
+  for (const g of (guests ?? [])) {
+    const direct = new Set<string>();
+    (existingInvites ?? []).filter((inv) => inv.guest_id === g.id && inv.invite_type === "include").forEach((inv) => {
+      if (inv.sub_event_id) direct.add(inv.sub_event_id as string);
+      else direct.add("__main__");
+    });
+    directInvitesByGuest.set(g.id, direct);
+  }
+
+  // Group-level invites: map group_id → set of sub_event_ids ("__main__" for Main Event)
+  const groupInvitesByGroup = new Map<string, Set<string>>();
+  for (const gi of (groupEventInvites ?? [])) {
+    let set = groupInvitesByGroup.get(gi.group_id);
+    if (!set) { set = new Set(); groupInvitesByGroup.set(gi.group_id, set); }
+    set.add(gi.sub_event_id ? gi.sub_event_id : "__main__");
+  }
+
   const invitedEventsByGuest = new Map<string, Set<string>>();
   for (const g of (guests ?? [])) {
-    const invited = new Set<string>();
-    (existingInvites ?? []).filter((inv) => inv.guest_id === g.id && inv.invite_type === "include").forEach((inv) => {
-      if (inv.sub_event_id) invited.add(inv.sub_event_id as string);
-      else invited.add("__main__");
-    });
+    const invited = new Set(directInvitesByGuest.get(g.id) ?? []);
+    // Add group-level invites
+    if (g.group_id) {
+      const giSet = groupInvitesByGroup.get(g.group_id);
+      if (giSet) giSet.forEach((key) => invited.add(key));
+    }
+    // Apply overrides: positive adds, negative removes only if no direct invite
     (allOverrides ?? []).filter((o) => o.guest_id === g.id).forEach((o) => {
       const key = o.sub_event_id ? (o.sub_event_id as string) : "__main__";
       if (o.is_invited) { invited.add(key); }
-      else { invited.delete(key); }
+      else if (!directInvitesByGuest.get(g.id)?.has(key)) { invited.delete(key); }
     });
     invitedEventsByGuest.set(g.id, invited);
   }
@@ -307,16 +335,22 @@ export function GuestsPage() {
         { onConflict: "guest_id,event_id,sub_event_id" },
       );
 
+      // Sync sub-event invitations via guest_event_invites (not overrides).
+      // Ticked sub-events get a direct invite; unticked ones have their
+      // direct invite removed. Overrides are left untouched — they are
+      // only for per-group adjustments made via Manage Invitations.
       if (subEvents && subEvents.length > 0) {
-        await supabase.from("guest_invitation_overrides").delete().eq("guest_id", guestId);
-        const overridesToInsert: Array<{ guest_id: string; sub_event_id: string; is_invited: boolean }> = [];
-        for (const se of subEvents) {
-          const isInvited = values.eventInvitations[se.id] ?? false;
-          overridesToInsert.push({ guest_id: guestId, sub_event_id: se.id, is_invited: isInvited });
+        const invitedSubEventIds = subEvents.filter((se) => values.eventInvitations[se.id] ?? false).map((se) => se.id);
+        // Remove direct invites for unticked sub-events
+        const untickedIds = subEvents.filter((se) => !(values.eventInvitations[se.id] ?? false)).map((se) => se.id);
+        if (untickedIds.length > 0) {
+          await supabase.from("guest_event_invites").delete().eq("guest_id", guestId).eq("event_id", eventId).in("sub_event_id", untickedIds);
         }
-        if (overridesToInsert.length > 0) {
-          const { error: overrideError } = await supabase.from("guest_invitation_overrides").insert(overridesToInsert);
-          if (overrideError) throw overrideError;
+        // Add direct invites for ticked sub-events
+        if (invitedSubEventIds.length > 0) {
+          const rows = invitedSubEventIds.map((sid) => ({ guest_id: guestId, event_id: eventId, sub_event_id: sid, invite_type: "include" as const }));
+          const { error: inviteError } = await supabase.from("guest_event_invites").upsert(rows, { onConflict: "guest_id,event_id,sub_event_id" });
+          if (inviteError) throw inviteError;
         }
       }
 
