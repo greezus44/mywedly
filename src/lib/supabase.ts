@@ -46,7 +46,7 @@ export interface SubEvent {
   wedding_id: string | null; tab_name: string | null;
 }
 
-export interface GuestGroup { id: string; wedding_id: string | null; event_id: string | null; name: string; sort_order: number; created_at: string; updated_at: string; }
+export interface GuestGroup { id: string; wedding_id: string | null; event_id: string | null; name: string; sort_order: number; is_open_rsvp_default: boolean; created_at: string; updated_at: string; }
 export interface GuestGroupMember { id: string; group_id: string; guest_id: string; created_at: string; }
 
 export interface EventRsvp {

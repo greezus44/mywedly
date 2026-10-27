@@ -126,6 +126,7 @@ export function SharingPage() {
   const [creatingForSubEvent, setCreatingForSubEvent] = useState<string | null>(null);
   const [newLinkGroupName, setNewLinkGroupName] = useState("");
   const [editGroupId, setEditGroupId] = useState<string | null>(null);
+  const [editGroupName, setEditGroupName] = useState("");
 
   const publicUrl = event.slug ? `${window.location.origin}/e/${event.slug}` : "";
 
@@ -178,6 +179,12 @@ export function SharingPage() {
 
   const linksForSubEvent = (subEventId: string) => (openLinks ?? []).filter((l) => l.sub_event_id === subEventId);
   const groupNameFor = (id: string | null) => (id ? (groups ?? []).find((g) => g.id === id)?.name ?? null : null);
+  const defaultGroup = (groups ?? []).find((g) => g.is_open_rsvp_default) ?? null;
+
+  const computeGroupName = (groupId: string | null) => {
+    if (groupId) return (groups ?? []).find((g) => g.id === groupId)?.name ?? "";
+    return defaultGroup?.name ?? "Open Link RSVP";
+  };
 
   const createLink = useMutation({
     mutationFn: async ({ subEventId, groupName }: { subEventId: string; groupName: string }) => {
@@ -240,6 +247,7 @@ export function SharingPage() {
     setEditEnabled(link.is_enabled);
     setEditToken(link.token);
     setEditGroupId(link.group_id);
+    setEditGroupName(computeGroupName(link.group_id));
     setTokenError(null);
     const se = (subEvents ?? []).find((s) => s.id === link.sub_event_id);
     setEditRsvpDeadline(se?.rsvp_deadline ?? "");
@@ -279,7 +287,41 @@ export function SharingPage() {
       setTokenError(null);
     }
     setSavingEdit(true);
-    const updates: Record<string, unknown> = { page_config: editConfig as unknown as Json, is_enabled: editEnabled, group_id: editGroupId };
+    const trimmedGroupName = editGroupName.trim();
+
+    // Handle group rename / creation before saving the link.
+    let groupIdToSave = editGroupId;
+    if (trimmedGroupName) {
+      if (groupIdToSave) {
+        // Rename existing group if the name changed.
+        const currentName = (groups ?? []).find((g) => g.id === groupIdToSave)?.name;
+        if (currentName !== trimmedGroupName) {
+          await supabase.from("guest_groups").update({ name: trimmedGroupName }).eq("id", groupIdToSave);
+        }
+      } else {
+        // "Default" selected: rename the existing default group if there is one.
+        if (defaultGroup) {
+          if (defaultGroup.name !== trimmedGroupName) {
+            await supabase.from("guest_groups").update({ name: trimmedGroupName }).eq("id", defaultGroup.id);
+          }
+          groupIdToSave = null; // keep link on default (group_id stays null, RPC finds by flag)
+        } else {
+          // No default group exists yet — create one with the flag and assign it to the link.
+          const { data: newDefault, error: createErr } = await supabase
+            .from("guest_groups")
+            .insert({ event_id: eventId, name: trimmedGroupName, sort_order: 9999, is_open_rsvp_default: true })
+            .select("id")
+            .single();
+          if (createErr) {
+            setSavingEdit(false);
+            return;
+          }
+          groupIdToSave = newDefault.id;
+        }
+      }
+    }
+
+    const updates: Record<string, unknown> = { page_config: editConfig as unknown as Json, is_enabled: editEnabled, group_id: groupIdToSave };
     if (tokenToSave) updates.token = tokenToSave;
     const { error } = await supabase
       .from("open_rsvp_links")
@@ -301,6 +343,7 @@ export function SharingPage() {
       queryClient.invalidateQueries({ queryKey: ["sub-events", eventId] });
     }
     queryClient.invalidateQueries({ queryKey: ["open-rsvp-links", eventId] });
+    queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
     setSavingEdit(false);
     setEditingLink(null);
   };
@@ -421,7 +464,7 @@ export function SharingPage() {
             <div className="mt-1.5">
               <select
                 value={editGroupId ?? ""}
-                onChange={(e) => setEditGroupId(e.target.value || null)}
+                onChange={(e) => { setEditGroupId(e.target.value || null); setEditGroupName(computeGroupName(e.target.value || null)); }}
                 className="w-full rounded-lg border border-dash-border bg-dash-bg px-2 py-1.5 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
               >
                 <option value="">Default (Open Link RSVP)</option>
@@ -429,7 +472,11 @@ export function SharingPage() {
                   <option key={g.id} value={g.id}>{g.name}</option>
                 ))}
               </select>
-              <p className="mt-1.5 text-xs text-dash-muted">Guests who register through this link are sorted into this group on your guest list. Create new groups from the Guests tab.</p>
+              <div className="mt-2">
+                <label className="mb-1 block text-xs font-medium text-dash-muted">Group name</label>
+                <Input value={editGroupName} onChange={(e) => setEditGroupName(e.target.value)} placeholder="Group name" />
+                <p className="mt-1.5 text-xs text-dash-muted">Rename this group — it updates everywhere guests are sorted. If you selected "Default", this renames the default group all ungrouped links fall back to.</p>
+              </div>
             </div>
           </div>
           <SectionLabel>Link ending</SectionLabel>
