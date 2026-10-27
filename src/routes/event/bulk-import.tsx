@@ -13,8 +13,9 @@ interface ParsedGuest {
 interface BulkImportModalProps {
   open: boolean;
   onClose: () => void;
-  onImport: (guests: { name: string; username: string }[]) => Promise<{ imported: number; failed: number; errors: string[] }>;
+  onImport: (guests: { name: string; username: string; groupId: string | null }[]) => Promise<{ imported: number; failed: number; errors: string[] }>;
   existingUsernames: Set<string>;
+  groups: { id: string; name: string }[];
 }
 
 function splitCsvLine(line: string): string[] {
@@ -52,12 +53,13 @@ function parseCsv(text: string): string[] {
   }).filter((l) => l);
 }
 
-export function BulkImportModal({ open, onClose, onImport, existingUsernames }: BulkImportModalProps) {
+export function BulkImportModal({ open, onClose, onImport, existingUsernames, groups }: BulkImportModalProps) {
   const [parsed, setParsed] = useState<ParsedGuest[]>([]);
   const [fileName, setFileName] = useState("");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const reset = useCallback(() => {
@@ -65,6 +67,7 @@ export function BulkImportModal({ open, onClose, onImport, existingUsernames }: 
     setFileName("");
     setImportError(null);
     setImportSummary(null);
+    setSelectedGroupId("");
     if (fileRef.current) fileRef.current.value = "";
   }, []);
 
@@ -131,7 +134,8 @@ export function BulkImportModal({ open, onClose, onImport, existingUsernames }: 
     setImportError(null);
     setImportSummary(null);
     try {
-      const result = await onImport(validGuests.map((r) => ({ name: r.fullName, username: r.username })));
+      const groupId = selectedGroupId || null;
+      const result = await onImport(validGuests.map((r) => ({ name: r.fullName, username: r.username, groupId })));
       if (result.failed > 0) {
         setImportError(`${result.imported} imported, ${result.failed} failed: ${result.errors.join(", ")}`);
       } else {
@@ -160,6 +164,21 @@ export function BulkImportModal({ open, onClose, onImport, existingUsernames }: 
         {parsed.length === 0 ? (
           <div className="space-y-3">
             <p className="text-sm text-dash-muted">Upload a CSV file with a "Full Name" column. Each row becomes one guest. Only the full name is required. If your CSV has other columns (email, phone, etc.), they will be ignored.</p>
+            {groups.length > 0 && (
+              <div className="space-y-1">
+                <label className="text-sm font-medium text-dash-text">Add to group (optional)</label>
+                <select
+                  value={selectedGroupId}
+                  onChange={(e) => setSelectedGroupId(e.target.value)}
+                  className="w-full rounded-lg border border-dash-border bg-white px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+                >
+                  <option value="">No group</option>
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="rounded-lg border-2 border-dashed border-dash-border p-6 text-center">
               <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={handleFile} className="hidden" id="bulk-import-file" />
               <label htmlFor="bulk-import-file" className="cursor-pointer text-sm font-medium text-dash-primary hover:underline">

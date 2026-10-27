@@ -641,6 +641,7 @@ export function GuestsPage() {
         open={showBulkImport}
         onClose={() => setShowBulkImport(false)}
         existingUsernames={new Set((guests ?? []).map((g) => (g.username ?? "").toLowerCase()).filter(Boolean))}
+        groups={(groups ?? []).map((g) => ({ id: g.id, name: g.name }))}
         onImport={async (importGuests) => {
           let imported = 0;
           let failed = 0;
@@ -649,7 +650,7 @@ export function GuestsPage() {
           for (const g of importGuests) {
             const { data: newGuest, error: insertError } = await supabase
               .from("event_guests")
-              .insert({ event_id: eventId, name: g.name, username: g.username, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0 })
+              .insert({ event_id: eventId, name: g.name, username: g.username, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0, group_id: g.groupId })
               .select("id")
               .maybeSingle();
             if (insertError || !newGuest) {
