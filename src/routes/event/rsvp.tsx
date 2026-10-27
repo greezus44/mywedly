@@ -104,8 +104,8 @@ export function RsvpPage() {
   useEffect(() => { setRsvpDeadline(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? ""); }, [event.draft_rsvp_deadline, event.rsvp_deadline]);
 
   const saveDeadlineMutation = useMutation({
-    mutationFn: async () => { const { error } = await supabase.from("user_events").update({ draft_rsvp_deadline: rsvpDeadline || null }).eq("id", eventId); if (error) throw error; },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["event", eventId] }),
+    mutationFn: async () => { const { error } = await supabase.from("user_events").update({ draft_rsvp_deadline: rsvpDeadline || null, rsvp_deadline: rsvpDeadline || null }).eq("id", eventId); if (error) throw error; },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event", eventId] }); queryClient.invalidateQueries({ queryKey: ["published-event"] }); },
   });
 
   useEffect(() => {
