@@ -642,16 +642,33 @@ export function GuestsPage() {
         onClose={() => setShowBulkImport(false)}
         existingUsernames={new Set((guests ?? []).map((g) => (g.username ?? "").toLowerCase()).filter(Boolean))}
         onImport={async (importGuests) => {
-          const rows = importGuests.map((g) => ({ event_id: eventId, name: g.name, username: g.username, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0 }));
-          const { data: inserted, error } = await supabase.from("event_guests").insert(rows).select("id");
-          if (error) throw error;
-          // Give every imported guest a Main Event invitation
-          if (inserted && inserted.length > 0) {
-            const inviteRows = inserted.map((g) => ({ guest_id: g.id, event_id: eventId, sub_event_id: null, invite_type: "include" as const }));
+          let imported = 0;
+          let failed = 0;
+          const errors: string[] = [];
+          const insertedIds: string[] = [];
+          for (const g of importGuests) {
+            const { data: newGuest, error: insertError } = await supabase
+              .from("event_guests")
+              .insert({ event_id: eventId, name: g.name, username: g.username, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0 })
+              .select("id")
+              .maybeSingle();
+            if (insertError || !newGuest) {
+              failed++;
+              const reason = insertError?.message ?? "Unknown error";
+              errors.push(`${g.name}: ${reason}`);
+            } else {
+              imported++;
+              insertedIds.push(newGuest.id);
+            }
+          }
+          // Give every successfully imported guest a Main Event invitation
+          if (insertedIds.length > 0) {
+            const inviteRows = insertedIds.map((id) => ({ guest_id: id, event_id: eventId, sub_event_id: null, invite_type: "include" as const }));
             await supabase.from("guest_event_invites").upsert(inviteRows, { onConflict: "guest_id,event_id,sub_event_id" });
           }
           queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
           queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] });
+          return { imported, failed, errors };
         }}
       />
     </div>
