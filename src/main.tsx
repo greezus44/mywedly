@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { GuestAuthProvider } from "./lib/guest-auth";
@@ -44,6 +44,11 @@ import RustyWishes from "./routes/guest/rusty-wishes";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
 
+function RedirectToRsvp() {
+  const { token } = useParams<{ token: string }>();
+  return <Navigate to={`/rsvp/${token}`} replace />;
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
@@ -73,7 +78,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 
               <Route path="/e/:slug" element={<LanguageProvider><GuestCover /></LanguageProvider>} />
               <Route path="/e/:slug/signin" element={<LanguageProvider><GuestSignIn /></LanguageProvider>} />
-              <Route path="/join/:token" element={<LanguageProvider><GuestJoin /></LanguageProvider>} />
+              <Route path="/rsvp/:token" element={<LanguageProvider><GuestJoin /></LanguageProvider>} />
+              <Route path="/join/:token" element={<RedirectToRsvp />} />
               <Route path="/e/:slug/home" element={<LanguageProvider><GuestLayout /></LanguageProvider>}><Route index element={<GuestHome />} /></Route>
               <Route path="/e/:slug/rsvp" element={<LanguageProvider><GuestLayout /></LanguageProvider>}><Route index element={<GuestRsvp />} /></Route>
               <Route path="/e/:slug/wishes" element={<LanguageProvider><GuestLayout /></LanguageProvider>}><Route index element={<GuestWishes />} /></Route>

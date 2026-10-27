@@ -275,7 +275,7 @@ export function SharingPage() {
     setEditRsvpDeadline(se?.rsvp_deadline ?? "");
   };
 
-  const joinPrefix = `${window.location.origin}/join/`;
+  const joinPrefix = `${window.location.origin}/rsvp/`;
 
   const validateToken = async (token: string): Promise<string | null> => {
     const trimmed = token.trim();
@@ -425,7 +425,7 @@ export function SharingPage() {
                   {seLinks.length > 0 && (
                     <div className="space-y-3">
                       {seLinks.map((link) => {
-                        const joinUrl = `${window.location.origin}/join/${link.token}`;
+                        const joinUrl = `${window.location.origin}/rsvp/${link.token}`;
                         const gName = groupNameFor(link.group_id);
                         return (
                           <div key={link.id} className="rounded-md border border-dash-border bg-dash-surface p-2.5">
