@@ -1,0 +1,179 @@
+/*
+# Fix open_rsvp_register: route guests to their link's group
+
+## Problem
+Two overloads of open_rsvp_register existed:
+  1. (text, text, text, text)   — newer, used v_link.group_id
+  2. (text, text, text, integer) — old, hardcoded "Open Link RSVP" group
+
+The frontend calls the function with p_plus_ones as an integer, so Postgres
+resolved to the OLD overload (#2), which ignores the link's group_id and
+sends every guest to the "Open Link RSVP" group regardless of which link
+they came through.
+
+## Fix
+- Drop BOTH old overloads.
+- Recreate a single function with the integer signature the frontend uses.
+- Use v_link.group_id (with fallback to the flagged default group) so guests
+  are sorted into the correct group for their link.
+- Move existing guests who re-register into the link's group (matches the
+  newer text-overload behavior).
+- Keep the RSVP deadline check that the old integer overload had.
+- Plus-one handling: the join page sends a count (0 or 1), not a name, so
+  we store the count on the RSVP row and the guest row. No plus-one guest
+  row is created (the join page doesn't collect a name).
+
+## Security
+- SECURITY DEFINER, fixed search_path — unchanged.
+- EXECUTE revoked from PUBLIC/anon, granted to anon + authenticated — the
+  function is the public RSVP entry point and must be callable by anon.
+*/
+
+-- Remove both stale overloads so only the corrected one remains.
+DROP FUNCTION IF EXISTS public.open_rsvp_register(text, text, text, text);
+DROP FUNCTION IF EXISTS public.open_rsvp_register(text, text, text, integer);
+
+CREATE OR REPLACE FUNCTION public.open_rsvp_register(
+  p_token text,
+  p_name text,
+  p_status text,
+  p_plus_ones integer
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public', 'pg_temp'
+AS $function$
+DECLARE
+  v_link open_rsvp_links%ROWTYPE;
+  v_event user_events%ROWTYPE;
+  v_sub_event sub_events%ROWTYPE;
+  v_group_id uuid;
+  v_guest_id uuid;
+  v_clean_name text;
+  v_norm_status text;
+  v_existing guest_event_invites%ROWTYPE;
+  v_plus_one_count int := 0;
+  v_username text;
+BEGIN
+  -- Load and validate the link.
+  SELECT l.* INTO v_link
+  FROM open_rsvp_links l
+  JOIN user_events e ON e.id = l.event_id
+  WHERE l.token = p_token AND l.is_enabled = true AND e.is_published = true
+  LIMIT 1;
+
+  IF NOT found THEN
+    RETURN jsonb_build_object('error', 'link_not_found');
+  END IF;
+
+  -- Validate name.
+  v_clean_name := btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g'));
+  IF v_clean_name = '' OR length(v_clean_name) > 200 THEN
+    RETURN jsonb_build_object('error', 'invalid_name');
+  END IF;
+
+  -- Validate status.
+  v_norm_status := lower(btrim(coalesce(p_status, '')));
+  IF v_norm_status NOT IN ('attending', 'declined') THEN
+    RETURN jsonb_build_object('error', 'invalid_status');
+  END IF;
+
+  -- Plus-one count: only if allowed and attending.
+  IF v_norm_status = 'attending' AND v_link.allow_plus_one AND coalesce(p_plus_ones, 0) > 0 THEN
+    v_plus_one_count := 1;
+  END IF;
+
+  SELECT * INTO v_event FROM user_events WHERE id = v_link.event_id LIMIT 1;
+  SELECT * INTO v_sub_event FROM sub_events WHERE id = v_link.sub_event_id LIMIT 1;
+
+  -- Enforce RSVP deadline.
+  IF v_sub_event.rsvp_deadline IS NOT NULL AND now() > v_sub_event.rsvp_deadline THEN
+    RETURN jsonb_build_object('error', 'closed');
+  END IF;
+
+  -- Determine the group for this link's registrants.
+  IF v_link.group_id IS NOT NULL THEN
+    SELECT id INTO v_group_id FROM guest_groups
+    WHERE id = v_link.group_id AND event_id = v_link.event_id LIMIT 1;
+  END IF;
+
+  IF v_group_id IS NULL THEN
+    -- Fallback: find the default group for this event by flag.
+    SELECT id INTO v_group_id FROM guest_groups
+    WHERE event_id = v_link.event_id AND is_open_rsvp_default = true LIMIT 1;
+    -- If no flagged default, fall back to name search.
+    IF v_group_id IS NULL THEN
+      SELECT id INTO v_group_id FROM guest_groups
+      WHERE event_id = v_link.event_id AND name = 'Open Link RSVP' LIMIT 1;
+    END IF;
+    -- If still none, create the default group with the flag set.
+    IF v_group_id IS NULL THEN
+      INSERT INTO guest_groups (event_id, name, sort_order, is_open_rsvp_default)
+      VALUES (v_link.event_id, 'Open Link RSVP', 9999, true)
+      RETURNING id INTO v_group_id;
+    END IF;
+  END IF;
+
+  -- Find existing guest with the same name in this event (avoid duplicates).
+  SELECT g.id INTO v_guest_id
+  FROM event_guests g
+  WHERE g.event_id = v_link.event_id AND lower(g.name) = lower(v_clean_name)
+  LIMIT 1;
+
+  IF v_guest_id IS NULL THEN
+    v_username := lower(regexp_replace(v_clean_name, '[^a-zA-Z0-9]+', '', 'g'));
+    INSERT INTO event_guests (event_id, name, username, token, rsvp_status, plus_ones, group_id, allow_plus_one)
+    VALUES (v_link.event_id, v_clean_name, v_username, gen_random_uuid()::text, 'pending', 0, v_group_id, v_link.allow_plus_one)
+    RETURNING id INTO v_guest_id;
+  ELSE
+    -- Move existing guest into this link's group so re-registrations sort correctly.
+    UPDATE event_guests SET group_id = v_group_id WHERE id = v_guest_id;
+  END IF;
+
+  -- Ensure invite row for the sub-event (idempotent).
+  SELECT * INTO v_existing FROM guest_event_invites
+  WHERE guest_id = v_guest_id AND event_id = v_link.event_id AND sub_event_id = v_link.sub_event_id LIMIT 1;
+  IF NOT found THEN
+    INSERT INTO guest_event_invites (guest_id, event_id, sub_event_id, invite_type)
+    VALUES (v_guest_id, v_link.event_id, v_link.sub_event_id, 'include');
+  END IF;
+
+  -- Record the RSVP for the primary guest.
+  INSERT INTO event_rsvps (event_id, guest_id, guest_name, status, plus_ones, sub_event_id, responded_at)
+  VALUES (v_link.event_id, v_guest_id, v_clean_name, v_norm_status, v_plus_one_count, v_link.sub_event_id, now())
+  ON CONFLICT DO NOTHING;
+
+  -- Update guest rsvp_status for convenience.
+  UPDATE event_guests SET rsvp_status = v_norm_status, rsvp_submitted_at = now(),
+  plus_ones = v_plus_one_count
+  WHERE id = v_guest_id;
+
+  -- Return a session row for the primary guest.
+  RETURN jsonb_build_object(
+    'error', NULL,
+    'guest', jsonb_build_object(
+      'id', g.id,
+      'event_id', g.event_id,
+      'name', g.name,
+      'group_name', g.group_name,
+      'side', g.side,
+      'rsvp_status', g.rsvp_status,
+      'rsvp_submitted_at', g.rsvp_submitted_at,
+      'plus_ones', g.plus_ones,
+      'dietary', g.dietary,
+      'message', g.message,
+      'created_at', g.created_at,
+      'table_number', g.table_number,
+      'group_id', g.group_id,
+      'allow_plus_one', g.allow_plus_one
+    ),
+    'event_slug', v_event.slug
+  )
+  FROM event_guests g
+  WHERE g.id = v_guest_id;
+END;
+$function$;
+
+-- Grant execute to anon + authenticated (public RSVP entry point).
+REVOKE EXECUTE ON FUNCTION public.open_rsvp_register(text, text, text, integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.open_rsvp_register(text, text, text, integer) TO anon, authenticated;
