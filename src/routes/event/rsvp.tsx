@@ -254,7 +254,7 @@ export function RsvpPage() {
   };
 
   const UNGROUPED_KEY = "__ungrouped__";
-  const sortedGroups = [...(groups ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+  const sortedGroups = [...(groups ?? [])].sort((a, b) => a.name.localeCompare(b.name));
   const groupedGuests: Array<{ key: string; label: string; guests: EventGuest[] }> = [];
   for (const gr of sortedGroups) {
     const gs = sortGuests((guests ?? []).filter((g) => g.group_id === gr.id));

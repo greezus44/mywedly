@@ -205,7 +205,7 @@ export function GuestsPage() {
     eventColumns.push({ key: se.id, label: tabLabel(se) });
   }
 
-  const sortedGroups = [...(groups ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+  const sortedGroups = [...(groups ?? [])].sort((a, b) => a.name.localeCompare(b.name));
   const groupName = (id: string | null) => sortedGroups.find((g) => g.id === id)?.name ?? null;
 
   const statusOrder: GuestStatus[] = ["attending", "declined", "pending", "not_invited"];
