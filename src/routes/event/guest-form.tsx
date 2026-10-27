@@ -70,8 +70,8 @@ export function GuestForm({ guest, subEvents, groups, existingInvitations, onSub
 
       {subEvents && subEvents.length > 0 && (
         <div className="border-t border-dash-border pt-4">
-          <p className="mb-2 text-sm font-medium text-dash-text">Event Invitations</p>
-          <p className="mb-3 text-xs text-dash-muted">Tick which events this guest is invited to.</p>
+          <p className="mb-2 text-sm font-medium text-dash-text">Direct Event Invitations</p>
+          <p className="mb-3 text-xs text-dash-muted">Tick which events this guest is directly invited to. If their group is invited to an event via Manage Invitations, they will also have access to that event regardless of these ticks.</p>
           <div className="space-y-2">
             {subEvents.map((se) => {
               const isInvited = invitedEvents[se.id] ?? false;
