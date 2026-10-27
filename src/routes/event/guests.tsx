@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventGuest, type SubEvent, type EventRsvp, type GuestGroup, type GroupEventInvite } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventGuest, type SubEvent, type EventRsvp, type GuestGroup } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
 import { GuestForm, type GuestFormValues } from "./guest-form";
@@ -46,7 +46,6 @@ export function GuestsPage() {
   const [inviteSubEventId, setInviteSubEventId] = useState<string>("");
   const [bulkGroupId, setBulkGroupId] = useState<string>("");
   const [newGroupName, setNewGroupName] = useState("");
-  const [groupError, setGroupError] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const toggleGroupCollapse = (key: string) => {
@@ -76,11 +75,6 @@ export function GuestsPage() {
     queryFn: async () => { const { data, error } = await supabase.from("guest_groups").select("*").eq("event_id", eventId).order("sort_order", { ascending: true }); if (error) throw error; return data as GuestGroup[]; },
   });
 
-  const { data: groupEventInvites } = useQuery({
-    queryKey: ["group-event-invites", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("group_event_invites").select("*").eq("event_id", eventId); if (error) throw error; return (data ?? []) as GroupEventInvite[]; },
-  });
-
   const { data: allOverrides } = useQuery({
     queryKey: ["all-guest-invitation-overrides", eventId],
     queryFn: async () => {
@@ -97,18 +91,22 @@ export function GuestsPage() {
     queryFn: async () => { const { data, error } = await supabase.from("event_rsvps").select("guest_id, sub_event_id, status, plus_ones").eq("event_id", eventId); if (error) throw error; return (data ?? []) as Pick<EventRsvp, "guest_id" | "sub_event_id" | "status" | "plus_ones">[]; },
   });
 
+  // Build a map of invited event keys per guest. "__main__" = Main Event.
+  // Invitations come from guest_event_invites (Main Event + sub-events)
+  // and per-guest overrides (which can add or remove access).
   const invitedEventsByGuest = new Map<string, Set<string>>();
-  if (subEvents && subEvents.length > 0) {
-    for (const g of (guests ?? [])) {
-      const invited = new Set<string>();
-      (existingInvites ?? []).filter((inv) => inv.guest_id === g.id && inv.invite_type === "include" && inv.sub_event_id).forEach((inv) => invited.add(inv.sub_event_id as string));
-      (allOverrides ?? []).filter((o) => o.guest_id === g.id).forEach((o) => {
-        const seId = o.sub_event_id as string;
-        if (o.is_invited) { invited.add(seId); }
-        else { invited.delete(seId); }
-      });
-      invitedEventsByGuest.set(g.id, invited);
-    }
+  for (const g of (guests ?? [])) {
+    const invited = new Set<string>();
+    (existingInvites ?? []).filter((inv) => inv.guest_id === g.id && inv.invite_type === "include").forEach((inv) => {
+      if (inv.sub_event_id) invited.add(inv.sub_event_id as string);
+      else invited.add("__main__");
+    });
+    (allOverrides ?? []).filter((o) => o.guest_id === g.id).forEach((o) => {
+      const key = o.sub_event_id ? (o.sub_event_id as string) : "__main__";
+      if (o.is_invited) { invited.add(key); }
+      else { invited.delete(key); }
+    });
+    invitedEventsByGuest.set(g.id, invited);
   }
 
   const rsvpStatusByGuest = new Map<string, Map<string, string>>();
@@ -124,16 +122,15 @@ export function GuestsPage() {
   }
 
   const statusFor = (guestId: string, tabKey: string): GuestStatus => {
+    const invited = invitedEventsByGuest.get(guestId);
+    if (!invited || !invited.has(tabKey)) return "not_invited";
     if (tabKey === "__main__") {
       const g = guests?.find((gg) => gg.id === guestId);
       const s = g?.rsvp_status;
       if (s === "attending") return "attending";
       if (s === "declined") return "declined";
-      if (!subEvents || subEvents.length === 0) return "pending";
       return "pending";
     }
-    const invited = invitedEventsByGuest.get(guestId);
-    if (!invited || !invited.has(tabKey)) return "not_invited";
     const rsvpMap = rsvpStatusByGuest.get(guestId);
     const status = rsvpMap?.get(tabKey);
     if (status === "attending") return "attending";
@@ -144,14 +141,14 @@ export function GuestsPage() {
   const plusOneLabelFor = (guestId: string, tabKey: string): string | null => {
     const g = guests?.find((gg) => gg.id === guestId);
     if (!g) return null;
+    const invited = invitedEventsByGuest.get(guestId);
+    if (!invited || !invited.has(tabKey)) return null;
     if (tabKey === "__main__") {
       const s = g.rsvp_status;
       if (s !== "attending" && s !== "declined") return null;
       if (!g.allow_plus_one) return null;
       return g.plus_ones > 0 ? "+1" : "0";
     }
-    const invited = invitedEventsByGuest.get(guestId);
-    if (!invited || !invited.has(tabKey)) return null;
     const rsvpMap = rsvpStatusByGuest.get(guestId);
     const status = rsvpMap?.get(tabKey);
     if (status !== "attending" && status !== "declined") return null;
@@ -171,10 +168,7 @@ export function GuestsPage() {
     if (!bDate) return -1;
     return aDate.localeCompare(bDate);
   });
-  const eventColumns: Array<{ key: string; label: string }> = [];
-  if (sortedSubEvents.length > 0) {
-    eventColumns.push({ key: "__main__", label: "Main Event" });
-  }
+  const eventColumns: Array<{ key: string; label: string }> = [{ key: "__main__", label: "Main Event" }];
   for (const se of sortedSubEvents) {
     eventColumns.push({ key: se.id, label: tabLabel(se) });
   }
@@ -264,30 +258,6 @@ export function GuestsPage() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] }); setSelectedGuestIds(new Set()); setBulkGroupId(""); },
   });
 
-  const toggleGroupEventInviteMutation = useMutation({
-    mutationFn: async ({ groupId, subEventId, checked }: { groupId: string; subEventId: string | null; checked: boolean }) => {
-      if (checked) {
-        const { error } = await supabase.from("group_event_invites").upsert(
-          { group_id: groupId, event_id: eventId, sub_event_id: subEventId },
-          { onConflict: "group_id,event_id,sub_event_id" },
-        );
-        if (error) throw error;
-      } else {
-        let q = supabase.from("group_event_invites").delete().eq("group_id", groupId).eq("event_id", eventId);
-        if (subEventId) q = q.eq("sub_event_id", subEventId); else q = q.is("sub_event_id", null);
-        const { error } = await q;
-        if (error) throw error;
-      }
-    },
-    onSuccess: () => {
-      setGroupError(null);
-      queryClient.invalidateQueries({ queryKey: ["group-event-invites", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["all-guest-invitation-overrides", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] });
-    },
-    onError: (e) => setGroupError(e instanceof Error ? e.message : "Failed to update group invitation"),
-  });
-
   const toggleGuestSelection = (id: string) => {
     setSelectedGuestIds((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
@@ -331,6 +301,12 @@ export function GuestsPage() {
         guestId = newGuest.id;
       }
 
+      // Ensure the guest has a Main Event invitation
+      await supabase.from("guest_event_invites").upsert(
+        { guest_id: guestId, event_id: eventId, sub_event_id: null, invite_type: "include" },
+        { onConflict: "guest_id,event_id,sub_event_id" },
+      );
+
       if (subEvents && subEvents.length > 0) {
         await supabase.from("guest_invitation_overrides").delete().eq("guest_id", guestId);
         const overridesToInsert: Array<{ guest_id: string; sub_event_id: string; is_invited: boolean }> = [];
@@ -352,9 +328,6 @@ export function GuestsPage() {
     } catch (e) { setFormError(e instanceof Error ? e.message : "Failed to save guest"); }
     finally { setSubmitting(false); }
   };
-
-  const groupInviteChecked = (groupId: string, subEventId: string | null) =>
-    (groupEventInvites ?? []).some((gi) => gi.group_id === groupId && (gi.sub_event_id ?? null) === (subEventId ?? null));
 
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
   if (isError) return <ErrorState title="Failed to load guests" message={error instanceof Error ? error.message : "Unknown error"} />;
@@ -532,46 +505,28 @@ export function GuestsPage() {
         </div>
       </Modal>
 
-      <Modal open={showGroups} onClose={() => { setShowGroups(false); setGroupError(null); setNewGroupName(""); }} title="Manage Groups">
+      <Modal open={showGroups} onClose={() => { setShowGroups(false); setNewGroupName(""); }} title="Manage Groups">
         <div className="space-y-4">
-          {groupError && <p className="text-sm text-dash-danger">{groupError}</p>}
           <div className="flex items-center gap-2">
             <input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="New group name" className="flex-1 rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text" />
-            <Button size="sm" onClick={() => { setGroupError(null); createGroupMutation.mutate(newGroupName.trim(), { onError: (e) => setGroupError(e instanceof Error ? e.message : "Failed to create group") }); }} disabled={!newGroupName.trim()} loading={createGroupMutation.isPending}>Add</Button>
+            <Button size="sm" onClick={() => createGroupMutation.mutate(newGroupName.trim())} disabled={!newGroupName.trim()} loading={createGroupMutation.isPending}>Add</Button>
           </div>
 
           {sortedGroups.length > 0 && (
             <div className="space-y-3 border-t border-dash-border pt-3">
-              {sortedSubEvents.length > 0 && (
-                <p className="text-xs text-dash-muted">Tick which events each group is invited to. Guests in the group inherit these invitations.</p>
-              )}
               {sortedGroups.map((gr) => (
                 <div key={gr.id} className="space-y-2 rounded-lg border border-dash-border bg-dash-bg p-3">
                   <div className="flex items-center gap-2">
                     <input defaultValue={gr.name} onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== gr.name) renameGroupMutation.mutate({ id: gr.id, name: v }); }} className="flex-1 rounded border border-dash-border bg-dash-surface px-2 py-1 text-sm text-dash-text" />
                     <button onClick={() => setGroupToDelete(gr)} className="text-xs text-dash-danger hover:underline" title="Delete group (guests become ungrouped)">Delete</button>
                   </div>
-                  {sortedSubEvents.length > 0 && (
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 pl-1">
-                      <label className="flex items-center gap-1.5 text-xs text-dash-text">
-                        <input type="checkbox" checked={groupInviteChecked(gr.id, null)} onChange={(e) => { setGroupError(null); toggleGroupEventInviteMutation.mutate({ groupId: gr.id, subEventId: null, checked: e.target.checked }); }} className="accent-dash-primary" />
-                        Main Event
-                      </label>
-                      {sortedSubEvents.map((se) => (
-                        <label key={se.id} className="flex items-center gap-1.5 text-xs text-dash-text">
-                          <input type="checkbox" checked={groupInviteChecked(gr.id, se.id)} onChange={(e) => { setGroupError(null); toggleGroupEventInviteMutation.mutate({ groupId: gr.id, subEventId: se.id, checked: e.target.checked }); }} className="accent-dash-primary" />
-                          {tabLabel(se)}
-                        </label>
-                      ))}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
           )}
 
           {sortedGroups.length === 0 && (
-            <p className="text-sm text-dash-muted">No groups yet. Create one above to start grouping your guests.</p>
+            <p className="text-sm text-dash-muted">No groups yet. Create one above to start grouping your guests. Use Manage Invitations to invite groups to events.</p>
           )}
         </div>
       </Modal>
@@ -602,9 +557,15 @@ export function GuestsPage() {
         existingUsernames={new Set((guests ?? []).map((g) => (g.username ?? "").toLowerCase()).filter(Boolean))}
         onImport={async (importGuests) => {
           const rows = importGuests.map((g) => ({ event_id: eventId, name: g.name, username: g.username, token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0 }));
-          const { error } = await supabase.from("event_guests").insert(rows);
+          const { data: inserted, error } = await supabase.from("event_guests").insert(rows).select("id");
           if (error) throw error;
+          // Give every imported guest a Main Event invitation
+          if (inserted && inserted.length > 0) {
+            const inviteRows = inserted.map((g) => ({ guest_id: g.id, event_id: eventId, sub_event_id: null, invite_type: "include" as const }));
+            await supabase.from("guest_event_invites").upsert(inviteRows, { onConflict: "guest_id,event_id,sub_event_id" });
+          }
           queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
+          queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] });
         }}
       />
     </div>
