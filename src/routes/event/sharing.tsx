@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type SharingEvent, type SubEvent, type OpenRsvpLink, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type SharingEvent, type SubEvent, type OpenRsvpLink, type GuestGroup, type Json } from "../../lib/supabase";
 import { Button, Input, Toggle, Modal, LoadingSpinner, Badge, DateTimePicker, ColorInput } from "../../components/ui";
 import { ImageUpload } from "../../components/ui/ImageUpload";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
@@ -123,6 +123,9 @@ export function SharingPage() {
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [tokenChecking, setTokenChecking] = useState(false);
   const [editRsvpDeadline, setEditRsvpDeadline] = useState("");
+  const [creatingForSubEvent, setCreatingForSubEvent] = useState<string | null>(null);
+  const [newLinkGroupName, setNewLinkGroupName] = useState("");
+  const [editGroupId, setEditGroupId] = useState<string | null>(null);
 
   const publicUrl = event.slug ? `${window.location.origin}/e/${event.slug}` : "";
 
@@ -153,6 +156,15 @@ export function SharingPage() {
     },
   });
 
+  const { data: groups } = useQuery({
+    queryKey: ["guest-groups", eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("guest_groups").select("*").eq("event_id", eventId).order("name", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as GuestGroup[];
+    },
+  });
+
   useEffect(() => {
     if (publicUrl) generateQrDataUrl(publicUrl, { width: 256 }).then(setQrUrl).catch(() => {});
   }, [publicUrl]);
@@ -164,19 +176,46 @@ export function SharingPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const findLinkForSubEvent = (subEventId: string) => openLinks?.find((l) => l.sub_event_id === subEventId);
+  const linksForSubEvent = (subEventId: string) => (openLinks ?? []).filter((l) => l.sub_event_id === subEventId);
+  const groupNameFor = (id: string | null) => (id ? (groups ?? []).find((g) => g.id === id)?.name ?? null : null);
 
   const createLink = useMutation({
-    mutationFn: async (subEventId: string) => {
+    mutationFn: async ({ subEventId, groupName }: { subEventId: string; groupName: string }) => {
+      let groupId: string | null = null;
+      const trimmedName = groupName.trim();
+      if (trimmedName) {
+        const { data: existing } = await supabase
+          .from("guest_groups")
+          .select("id")
+          .eq("event_id", eventId)
+          .eq("name", trimmedName)
+          .maybeSingle();
+        if (existing) {
+          groupId = existing.id;
+        } else {
+          const { data: newGroup, error: groupError } = await supabase
+            .from("guest_groups")
+            .insert({ event_id: eventId, name: trimmedName, sort_order: 9999 })
+            .select("id")
+            .single();
+          if (groupError) throw groupError;
+          groupId = newGroup.id;
+        }
+      }
       const { data, error } = await supabase
         .from("open_rsvp_links")
-        .insert({ event_id: eventId, sub_event_id: subEventId, allow_plus_one: false, is_enabled: true, page_config: DEFAULT_PAGE_CONFIG as unknown as Json })
+        .insert({ event_id: eventId, sub_event_id: subEventId, allow_plus_one: false, is_enabled: true, page_config: DEFAULT_PAGE_CONFIG as unknown as Json, group_id: groupId })
         .select("*")
         .single();
       if (error) throw error;
       return data as OpenRsvpLink;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["open-rsvp-links", eventId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["open-rsvp-links", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["guest-groups", eventId] });
+      setCreatingForSubEvent(null);
+      setNewLinkGroupName("");
+    },
   });
 
   const toggleLink = useMutation({
@@ -200,6 +239,7 @@ export function SharingPage() {
     setEditConfig({ ...DEFAULT_PAGE_CONFIG, ...((link.page_config ?? {}) as PageConfig) });
     setEditEnabled(link.is_enabled);
     setEditToken(link.token);
+    setEditGroupId(link.group_id);
     setTokenError(null);
     const se = (subEvents ?? []).find((s) => s.id === link.sub_event_id);
     setEditRsvpDeadline(se?.rsvp_deadline ?? "");
@@ -239,7 +279,7 @@ export function SharingPage() {
       setTokenError(null);
     }
     setSavingEdit(true);
-    const updates: Record<string, unknown> = { page_config: editConfig as unknown as Json, is_enabled: editEnabled };
+    const updates: Record<string, unknown> = { page_config: editConfig as unknown as Json, is_enabled: editEnabled, group_id: editGroupId };
     if (tokenToSave) updates.token = tokenToSave;
     const { error } = await supabase
       .from("open_rsvp_links")
@@ -293,41 +333,63 @@ export function SharingPage() {
 
       <div className="rounded-lg border border-dash-border bg-dash-surface p-4">
         <h3 className="mb-1 text-sm font-semibold text-dash-text">Open RSVP Links</h3>
-        <p className="mb-4 text-sm text-dash-muted">Create a unique link for each event. Guests fill in their name and RSVP yes or no — they're added to your guest list under an "Open Link RSVP" group, invited only to that one event.</p>
-        {createLink.isPending && <div className="mb-3"><LoadingSpinner className="h-6 w-6" /></div>}
+        <p className="mb-4 text-sm text-dash-muted">Create one or more links for each event. Each link can route guests into their own group on your guest list — for example, one link for the groom's side and one for the bride's side. Guests fill in their name and RSVP yes or no.</p>
         {(!subEvents || subEvents.length === 0) ? (
           <p className="text-sm text-dash-muted">No events found. Create events first in the Events tab.</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {subEvents.map((se) => {
-              const link = findLinkForSubEvent(se.id);
-              const joinUrl = link ? `${window.location.origin}/join/${link.token}` : "";
+              const seLinks = linksForSubEvent(se.id);
               return (
                 <div key={se.id} className="rounded-lg border border-dash-border bg-dash-bg p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-dash-text">{se.name}</span>
-                      {link && <Badge variant={link.is_enabled ? "success" : "default"}>{link.is_enabled ? "Enabled" : "Disabled"}</Badge>}
-                    </div>
-                    <div className="flex gap-2">
-                      {!link ? (
-                        <Button size="sm" variant="secondary" onClick={() => createLink.mutate(se.id)} disabled={createLink.isPending}>Create Link</Button>
-                      ) : (
-                        <>
-                          <Button size="sm" variant="secondary" onClick={() => openEditor(link)}>Edit</Button>
-                          <Button size="sm" variant="secondary" onClick={() => toggleLink.mutate({ link, enabled: !link.is_enabled })}>{link.is_enabled ? "Disable" : "Enable"}</Button>
-                          <Button size="sm" variant="danger" onClick={() => { if (confirm("Delete this open RSVP link? Guests who already registered will remain on your list.")) deleteLink.mutate(link); }}>Delete</Button>
-                        </>
-                      )}
-                    </div>
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="text-sm font-medium text-dash-text">{se.name}</span>
+                    <span className="text-xs text-dash-muted">({seLinks.length} link{seLinks.length === 1 ? "" : "s"})</span>
                   </div>
-                  {link && joinUrl && (
-                    <div className="mt-3 space-y-2">
+                  {seLinks.length > 0 && (
+                    <div className="space-y-3">
+                      {seLinks.map((link) => {
+                        const joinUrl = `${window.location.origin}/join/${link.token}`;
+                        const gName = groupNameFor(link.group_id);
+                        return (
+                          <div key={link.id} className="rounded-md border border-dash-border bg-dash-surface p-2.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <Badge variant={link.is_enabled ? "success" : "default"}>{link.is_enabled ? "Enabled" : "Disabled"}</Badge>
+                                {gName && <span className="text-xs text-dash-muted">Group: {gName}</span>}
+                                {!gName && <span className="text-xs text-dash-muted">Default group</span>}
+                              </div>
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="secondary" onClick={() => openEditor(link)}>Edit</Button>
+                                <Button size="sm" variant="secondary" onClick={() => toggleLink.mutate({ link, enabled: !link.is_enabled })}>{link.is_enabled ? "Disable" : "Enable"}</Button>
+                                <Button size="sm" variant="danger" onClick={() => { if (confirm("Delete this open RSVP link? Guests who already registered will remain on your list.")) deleteLink.mutate(link); }}>Delete</Button>
+                              </div>
+                            </div>
+                            <div className="mt-2 space-y-2">
+                              <div className="flex gap-2">
+                                <Input value={joinUrl} readOnly />
+                                <Button size="sm" variant="secondary" onClick={() => { navigator.clipboard.writeText(joinUrl); }}>Copy</Button>
+                              </div>
+                              <OpenLinkQr url={joinUrl} slug={gName || se.name} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {creatingForSubEvent === se.id ? (
+                    <div className="mt-3 rounded-md border border-dash-border bg-dash-surface p-3">
+                      <label className="mb-1 block text-xs font-medium text-dash-muted">Group name (optional)</label>
                       <div className="flex gap-2">
-                        <Input value={joinUrl} readOnly />
-                        <Button size="sm" variant="secondary" onClick={() => { navigator.clipboard.writeText(joinUrl); }}>Copy</Button>
+                        <Input value={newLinkGroupName} onChange={(e) => setNewLinkGroupName(e.target.value)} placeholder="e.g. Groom's Side" />
+                        <Button size="sm" onClick={() => createLink.mutate({ subEventId: se.id, groupName: newLinkGroupName })} disabled={createLink.isPending}>{createLink.isPending ? "Creating..." : "Create"}</Button>
+                        <Button size="sm" variant="secondary" onClick={() => { setCreatingForSubEvent(null); setNewLinkGroupName(""); }}>Cancel</Button>
                       </div>
-                      <OpenLinkQr url={joinUrl} slug={se.name} />
+                      <p className="mt-1.5 text-xs text-dash-muted">Leave blank to use the default "Open Link RSVP" group. Enter a name to create or reuse a group — guests from this link will be sorted into that group.</p>
+                    </div>
+                  ) : (
+                    <div className="mt-2">
+                      <Button size="sm" variant="secondary" onClick={() => { setCreatingForSubEvent(se.id); setNewLinkGroupName(""); }} disabled={createLink.isPending}>Add Link</Button>
                     </div>
                   )}
                 </div>
@@ -353,6 +415,22 @@ export function SharingPage() {
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-dash-text">Link enabled</span>
             <Toggle checked={editEnabled} onChange={setEditEnabled} />
+          </div>
+          <div>
+            <SectionLabel>Guest group</SectionLabel>
+            <div className="mt-1.5">
+              <select
+                value={editGroupId ?? ""}
+                onChange={(e) => setEditGroupId(e.target.value || null)}
+                className="w-full rounded-lg border border-dash-border bg-dash-bg px-2 py-1.5 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+              >
+                <option value="">Default (Open Link RSVP)</option>
+                {(groups ?? []).map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+              <p className="mt-1.5 text-xs text-dash-muted">Guests who register through this link are sorted into this group on your guest list. Create new groups from the Guests tab.</p>
+            </div>
           </div>
           <SectionLabel>Link ending</SectionLabel>
           <div>
