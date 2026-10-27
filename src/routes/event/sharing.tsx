@@ -180,6 +180,7 @@ export function SharingPage() {
   const linksForSubEvent = (subEventId: string) => (openLinks ?? []).filter((l) => l.sub_event_id === subEventId);
   const groupNameFor = (id: string | null) => (id ? (groups ?? []).find((g) => g.id === id)?.name ?? null : null);
   const defaultGroup = (groups ?? []).find((g) => g.is_open_rsvp_default) ?? null;
+  const primaryLink = (openLinks ?? []).find((l) => l.is_primary) ?? null;
 
   const computeGroupName = (groupId: string | null) => {
     if (groupId) return (groups ?? []).find((g) => g.id === groupId)?.name ?? "";
@@ -209,9 +210,15 @@ export function SharingPage() {
           groupId = newGroup.id;
         }
       }
+      // First link for the event becomes the primary (style source). Extra links
+      // inherit the primary link's page_config + allow_plus_one so all links
+      // share one look.
+      const hasPrimary = (openLinks ?? []).some((l) => l.is_primary);
+      const seedConfig = primaryLink ? (primaryLink.page_config ?? DEFAULT_PAGE_CONFIG) : DEFAULT_PAGE_CONFIG;
+      const seedPlusOne = primaryLink ? primaryLink.allow_plus_one : false;
       const { data, error } = await supabase
         .from("open_rsvp_links")
-        .insert({ event_id: eventId, sub_event_id: subEventId, allow_plus_one: false, is_enabled: true, page_config: DEFAULT_PAGE_CONFIG as unknown as Json, group_id: groupId })
+        .insert({ event_id: eventId, sub_event_id: subEventId, allow_plus_one: seedPlusOne, is_enabled: true, page_config: seedConfig as unknown as Json, group_id: groupId, is_primary: !hasPrimary })
         .select("*")
         .single();
       if (error) throw error;
@@ -237,6 +244,19 @@ export function SharingPage() {
     mutationFn: async (link: OpenRsvpLink) => {
       const { error } = await supabase.from("open_rsvp_links").delete().eq("id", link.id);
       if (error) throw error;
+      // If we deleted the primary link, promote the oldest remaining link.
+      if (link.is_primary) {
+        const { data: remaining } = await supabase
+          .from("open_rsvp_links")
+          .select("id")
+          .eq("event_id", eventId)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (remaining) {
+          await supabase.from("open_rsvp_links").update({ is_primary: true }).eq("id", remaining.id);
+        }
+      }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["open-rsvp-links", eventId] }),
   });
@@ -321,7 +341,9 @@ export function SharingPage() {
       }
     }
 
-    const updates: Record<string, unknown> = { page_config: editConfig as unknown as Json, is_enabled: editEnabled, group_id: groupIdToSave };
+    const isPrimary = editingLink.is_primary;
+    const updates: Record<string, unknown> = { is_enabled: editEnabled, group_id: groupIdToSave };
+    if (isPrimary) updates.page_config = editConfig as unknown as Json;
     if (tokenToSave) updates.token = tokenToSave;
     const { error } = await supabase
       .from("open_rsvp_links")
@@ -335,6 +357,15 @@ export function SharingPage() {
       }
       setSavingEdit(false);
       return;
+    }
+    // Primary link governs the shared page style: push its config + plus-one
+    // setting to every other link so all Open RSVP pages look identical.
+    if (isPrimary) {
+      await supabase
+        .from("open_rsvp_links")
+        .update({ page_config: editConfig as unknown as Json, allow_plus_one: editConfig.plusOneQuestion !== undefined ? !!editConfig.plusOneQuestion : false })
+        .eq("event_id", eventId)
+        .neq("id", editingLink.id);
     }
     const subEventDeadline = editRsvpDeadline || null;
     const currentSub = (subEvents ?? []).find((s) => s.id === editingLink.sub_event_id);
@@ -399,6 +430,7 @@ export function SharingPage() {
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <Badge variant={link.is_enabled ? "success" : "default"}>{link.is_enabled ? "Enabled" : "Disabled"}</Badge>
+                                {link.is_primary && <Badge variant="default">Primary</Badge>}
                                 {gName && <span className="text-xs text-dash-muted">Group: {gName}</span>}
                                 {!gName && <span className="text-xs text-dash-muted">Default group</span>}
                               </div>
@@ -453,7 +485,7 @@ export function SharingPage() {
         )}
       </div>
 
-      <Modal open={!!editingLink} onClose={() => setEditingLink(null)} title="Edit Open RSVP Link">
+      <Modal open={!!editingLink} onClose={() => setEditingLink(null)} title={editingLink?.is_primary ? "Edit Open RSVP Link (Primary)" : "Edit Open RSVP Link"}>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-dash-text">Link enabled</span>
@@ -506,6 +538,7 @@ export function SharingPage() {
               <p className="mt-1.5 text-xs text-dash-muted">Leave blank to keep this link open indefinitely. After the deadline, guests see a closed message and submissions are rejected.</p>
             </div>
           </div>
+          {editingLink?.is_primary ? (<>
           <SectionLabel>Logo</SectionLabel>
           <ImageUpload userId={event.creator_id} value={editConfig.logoUrl ?? null} onChange={(url) => setEditConfig((p) => ({ ...p, logoUrl: url ?? undefined }))} label="Logo shown at the top of the RSVP page" />
           <div>
@@ -630,6 +663,11 @@ export function SharingPage() {
           <ButtonColourEditor label="+1 Yes (selected)" value={editConfig.plusOneYesColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneYesColors: v }))} />
           <ButtonColourEditor label="+1 No (selected)" value={editConfig.plusOneNoColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneNoColors: v }))} />
           <ButtonColourEditor label="Base Button Colours (unselected)" value={editConfig.buttonColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, buttonColors: v }))} />
+          </>) : (
+            <div className="rounded-md border border-dash-border bg-dash-bg p-3 text-sm text-dash-muted">
+              This link uses the shared Open RSVP page style. To change the page appearance, edit the link marked <span className="font-medium text-dash-text">Primary</span>.
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={() => setEditingLink(null)}>Cancel</Button>
             <Button onClick={saveEdit} disabled={savingEdit || tokenChecking}>{savingEdit ? "Saving..." : "Save"}</Button>

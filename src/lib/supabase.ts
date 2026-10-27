@@ -85,6 +85,6 @@ export interface SharingEvent { id: string; event_id: string; type: string; meta
 export interface OpenRsvpLink {
   id: string; token: string; event_id: string; sub_event_id: string;
   allow_plus_one: boolean; is_enabled: boolean; page_config: Json;
-  group_id: string | null;
+  group_id: string | null; is_primary: boolean;
   created_at: string; updated_at: string;
 }
