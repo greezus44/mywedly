@@ -308,21 +308,23 @@ export default function GuestJoin() {
     return (
       <EventThemeProvider theme={event.theme}>
         <LanguageToggle />
-        {pageConfig.logoUrl && (
-          <div className="flex justify-center mb-6">
-            <img src={pageConfig.logoUrl} alt="" className="h-auto max-w-full object-contain" style={{ width: `${pageConfig.logoSize ?? 160}px` }} />
-          </div>
-        )}
-        <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
-          <div className="w-full max-w-md text-center">
-            <h1 className="guest-title mb-4">{thankYou}</h1>
-            <button
-              type="button"
-              onClick={() => navigate(`/e/${event.slug}/home`, { replace: true })}
-              className="event-btn-primary"
-            >
-              {language === "bm" ? "Lihat jemputan" : "View Invitation"}
-            </button>
+        <div className="guest-section guest-rsvp-page">
+          <div className="mx-auto max-w-2xl guest-rsvp-content">
+            {pageConfig.logoUrl && (
+              <div className="flex justify-center pt-8 sm:pt-12 mb-6 sm:mb-8">
+                <img src={pageConfig.logoUrl} alt="" className="h-auto max-w-full object-contain" style={{ width: `${pageConfig.logoSize ?? 160}px` }} />
+              </div>
+            )}
+            <div className="text-center pt-4 sm:pt-6">
+              <h1 className="guest-title mb-4">{thankYou}</h1>
+              <button
+                type="button"
+                onClick={() => navigate(`/e/${event.slug}/home`, { replace: true })}
+                className="event-btn-primary"
+              >
+                {language === "bm" ? "Lihat jemputan" : "View Invitation"}
+              </button>
+            </div>
           </div>
         </div>
       </EventThemeProvider>
