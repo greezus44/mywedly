@@ -282,12 +282,6 @@ export function RsvpPage() {
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
   if (isError) return <ErrorState title="Failed to load RSVPs" message={error instanceof Error ? error.message : "Unknown error"} />;
 
-  const counts = {
-    attending: (guests ?? []).filter((g) => g.rsvp_status === "attending").length,
-    declined: (guests ?? []).filter((g) => g.rsvp_status === "declined").length,
-    pending: (guests ?? []).filter((g) => g.rsvp_status === "pending").length,
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -456,11 +450,6 @@ export function RsvpPage() {
         {saveDeadlineMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
         <DateTimePicker label="RSVP Deadline" value={rsvpDeadline} onChange={setRsvpDeadline} />
         <p className="text-xs text-dash-muted">Guests won't be able to RSVP after this date. Leave blank for no deadline.</p>
-      </div>
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-green-600">{counts.attending}</p><p className="text-xs text-dash-muted">Attending</p></div>
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-red-600">{counts.declined}</p><p className="text-xs text-dash-muted">Declined</p></div>
-        <div className="rounded-lg border border-dash-border bg-dash-surface p-3 text-center"><p className="text-xl font-bold text-gray-600">{counts.pending}</p><p className="text-xs text-dash-muted">Pending</p></div>
       </div>
       {!guests || guests.length === 0 ? (
         <EmptyState title="No guests" description="Add guests from the Guests page to see their RSVP status here." />
