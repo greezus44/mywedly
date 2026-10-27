@@ -316,7 +316,9 @@ export default function GuestJoin() {
               </div>
             )}
             <div className="text-center pt-4 sm:pt-6">
-              <h1 className="guest-title mb-4">{thankYou}</h1>
+              <h1 className="guest-title mb-4" style={{ fontSize: "26px" }}>
+                {thankYou === "Thank you for letting us know" ? <>Thank you for&nbsp;<div>letting us know</div></> : thankYou}
+              </h1>
               <button
                 type="button"
                 onClick={() => navigate(`/e/${event.slug}/home`, { replace: true })}
