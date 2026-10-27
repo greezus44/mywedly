@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventRsvp, type EventGuest, type SubEvent, type GuestGroup, type Json } from "../../lib/supabase";
@@ -92,6 +92,7 @@ export function RsvpPage() {
   const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const didInitCollapse = useRef(false);
+  const [sortByEvent, setSortByEvent] = useState<string | null>(null);
 
   const toggleGroupCollapse = (key: string) => {
     setCollapsedGroups((prev) => {
@@ -234,14 +235,32 @@ export function RsvpPage() {
     eventColumns.push({ key: se.id, label: tabLabel(se) });
   }
 
+  const statusOrder: GuestStatus[] = ["attending", "declined", "pending", "not_invited"];
+  const statusRank = (s: GuestStatus) => statusOrder.indexOf(s);
+  const statusLabel = (s: GuestStatus) =>
+    s === "attending" ? "Attending" : s === "declined" ? "Declined" : s === "pending" ? "Pending" : "Not invited";
+  const statusColour = (s: GuestStatus) =>
+    s === "attending" ? "text-green-600" : s === "declined" ? "text-red-500" : "text-dash-muted";
+
+  const sortGuests = (gs: EventGuest[]) => {
+    const byName = (a: EventGuest, b: EventGuest) => (a.name ?? "").localeCompare(b.name ?? "");
+    if (!sortByEvent) return [...gs].sort(byName);
+    return [...gs].sort((a, b) => {
+      const ra = statusRank(statusFor(a.id, sortByEvent));
+      const rb = statusRank(statusFor(b.id, sortByEvent));
+      if (ra !== rb) return ra - rb;
+      return byName(a, b);
+    });
+  };
+
   const UNGROUPED_KEY = "__ungrouped__";
   const sortedGroups = [...(groups ?? [])].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
   const groupedGuests: Array<{ key: string; label: string; guests: EventGuest[] }> = [];
   for (const gr of sortedGroups) {
-    const gs = (guests ?? []).filter((g) => g.group_id === gr.id).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    const gs = sortGuests((guests ?? []).filter((g) => g.group_id === gr.id));
     if (gs.length > 0) groupedGuests.push({ key: gr.id, label: gr.name, guests: gs });
   }
-  const ungrouped = (guests ?? []).filter((g) => !g.group_id).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  const ungrouped = sortGuests((guests ?? []).filter((g) => !g.group_id));
   if (ungrouped.length > 0) groupedGuests.push({ key: UNGROUPED_KEY, label: "Ungrouped", guests: ungrouped });
 
   const deadline = event.draft_rsvp_deadline ?? event.rsvp_deadline;
@@ -465,7 +484,17 @@ export function RsvpPage() {
                 <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Guest</th>
                 {eventColumns.length > 0 ? (
                   eventColumns.map((col) => (
-                    <th key={col.key} className="px-4 py-2 text-center text-xs font-medium text-dash-muted whitespace-nowrap">{col.label}</th>
+                    <th
+                      key={col.key}
+                      onClick={() => setSortByEvent((prev) => (prev === col.key ? null : col.key))}
+                      className={`px-4 py-2 text-center text-xs font-medium whitespace-nowrap cursor-pointer select-none transition-colors ${
+                        sortByEvent === col.key ? "text-dash-primary bg-dash-surface/60" : "text-dash-muted hover:text-dash-text"
+                      }`}
+                      title={sortByEvent === col.key ? "Click to stop grouping by RSVP status" : "Click to group guests within each group by their RSVP status for this event"}
+                    >
+                      {col.label}
+                      {sortByEvent === col.key && <span className="ml-1">&#9650;</span>}
+                    </th>
                   ))
                 ) : (
                   <th className="px-4 py-2 text-center text-xs font-medium text-dash-muted">Status</th>
@@ -475,75 +504,117 @@ export function RsvpPage() {
             </thead>
             <tbody className="divide-y divide-dash-border bg-dash-surface">
               {groupedGuests.length === 0 ? (
-                (guests ?? []).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")).map((g) => (
-                  <tr key={g.id}>
-                    <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
-                    {eventColumns.length > 0 ? (
-                      eventColumns.map((col) => (
-                        <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
-                      ))
-                    ) : (
-                      <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
-                    )}
-                    <td className="px-4 py-2 text-right">
-                      <button
-                        onClick={() => {
-                          const drafts: Record<string, string> = {};
-                          if (eventColumns.length > 0) {
-                            for (const col of eventColumns) {
-                              const s = statusFor(g.id, col.key);
-                              drafts[col.key] = s === "not_invited" ? "not_invited" : s;
-                            }
-                          } else {
-                            drafts["__main__"] = g.rsvp_status ?? "pending";
-                          }
-                          setStatusDrafts(drafts);
-                          setStatusEditGuest(g);
-                        }}
-                        className="text-xs text-dash-primary hover:underline"
-                      >Change Status</button>
-                    </td>
-                  </tr>
-                ))
+                (() => {
+                  const allSorted = sortGuests(guests ?? []);
+                  const rows: ReactNode[] = [];
+                  const blocks: Array<{ status: GuestStatus; guests: EventGuest[] }> = [];
+                  for (const st of statusOrder) {
+                    const bucket = allSorted.filter((g) => statusFor(g.id, sortByEvent ?? "__main__") === st);
+                    if (bucket.length > 0) blocks.push({ status: st, guests: bucket });
+                  }
+                  blocks.forEach((blk, bi) => {
+                    rows.push(
+                      <tr key={`sub-${bi}`} className="bg-dash-surface/40">
+                        <td colSpan={eventColumns.length > 0 ? eventColumns.length + 2 : 3} className="px-4 py-1 text-[10px] font-semibold uppercase tracking-wider text-dash-muted/70">
+                          <span className={statusColour(blk.status)}>{statusLabel(blk.status)}</span> <span className="text-dash-muted/50">({blk.guests.length})</span>
+                        </td>
+                      </tr>,
+                    );
+                    blk.guests.forEach((g) => {
+                      rows.push(
+                        <tr key={g.id}>
+                          <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
+                          {eventColumns.length > 0 ? (
+                            eventColumns.map((col) => (
+                              <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
+                            ))
+                          ) : (
+                            <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
+                          )}
+                          <td className="px-4 py-2 text-right">
+                            <button
+                              onClick={() => {
+                                const drafts: Record<string, string> = {};
+                                if (eventColumns.length > 0) {
+                                  for (const col of eventColumns) {
+                                    const s = statusFor(g.id, col.key);
+                                    drafts[col.key] = s === "not_invited" ? "not_invited" : s;
+                                  }
+                                } else {
+                                  drafts["__main__"] = g.rsvp_status ?? "pending";
+                                }
+                                setStatusDrafts(drafts);
+                                setStatusEditGuest(g);
+                              }}
+                              className="text-xs text-dash-primary hover:underline"
+                            >Change Status</button>
+                          </td>
+                        </tr>,
+                      );
+                    });
+                  });
+                  return rows;
+                })()
               ) : (
-                groupedGuests.flatMap((section) => [
-                  <tr key={`sep-${section.key}`} onClick={() => toggleGroupCollapse(section.key)} className="cursor-pointer hover:bg-dash-surface/60">
-                    <td colSpan={eventColumns.length > 0 ? eventColumns.length + 2 : 3} className="bg-dash-bg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-dash-text">
-                      <span className="mr-1.5 inline-block w-3 text-dash-muted">{collapsedGroups.has(section.key) ? "\u25B6" : "\u25BC"}</span>
-                      {section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span>
-                    </td>
-                  </tr>,
-                  ...(collapsedGroups.has(section.key) ? [] : section.guests.map((g) => (
-                    <tr key={g.id}>
-                      <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
-                      {eventColumns.length > 0 ? (
-                        eventColumns.map((col) => (
-                          <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
-                        ))
-                      ) : (
-                        <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
-                      )}
-                      <td className="px-4 py-2 text-right">
-                        <button
-                          onClick={() => {
-                            const drafts: Record<string, string> = {};
-                            if (eventColumns.length > 0) {
-                              for (const col of eventColumns) {
-                                const s = statusFor(g.id, col.key);
-                                drafts[col.key] = s === "not_invited" ? "not_invited" : s;
-                              }
-                            } else {
-                              drafts["__main__"] = g.rsvp_status ?? "pending";
-                            }
-                            setStatusDrafts(drafts);
-                            setStatusEditGuest(g);
-                          }}
-                          className="text-xs text-dash-primary hover:underline"
-                        >Change Status</button>
+                groupedGuests.flatMap((section) => {
+                  const rows: ReactNode[] = [];
+                  rows.push(
+                    <tr key={`sep-${section.key}`} onClick={() => toggleGroupCollapse(section.key)} className="cursor-pointer hover:bg-dash-surface/60">
+                      <td colSpan={eventColumns.length > 0 ? eventColumns.length + 2 : 3} className="bg-dash-bg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-dash-text">
+                        <span className="mr-1.5 inline-block w-3 text-dash-muted">{collapsedGroups.has(section.key) ? "\u25B6" : "\u25BC"}</span>
+                        {section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span>
                       </td>
-                    </tr>
-                  ))),
-                ])
+                    </tr>,
+                  );
+                  if (collapsedGroups.has(section.key)) return rows;
+                  const blocks: Array<{ status: GuestStatus; guests: EventGuest[] }> = [];
+                  for (const st of statusOrder) {
+                    const bucket = section.guests.filter((g) => statusFor(g.id, sortByEvent ?? "__main__") === st);
+                    if (bucket.length > 0) blocks.push({ status: st, guests: bucket });
+                  }
+                  blocks.forEach((blk, bi) => {
+                    rows.push(
+                      <tr key={`sub-${section.key}-${bi}`} className="bg-dash-surface/40">
+                        <td colSpan={eventColumns.length > 0 ? eventColumns.length + 2 : 3} className="px-4 py-1 text-[10px] font-semibold uppercase tracking-wider text-dash-muted/70">
+                          <span className={statusColour(blk.status)}>{statusLabel(blk.status)}</span> <span className="text-dash-muted/50">({blk.guests.length})</span>
+                        </td>
+                      </tr>,
+                    );
+                    blk.guests.forEach((g) => {
+                      rows.push(
+                        <tr key={g.id}>
+                          <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
+                          {eventColumns.length > 0 ? (
+                            eventColumns.map((col) => (
+                              <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
+                            ))
+                          ) : (
+                            <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
+                          )}
+                          <td className="px-4 py-2 text-right">
+                            <button
+                              onClick={() => {
+                                const drafts: Record<string, string> = {};
+                                if (eventColumns.length > 0) {
+                                  for (const col of eventColumns) {
+                                    const s = statusFor(g.id, col.key);
+                                    drafts[col.key] = s === "not_invited" ? "not_invited" : s;
+                                  }
+                                } else {
+                                  drafts["__main__"] = g.rsvp_status ?? "pending";
+                                }
+                                setStatusDrafts(drafts);
+                                setStatusEditGuest(g);
+                              }}
+                              className="text-xs text-dash-primary hover:underline"
+                            >Change Status</button>
+                          </td>
+                        </tr>,
+                      );
+                    });
+                  });
+                  return rows;
+                })
               )}
             </tbody>
           </table>
