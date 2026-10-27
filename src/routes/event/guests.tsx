@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventGuest, type SubEvent, type EventRsvp, type GuestGroup, type GroupEventInvite } from "../../lib/supabase";
@@ -48,6 +48,7 @@ export function GuestsPage() {
   const [bulkGroupId, setBulkGroupId] = useState<string>("");
   const [newGroupName, setNewGroupName] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const didInitCollapse = useRef(false);
 
   const toggleGroupCollapse = (key: string) => {
     setCollapsedGroups((prev) => {
@@ -85,6 +86,14 @@ export function GuestsPage() {
     queryKey: ["event-rsvps-full", eventId],
     queryFn: async () => { const { data, error } = await supabase.from("event_rsvps").select("guest_id, sub_event_id, status, plus_ones").eq("event_id", eventId); if (error) throw error; return (data ?? []) as Pick<EventRsvp, "guest_id" | "sub_event_id" | "status" | "plus_ones">[]; },
   });
+
+  useEffect(() => {
+    if (didInitCollapse.current) return;
+    const keys = new Set<string>();
+    for (const gr of (groups ?? [])) keys.add(gr.id);
+    if ((guests ?? []).some((g) => !g.group_id)) keys.add(UNGROUPED_KEY);
+    if (keys.size > 0) { didInitCollapse.current = true; setCollapsedGroups(keys); }
+  }, [groups, guests]);
 
   // Build a map of invited event keys per guest. "__main__" = Main Event.
   // A guest is invited if they have:

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventRsvp, type EventGuest, type SubEvent, type GuestGroup, type Json } from "../../lib/supabase";
@@ -91,6 +91,7 @@ export function RsvpPage() {
   const [statusEditGuest, setStatusEditGuest] = useState<EventGuest | null>(null);
   const [statusDrafts, setStatusDrafts] = useState<Record<string, string>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const didInitCollapse = useRef(false);
 
   const toggleGroupCollapse = (key: string) => {
     setCollapsedGroups((prev) => {
@@ -164,6 +165,14 @@ export function RsvpPage() {
     },
     enabled: !!guests && guests.length > 0,
   });
+
+  useEffect(() => {
+    if (didInitCollapse.current) return;
+    const keys = new Set<string>();
+    for (const gr of (groups ?? [])) keys.add(gr.id);
+    if ((guests ?? []).some((g) => !g.group_id)) keys.add("__ungrouped__");
+    if (keys.size > 0) { didInitCollapse.current = true; setCollapsedGroups(keys); }
+  }, [groups, guests]);
 
   const invitedEventsByGuest = new Map<string, Set<string>>();
   if (subEvents && subEvents.length > 0) {
