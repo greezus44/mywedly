@@ -6,7 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
 import { GuestForm, type GuestFormValues } from "./guest-form";
 import { BulkImportModal } from "./bulk-import";
-import { generateUsername } from "../../lib/utils";
+import { generateUsername, slugify } from "../../lib/utils";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
 
@@ -49,6 +49,8 @@ export function GuestsPage() {
   const [newGroupName, setNewGroupName] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const didInitCollapse = useRef(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
 
   const toggleGroupCollapse = (key: string) => {
     setCollapsedGroups((prev) => {
@@ -94,6 +96,15 @@ export function GuestsPage() {
     if ((guests ?? []).some((g) => !g.group_id)) keys.add(UNGROUPED_KEY);
     if (keys.size > 0) { didInitCollapse.current = true; setCollapsedGroups(keys); }
   }, [groups, guests]);
+
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) setShowExportMenu(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showExportMenu]);
 
   // Build a map of invited event keys per guest. "__main__" = Main Event.
   // A guest is invited if they have:
@@ -375,6 +386,32 @@ export function GuestsPage() {
     finally { setSubmitting(false); }
   };
 
+  const exportGuestCsv = (guestList: EventGuest[], filename: string) => {
+    const headers = ["Name", "Username", "Group"];
+    for (const col of eventColumns) headers.push(col.label);
+    headers.push("Plus-one");
+    const rows: string[][] = [];
+    for (const g of guestList) {
+      const row = [g.name ?? "", g.username ?? "", groupName(g.group_id) ?? "Ungrouped"];
+      for (const col of eventColumns) {
+        const s = statusFor(g.id, col.key);
+        row.push(s === "attending" ? "Attending" : s === "declined" ? "Declined" : s === "pending" ? "Pending" : "Not invited");
+      }
+      row.push(plusOneLabelFor(g.id, "__main__") ?? "");
+      rows.push(row);
+    }
+    const escapeCell = (s: string) => (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
+    const csv = [headers, ...rows].map((r) => r.map(escapeCell).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    setShowExportMenu(false);
+  };
+
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
   if (isError) return <ErrorState title="Failed to load guests" message={error instanceof Error ? error.message : "Unknown error"} />;
 
@@ -386,6 +423,20 @@ export function GuestsPage() {
           <Button size="sm" variant="secondary" onClick={() => setShowBulkImport(true)}>Bulk Import</Button>
           <Button size="sm" variant="secondary" onClick={() => setShowGroups(true)}>Manage Groups</Button>
           <Button size="sm" variant="secondary" onClick={() => setShowInvites(true)} disabled={!guests || guests.length === 0}>Manage Invitations</Button>
+          <div className="relative" ref={exportRef}>
+            <Button size="sm" variant="secondary" onClick={() => setShowExportMenu((v) => !v)} disabled={!guests || guests.length === 0}>Export</Button>
+            {showExportMenu && (
+              <div className="absolute right-0 z-10 mt-1 w-48 rounded-lg border border-dash-border bg-dash-surface shadow-lg">
+                <button onClick={() => exportGuestCsv(guests ?? [], "guests-all.csv")} className="block w-full px-4 py-2 text-left text-sm text-dash-text hover:bg-dash-bg">All guests</button>
+                {sortedGroups.filter((gr) => (guests ?? []).some((g) => g.group_id === gr.id)).map((gr) => (
+                  <button key={gr.id} onClick={() => exportGuestCsv((guests ?? []).filter((g) => g.group_id === gr.id), `guests-${slugify(gr.name)}.csv`)} className="block w-full px-4 py-2 text-left text-sm text-dash-text hover:bg-dash-bg">{gr.name}</button>
+                ))}
+                {(guests ?? []).filter((g) => !g.group_id).length > 0 && (
+                  <button onClick={() => exportGuestCsv((guests ?? []).filter((g) => !g.group_id), "guests-ungrouped.csv")} className="block w-full px-4 py-2 text-left text-sm text-dash-text hover:bg-dash-bg">Ungrouped</button>
+                )}
+              </div>
+            )}
+          </div>
           <Button size="sm" onClick={() => { setEditGuest(null); setShowForm(true); }}>Add Guest</Button>
         </div>
       </div>
