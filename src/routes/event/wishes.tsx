@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type EventMessage } from "../../lib/supabase";
@@ -11,6 +11,47 @@ import { HEADING_FONT_OPTIONS } from "../../lib/theme";
 import type { TypographyStyle } from "../../lib/typography";
 import { formatDateTime } from "../../lib/utils";
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function escapeCsv(s: string): string {
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function downloadBlob(content: BlobPart, filename: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportWord(messages: EventMessage[], eventName: string) {
+  const rows = messages.map((m) => `<tr><td>${escapeHtml(m.guest_name)}</td><td>${escapeHtml(formatDateTime(m.created_at))}</td><td>${escapeHtml(m.message)}</td></tr>`).join("");
+  const html = `<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${escapeHtml(eventName)} - Messages</title></head><body><h2>${escapeHtml(eventName)} - Guest Messages</h2><table border="1" cellspacing="0" cellpadding="6"><thead><tr><th>Name</th><th>Date</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+  downloadBlob(html, `${eventName}-messages.doc`, "application/msword");
+}
+
+function exportCsv(messages: EventMessage[], eventName: string) {
+  const header = "Name,Date,Message\n";
+  const rows = messages.map((m) => `${escapeCsv(m.guest_name)},${escapeCsv(formatDateTime(m.created_at))},${escapeCsv(m.message)}`).join("\n");
+  downloadBlob("\uFEFF" + header + rows, `${eventName}-messages.csv`, "text/csv;charset=utf-8");
+}
+
+function exportPdf(messages: EventMessage[], eventName: string) {
+  const rows = messages.map((m) => `<tr><td>${escapeHtml(m.guest_name)}</td><td>${escapeHtml(formatDateTime(m.created_at))}</td><td>${escapeHtml(m.message)}</td></tr>`).join("");
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(eventName)} - Messages</title><style>body{font-family:Arial,Helvetica,sans-serif;padding:24px;color:#111}h2{margin-bottom:8px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border:1px solid #ccc;padding:8px;text-align:left;vertical-align:top}th{background:#f5f5f5;font-weight:600}td:nth-child(2){white-space:nowrap}@media print{body{padding:0}}</style></head><body><h2>${escapeHtml(eventName)} - Guest Messages</h2><table><thead><tr><th>Name</th><th>Date</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table><script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`);
+  w.document.close();
+}
+
 interface EventContextValue { event: UserEvent; eventId: string; }
 interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; enabled?: boolean; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; placeholderTypography?: TypographyStyle; }
 
@@ -19,6 +60,18 @@ export function MessagesPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<"messages" | "settings">("messages");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const downloadRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (downloadRef.current && !downloadRef.current.contains(e.target as Node)) setDownloadOpen(false);
+    }
+    if (downloadOpen) document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [downloadOpen]);
+
+  const eventName = event.name || event.draft_name || "event";
 
   const [wishesContent, setWishesContent] = useState<WishesContent>(() => {
     const raw = (event.content as Record<string, unknown> | null) ?? {};
@@ -76,6 +129,28 @@ export function MessagesPage() {
         <div className="flex items-center gap-2">
           <button onClick={() => setTab("messages")} className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === "messages" ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted hover:text-dash-text"}`}>Messages {messages ? `(${messages.length})` : ""}</button>
           <button onClick={() => setTab("settings")} className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${tab === "settings" ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted hover:text-dash-text"}`}>Page Settings</button>
+          {messages && messages.length > 0 && (
+            <div className="relative" ref={downloadRef}>
+              <button onClick={() => setDownloadOpen((v) => !v)} className="inline-flex items-center gap-1.5 rounded-md border border-dash-border bg-dash-surface px-3 py-1.5 text-sm font-medium text-dash-text transition-colors hover:bg-dash-primary/5">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2" /></svg>
+                Download
+                <svg className={`h-3 w-3 transition-transform ${downloadOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {downloadOpen && (
+                <div className="absolute right-0 z-20 mt-1 w-44 rounded-lg border border-dash-border bg-dash-surface py-1 shadow-lg">
+                  <button onClick={() => { exportWord(messages, eventName); setDownloadOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-dash-text transition-colors hover:bg-dash-primary/5">
+                    <span className="font-medium">Word</span><span className="text-xs text-dash-muted">.doc</span>
+                  </button>
+                  <button onClick={() => { exportPdf(messages, eventName); setDownloadOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-dash-text transition-colors hover:bg-dash-primary/5">
+                    <span className="font-medium">PDF</span><span className="text-xs text-dash-muted">Print to PDF</span>
+                  </button>
+                  <button onClick={() => { exportCsv(messages, eventName); setDownloadOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-dash-text transition-colors hover:bg-dash-primary/5">
+                    <span className="font-medium">CSV</span><span className="text-xs text-dash-muted">Excel / Sheets</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
