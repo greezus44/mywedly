@@ -177,7 +177,9 @@ export function SharingPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const linksForSubEvent = (subEventId: string) => (openLinks ?? []).filter((l) => l.sub_event_id === subEventId);
+  const linksForSubEvent = (subEventId: string) =>
+    (openLinks ?? []).filter((l) => l.sub_event_id === subEventId)
+      .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
   const groupNameFor = (id: string | null) => (id ? (groups ?? []).find((g) => g.id === id)?.name ?? null : null);
   const defaultGroup = (groups ?? []).find((g) => g.is_open_rsvp_default) ?? null;
   const primaryLink = (openLinks ?? []).find((l) => l.is_primary) ?? null;
