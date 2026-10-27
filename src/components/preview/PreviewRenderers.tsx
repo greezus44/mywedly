@@ -109,6 +109,7 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
         )}
         {sections.map((section, i) => {
           const heading = resolveTypography(section.heading, "");
+          const headingBm = (section as { headingBm?: string }).headingBm || "";
           const bodyStyle = resolveTypography(section.bodyTypography, "").style;
           const bodyTypography = section.bodyTypography;
           const bodySpacingStyle = bodyTypography?.paragraphSpacing !== undefined
@@ -119,6 +120,13 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
               <div className="mx-auto max-w-3xl">
                 {heading.text && <h2 className="guest-title mb-4" style={heading.style}>{heading.text}</h2>}
                 {section.body && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.body) }} />}
+                {section.bodyBm?.trim() && (
+                  <>
+                    <div className="my-3 border-t border-dash-border/40" />
+                    {headingBm && <h2 className="guest-title mb-4" style={heading.style}>{headingBm}</h2>}
+                    <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.bodyBm) }} />
+                  </>
+                )}
               </div>
             </section>
           );

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type Json } from "../../lib/supabase";
@@ -20,8 +20,13 @@ export function HomeEditor() {
   const { event, eventId } = useOutletContext<EventContextValue>();
   const queryClient = useQueryClient();
   const [content, setContent] = useState<EventContent>(() => ((event.draft_content ?? event.content) as EventContent) ?? { sections: [] });
+  const loadedEventId = useRef<string | null>(null);
 
-  useEffect(() => { setContent(((event.draft_content ?? event.content) as EventContent) ?? { sections: [] }); }, [event.draft_content, event.content]);
+  useEffect(() => {
+    if (loadedEventId.current === eventId) return;
+    loadedEventId.current = eventId;
+    setContent(((event.draft_content ?? event.content) as EventContent) ?? { sections: [] });
+  }, [eventId, event.draft_content, event.content]);
 
   const updateLogo = (patch: Partial<HomeLogo>) => setContent((p) => ({ ...p, logo: { ...(p.logo ?? {}), ...patch } }));
   const updateSection = (i: number, patch: Partial<HomeSection>) => setContent((p) => {
