@@ -27,6 +27,41 @@ function StatusIcon({ status }: { status: GuestStatus }) {
   return <span className="text-dash-muted text-base" title="Not invited">&mdash;</span>;
 }
 
+function MobileRsvpSection({
+  label,
+  colour,
+  guests,
+  mobileActiveEvent,
+  statusFor,
+  onEdit,
+  embedded,
+}: {
+  label: string;
+  colour: string;
+  guests: EventGuest[];
+  mobileActiveEvent: string;
+  statusFor: (guestId: string, eventKey: string) => GuestStatus;
+  onEdit: (g: EventGuest) => void;
+  embedded?: boolean;
+}) {
+  return (
+    <div className={embedded ? undefined : "overflow-hidden rounded-lg border border-dash-border bg-dash-surface"}>
+      <div className={`px-4 py-1 text-[10px] font-semibold uppercase tracking-wider ${embedded ? "bg-dash-surface/40" : "bg-dash-bg"}`}>
+        <span className={colour}>{label}</span> <span className="text-dash-muted/50">({guests.length})</span>
+      </div>
+      <div className="divide-y divide-dash-border">
+        {guests.map((g) => (
+          <div key={g.id} className="flex items-center gap-2 px-4 py-2.5">
+            <span className="min-w-0 flex-1 truncate text-sm text-dash-text">{g.name}</span>
+            <span className="shrink-0"><StatusIcon status={statusFor(g.id, mobileActiveEvent)} /></span>
+            <button onClick={() => onEdit(g)} className="shrink-0 text-xs text-dash-primary hover:underline">Change</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export interface RsvpContent {
   title?: string;
   titleTypography?: unknown;
@@ -93,6 +128,7 @@ export function RsvpPage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const didInitCollapse = useRef(false);
   const [sortByEvent, setSortByEvent] = useState<string | null>(null);
+  const [mobileActiveEvent, setMobileActiveEvent] = useState<string>("__main__");
 
   const toggleGroupCollapse = (key: string) => {
     setCollapsedGroups((prev) => {
@@ -303,9 +339,9 @@ export function RsvpPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold text-dash-text">RSVP</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="secondary" onClick={() => setShowEditor((v) => !v)}>{showEditor ? "Hide Editor" : "Edit RSVP Page"}</Button>
           {deadline && <Badge variant={closed ? "danger" : "warning"}>{closed ? "Closed" : `Closes ${formatDate(deadline)}`}</Badge>}
         </div>
@@ -474,10 +510,67 @@ export function RsvpPage() {
         <EmptyState title="No guests" description="Add guests from the Guests page to see their RSVP status here." />
       ) : (
         <>
-        <div className="text-xs text-dash-muted">
-          <span className="text-green-600 font-bold">&#10003;</span> Attending &nbsp; <span className="text-red-500 font-bold">&#10007;</span> Declined &nbsp; <span className="font-bold">=</span> Pending &nbsp; <span>&mdash;</span> Not invited
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-dash-muted">
+          <span className="inline-flex items-center gap-1"><span className="text-green-600 font-bold">&#10003;</span> Attending</span>
+          <span className="inline-flex items-center gap-1"><span className="text-red-500 font-bold">&#10007;</span> Declined</span>
+          <span className="inline-flex items-center gap-1"><span className="font-bold">=</span> Pending</span>
+          <span className="inline-flex items-center gap-1"><span>&mdash;</span> Not invited</span>
         </div>
-        <div className="overflow-x-auto rounded-lg border border-dash-border">
+        {/* Mobile-only: event selector pills */}
+        <div className="flex flex-wrap gap-1.5 sm:hidden">
+          {eventColumns.map((col) => {
+            const active = mobileActiveEvent === col.key;
+            return (
+              <button key={col.key} onClick={() => setMobileActiveEvent(col.key)} className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors ${active ? "bg-dash-primary text-dash-primary-fg" : "bg-dash-bg text-dash-muted border border-dash-border"}`}>{col.label}</button>
+            );
+          })}
+        </div>
+
+        {/* Mobile-only: compact guest list */}
+        <div className="space-y-2 sm:hidden">
+          {groupedGuests.length === 0 ? (
+            (() => {
+              const allSorted = sortGuests(guests ?? []);
+              const blocks: Array<{ status: GuestStatus; guests: EventGuest[] }> = [];
+              for (const st of statusOrder) {
+                const bucket = allSorted.filter((g) => statusFor(g.id, mobileActiveEvent) === st);
+                if (bucket.length > 0) blocks.push({ status: st, guests: bucket });
+              }
+              if (blocks.length === 0) return <p className="py-4 text-center text-sm text-dash-muted">No guests found.</p>;
+              return blocks.map((blk, bi) => (
+                <MobileRsvpSection key={`mblk-${bi}`} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} mobileActiveEvent={mobileActiveEvent} statusFor={statusFor} onEdit={(g) => { const drafts: Record<string,string> = {}; if (eventColumns.length > 0) { for (const col of eventColumns) { const s = statusFor(g.id, col.key); drafts[col.key] = s === "not_invited" ? "not_invited" : s; } } else { drafts["__main__"] = g.rsvp_status ?? "pending"; } setStatusDrafts(drafts); setStatusEditGuest(g); }} />
+              ));
+            })()
+          ) : (
+            groupedGuests.map((section) => (
+              <div key={`msec-${section.key}`} className="overflow-hidden rounded-lg border border-dash-border bg-dash-surface">
+                <button onClick={() => toggleGroupCollapse(section.key)} className="flex w-full items-center justify-between bg-dash-bg px-4 py-2.5 text-left">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-dash-text">
+                    <span className="mr-1.5 inline-block w-3 text-dash-muted">{collapsedGroups.has(section.key) ? "\u25B6" : "\u25BC"}</span>
+                    {section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span>
+                  </span>
+                </button>
+                {!collapsedGroups.has(section.key) && (
+                  <div className="divide-y divide-dash-border">
+                    {(() => {
+                      const blocks: Array<{ status: GuestStatus; guests: EventGuest[] }> = [];
+                      for (const st of statusOrder) {
+                        const bucket = section.guests.filter((g) => statusFor(g.id, mobileActiveEvent) === st);
+                        if (bucket.length > 0) blocks.push({ status: st, guests: bucket });
+                      }
+                      if (blocks.length === 0) return <p className="px-4 py-3 text-sm text-dash-muted">No guests.</p>;
+                      return blocks.map((blk, bi) => (
+                        <MobileRsvpSection key={`mblk-${section.key}-${bi}`} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} mobileActiveEvent={mobileActiveEvent} statusFor={statusFor} onEdit={(g) => { const drafts: Record<string,string> = {}; if (eventColumns.length > 0) { for (const col of eventColumns) { const s = statusFor(g.id, col.key); drafts[col.key] = s === "not_invited" ? "not_invited" : s; } } else { drafts["__main__"] = g.rsvp_status ?? "pending"; } setStatusDrafts(drafts); setStatusEditGuest(g); }} embedded />
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+        {/* Desktop/tablet: full multi-column table (hidden on phones) */}
+        <div className="hidden overflow-x-auto rounded-lg border border-dash-border sm:block">
           <table className="w-full">
             <thead className="bg-dash-bg">
               <tr>
@@ -629,13 +722,13 @@ export function RsvpPage() {
               const currentDraft = statusDrafts[col.key] ?? "pending";
               const isNotInvited = currentDraft === "not_invited";
               return (
-                <div key={col.key} className="flex items-center justify-between gap-3">
+                <div key={col.key} className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                   <span className="text-sm text-dash-text">{col.label}</span>
                   <select
                     value={currentDraft}
                     disabled={isNotInvited}
                     onChange={(e) => setStatusDrafts((p) => ({ ...p, [col.key]: e.target.value }))}
-                    className="rounded border border-dash-border bg-dash-bg px-2 py-1 text-xs text-dash-text"
+                    className="w-full rounded border border-dash-border bg-dash-bg px-2 py-1.5 text-sm text-dash-text sm:w-auto sm:px-2 sm:py-1 sm:text-xs"
                   >
                     {isNotInvited && <option value="not_invited" disabled>Not invited</option>}
                     <option value="pending">Pending</option>
