@@ -516,15 +516,12 @@ export function RsvpPage() {
           <span className="inline-flex items-center gap-1"><span className="font-bold">=</span> Pending</span>
           <span className="inline-flex items-center gap-1"><span>&mdash;</span> Not invited</span>
         </div>
-        {/* Mobile-only: event selector pills */}
-        <div className="flex flex-wrap gap-1.5 sm:hidden">
-          {eventColumns.map((col) => {
-            const active = mobileActiveEvent === col.key;
-            return (
-              <button key={col.key} onClick={() => setMobileActiveEvent(col.key)} className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors ${active ? "bg-dash-primary text-dash-primary-fg" : "bg-dash-bg text-dash-muted border border-dash-border"}`}>{col.label}</button>
-            );
-          })}
-        </div>
+        {/* Mobile-only: event selector dropdown */}
+        <select value={mobileActiveEvent} onChange={(e) => setMobileActiveEvent(e.target.value)} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text sm:hidden">
+          {eventColumns.map((col) => (
+            <option key={col.key} value={col.key}>{col.label}</option>
+          ))}
+        </select>
 
         {/* Mobile-only: compact guest list */}
         <div className="space-y-2 sm:hidden">

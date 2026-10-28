@@ -534,14 +534,11 @@ export function GuestsPage() {
               <button onClick={() => setMobileShowUsername(false)} className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${!mobileShowUsername ? "bg-dash-surface text-dash-text shadow-sm" : "text-dash-muted"}`}>Name</button>
               <button onClick={() => setMobileShowUsername(true)} className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mobileShowUsername ? "bg-dash-surface text-dash-text shadow-sm" : "text-dash-muted"}`}>Username</button>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {eventColumns.map((col) => {
-                const active = mobileActiveEvent === col.key;
-                return (
-                  <button key={col.key} onClick={() => setMobileActiveEvent((prev) => prev === col.key ? "__main__" : col.key)} className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors ${active ? "bg-dash-primary text-dash-primary-fg" : "bg-dash-bg text-dash-muted border border-dash-border"}`} title={active ? "Tap again to reset to Main Event" : "Show status for this event"}>{col.label}</button>
-                );
-              })}
-            </div>
+            <select value={mobileActiveEvent} onChange={(e) => setMobileActiveEvent(e.target.value)} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text">
+              {eventColumns.map((col) => (
+                <option key={col.key} value={col.key}>{col.label}</option>
+              ))}
+            </select>
           </div>
 
           {selectedGuestIds.size > 0 && sortedGroups.length > 0 && (
