@@ -19,7 +19,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored === "en" || stored === "bm") return stored;
     }
-    return "en";
+    return "bm";
   });
 
   const setLanguage = (lang: Language) => {
@@ -48,6 +48,6 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
 export function useLanguage(): LanguageContextValue {
   const ctx = useContext(LanguageContext);
-  if (!ctx) return { language: "en", setLanguage: () => {}, t: (en: string) => en };
+  if (!ctx) return { language: "bm", setLanguage: () => {}, t: (_en: string, bm: string) => bm };
   return ctx;
 }
