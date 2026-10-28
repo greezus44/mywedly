@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent } from "../../lib/supabase";
+import { supabase, PUBLISHED_EVENT_COLUMNS, type UserEvent } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { jsonToTheme } from "../../lib/theme";
 import { resolveTypography } from "../../lib/typography";
@@ -22,9 +22,9 @@ export default function GuestCover() {
   const { data: event, isLoading } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle();
+      const { data, error } = await supabase.from("user_events").select(PUBLISHED_EVENT_COLUMNS).eq("slug", slug).eq("is_published", true).maybeSingle();
       if (error) throw error;
-      return data as UserEvent | null;
+      return data as unknown as UserEvent | null;
     },
     enabled: !!slug,
   });

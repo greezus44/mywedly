@@ -257,6 +257,10 @@ export default function GuestJoin() {
           invalid_name: "Please enter a valid name.",
           invalid_status: "Please choose Attending or Declined.",
           closed: language === "bm" ? "Tempoh RSVP untuk acara ini telah tamat." : "RSVP for this event is now closed.",
+          already_responded:
+            language === "bm"
+              ? "Nama ini sudah menghantar RSVP. Sila hubungi tuan rumah jika anda perlu mengubahnya."
+              : "An RSVP has already been submitted for this name. Please contact the host if it needs to be changed.",
         };
         setError(messages[result.error] ?? "Something went wrong. Please try again.");
         setSubmitting(false);

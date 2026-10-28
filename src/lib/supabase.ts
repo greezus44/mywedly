@@ -88,3 +88,11 @@ export interface OpenRsvpLink {
   group_id: string | null; is_primary: boolean;
   created_at: string; updated_at: string;
 }
+
+/**
+ * Columns of `user_events` that are safe to read on the public guest-facing
+ * pages. The draft_* columns are deliberately excluded: they hold edits the
+ * host has not published yet, and visitors have no column access to them.
+ */
+export const PUBLISHED_EVENT_COLUMNS =
+  "id, name, name_bm, event_type, event_date, event_time, venue, address, cover_image, cover_config, login_config, theme, logo_config, content, sharing_config, is_published, is_archived, published_at, created_at, updated_at, template_id, slug, rsvp_deadline";

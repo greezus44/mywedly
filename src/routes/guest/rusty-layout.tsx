@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, useLocation, NavLink, Outlet, Link, useOutletContext } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type UserEvent, type CustomPage } from "../../lib/supabase";
+import { supabase, PUBLISHED_EVENT_COLUMNS, type UserEvent, type CustomPage } from "../../lib/supabase";
 import { EventThemeProvider } from "../../lib/theme-context";
 import { RUSTY_THEME } from "../../lib/theme";
 import { resolveGuestInvitations, getInvitedSubEventIds, hasRsvpAccess, type ResolveResult } from "../../lib/invitations";
@@ -23,9 +23,9 @@ export default function RustyLayout() {
   const { data: event, isLoading, isError, error } = useQuery({
     queryKey: ["published-event", slug],
     queryFn: async () => {
-      const { data, error } = await supabase.from("user_events").select("*").eq("slug", slug).eq("is_published", true).maybeSingle();
+      const { data, error } = await supabase.from("user_events").select(PUBLISHED_EVENT_COLUMNS).eq("slug", slug).eq("is_published", true).maybeSingle();
       if (error) throw error;
-      return data as UserEvent | null;
+      return data as unknown as UserEvent | null;
     },
     enabled: !!slug,
   });

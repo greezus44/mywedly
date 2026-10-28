@@ -52,6 +52,33 @@ function hasMeaningfulStyle(el: Element): boolean {
 
 const UNWRAP_TAGS = new Set(["SPAN", "DIV"]);
 
+/**
+ * Strip whitespace and control characters a browser ignores when resolving a
+ * URL, so that "\tjavascript:..." cannot slip past a scheme check.
+ */
+function normalizeUrl(value: string): string {
+  return value.replace(/[\u0000-\u0020\u00a0\u2000-\u200d\u2028\u2029\ufeff]/g, "").toLowerCase();
+}
+
+const SAFE_LINK_SCHEMES = ["http:", "https:", "mailto:", "tel:"];
+
+/** Links: allow relative URLs, anchors and the safe schemes only. */
+function isSafeLinkUrl(value: string): boolean {
+  const v = normalizeUrl(value);
+  if (v === "") return false;
+  if (/^[a-z][a-z0-9+.-]*:/.test(v)) return SAFE_LINK_SCHEMES.some((s) => v.startsWith(s));
+  return !v.startsWith("//");
+}
+
+/** Images: allow relative URLs, http(s) and inline image data only. */
+function isSafeImageUrl(value: string): boolean {
+  const v = normalizeUrl(value);
+  if (v === "") return false;
+  if (v.startsWith("data:")) return /^data:image\/(png|jpe?g|gif|webp|avif);/.test(v);
+  if (/^[a-z][a-z0-9+.-]*:/.test(v)) return v.startsWith("http:") || v.startsWith("https:");
+  return !v.startsWith("//");
+}
+
 export function sanitizeHtml(html: string): string {
   if (typeof document === "undefined") return html;
   const parser = new DOMParser();
@@ -71,9 +98,15 @@ export function sanitizeHtml(html: string): string {
           child.removeAttribute(attr.name);
         } else if (attr.name.toLowerCase() === "style") {
           child.setAttribute("style", sanitizeStyle(attr.value));
-        } else if (attr.name.toLowerCase() === "href" && attr.value.toLowerCase().startsWith("javascript:")) {
-          child.removeAttribute("href");
+        } else if (attr.name.toLowerCase() === "href") {
+          if (!isSafeLinkUrl(attr.value)) child.removeAttribute("href");
+        } else if (attr.name.toLowerCase() === "src") {
+          if (!isSafeImageUrl(attr.value)) child.removeAttribute("src");
         }
+      }
+      // A link that opens a new tab must not hand the opener window over.
+      if (tag === "A" && child.hasAttribute("target")) {
+        child.setAttribute("rel", "noopener noreferrer");
       }
       clean(child);
       if (UNWRAP_TAGS.has(tag) && !hasMeaningfulStyle(child) && child.attributes.length === 0) {
