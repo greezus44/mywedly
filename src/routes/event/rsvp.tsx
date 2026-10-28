@@ -498,7 +498,7 @@ export function RsvpPage() {
           </div>
         </div>
         }
-        preview={<RsvpPreview theme={event.draft_theme ?? event.theme} content={{ ...rsvpContent as unknown as Record<string, unknown>, rsvpDeadline: deadline ?? undefined }} eventDate={event.draft_event_date ?? event.event_date} eventTime={event.draft_event_time ?? event.event_time} venue={event.draft_venue ?? event.venue} address={event.draft_address ?? event.address} eventName={event.draft_name ?? event.name ?? undefined} subEvents={(subEvents ?? []).map((se) => ({ name: se.name, date: se.date, time: se.time ?? se.start_time, venue: se.venue, address: se.address }))} schedule={(schedule ?? []).map((s) => ({ title: s.title, start_time: s.start_time, end_time: s.end_time, sub_event_id: s.sub_event_id }))} />}
+        preview={<RsvpPreview theme={event.draft_theme ?? event.theme} content={{ ...rsvpContent as unknown as Record<string, unknown>, rsvpDeadline: deadline ?? undefined }} eventDate={event.draft_event_date ?? event.event_date} eventTime={event.draft_event_time ?? event.event_time} venue={event.draft_venue ?? event.venue} address={event.draft_address ?? event.address} eventName={event.draft_name ?? event.name ?? undefined} subEvents={sortedSubEvents.map((se) => ({ name: se.name, date: se.date, time: se.time ?? se.start_time, venue: se.venue, address: se.address }))} schedule={(schedule ?? []).map((s) => ({ title: s.title, start_time: s.start_time, end_time: s.end_time, sub_event_id: s.sub_event_id }))} />}
       />
       )}
       <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-4">
