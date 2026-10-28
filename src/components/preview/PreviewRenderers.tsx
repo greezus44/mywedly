@@ -5,6 +5,21 @@ import { resolveTypography, getTypographyStyle, getTypographyText } from "../../
 import { formatDateLong, formatTime12, cn } from "../../lib/utils";
 import { ButtonColors, buttonColorsToStyle, buttonColorsToHoverStyle } from "../ui/ButtonColourEditor";
 import { sanitizeHtml } from "../../lib/sanitize";
+import { autoTranslate } from "../../lib/translations";
+import { usePreviewLanguage, type PreviewLanguage } from "./preview-language";
+
+function pickPreviewText(isBm: boolean, en: string | undefined, bmOverride?: string | null, useAuto = true): string {
+  if (!en) return "";
+  if (isBm) {
+    if (bmOverride && bmOverride.trim()) return bmOverride;
+    if (useAuto) {
+      const auto = autoTranslate(en);
+      if (auto) return auto;
+    }
+    return en;
+  }
+  return en;
+}
 
 export interface CoverConfig {
   background?: { image?: string | null; color?: string; position?: string; fit?: string };
@@ -43,6 +58,7 @@ export interface EventContent {
 
 interface CoverPreviewProps { config: CoverConfig; theme: unknown; eventName?: string; }
 export function CoverPreview({ config, theme, eventName }: CoverPreviewProps) {
+  const { isBm } = usePreviewLanguage();
   const t = jsonToTheme(theme);
   const bg = config.background ?? {};
   const overlay = (typeof config.overlayOpacity === "number" ? config.overlayOpacity : 30) / 100;
@@ -50,10 +66,13 @@ export function CoverPreview({ config, theme, eventName }: CoverPreviewProps) {
   if (bg.image) { bgStyle.backgroundImage = `url(${bg.image})`; bgStyle.backgroundSize = bg.fit === "fill" ? "100% 100%" : (bg.fit as "cover" | "contain") || "cover"; bgStyle.backgroundPosition = bg.position || "center"; bgStyle.backgroundRepeat = "no-repeat"; }
   else if (bg.color) bgStyle.backgroundColor = bg.color;
   else bgStyle.backgroundColor = t.colors.bg;
-  const eyebrow = resolveTypography(config.eyebrow, "");
-  const heading = resolveTypography(config.heading, eventName ?? "");
-  const subheading = resolveTypography(config.subheading, "");
-  const cta = config.ctaText || "Enter";
+  const eyebrowRaw = resolveTypography(config.eyebrow, "");
+  const headingRaw = resolveTypography(config.heading, eventName ?? "");
+  const subheadingRaw = resolveTypography(config.subheading, "");
+  const eyebrow = { text: pickPreviewText(isBm, eyebrowRaw.text, config.eyebrowBm), style: eyebrowRaw.style };
+  const heading = { text: pickPreviewText(isBm, headingRaw.text, config.headingBm), style: headingRaw.style };
+  const subheading = { text: pickPreviewText(isBm, subheadingRaw.text, config.subheadingBm), style: subheadingRaw.style };
+  const cta = pickPreviewText(isBm, config.ctaText || "Enter", config.ctaTextBm);
   const logo = config.logo;
   const logoAlign = logo?.align || "center";
   return (
@@ -77,10 +96,13 @@ export function CoverPreview({ config, theme, eventName }: CoverPreviewProps) {
 
 interface LoginPreviewProps { config: LoginConfig; theme: unknown; eventName?: string; }
 export function LoginPreview({ config, theme, eventName }: LoginPreviewProps) {
-  const heading = resolveTypography(config.heading, (eventName ?? "") || "Welcome");
-  const subheading = resolveTypography(config.subheading, "");
-  const placeholder = config.placeholder || "Enter your username";
-  const buttonLabel = config.buttonLabel || "Sign In";
+  const { isBm } = usePreviewLanguage();
+  const headingRaw = resolveTypography(config.heading, (eventName ?? "") || "Welcome");
+  const subheadingRaw = resolveTypography(config.subheading, "");
+  const heading = { text: pickPreviewText(isBm, headingRaw.text, config.headingBm), style: headingRaw.style };
+  const subheading = { text: pickPreviewText(isBm, subheadingRaw.text, config.subheadingBm), style: subheadingRaw.style };
+  const placeholder = pickPreviewText(isBm, config.placeholder || "Enter your username", config.placeholderBm);
+  const buttonLabel = pickPreviewText(isBm, config.buttonLabel || "Sign In", config.buttonLabelBm);
   return (
     <EventThemeProvider theme={theme} compact>
       <div className="flex min-h-[280px] flex-col items-center justify-center px-6 py-10">
@@ -104,8 +126,10 @@ export function LoginPreview({ config, theme, eventName }: LoginPreviewProps) {
 
 interface HomePreviewProps { content: EventContent; theme: unknown; }
 export function HomePreview({ content, theme }: HomePreviewProps) {
+  const { isBm } = usePreviewLanguage();
   const logo = content.logo;
   const sections = content.sections ?? ((content.heading !== undefined || content.body !== undefined) ? [{ heading: content.heading, body: content.body }] : []);
+  const rsvpButtonText = pickPreviewText(isBm, content.rsvpButtonText || "RSVP Now", content.rsvpButtonTextBm);
   return (
     <EventThemeProvider theme={theme} compact>
       <div className="guest-home-page">
@@ -118,31 +142,26 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
           <section className="guest-section text-center"><div className="mx-auto max-w-md"><p className="guest-subtitle">No content yet.</p></div></section>
         )}
         {sections.map((section, i) => {
-          const heading = resolveTypography(section.heading, "");
+          const headingRaw = resolveTypography(section.heading, "");
           const headingBm = (section as { headingBm?: string }).headingBm || "";
+          const headingText = pickPreviewText(isBm, headingRaw.text, headingBm);
           const bodyStyle = getTypographyStyle(section.bodyTypography);
           const bodyTypography = section.bodyTypography;
           const bodySpacingStyle = bodyTypography?.paragraphSpacing !== undefined
             ? { "--rich-paragraph-spacing": `${bodyTypography.paragraphSpacing}em` }
             : {};
+          const displayBody = isBm && section.bodyBm?.trim() ? section.bodyBm : section.body;
           return (
             <section key={i} className="guest-section" style={i === 0 ? { paddingTop: 0 } : undefined}>
               <div className="mx-auto max-w-3xl">
-                {heading.text && <h2 className="guest-title mb-4" style={{ whiteSpace: "pre-wrap", ...heading.style }}>{heading.text}</h2>}
-                {section.body && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.body) }} />}
-                {section.bodyBm?.trim() && (
-                  <>
-                    <div className="my-3 border-t border-dash-border/40" />
-                    {headingBm && <h2 className="guest-title mb-4" style={{ whiteSpace: "pre-wrap", ...heading.style }}>{headingBm}</h2>}
-                    <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: sanitizeHtml(section.bodyBm) }} />
-                  </>
-                )}
+                {headingText && <h2 className="guest-title mb-4" style={{ whiteSpace: "pre-wrap", ...headingRaw.style }}>{headingText}</h2>}
+                {displayBody && <div className="rich-content" style={{ ...bodyStyle, ...bodySpacingStyle } as CSSProperties} dangerouslySetInnerHTML={{ __html: sanitizeHtml(displayBody) }} />}
               </div>
             </section>
           );
         })}
         <section className="rsvp-section text-center" style={{ paddingTop: "1.5rem", paddingBottom: "2.5rem" }}>
-          <button type="button" className="event-btn-primary" style={{ ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography), ...buttonColorsToHoverStyle(content.rsvpButtonColors) })} onMouseLeave={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) })}>{content.rsvpButtonText || "RSVP Now"}</button>
+          <button type="button" className="event-btn-primary" style={{ ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) }} onMouseEnter={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography), ...buttonColorsToHoverStyle(content.rsvpButtonColors) })} onMouseLeave={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(content.rsvpButtonColors), ...getTypographyStyle(content.rsvpButtonTypography) })}>{rsvpButtonText}</button>
         </section>
       </div>
     </EventThemeProvider>
@@ -155,18 +174,19 @@ const ATTENDING_SELECTED_COLORS: ButtonColors = { bgColor: "#16a34a", textColor:
 const DECLINED_SELECTED_COLORS: ButtonColors = { bgColor: "#dc2626", textColor: "#ffffff", borderColor: "#dc2626", hoverBgColor: "#b91c1c", hoverTextColor: "#ffffff", hoverBorderColor: "#b91c1c" };
 const BLACK_TEXT = "#1a1a1a";
 
-interface RsvpSubEventPreview { name?: string | null; date?: string | null; time?: string | null; venue?: string | null; address?: string | null; }
+interface RsvpSubEventPreview { name?: string | null; nameBm?: string | null; date?: string | null; time?: string | null; venue?: string | null; address?: string | null; }
 
 interface RsvpPreviewProps {
   theme: unknown;
   content?: Record<string, unknown> | null;
+  contentBm?: Record<string, unknown> | null;
   eventDate?: string | null;
   eventTime?: string | null;
   venue?: string | null;
   address?: string | null;
   eventName?: string | null;
   subEvents?: RsvpSubEventPreview[];
-  schedule?: { title?: string; start_time?: string | null; end_time?: string | null; sub_event_id?: string | null }[];
+  schedule?: { title?: string; titleBm?: string | null; start_time?: string | null; end_time?: string | null; sub_event_id?: string | null }[];
 }
 
 function toDateForDisplay(d: string): Date {
@@ -200,7 +220,8 @@ function formatScheduleTimeRange(startTime: string | null | undefined, endTime: 
   return `${start} \u2013 ${end}`;
 }
 
-export function RsvpPreview({ theme, content, eventDate, eventTime, venue, address, eventName, subEvents = [], schedule = [] }: RsvpPreviewProps) {
+export function RsvpPreview({ theme, content, contentBm, eventDate, eventTime, venue, address, eventName, subEvents = [], schedule = [] }: RsvpPreviewProps) {
+  const { isBm } = usePreviewLanguage();
   const c = content as {
     title?: string; titleTypography?: unknown; subtitle?: string; subtitleTypography?: unknown;
     attendingText?: string; declinedText?: string; attendingMessage?: string; declinedMessage?: string;
@@ -217,9 +238,15 @@ export function RsvpPreview({ theme, content, eventDate, eventTime, venue, addre
     attendingButtonTypography?: unknown; declinedButtonTypography?: unknown;
   } | null;
 
+  const cBm = contentBm as {
+    title?: string; subtitle?: string; attendingText?: string; declinedText?: string;
+    attendingMessage?: string; declinedMessage?: string; scheduleHeading?: string;
+    additionalInfoBody?: string; contactMessage?: string;
+  } | null;
+
   const titleStyle = getTypographyStyle(c?.titleTypography);
   const subtitleStyle = getTypographyStyle(c?.subtitleTypography);
-  const subtitleText = getTypographyText(c?.subtitleTypography, c?.subtitle ?? "");
+  const subtitleText = pickPreviewText(isBm, getTypographyText(c?.subtitleTypography, c?.subtitle ?? ""), cBm?.subtitle);
   const guestNameStyle = getTypographyStyle(c?.guestNameTypography);
   const eventNameStyle = getTypographyStyle(c?.eventNameTypography);
   const eventDateStyle = getTypographyStyle(c?.eventDateTypography);
@@ -234,7 +261,14 @@ export function RsvpPreview({ theme, content, eventDate, eventTime, venue, addre
   const attendingButtonFontStyle = getTypographyStyle(c?.attendingButtonTypography);
   const declinedButtonFontStyle = getTypographyStyle(c?.declinedButtonTypography);
   const scheduleHeadingStyle = getTypographyStyle(c?.scheduleHeading);
-  const scheduleHeadingText = getTypographyText(c?.scheduleHeading, "Program");
+  const scheduleHeadingText = pickPreviewText(isBm, getTypographyText(c?.scheduleHeading, "Program"), cBm?.scheduleHeading);
+
+  const titleText = pickPreviewText(isBm, c?.title, cBm?.title);
+  const attendingText = pickPreviewText(isBm, c?.attendingText || "Attending", cBm?.attendingText);
+  const declinedText = pickPreviewText(isBm, c?.declinedText || "Declined", cBm?.declinedText);
+  const additionalInfoHeadingText = pickPreviewText(isBm, getTypographyText(c?.additionalInfoHeading, ""), null, false);
+  const additionalInfoBody = pickPreviewText(isBm, c?.additionalInfoBody, cBm?.additionalInfoBody);
+  const contactMessage = pickPreviewText(isBm, c?.contactMessage, cBm?.contactMessage);
 
   const attendingSelectedColors: ButtonColors = c?.attendingSelectedButtonColors ?? (c?.attendingColor ? { bgColor: c.attendingColor, textColor: "#ffffff", borderColor: c.attendingColor, hoverBgColor: c.attendingColor } : ATTENDING_SELECTED_COLORS);
   const declinedSelectedColors: ButtonColors = c?.declinedSelectedButtonColors ?? (c?.declinedColor ? { bgColor: c.declinedColor, textColor: "#ffffff", borderColor: c.declinedColor, hoverBgColor: c.declinedColor } : DECLINED_SELECTED_COLORS);
@@ -260,8 +294,6 @@ export function RsvpPreview({ theme, content, eventDate, eventTime, venue, addre
 
   const rsvpDeadline = (content as { rsvpDeadline?: string } | null)?.rsvpDeadline as string | null | undefined;
 
-  const additionalInfoHeadingText = getTypographyText(c?.additionalInfoHeading, "");
-  const additionalInfoBody = c?.additionalInfoBody;
   const showAdditionalInfo = !!(additionalInfoHeadingText || (additionalInfoBody && additionalInfoBody.trim()));
 
   const renderDateColumn = (dateStr: string | null | undefined) => {
@@ -287,7 +319,7 @@ export function RsvpPreview({ theme, content, eventDate, eventTime, venue, addre
           {items.map((item, idx) => (
             <div key={idx} className="grid items-start gap-2" style={{ gridTemplateColumns: "auto 1fr" }}>
               <span className="text-xs font-medium leading-snug" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-body)", ...programmeItemStyle }}>{formatScheduleTimeRange(item.start_time, item.end_time)}</span>
-              <span className="text-xs font-medium leading-snug" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-heading)", ...programmeItemStyle }}>{item.title}</span>
+              <span className="text-xs font-medium leading-snug" style={{ color: BLACK_TEXT, fontFamily: "var(--event-font-heading)", ...programmeItemStyle }}>{pickPreviewText(isBm, item.title, item.titleBm)}</span>
             </div>
           ))}
         </div>
@@ -309,10 +341,10 @@ export function RsvpPreview({ theme, content, eventDate, eventTime, venue, addre
     <div className="mt-4">
       <div className="flex gap-2">
         <button type="button" className="event-btn-primary rsvp-toggle-btn" style={{ flex: 1, opacity: 0.6, ...attendingSelectedStyle(false), ...attendingButtonFontStyle }} disabled>
-          {c?.attendingText || "Attending"}
+          {attendingText}
         </button>
         <button type="button" className="event-btn-secondary rsvp-toggle-btn" style={{ flex: 1, opacity: 0.6, ...declinedSelectedStyle(false), ...declinedButtonFontStyle }} disabled>
-          {c?.declinedText || "Declined"}
+          {declinedText}
         </button>
       </div>
     </div>
@@ -339,8 +371,8 @@ export function RsvpPreview({ theme, content, eventDate, eventTime, venue, addre
     <EventThemeProvider theme={theme} compact>
       <div className="guest-section guest-rsvp-page">
         <div className="mx-auto max-w-2xl guest-rsvp-content">
-          <div className={cn("text-center pt-6", (c?.title || rsvpDeadline || c?.subtitle) && "mb-8")}>
-            {c?.title && <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0, ...titleStyle }}>{c.title}</h1>}
+          <div className={cn("text-center pt-6", (titleText || rsvpDeadline || subtitleText) && "mb-8")}>
+            {titleText && <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0, ...titleStyle }}>{titleText}</h1>}
             {rsvpDeadline && (
               <p className="text-center" style={{ whiteSpace: "pre-wrap", marginTop: "4px", marginBottom: 0, ...rsvpDeadlineStyle, color: rsvpDeadlineStyle.color || "var(--event-muted)", textTransform: "uppercase" }}>
                 {(c?.rsvpDeadlinePrefix || "RSVP by").toUpperCase()} {formatDateLong(rsvpDeadline).toUpperCase()}
@@ -355,17 +387,17 @@ export function RsvpPreview({ theme, content, eventDate, eventTime, venue, addre
               {subEvents.map((se, i) => (
                 <div key={i}>
                   {i > 0 && <hr className="border-0 border-t my-4" style={{ borderColor: "var(--event-border)" }} />}
-                  {renderEventBlock(se.name ?? "", se.date ?? null, se.time ?? null, se.venue ?? null, se.address ?? null, null)}
+                  {renderEventBlock(pickPreviewText(isBm, se.name ?? "", se.nameBm), se.date ?? null, se.time ?? null, se.venue ?? null, se.address ?? null, null)}
                 </div>
               ))}
             </div>
           ) : (
-            renderEventBlock(eventName ?? "", eventDate ?? null, eventTime ?? null, venue ?? null, address ?? null, null)
+            renderEventBlock(pickPreviewText(isBm, eventName ?? "", null, false), eventDate ?? null, eventTime ?? null, venue ?? null, address ?? null, null)
           )}
 
-          {c?.contactMessage?.trim() && (
+          {contactMessage?.trim() && (
             <div className="mt-6 text-center">
-              <p style={{ whiteSpace: "pre-wrap", color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...contactMessageStyle }}>{c.contactMessage}</p>
+              <p style={{ whiteSpace: "pre-wrap", color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...contactMessageStyle }}>{contactMessage}</p>
             </div>
           )}
 
