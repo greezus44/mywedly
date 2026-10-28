@@ -39,13 +39,14 @@ export function SiteHeader() {
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
                   <div className="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-dash-border bg-dash-surface shadow-lg">
-                    <div className="px-4 py-3 border-b border-dash-border">
+                    <div className="px-4 py-3 border-b border-dash-border" style={{ backgroundColor: "#f8ecd5" }}>
                       <p className="text-xs text-dash-muted">Signed in as</p>
                       <p className="text-sm font-medium text-dash-text truncate">{email}</p>
                     </div>
                     <button
                       onClick={handleSignOut}
                       className="w-full px-4 py-3 text-left text-sm text-dash-text transition-colors hover:bg-dash-bg"
+                      style={{ backgroundColor: "#f8ecd5" }}
                     >
                       Sign Out
                     </button>
