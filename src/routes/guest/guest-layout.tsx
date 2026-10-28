@@ -83,6 +83,7 @@ export default function GuestLayout() {
   if (!guest || eventId !== event.id) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><LoadingSpinner /></div>;
 
   const wishesConfig = (event.content as Record<string, unknown> | null)?.wishes as Record<string, unknown> | null;
+  const wishesPageSlug = typeof wishesConfig?.pageSlug === "string" && wishesConfig.pageSlug.trim() && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(wishesConfig.pageSlug.trim()) ? wishesConfig.pageSlug.trim() : "wishes";
   const messagesNavLabel = wishesConfig
     ? (language === "bm"
       ? (wishesConfig.navLabelBm as string | undefined) || (wishesConfig.navLabel as string | undefined) || t("Messages", "Mesej")
@@ -110,7 +111,7 @@ export default function GuestLayout() {
   const navLinks = [
     { label: homeNavLabel, to: `/e/${slug}/home` },
     ...(hasRsvpAccess(invitations ?? { invitations: [], hasMainEventAccess: false, error: null }) ? [{ label: rsvpNavLabel, to: `/e/${slug}/rsvp` }] : []),
-    ...(wishesConfig?.enabled !== false ? [{ label: messagesNavLabel, to: `/e/${slug}/wishes` }] : []),
+    ...(wishesConfig?.enabled !== false ? [{ label: messagesNavLabel, to: `/e/${slug}/${wishesPageSlug}` }] : []),
     ...(customPages ?? []).map((p) => ({ label: language === "bm" ? (p.nav_label_bm || p.nav_label || p.title) : (p.nav_label || p.title), to: `/e/${slug}/p/${p.slug}` })),
   ];
 

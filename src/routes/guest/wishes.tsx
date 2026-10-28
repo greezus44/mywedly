@@ -11,7 +11,7 @@ import { pickText, autoTranslate, setCurrentLanguage } from "../../lib/translati
 import { cn } from "../../lib/utils";
 import type { EventContent } from "../../components/preview/PreviewRenderers";
 
-interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; placeholderTypography?: TypographyStyle; }
+interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; placeholderTypography?: TypographyStyle; pageSlug?: string; }
 
 export default function GuestWishes() {
   const { event } = useGuestOutletContext();

@@ -53,7 +53,7 @@ function exportPdf(messages: EventMessage[], eventName: string) {
 }
 
 interface EventContextValue { event: UserEvent; eventId: string; }
-interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; enabled?: boolean; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; placeholderTypography?: TypographyStyle; }
+interface WishesContent { heading?: string; subheading?: string; placeholder?: string; submitLabel?: string; buttonColors?: ButtonColors; enabled?: boolean; headingBm?: string; subheadingBm?: string; placeholderBm?: string; submitLabelBm?: string; navLabel?: string; navLabelBm?: string; headingTypography?: TypographyStyle; placeholderTypography?: TypographyStyle; pageSlug?: string; }
 
 export function MessagesPage() {
   const { event, eventId } = useOutletContext<EventContextValue>();
@@ -201,6 +201,17 @@ export function MessagesPage() {
           <div>
             <label className="mb-1 block text-xs font-medium text-dash-muted">Nav Label (Bahasa Melayu)</label>
             <input type="text" value={wishesContent.navLabelBm ?? ""} onChange={(e) => setWishesContent((p) => ({ ...p, navLabelBm: e.target.value }))} placeholder="Auto-translate if empty" className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-dash-muted">Messages Page URL Slug</label>
+            <input
+              type="text"
+              value={wishesContent.pageSlug ?? ""}
+              onChange={(e) => setWishesContent((p) => ({ ...p, pageSlug: e.target.value }))}
+              placeholder="messages"
+              className="w-full rounded-lg border border-dash-border bg-dash-bg px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-dash-muted">Customizes the last part of the guest Messages page link (e.g. <code className="rounded bg-dash-bg px-1">/e/your-event/<strong>{wishesContent.pageSlug || "messages"}</strong></code>). Use lowercase letters, numbers, and hyphens only. Defaults to "messages".</p>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-dash-muted">Page Heading</label>

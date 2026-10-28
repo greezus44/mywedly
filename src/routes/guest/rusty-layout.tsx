@@ -80,6 +80,7 @@ export default function RustyLayout() {
 
   const { t, language } = useLanguage();
   const wishesConfig = (event.content as Record<string, unknown> | null)?.wishes as Record<string, unknown> | null;
+  const wishesPageSlug = typeof wishesConfig?.pageSlug === "string" && wishesConfig.pageSlug.trim() && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(wishesConfig.pageSlug.trim()) ? wishesConfig.pageSlug.trim() : "wishes";
   const messagesNavLabel = wishesConfig
     ? (language === "bm"
       ? (wishesConfig.navLabelBm as string | undefined) || (wishesConfig.navLabel as string | undefined) || t("Messages", "Mesej")
@@ -107,7 +108,7 @@ export default function RustyLayout() {
   const navLinks = [
     { label: homeNavLabel, to: `/r/${slug}/home` },
     ...(hasRsvpAccess(invitations ?? { invitations: [], hasMainEventAccess: false, error: null }) ? [{ label: rsvpNavLabel, to: `/r/${slug}/rsvp` }] : []),
-    ...(wishesConfig?.enabled !== false ? [{ label: messagesNavLabel, to: `/r/${slug}/wishes` }] : []),
+    ...(wishesConfig?.enabled !== false ? [{ label: messagesNavLabel, to: `/r/${slug}/${wishesPageSlug}` }] : []),
     ...(customPages ?? []).map((p) => ({ label: language === "bm" ? (p.nav_label_bm || p.nav_label || p.title) : (p.nav_label || p.title), to: `/r/${slug}/p/${p.slug}` })),
   ];
 

@@ -32,7 +32,7 @@ import GuestJoin from "./routes/guest/join";
 import GuestLayout from "./routes/guest/guest-layout";
 import GuestHome from "./routes/guest/home";
 import GuestRsvp from "./routes/guest/rsvp";
-import GuestWishes from "./routes/guest/wishes";
+import { EGuestWishesResolver, RGuestWishesResolver } from "./routes/guest/wishes-route";
 import GuestCustomPage from "./routes/guest/custom-page";
 
 import RustyCover from "./routes/guest/rusty-cover";
@@ -40,7 +40,6 @@ import RustySignIn from "./routes/guest/rusty-signin";
 import RustyLayout from "./routes/guest/rusty-layout";
 import RustyHome from "./routes/guest/rusty-home";
 import RustyRsvp from "./routes/guest/rusty-rsvp";
-import RustyWishes from "./routes/guest/rusty-wishes";
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } } });
 
@@ -82,14 +81,14 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="/join/:token" element={<RedirectToRsvp />} />
               <Route path="/e/:slug/home" element={<LanguageProvider><GuestLayout /></LanguageProvider>}><Route index element={<GuestHome />} /></Route>
               <Route path="/e/:slug/rsvp" element={<LanguageProvider><GuestLayout /></LanguageProvider>}><Route index element={<GuestRsvp />} /></Route>
-              <Route path="/e/:slug/wishes" element={<LanguageProvider><GuestLayout /></LanguageProvider>}><Route index element={<GuestWishes />} /></Route>
+              <Route path="/e/:slug/:wishesSlug" element={<LanguageProvider><GuestLayout /></LanguageProvider>}><Route index element={<EGuestWishesResolver />} /></Route>
               <Route path="/e/:slug/p/:pageSlug" element={<LanguageProvider><GuestLayout /></LanguageProvider>}><Route index element={<GuestCustomPage />} /></Route>
 
               <Route path="/r/:slug" element={<LanguageProvider><RustyCover /></LanguageProvider>} />
               <Route path="/r/:slug/signin" element={<LanguageProvider><RustySignIn /></LanguageProvider>} />
               <Route path="/r/:slug/home" element={<LanguageProvider><RustyLayout /></LanguageProvider>}><Route index element={<RustyHome />} /></Route>
               <Route path="/r/:slug/rsvp" element={<LanguageProvider><RustyLayout /></LanguageProvider>}><Route index element={<RustyRsvp />} /></Route>
-              <Route path="/r/:slug/wishes" element={<LanguageProvider><RustyLayout /></LanguageProvider>}><Route index element={<RustyWishes />} /></Route>
+              <Route path="/r/:slug/:wishesSlug" element={<LanguageProvider><RustyLayout /></LanguageProvider>}><Route index element={<RGuestWishesResolver />} /></Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

@@ -178,8 +178,9 @@ export default function GuestRsvp() {
     },
   });
 
+  const wishesPageSlug = typeof wishesConfig?.pageSlug === "string" && wishesConfig.pageSlug.trim() && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(wishesConfig.pageSlug.trim()) ? wishesConfig.pageSlug.trim() : "wishes";
   const nextPageRoute = messagesEnabled
-    ? `${prefix}/wishes`
+    ? `${prefix}/${wishesPageSlug}`
     : customPages && customPages.length > 0
       ? `${prefix}/p/${customPages[0].slug}`
       : null;
