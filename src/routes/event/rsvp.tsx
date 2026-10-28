@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventRsvp, type EventGuest, type SubEvent, type GuestGroup, type Json } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventRsvp, type EventGuest, type SubEvent, type GuestGroup, type EventSchedule, type Json } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Badge, ColorInput, Modal } from "../../components/ui";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
@@ -174,6 +174,11 @@ export function RsvpPage() {
   const { data: subEvents } = useQuery({
     queryKey: ["event-sub-events-rsvp", eventId],
     queryFn: async () => { const { data, error } = await supabase.from("sub_events").select("*").eq("parent_event_id", eventId).order("display_order", { ascending: true }); if (error) throw error; return data as SubEvent[]; },
+  });
+
+  const { data: schedule } = useQuery({
+    queryKey: ["event-schedule-rsvp-preview", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("event_schedule").select("title, start_time, end_time, sub_event_id").eq("event_id", eventId).order("order_index", { ascending: true }); if (error) throw error; return (data ?? []) as Pick<EventSchedule, "title" | "start_time" | "end_time" | "sub_event_id">[]; },
   });
 
   const { data: guests } = useQuery({
@@ -493,7 +498,7 @@ export function RsvpPage() {
           </div>
         </div>
         }
-        preview={<RsvpPreview theme={event.draft_theme ?? event.theme} content={rsvpContent as unknown as Record<string, unknown>} eventDate={event.draft_event_date ?? event.event_date} subEventDates={(subEvents ?? []).map((subEvent) => subEvent.date)} />}
+        preview={<RsvpPreview theme={event.draft_theme ?? event.theme} content={{ ...rsvpContent as unknown as Record<string, unknown>, rsvpDeadline: deadline ?? undefined }} eventDate={event.draft_event_date ?? event.event_date} eventTime={event.draft_event_time ?? event.event_time} venue={event.draft_venue ?? event.venue} address={event.draft_address ?? event.address} eventName={event.draft_name ?? event.name ?? undefined} subEvents={(subEvents ?? []).map((se) => ({ name: se.name, date: se.date, time: se.time ?? se.start_time, venue: se.venue, address: se.address }))} schedule={(schedule ?? []).map((s) => ({ title: s.title, start_time: s.start_time, end_time: s.end_time, sub_event_id: s.sub_event_id }))} />}
       />
       )}
       <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-4">
