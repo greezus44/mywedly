@@ -324,7 +324,7 @@ export default function GuestJoin() {
                 onClick={() => navigate(`/e/${event.slug}/home`, { replace: true })}
                 className="event-btn-primary"
               >
-                {language === "bm" ? "Lihat jemputan" : "View Invitation"}
+                {language === "bm" ? "LIHAT JEMPUTAN ANDA" : "VIEW YOUR INVITATION"}
               </button>
             </div>
           </div>
