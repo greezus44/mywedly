@@ -7,10 +7,10 @@ export function LandingPage() {
   return (
     <div className="flex min-h-screen flex-col bg-dash-bg">
       <SiteHeader />
-      <main className="flex flex-1 flex-col items-center justify-center px-4 py-16 text-center" style={{ backgroundColor: "#f8ecd5" }}>
+      <main className="flex flex-1 flex-col items-center justify-center px-4 py-16 text-center" style={{ backgroundColor: "var(--dash-header-bg)" }}>
         <div className="mx-auto max-w-2xl">
           <div className="flex justify-center gap-3">
-            <Link to="/dashboard"><Button size="lg" variant="secondary" style={{ backgroundColor: "#f8ecd5" }}>View Dashboard</Button></Link>
+            <Link to="/dashboard"><Button size="lg" variant="secondary">View Dashboard</Button></Link>
           </div>
         </div>
       </main>

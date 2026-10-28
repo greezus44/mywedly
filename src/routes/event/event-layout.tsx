@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, Modal } from "../../components/ui";
+import { useDashTheme } from "../../lib/use-dark-mode";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
 export function useEventContext(): EventContextValue { return useOutletContext<EventContextValue>(); }
@@ -21,6 +22,7 @@ export function EventLayout() {
   const queryClient = useQueryClient();
   const [showPublish, setShowPublish] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { theme: dashTheme, toggle: toggleDashTheme } = useDashTheme();
 
   const { data: event, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["event", eventId],
@@ -56,19 +58,20 @@ export function EventLayout() {
   return (
     <div className="min-h-screen bg-dash-bg">
       <header className="sticky top-0 z-30 border-b border-dash-border bg-dash-surface">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-6" style={{ backgroundColor: "#f8ecd5" }}>
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-6" style={{ backgroundColor: "var(--dash-header-bg)" }}>
           <div className="flex items-center gap-4">
             <Link to="/dashboard" className="text-sm font-medium text-dash-muted hover:text-dash-text">← Dashboard</Link>
             <div className="hidden h-6 w-px bg-dash-border sm:block" />
             <h1 className="hidden text-lg font-semibold text-dash-text sm:block">{event.draft_name || event.name || "Untitled Event"}</h1>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={toggleDashTheme} className="rounded-lg border border-dash-border px-2.5 py-1.5 text-sm text-dash-text transition-colors hover:bg-dash-surface" aria-label="Toggle dark mode">{dashTheme === "dark" ? "☀" : "☾"}</button>
             {event.is_published && <a href={`${window.location.origin}/e/${event.slug}`} target="_blank" rel="noopener noreferrer" className="text-sm text-dash-primary hover:underline">View Live →</a>}
-            <Button size="sm" onClick={() => setShowPublish(true)} disabled={publishMutation.isPending} style={{ backgroundColor: "#d2ae4b" }}>{publishMutation.isPending ? "Publishing..." : "Publish"}</Button>
+            <Button size="sm" onClick={() => setShowPublish(true)} disabled={publishMutation.isPending} style={{ backgroundColor: "var(--dash-accent)", color: "var(--dash-accent-fg)" }}>{publishMutation.isPending ? "Publishing..." : "Publish"}</Button>
           </div>
         </div>
-        <nav className="mx-auto hidden max-w-7xl items-center gap-1 px-4 pb-2 sm:flex sm:px-6 overflow-x-auto scrollbar-thin" style={{ backgroundColor: "#f8ecd5" }}>
-          {navTabs.map((tab) => <NavLink key={tab.to} to={tab.to} end={tab.to === ""} className={({ isActive }) => `whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${isActive ? "bg-dash-primary/10" : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"}`} style={({ isActive }) => isActive ? { color: "#030712" } : undefined}>{tab.label}</NavLink>)}
+        <nav className="mx-auto hidden max-w-7xl items-center gap-1 px-4 pb-2 sm:flex sm:px-6 overflow-x-auto scrollbar-thin" style={{ backgroundColor: "var(--dash-header-bg)" }}>
+          {navTabs.map((tab) => <NavLink key={tab.to} to={tab.to} end={tab.to === ""} className={({ isActive }) => `whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${isActive ? "bg-dash-primary/10 text-dash-primary" : "text-dash-muted hover:bg-dash-bg hover:text-dash-text"}`}>{tab.label}</NavLink>)}
         </nav>
       </header>
       <div className="sm:hidden">

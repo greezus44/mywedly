@@ -38,17 +38,17 @@ export function AuthPage() {
   return (
     <div className="flex min-h-screen flex-col bg-dash-bg">
       <SiteHeader />
-      <main className="flex flex-1 items-center justify-center px-4 py-12" style={{ backgroundColor: "#f8ecd5" }}>
-        <div className="w-full max-w-md rounded-lg border border-dash-border bg-dash-surface p-6" style={{ backgroundColor: "#f8ecd5" }}>
+      <main className="flex flex-1 items-center justify-center px-4 py-12" style={{ backgroundColor: "var(--dash-header-bg)" }}>
+        <div className="w-full max-w-md rounded-lg border border-dash-border bg-dash-surface p-6">
           <div className="mb-6 flex gap-2">
-            <button onClick={() => setMode("signin")} className={cn("flex-1 rounded-lg py-2 text-sm font-medium transition-colors", mode === "signin" ? "" : "text-dash-muted hover:bg-dash-bg")} style={mode === "signin" ? { backgroundColor: "#d2ae4b", color: "#030712" } : undefined}>Sign In</button>
-            <button onClick={() => setMode("signup")} className={cn("flex-1 rounded-lg py-2 text-sm font-medium transition-colors", mode === "signup" ? "" : "text-dash-muted hover:bg-dash-bg")} style={mode === "signup" ? { backgroundColor: "#d2ae4b", color: "#030712" } : undefined}>Sign Up</button>
+            <button onClick={() => setMode("signin")} className={cn("flex-1 rounded-lg py-2 text-sm font-medium transition-colors", mode === "signin" ? "" : "text-dash-muted hover:bg-dash-bg")} style={mode === "signin" ? { backgroundColor: "var(--dash-accent)", color: "var(--dash-accent-fg)" } : undefined}>Sign In</button>
+            <button onClick={() => setMode("signup")} className={cn("flex-1 rounded-lg py-2 text-sm font-medium transition-colors", mode === "signup" ? "" : "text-dash-muted hover:bg-dash-bg")} style={mode === "signup" ? { backgroundColor: "var(--dash-accent)", color: "var(--dash-accent-fg)" } : undefined}>Sign Up</button>
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required autoFocus style={{ backgroundColor: "#f8ecd5" }} />
-            <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} style={{ backgroundColor: "#f8ecd5" }} />
+            <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required autoFocus />
+            <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
             {error && <p className="text-sm text-dash-danger">{error}</p>}
-            <Button type="submit" className="w-full" loading={loading} style={{ backgroundColor: "#d2ae4b", color: "#030712" }}>{mode === "signin" ? "Sign In" : "Create Account"}</Button>
+            <Button type="submit" className="w-full" loading={loading} style={{ backgroundColor: "var(--dash-accent)", color: "var(--dash-accent-fg)" }}>{mode === "signin" ? "Sign In" : "Create Account"}</Button>
           </form>
           <div className="mt-4 text-center text-sm text-dash-muted">
             <Link to="/" className="hover:text-dash-text">← Back to home</Link>

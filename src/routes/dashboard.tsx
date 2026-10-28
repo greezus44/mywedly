@@ -8,6 +8,7 @@ import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../components/ui"
 import { SiteHeader } from "../components/site/SiteHeader";
 import { DEFAULT_THEME } from "../lib/theme";
 import { slugify } from "../lib/utils";
+import { useDashTheme } from "../lib/use-dark-mode";
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export function DashboardPage() {
   const [newSlug, setNewSlug] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const { theme: dashTheme, toggle: toggleDashTheme } = useDashTheme();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -89,26 +91,30 @@ export function DashboardPage() {
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center">
         <h1 className="text-2xl font-bold text-dash-text">Please sign in</h1>
         <Link to="/auth"><Button>Sign In</Button></Link>
+        <button onClick={toggleDashTheme} className="mt-2 text-sm text-dash-muted hover:text-dash-text transition-colors" aria-label="Toggle dark mode">{dashTheme === "dark" ? "Light mode" : "Dark mode"}</button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-dash-bg" style={{ backgroundColor: "#f8ecd5" }}>
+    <div className="min-h-screen bg-dash-bg">
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-xl font-bold text-dash-text sm:text-2xl">Your Events</h1>
-          <Button onClick={() => setShowCreate(true)} style={{ backgroundColor: "#d2ae4b" }}>Create Event</Button>
+          <div className="flex items-center gap-2">
+            <button onClick={toggleDashTheme} className="rounded-lg border border-dash-border px-3 py-1.5 text-sm font-medium text-dash-text transition-colors hover:bg-dash-surface" aria-label="Toggle dark mode">{dashTheme === "dark" ? "☀" : "☾"}</button>
+            <Button onClick={() => setShowCreate(true)} style={{ backgroundColor: "var(--dash-accent)", color: "var(--dash-accent-fg)" }}>Create Event</Button>
+          </div>
         </div>
         {isLoading ? <div className="flex justify-center py-12"><LoadingSpinner /></div>
         : isError ? <ErrorState title="Failed to load events" message={error instanceof Error ? error.message : "Unknown error"} />
         : !events || events.length === 0 ? (
-          <EmptyState title="No events yet" description="Create your first wedding event to get started." action={<Button onClick={() => setShowCreate(true)}>Create Event</Button>} />
+          <EmptyState title="No events yet" description="Create your first wedding event to get started." action={<Button onClick={() => setShowCreate(true)} style={{ backgroundColor: "var(--dash-accent)", color: "var(--dash-accent-fg)" }}>Create Event</Button>} />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {events.map((ev) => (
-              <Link key={ev.id} to={`/event/${ev.id}`} className="rounded-lg border border-dash-border bg-dash-surface p-4 transition-shadow hover:shadow-md" style={{ backgroundColor: "#f8ecd5" }}>
+              <Link key={ev.id} to={`/event/${ev.id}`} className="rounded-lg border border-dash-border bg-dash-surface p-4 transition-shadow hover:shadow-md">
                 <h3 className="mb-1 font-semibold text-dash-text">{ev.draft_name || ev.name || "Untitled Event"}</h3>
                 <p className="text-sm text-dash-muted">{ev.draft_event_date || ev.event_date || "No date set"}</p>
                 <p className="mt-2 text-xs text-dash-muted">{ev.is_published ? "Published" : "Draft"}</p>
