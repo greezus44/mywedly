@@ -76,7 +76,7 @@ header.bg-dash-surface, .bg-dash-surface, .bg-dash-bg, .border-dash-border { tra
 .event-themed .home-logo { display:block;margin-left:auto;margin-right:auto;background:transparent;border:none;box-shadow:none; }
 .event-themed .rsvp-section { background-color: var(--event-bg); }
 
-.event-preview { min-height:auto !important; font-size:0.9375rem; }
+.event-themed.event-preview { min-height:auto !important; font-size:0.9375rem; }
 .event-preview .guest-section { padding:2rem 1.25rem; }
 .event-preview .guest-section-tight { padding:1.5rem 1.25rem; }
 .event-preview .guest-title { font-size:calc(1.5rem * var(--event-font-scale,1)) !important; }
