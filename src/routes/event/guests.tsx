@@ -30,6 +30,60 @@ function StatusIcon({ status, plusOneLabel }: { status: GuestStatus; plusOneLabe
 
 const UNGROUPED_KEY = "__ungrouped__";
 
+function MobileGuestSection({
+  status,
+  label,
+  colour,
+  guests,
+  selectedGuestIds,
+  toggleGuestSelection,
+  mobileShowUsername,
+  activeEventKey,
+  statusFor,
+  plusOneLabelFor,
+  onEdit,
+  onDelete,
+  embedded,
+}: {
+  status: GuestStatus;
+  label: string;
+  colour: string;
+  guests: EventGuest[];
+  selectedGuestIds: Set<string>;
+  toggleGuestSelection: (id: string) => void;
+  mobileShowUsername: boolean;
+  activeEventKey: string;
+  statusFor: (guestId: string, tabKey: string) => GuestStatus;
+  plusOneLabelFor: (guestId: string, tabKey: string) => string | null;
+  onEdit: (g: EventGuest) => void;
+  onDelete: (g: EventGuest) => void;
+  embedded?: boolean;
+}) {
+  return (
+    <div className={embedded ? undefined : "rounded-lg border border-dash-border bg-dash-surface overflow-hidden"}>
+      <div className={`px-4 py-1 text-[10px] font-semibold uppercase tracking-wider ${embedded ? "bg-dash-surface/40" : "bg-dash-bg"}`}>
+        <span className={colour}>{label}</span> <span className="text-dash-muted/50">({guests.length})</span>
+      </div>
+      <div className="divide-y divide-dash-border">
+        {guests.map((g) => (
+          <div key={g.id} className="flex items-center gap-2 px-4 py-2.5">
+            <input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary shrink-0" />
+            <span className="min-w-0 flex-1 truncate text-sm text-dash-text">
+              {(mobileShowUsername ? g.username : g.name) ?? "\u2014"}
+              {g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}
+            </span>
+            <span className="shrink-0"><StatusIcon status={statusFor(g.id, activeEventKey)} plusOneLabel={plusOneLabelFor(g.id, activeEventKey)} /></span>
+            <div className="flex shrink-0 gap-2">
+              <button onClick={() => onEdit(g)} className="text-xs text-dash-primary hover:underline">Edit</button>
+              <button onClick={() => onDelete(g)} className="text-xs text-dash-danger hover:underline">Del</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function GuestsPage() {
   const { eventId } = useOutletContext<EventContextValue>();
   const queryClient = useQueryClient();
@@ -52,6 +106,8 @@ export function GuestsPage() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [sortByEvent, setSortByEvent] = useState<string | null>(null);
   const exportRef = useRef<HTMLDivElement>(null);
+  const [mobileShowUsername, setMobileShowUsername] = useState(false);
+  const [mobileActiveEvent, setMobileActiveEvent] = useState<string>("__main__");
 
   const toggleGroupCollapse = (key: string) => {
     setCollapsedGroups((prev) => {
@@ -436,9 +492,9 @@ export function GuestsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold text-dash-text">Guests</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => setShowBulkImport(true)}>Bulk Import</Button>
           <Button size="sm" variant="secondary" onClick={() => setShowGroups(true)}>Manage Groups</Button>
           <Button size="sm" variant="secondary" onClick={() => setShowInvites(true)} disabled={!guests || guests.length === 0}>Manage Invitations</Button>
@@ -464,14 +520,34 @@ export function GuestsPage() {
         <EmptyState title="No guests yet" description="Add guests to invite them to your event." action={<Button size="sm" onClick={() => { setEditGuest(null); setShowForm(true); }}>Add Guest</Button>} />
       ) : (
         <>
-          <div className="text-xs text-dash-muted">
-            <span className="text-green-600 font-bold">&#10003;</span> Attending &nbsp; <span className="text-red-500 font-bold">&#10007;</span> Declined &nbsp; <span className="font-bold">=</span> Pending &nbsp; <span>&mdash;</span> Not invited &nbsp; <span className="text-green-600 font-semibold">+1</span>/<span className="text-dash-muted font-semibold">0</span> Plus-one choice
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-dash-muted">
+            <span className="inline-flex items-center gap-1"><span className="text-green-600 font-bold">&#10003;</span> Attending</span>
+            <span className="inline-flex items-center gap-1"><span className="text-red-500 font-bold">&#10007;</span> Declined</span>
+            <span className="inline-flex items-center gap-1"><span className="font-bold">=</span> Pending</span>
+            <span className="inline-flex items-center gap-1"><span>&mdash;</span> Not invited</span>
+            <span className="inline-flex items-center gap-1"><span className="text-green-600 font-semibold">+1</span>/<span className="text-dash-muted font-semibold">0</span> Plus-one</span>
+          </div>
+
+          {/* Mobile-only controls: Name/Username toggle + active event selector */}
+          <div className="flex flex-col gap-2 sm:hidden">
+            <div className="flex rounded-lg border border-dash-border bg-dash-bg p-0.5">
+              <button onClick={() => setMobileShowUsername(false)} className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${!mobileShowUsername ? "bg-dash-surface text-dash-text shadow-sm" : "text-dash-muted"}`}>Name</button>
+              <button onClick={() => setMobileShowUsername(true)} className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mobileShowUsername ? "bg-dash-surface text-dash-text shadow-sm" : "text-dash-muted"}`}>Username</button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {eventColumns.map((col) => {
+                const active = mobileActiveEvent === col.key;
+                return (
+                  <button key={col.key} onClick={() => setMobileActiveEvent((prev) => prev === col.key ? "__main__" : col.key)} className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors ${active ? "bg-dash-primary text-dash-primary-fg" : "bg-dash-bg text-dash-muted border border-dash-border"}`} title={active ? "Tap again to reset to Main Event" : "Show status for this event"}>{col.label}</button>
+                );
+              })}
+            </div>
           </div>
 
           {selectedGuestIds.size > 0 && sortedGroups.length > 0 && (
-            <div className="flex items-center gap-2 rounded-lg border border-dash-border bg-dash-bg px-3 py-2">
+            <div className="flex flex-col gap-2 rounded-lg border border-dash-border bg-dash-bg px-3 py-2 sm:flex-row sm:items-center">
               <span className="text-xs text-dash-muted">{selectedGuestIds.size} selected</span>
-              <select value={bulkGroupId} onChange={(e) => setBulkGroupId(e.target.value)} className="flex-1 rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text">
+              <select value={bulkGroupId} onChange={(e) => setBulkGroupId(e.target.value)} className="w-full flex-1 rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text">
                 <option value="">Assign to group…</option>
                 <option value={UNGROUPED_KEY}>Ungrouped</option>
                 {sortedGroups.map((gr) => <option key={gr.id} value={gr.id}>{gr.name}</option>)}
@@ -480,7 +556,52 @@ export function GuestsPage() {
             </div>
           )}
 
-          <div className="overflow-x-auto rounded-lg border border-dash-border">
+          {/* Mobile: compact two-column list (checkbox, name/username, status, actions) */}
+          <div className="space-y-2 sm:hidden">
+            {groupedGuests.length === 0 ? (
+              (() => {
+                const allSorted = sortGuests(guests ?? []);
+                const blocks: Array<{ status: GuestStatus; guests: EventGuest[] }> = [];
+                for (const st of statusOrder) {
+                  const bucket = allSorted.filter((g) => statusFor(g.id, mobileActiveEvent) === st);
+                  if (bucket.length > 0) blocks.push({ status: st, guests: bucket });
+                }
+                if (blocks.length === 0) return <p className="text-sm text-dash-muted py-4 text-center">No guests found.</p>;
+                return blocks.map((blk, bi) => (
+                  <MobileGuestSection key={`mblk-${bi}`} status={blk.status} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} selectedGuestIds={selectedGuestIds} toggleGuestSelection={toggleGuestSelection} mobileShowUsername={mobileShowUsername} activeEventKey={mobileActiveEvent} statusFor={statusFor} plusOneLabelFor={plusOneLabelFor} onEdit={(g) => { setEditGuest(g); setShowForm(true); }} onDelete={(g) => setGuestToDelete(g)} />
+                ));
+              })()
+            ) : (
+              groupedGuests.map((section) => (
+                <div key={`msec-${section.key}`} className="rounded-lg border border-dash-border bg-dash-surface overflow-hidden">
+                  <button onClick={() => toggleGroupCollapse(section.key)} className="flex w-full items-center justify-between bg-dash-bg px-4 py-2.5 text-left">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-dash-text">
+                      <span className="mr-1.5 inline-block w-3 text-dash-muted">{collapsedGroups.has(section.key) ? "\u25B6" : "\u25BC"}</span>
+                      {section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span>
+                    </span>
+                  </button>
+                  {!collapsedGroups.has(section.key) && (
+                    <div className="divide-y divide-dash-border">
+                      {(() => {
+                        const blocks: Array<{ status: GuestStatus; guests: EventGuest[] }> = [];
+                        for (const st of statusOrder) {
+                          const bucket = section.guests.filter((g) => statusFor(g.id, mobileActiveEvent) === st);
+                          if (bucket.length > 0) blocks.push({ status: st, guests: bucket });
+                        }
+                        if (blocks.length === 0) return <p className="px-4 py-3 text-sm text-dash-muted">No guests.</p>;
+                        return blocks.map((blk, bi) => (
+                          <MobileGuestSection key={`mblk-${section.key}-${bi}`} status={blk.status} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} selectedGuestIds={selectedGuestIds} toggleGuestSelection={toggleGuestSelection} mobileShowUsername={mobileShowUsername} activeEventKey={mobileActiveEvent} statusFor={statusFor} plusOneLabelFor={plusOneLabelFor} onEdit={(g) => { setEditGuest(g); setShowForm(true); }} onDelete={(g) => setGuestToDelete(g)} embedded />
+                        ));
+                      })()}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop/tablet: full multi-column table (hidden on phones) */}
+          <div className="hidden overflow-x-auto rounded-lg border border-dash-border sm:block">
             <table className="w-full">
               <thead className="bg-dash-bg">
                 <tr>
