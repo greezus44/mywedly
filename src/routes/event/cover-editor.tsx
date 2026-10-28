@@ -9,6 +9,7 @@ import { RichTextEditor } from "../../components/ui/RichTextEditor";
 import { TypographyControls } from "../../components/ui/TypographyControls";
 import { ButtonColourEditor } from "../../components/ui/ButtonColourEditor";
 import { SplitEditor } from "../../components/preview/SplitEditor";
+import { PreviewLanguageProvider } from "../../components/preview/preview-language";
 import { CoverPreview, type CoverConfig } from "../../components/preview/PreviewRenderers";
 import type { TypographyStyle } from "../../lib/typography";
 
@@ -44,6 +45,7 @@ export function CoverEditor() {
       </div>
       {saveMutation.isError && <p className="text-sm text-dash-danger">{saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}</p>}
       {saveMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
+      <PreviewLanguageProvider>
       <SplitEditor
         editor={
           <>
@@ -84,6 +86,7 @@ export function CoverEditor() {
         }
         preview={<CoverPreview config={config} theme={event.draft_theme ?? event.theme} eventName={event.draft_name ?? event.name ?? undefined} />}
       />
+      </PreviewLanguageProvider>
     </div>
   );
 }

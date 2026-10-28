@@ -14,6 +14,7 @@ import type { TypographyStyle } from "../../lib/typography";
 import { formatDate, isRsvpClosed } from "../../lib/utils";
 import { DateTimePicker } from "../../components/ui";
 import { SplitEditor } from "../../components/preview/SplitEditor";
+import { PreviewLanguageProvider } from "../../components/preview/preview-language";
 import { RsvpPreview } from "../../components/preview/PreviewRenderers";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
@@ -178,7 +179,7 @@ export function RsvpPage() {
 
   const { data: schedule } = useQuery({
     queryKey: ["event-schedule-rsvp-preview", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("event_schedule").select("title, start_time, end_time, sub_event_id").eq("event_id", eventId).order("order_index", { ascending: true }); if (error) throw error; return (data ?? []) as Pick<EventSchedule, "title" | "start_time" | "end_time" | "sub_event_id">[]; },
+    queryFn: async () => { const { data, error } = await supabase.from("event_schedule").select("title, title_bm, start_time, end_time, sub_event_id").eq("event_id", eventId).order("order_index", { ascending: true }); if (error) throw error; return (data ?? []) as Pick<EventSchedule, "title" | "title_bm" | "start_time" | "end_time" | "sub_event_id">[]; },
   });
 
   const { data: guests } = useQuery({
@@ -352,6 +353,7 @@ export function RsvpPage() {
         </div>
       </div>
       {showEditor && (
+      <PreviewLanguageProvider>
       <SplitEditor
         editor={
         <div className="space-y-3">
@@ -498,8 +500,9 @@ export function RsvpPage() {
           </div>
         </div>
         }
-        preview={<RsvpPreview theme={event.draft_theme ?? event.theme} content={{ ...rsvpContent as unknown as Record<string, unknown>, rsvpDeadline: deadline ?? undefined }} eventDate={event.draft_event_date ?? event.event_date} eventTime={event.draft_event_time ?? event.event_time} venue={event.draft_venue ?? event.venue} address={event.draft_address ?? event.address} eventName={event.draft_name ?? event.name ?? undefined} subEvents={sortedSubEvents.map((se) => ({ name: se.name, date: se.date, time: se.time ?? se.start_time, venue: se.venue, address: se.address }))} schedule={(schedule ?? []).map((s) => ({ title: s.title, start_time: s.start_time, end_time: s.end_time, sub_event_id: s.sub_event_id }))} />}
+        preview={<RsvpPreview theme={event.draft_theme ?? event.theme} content={{ ...rsvpContent as unknown as Record<string, unknown>, rsvpDeadline: deadline ?? undefined }} contentBm={rsvpBm as Record<string, unknown>} eventDate={event.draft_event_date ?? event.event_date} eventTime={event.draft_event_time ?? event.event_time} venue={event.draft_venue ?? event.venue} address={event.draft_address ?? event.address} eventName={event.draft_name ?? event.name ?? undefined} subEvents={sortedSubEvents.map((se) => ({ name: se.name, nameBm: se.name_bm, date: se.date, time: se.time ?? se.start_time, venue: se.venue, address: se.address }))} schedule={(schedule ?? []).map((s) => ({ title: s.title, titleBm: s.title_bm, start_time: s.start_time, end_time: s.end_time, sub_event_id: s.sub_event_id }))} />}
       />
+      </PreviewLanguageProvider>
       )}
       <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-4">
         <div className="flex items-center justify-between">

@@ -9,6 +9,7 @@ import { ButtonColourEditor } from "../../components/ui/ButtonColourEditor";
 import { FontSelect } from "../../components/ui/FontSelect";
 import { HEADING_FONT_OPTIONS } from "../../lib/theme";
 import { SplitEditor } from "../../components/preview/SplitEditor";
+import { PreviewLanguageProvider } from "../../components/preview/preview-language";
 import { LoginPreview, type LoginConfig } from "../../components/preview/PreviewRenderers";
 import type { TypographyStyle } from "../../lib/typography";
 
@@ -41,6 +42,7 @@ export function LoginEditor() {
       </div>
       {saveMutation.isError && <p className="text-sm text-dash-danger">{saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}</p>}
       {saveMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
+      <PreviewLanguageProvider>
       <SplitEditor
         editor={
           <div className="space-y-4 rounded-lg border border-dash-border bg-dash-surface p-4">
@@ -58,6 +60,7 @@ export function LoginEditor() {
         }
         preview={<LoginPreview config={config} theme={event.draft_theme ?? event.theme} eventName={event.draft_name ?? event.name ?? undefined} />}
       />
+      </PreviewLanguageProvider>
     </div>
   );
 }

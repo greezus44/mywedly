@@ -9,6 +9,7 @@ import { RichTextEditor } from "../../components/ui/RichTextEditor";
 import { TypographyControls } from "../../components/ui/TypographyControls";
 import { ButtonColourEditor } from "../../components/ui/ButtonColourEditor";
 import { SplitEditor } from "../../components/preview/SplitEditor";
+import { PreviewLanguageProvider } from "../../components/preview/preview-language";
 import { HomePreview, type EventContent, type HomeSection, type HomeLogo } from "../../components/preview/PreviewRenderers";
 import type { TypographyStyle } from "../../lib/typography";
 import { FontSelect } from "../../components/ui/FontSelect";
@@ -56,6 +57,7 @@ export function HomeEditor() {
       {saveMutation.isError && <p className="text-sm text-dash-danger">{saveMutation.error instanceof Error ? saveMutation.error.message : "Save failed"}</p>}
       {saveMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
 
+      <PreviewLanguageProvider>
       <SplitEditor
         editor={
           <div className="space-y-6">
@@ -120,6 +122,7 @@ export function HomeEditor() {
         }
         preview={<HomePreview content={content} theme={event.draft_theme ?? event.theme} />}
       />
+      </PreviewLanguageProvider>
     </div>
   );
 }
