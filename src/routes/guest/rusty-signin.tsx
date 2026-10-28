@@ -47,7 +47,7 @@ export default function RustySignIn() {
     }
   };
 
-  if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-dash-bg"><div className="h-8 w-8 animate-spin rounded-full border-2 border-dash-primary border-t-transparent" /></div>;
+  if (isLoading) return <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: "var(--event-bg)" }}><div className="h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" style={{ borderColor: "var(--event-primary)", borderTopColor: "transparent" }} /></div>;
   if (!event) return <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-dash-bg px-4 text-center"><h1 className="text-2xl font-bold text-dash-text">Invitation Not Found</h1><Link to="/" className="text-dash-primary hover:underline">Return home</Link></div>;
 
   const loginConfig = (event.login_config ?? {}) as LoginConfig;
