@@ -103,7 +103,6 @@ export function DashboardPage() {
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 className="text-xl font-bold text-dash-text sm:text-2xl">Your Events</h1>
           <div className="flex items-center gap-2">
-            <button onClick={toggleDashTheme} className="rounded-lg border border-dash-border px-3 py-1.5 text-sm font-medium text-dash-text transition-colors hover:bg-dash-surface" aria-label="Toggle dark mode">{dashTheme === "dark" ? "☀" : "☾"}</button>
             <Button onClick={() => setShowCreate(true)} style={{ backgroundColor: "var(--dash-accent)", color: "var(--dash-accent-fg)" }}>Create Event</Button>
           </div>
         </div>
