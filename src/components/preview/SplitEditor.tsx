@@ -7,7 +7,7 @@ interface SplitEditorProps {
 }
 
 const DEVICE_CONFIG: Record<PreviewDevice, { width: string; label: string }> = {
-  phone: { width: "402px", label: "Phone" },
+  phone: { width: "340px", label: "Phone" },
   tablet: { width: "834px", label: "Tablet" },
   laptop: { width: "100%", label: "Laptop" },
 };
@@ -71,34 +71,39 @@ export function SplitEditor({ editor, preview }: SplitEditorProps) {
         {/* Scrollable preview area */}
         <div className="flex-1 overflow-hidden rounded-lg border border-dash-border bg-dash-bg/30 p-3 flex justify-center items-stretch h-[600px] lg:h-auto" style={{ minHeight: "200px" }}>
           {isPhone ? (
-            /* iPhone 17 Pro frame: dark bezel, rounded corners, Dynamic Island */
+            /* iPhone SE frame: dark bezel, modest rounded corners, home button */
             <div
               className="relative shrink-0 bg-neutral-900 transition-all duration-300 ease-out flex flex-col"
               style={{
-                width: "426px",
+                width: "356px",
                 maxWidth: "100%",
-                borderRadius: "55px",
-                padding: "12px",
-                boxShadow: "0 8px 30px rgba(0,0,0,0.25)",
+                borderRadius: "22px",
+                padding: "8px",
+                boxShadow: "0 6px 24px rgba(0,0,0,0.2)",
               }}
             >
-              {/* Dynamic Island */}
+              {/* Speaker grille */}
               <div
-                className="absolute left-1/2 -translate-x-1/2 bg-black rounded-full"
-                style={{ top: "20px", width: "120px", height: "34px", zIndex: 10 }}
+                className="absolute left-1/2 -translate-x-1/2 bg-neutral-700 rounded-full"
+                style={{ top: "12px", width: "46px", height: "4px", zIndex: 10 }}
               />
               {/* Screen */}
               <div
                 className="overflow-y-auto overflow-x-hidden flex-1"
                 style={{
-                  width: "402px",
+                  width: "340px",
                   maxWidth: "100%",
-                  borderRadius: "44px",
+                  borderRadius: "14px",
                   minHeight: "300px",
                 }}
               >
                 {preview}
               </div>
+              {/* Home button */}
+              <div
+                className="mx-auto mt-1.5 shrink-0 rounded-full border-2 border-neutral-600"
+                style={{ width: "26px", height: "26px" }}
+              />
             </div>
           ) : (
             <div
