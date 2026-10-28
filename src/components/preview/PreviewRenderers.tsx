@@ -54,11 +54,11 @@ export function CoverPreview({ config, theme, eventName }: CoverPreviewProps) {
   const cta = config.ctaText || "Enter";
   const logo = config.logo;
   return (
-    <EventThemeProvider theme={theme}>
-      <div className="relative flex min-h-[400px] flex-col items-center justify-center overflow-hidden p-8 text-center" style={bgStyle}>
+    <EventThemeProvider theme={theme} compact>
+      <div className="relative flex min-h-[280px] flex-col items-center justify-center overflow-hidden p-6 text-center" style={bgStyle}>
         {bg.image && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />}
         <div className="relative z-10 flex max-w-md flex-col items-center">
-          {logo?.url && <div style={{ marginTop: logo.marginTop ? `${logo.marginTop}px` : undefined, marginBottom: logo.marginBottom != null ? `${logo.marginBottom}px` : "2rem", display: "flex", justifyContent: "center", width: "100%" }}><img src={logo.url} alt="Logo" style={{ height: logo.size ? `${logo.size}px` : "120px", width: "auto", maxWidth: logo.maxWidth ? `${logo.maxWidth}px` : undefined, maxHeight: logo.maxHeight ? `${logo.maxHeight}px` : "40vh", objectFit: "contain", background: "transparent" }} /></div>}
+          {logo?.url && <div style={{ marginTop: logo.marginTop ? `${logo.marginTop}px` : undefined, marginBottom: logo.marginBottom != null ? `${logo.marginBottom}px` : "1.5rem", display: "flex", justifyContent: "center", width: "100%" }}><img src={logo.url} alt="Logo" style={{ height: logo.size ? `${Math.min(logo.size, 100)}px` : "90px", width: "auto", maxWidth: logo.maxWidth ? `${Math.min(logo.maxWidth, 240)}px` : undefined, maxHeight: "30vh", objectFit: "contain", background: "transparent" }} /></div>}
           {eyebrow.text && <p className="guest-eyebrow mb-2" style={{ whiteSpace: "pre-wrap", ...eyebrow.style }}>{eyebrow.text}</p>}
           {heading.text && <h1 className="guest-title mb-3" style={{ whiteSpace: "pre-wrap", ...heading.style }}>{heading.text}</h1>}
           {subheading.text && <p className="guest-subtitle mb-3" style={{ whiteSpace: "pre-wrap", ...subheading.style }}>{subheading.text}</p>}
@@ -77,8 +77,8 @@ export function LoginPreview({ config, theme, eventName }: LoginPreviewProps) {
   const placeholder = config.placeholder || "Enter your username";
   const buttonLabel = config.buttonLabel || "Sign In";
   return (
-    <EventThemeProvider theme={theme}>
-      <div className="flex min-h-[400px] flex-col items-center justify-center p-8">
+    <EventThemeProvider theme={theme} compact>
+      <div className="flex min-h-[280px] flex-col items-center justify-center p-6">
         <div className="w-full max-w-sm">
           <div className="mb-6 text-center">
             {heading.text && <h1 className="guest-title mb-2" style={heading.style}>{heading.text}</h1>}
@@ -100,11 +100,11 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
   const logo = content.logo;
   const sections = content.sections ?? ((content.heading !== undefined || content.body !== undefined) ? [{ heading: content.heading, body: content.body }] : []);
   return (
-    <EventThemeProvider theme={theme}>
-      <div className="min-h-[400px]">
+    <EventThemeProvider theme={theme} compact>
+      <div className="min-h-[200px]">
         {logo?.url && (
           <div style={{ paddingTop: logo.marginTop ? `${logo.marginTop}px` : undefined, paddingBottom: logo.marginBottom != null ? `${Math.min(logo.marginBottom, 8)}px` : "0.5rem", display: "flex", justifyContent: "center" }}>
-            <img src={logo.url} alt="" className="home-logo" style={{ maxWidth: logo.size ? `${logo.size}px` : "140px", height: "auto", width: "auto" }} />
+            <img src={logo.url} alt="" className="home-logo" style={{ maxWidth: logo.size ? `${Math.min(logo.size, 120)}px` : "100px", height: "auto", width: "auto" }} />
           </div>
         )}
         {sections.map((section, i) => {
@@ -150,7 +150,7 @@ export function RsvpPreview({ theme, content, eventDate, subEventDates = [] }: R
   const eventDateFontStyle = eventDateStyle.fontFamily ? { fontFamily: eventDateStyle.fontFamily } : {};
   const dates = subEventDates.length > 0 ? subEventDates : [eventDate];
   return (
-    <EventThemeProvider theme={theme}>
+    <EventThemeProvider theme={theme} compact>
       <div className="guest-section">
         <div className="mx-auto max-w-md text-center">
           <h1 className="guest-title mb-2">{c?.title || "RSVP"}</h1>
