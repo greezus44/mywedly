@@ -67,7 +67,7 @@ export function EventLayout() {
           <div className="flex items-center gap-2">
             <button onClick={toggleDashTheme} className="rounded-lg border border-dash-border px-2.5 py-1.5 text-sm text-dash-text transition-colors hover:bg-dash-surface" aria-label="Toggle dark mode">{dashTheme === "dark" ? "☀" : "☾"}</button>
             {event.is_published && <a href={`${window.location.origin}/e/${event.slug}`} target="_blank" rel="noopener noreferrer" className="text-sm text-dash-primary hover:underline">View Live →</a>}
-            <Button size="sm" onClick={() => setShowPublish(true)} disabled={publishMutation.isPending} style={{ backgroundColor: "var(--dash-accent)", color: "var(--dash-accent-fg)" }}>{publishMutation.isPending ? "Publishing..." : "Publish"}</Button>
+            <Button size="sm" onClick={() => setShowPublish(true)} disabled={publishMutation.isPending} style={{ backgroundColor: "#50bcf4" }}>{publishMutation.isPending ? "Publishing..." : "Publish"}</Button>
           </div>
         </div>
         <nav className="mx-auto hidden max-w-7xl items-center gap-1 px-4 pb-2 sm:flex sm:px-6 overflow-x-auto scrollbar-thin" style={{ backgroundColor: "var(--dash-header-bg)" }}>
