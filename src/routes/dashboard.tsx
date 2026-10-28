@@ -97,8 +97,8 @@ export function DashboardPage() {
     <div className="min-h-screen bg-dash-bg" style={{ backgroundColor: "#f8ecd5" }}>
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-dash-text">Your Events</h1>
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h1 className="text-xl font-bold text-dash-text sm:text-2xl">Your Events</h1>
           <Button onClick={() => setShowCreate(true)} style={{ backgroundColor: "#d2ae4b" }}>Create Event</Button>
         </div>
         {isLoading ? <div className="flex justify-center py-12"><LoadingSpinner /></div>

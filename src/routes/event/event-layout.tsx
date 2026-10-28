@@ -56,7 +56,7 @@ export function EventLayout() {
   return (
     <div className="min-h-screen bg-dash-bg">
       <header className="sticky top-0 z-30 border-b border-dash-border bg-dash-surface">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6" style={{ backgroundColor: "#f8ecd5" }}>
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-6" style={{ backgroundColor: "#f8ecd5" }}>
           <div className="flex items-center gap-4">
             <Link to="/dashboard" className="text-sm font-medium text-dash-muted hover:text-dash-text">← Dashboard</Link>
             <div className="hidden h-6 w-px bg-dash-border sm:block" />
