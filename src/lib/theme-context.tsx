@@ -17,7 +17,7 @@ interface EventThemeProviderProps {
 export function EventThemeProvider({ theme, children, className, compact }: EventThemeProviderProps) {
   const cssVars = useMemo(() => themeToEventCssVars(jsonToTheme(theme)), [theme]);
   const classes = compact ? `event-themed event-preview${className ? ` ${className}` : ""}` : `event-themed${className ? ` ${className}` : ""}`;
-  const style: CSSProperties = { ...cssVars, ...(compact || className ? { minHeight: "auto" } : { minHeight: "100dvh" }) };
+  const style: CSSProperties = { ...cssVars, ...(compact || className ? { minHeight: "auto", height: "100%" } : { minHeight: "100dvh" }) };
   return (
     <EventThemeContext.Provider value={{ cssVars }}>
       <div className={classes} style={style}>

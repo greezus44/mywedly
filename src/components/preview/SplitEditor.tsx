@@ -69,11 +69,11 @@ export function SplitEditor({ editor, preview }: SplitEditorProps) {
         </div>
 
         {/* Scrollable preview area */}
-        <div className="flex-1 overflow-y-auto overflow-x-auto rounded-lg border border-dash-border bg-dash-bg/30 p-3 flex justify-center" style={{ minHeight: "200px" }}>
+        <div className="flex-1 overflow-hidden rounded-lg border border-dash-border bg-dash-bg/30 p-3 flex justify-center items-stretch h-[600px] lg:h-auto" style={{ minHeight: "200px" }}>
           {isPhone ? (
             /* iPhone 17 Pro frame: dark bezel, rounded corners, Dynamic Island */
             <div
-              className="relative shrink-0 bg-neutral-900 transition-all duration-300 ease-out"
+              className="relative shrink-0 bg-neutral-900 transition-all duration-300 ease-out flex flex-col"
               style={{
                 width: "426px",
                 maxWidth: "100%",
@@ -89,12 +89,12 @@ export function SplitEditor({ editor, preview }: SplitEditorProps) {
               />
               {/* Screen */}
               <div
-                className="overflow-y-auto overflow-x-hidden bg-white"
+                className="overflow-y-auto overflow-x-hidden flex-1"
                 style={{
                   width: "402px",
                   maxWidth: "100%",
                   borderRadius: "44px",
-                  height: "760px",
+                  minHeight: "300px",
                 }}
               >
                 {preview}
@@ -102,8 +102,8 @@ export function SplitEditor({ editor, preview }: SplitEditorProps) {
             </div>
           ) : (
             <div
-              className="rounded-md overflow-y-auto overflow-x-hidden bg-white transition-all duration-300 ease-out"
-              style={{ width: previewWidth, maxWidth: "100%", height: "760px" }}
+              className="rounded-md overflow-y-auto overflow-x-hidden transition-all duration-300 ease-out h-full"
+              style={{ width: previewWidth, maxWidth: "100%", minHeight: "300px" }}
             >
               {preview}
             </div>

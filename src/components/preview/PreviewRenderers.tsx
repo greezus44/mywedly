@@ -77,7 +77,7 @@ export function CoverPreview({ config, theme, eventName }: CoverPreviewProps) {
   const logoAlign = logo?.align || "center";
   return (
     <EventThemeProvider theme={theme} compact>
-      <div className="relative flex min-h-[280px] flex-col items-center justify-center overflow-hidden text-center" style={{ minHeight: "40vh", ...bgStyle }}>
+      <div className="relative flex min-h-full flex-col items-center justify-center overflow-hidden text-center" style={{ ...bgStyle }}>
         {bg.image && <div className="absolute inset-0" style={{ backgroundColor: `rgba(0,0,0,${overlay})` }} />}
         <div className="relative z-10 flex w-full max-w-lg flex-col items-center px-6 py-10 text-center animate-fadeIn" style={{ whiteSpace: "pre-wrap" }}>
           {logo?.url && <div className="mb-4 flex w-full" style={{ justifyContent: logoAlign === "left" ? "flex-start" : logoAlign === "right" ? "flex-end" : "center" }}><img src={logo.url} alt="Logo" style={{ height: `${logo.size ?? 90}px`, width: "auto", maxHeight: "30vh", maxWidth: logo.maxWidth ? `${logo.maxWidth}px` : undefined, objectFit: "contain", background: "transparent" }} /></div>}
@@ -105,7 +105,7 @@ export function LoginPreview({ config, theme, eventName }: LoginPreviewProps) {
   const buttonLabel = pickPreviewText(isBm, config.buttonLabel || "Sign In", config.buttonLabelBm);
   return (
     <EventThemeProvider theme={theme} compact>
-      <div className="flex min-h-[280px] flex-col items-center justify-center px-6 py-10">
+      <div className="flex min-h-full flex-col items-center justify-center px-6 py-10">
         <div className="w-full max-w-md">
           <div className="mb-8 text-center">
             {heading.text && <h1 className="guest-title mb-2" style={heading.style}>{heading.text}</h1>}
@@ -132,7 +132,7 @@ export function HomePreview({ content, theme }: HomePreviewProps) {
   const rsvpButtonText = pickPreviewText(isBm, content.rsvpButtonText || "RSVP Now", content.rsvpButtonTextBm);
   return (
     <EventThemeProvider theme={theme} compact>
-      <div className="guest-home-page">
+      <div className="guest-home-page min-h-full">
         {logo?.url && (
           <div style={{ paddingTop: logo.marginTop ? `${logo.marginTop}px` : undefined, paddingBottom: logo.marginBottom != null ? `${Math.min(logo.marginBottom, 8)}px` : "0.5rem", display: "flex", justifyContent: "center" }}>
             <img src={logo.url} alt="" className="home-logo" style={{ maxWidth: logo.size ? `${logo.size}px` : "140px", height: "auto", width: "auto" }} />
@@ -369,7 +369,7 @@ export function RsvpPreview({ theme, content, contentBm, eventDate, eventTime, v
 
   return (
     <EventThemeProvider theme={theme} compact>
-      <div className="guest-section guest-rsvp-page">
+      <div className="guest-section guest-rsvp-page min-h-full">
         <div className="mx-auto max-w-2xl guest-rsvp-content">
           <div className={cn("text-center pt-6", (titleText || rsvpDeadline || subtitleText) && "mb-8")}>
             {titleText && <h1 className="guest-title text-center" style={{ whiteSpace: "pre-wrap", marginBottom: 0, ...titleStyle }}>{titleText}</h1>}
