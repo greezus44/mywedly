@@ -6,34 +6,33 @@ interface SplitEditorProps {
   preview: ReactNode;
 }
 
-const DEVICE_WIDTHS: Record<PreviewDevice, string> = {
-  phone: "390px",
-  tablet: "768px",
-  laptop: "100%",
-};
-
-const DEVICE_LABELS: Record<PreviewDevice, string> = {
-  phone: "Phone",
-  tablet: "Tablet",
-  laptop: "Laptop",
+const DEVICE_CONFIG: Record<PreviewDevice, { width: string; label: string }> = {
+  phone: { width: "402px", label: "Phone" },
+  tablet: { width: "834px", label: "Tablet" },
+  laptop: { width: "100%", label: "Laptop" },
 };
 
 export function SplitEditor({ editor, preview }: SplitEditorProps) {
   const { language, toggle, device, setDevice } = usePreviewLanguage();
-  const previewWidth = DEVICE_WIDTHS[device];
-  const isResponsive = device !== "laptop";
+  const { width: previewWidth, label: deviceLabel } = DEVICE_CONFIG[device];
+  const isPhone = device === "phone";
+
   return (
     <div className="grid gap-4 lg:grid-cols-2">
+      {/* Editor column */}
       <div className="order-2 lg:order-1">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-dash-muted">Editor</div>
         <div className="space-y-4">{editor}</div>
       </div>
-      <div className="order-1 lg:order-2">
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-dash-muted">
+
+      {/* Preview column — entire column sticks so header buttons stay visible while scrolling */}
+      <div className="order-1 lg:order-2 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-hidden flex flex-col">
+        {/* Sticky toolbar: device toggle + language toggle */}
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide text-dash-muted shrink-0">
           <span>Live Preview</span>
           <div className="flex items-center gap-3">
             <div className="flex items-center rounded-md border border-dash-border bg-dash-surface p-0.5">
-              {(Object.keys(DEVICE_LABELS) as PreviewDevice[]).map((d) => (
+              {(Object.keys(DEVICE_CONFIG) as PreviewDevice[]).map((d) => (
                 <button
                   key={d}
                   type="button"
@@ -42,7 +41,7 @@ export function SplitEditor({ editor, preview }: SplitEditorProps) {
                     device === d ? "bg-dash-primary text-white" : "text-dash-muted hover:text-dash-text"
                   }`}
                 >
-                  {DEVICE_LABELS[d]}
+                  {DEVICE_CONFIG[d].label}
                 </button>
               ))}
             </div>
@@ -68,13 +67,47 @@ export function SplitEditor({ editor, preview }: SplitEditorProps) {
             </div>
           </div>
         </div>
-        <div className="lg:sticky lg:top-4 overflow-y-auto overflow-x-auto rounded-lg border border-dash-border max-h-[70vh] lg:max-h-[75vh] shadow-sm bg-dash-bg/30 p-2 flex justify-center">
-          <div
-            className="rounded-md overflow-y-auto overflow-x-hidden bg-white transition-all duration-300 ease-out"
-            style={{ width: previewWidth, maxWidth: "100%", maxHeight: "calc(75vh - 16px)" }}
-          >
-            {preview}
-          </div>
+
+        {/* Scrollable preview area */}
+        <div className="flex-1 overflow-y-auto overflow-x-auto rounded-lg border border-dash-border bg-dash-bg/30 p-3 flex justify-center" style={{ minHeight: "200px" }}>
+          {isPhone ? (
+            /* iPhone 17 Pro frame: dark bezel, rounded corners, Dynamic Island */
+            <div
+              className="relative shrink-0 bg-neutral-900 transition-all duration-300 ease-out"
+              style={{
+                width: "426px",
+                maxWidth: "100%",
+                borderRadius: "55px",
+                padding: "12px",
+                boxShadow: "0 8px 30px rgba(0,0,0,0.25)",
+              }}
+            >
+              {/* Dynamic Island */}
+              <div
+                className="absolute left-1/2 -translate-x-1/2 bg-black rounded-full"
+                style={{ top: "20px", width: "120px", height: "34px", zIndex: 10 }}
+              />
+              {/* Screen */}
+              <div
+                className="overflow-y-auto overflow-x-hidden bg-white"
+                style={{
+                  width: "402px",
+                  maxWidth: "100%",
+                  borderRadius: "44px",
+                  height: "760px",
+                }}
+              >
+                {preview}
+              </div>
+            </div>
+          ) : (
+            <div
+              className="rounded-md overflow-y-auto overflow-x-hidden bg-white transition-all duration-300 ease-out"
+              style={{ width: previewWidth, maxWidth: "100%", height: "760px" }}
+            >
+              {preview}
+            </div>
+          )}
         </div>
       </div>
     </div>
