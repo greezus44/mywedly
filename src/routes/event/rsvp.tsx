@@ -140,12 +140,21 @@ export function RsvpPage() {
     });
   };
   const [rsvpDeadline, setRsvpDeadline] = useState(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? "");
-  useEffect(() => { setRsvpDeadline(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? ""); }, [event.draft_rsvp_deadline, event.rsvp_deadline]);
+  const deadlineSyncRef = useRef(true);
+  useEffect(() => { setRsvpDeadline(event.draft_rsvp_deadline ?? event.rsvp_deadline ?? ""); deadlineSyncRef.current = true; }, [event.draft_rsvp_deadline, event.rsvp_deadline]);
 
   const saveDeadlineMutation = useMutation({
-    mutationFn: async () => { const { error } = await supabase.from("user_events").update({ draft_rsvp_deadline: rsvpDeadline || null, rsvp_deadline: rsvpDeadline || null }).eq("id", eventId); if (error) throw error; },
+    mutationFn: async (deadline: string) => { const { error } = await supabase.from("user_events").update({ draft_rsvp_deadline: deadline || null, rsvp_deadline: deadline || null }).eq("id", eventId); if (error) throw error; },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["event", eventId] }); queryClient.invalidateQueries({ queryKey: ["published-event"] }); },
   });
+
+  const deadlineTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (deadlineSyncRef.current) { deadlineSyncRef.current = false; return; }
+    if (deadlineTimerRef.current) clearTimeout(deadlineTimerRef.current);
+    deadlineTimerRef.current = setTimeout(() => { saveDeadlineMutation.mutate(rsvpDeadline); }, 800);
+    return () => { if (deadlineTimerRef.current) clearTimeout(deadlineTimerRef.current); };
+  }, [rsvpDeadline]);
 
   useEffect(() => {
     const content = (event.draft_content ?? event.content) as Record<string, unknown> | null;
@@ -507,12 +516,12 @@ export function RsvpPage() {
       <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-dash-text">RSVP Deadline</h3>
-          <Button size="sm" onClick={() => saveDeadlineMutation.mutate()} loading={saveDeadlineMutation.isPending}>Save Deadline</Button>
+          {saveDeadlineMutation.isPending && <span className="text-xs text-dash-muted">Saving…</span>}
+          {saveDeadlineMutation.isError && <span className="text-xs text-dash-danger">Save failed</span>}
+          {saveDeadlineMutation.isSuccess && <span className="text-xs text-green-600">Saved</span>}
         </div>
-        {saveDeadlineMutation.isError && <p className="text-sm text-dash-danger">{saveDeadlineMutation.error instanceof Error ? saveDeadlineMutation.error.message : "Save failed"}</p>}
-        {saveDeadlineMutation.isSuccess && <p className="text-sm text-green-600">Saved</p>}
         <DateTimePicker label="RSVP Deadline" value={rsvpDeadline} onChange={setRsvpDeadline} />
-        <p className="text-xs text-dash-muted">Guests won't be able to RSVP after this date. Leave blank for no deadline.</p>
+        <p className="text-xs text-dash-muted">Guests won't be able to RSVP after this date. Leave blank for no deadline. Changes save automatically.</p>
       </div>
       {!guests || guests.length === 0 ? (
         <EmptyState title="No guests" description="Add guests from the Guests page to see their RSVP status here." />
