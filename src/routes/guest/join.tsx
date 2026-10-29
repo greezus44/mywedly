@@ -64,6 +64,9 @@ interface PageConfig {
   phoneQuestionBm?: string;
   phoneHelper?: string;
   phoneHelperBm?: string;
+  phoneExample?: string;
+  phoneExampleBm?: string;
+  phoneExampleColor?: string;
   headingTypography?: TypographyStyle;
   introTypography?: TypographyStyle;
   eventTitleTypography?: TypographyStyle;
@@ -87,6 +90,7 @@ interface PageConfig {
 }
 
 const BLACK_TEXT = "#1a1a1a";
+const DEFAULT_PHONE_EXAMPLE = "+60 12-345 6789";
 
 interface LookupResult {
   link: {
@@ -247,7 +251,7 @@ export default function GuestJoin() {
     if (!token || !lookup) return;
     if (!name.trim()) { setError("Please enter your name."); return; }
     if (!status) { setError("Please choose Attending or Declined."); return; }
-    if (status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne) { setError("Please choose Yes or No for bringing a +1."); return; }
+    if (status === "attending" && !bringingPlusOne) return;
     setError(null);
     setSubmitting(true);
     try {
@@ -504,7 +508,7 @@ export default function GuestJoin() {
               </div>
             </div>
 
-            {status === "attending" && lookup?.link?.allow_plus_one && (
+            {status === "attending" && (
               <div>
                 <p className="mb-2 text-center text-sm" style={{ color: plusOneQuestionColor, fontFamily: "var(--event-font-body)", ...plusOneQuestionStyle }}>{language === "bm" ? (pageConfig.plusOneQuestionBm?.trim() || "Membawa +1?") : (pageConfig.plusOneQuestion?.trim() || "Bringing a +1?")}</p>
                 <div className="flex gap-2 sm:gap-3">
@@ -540,11 +544,11 @@ export default function GuestJoin() {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="event-input"
-                  placeholder="+60 12-345 6789"
+                  placeholder={language === "bm" ? (pageConfig.phoneExampleBm?.trim() || DEFAULT_PHONE_EXAMPLE) : (pageConfig.phoneExample?.trim() || DEFAULT_PHONE_EXAMPLE)}
                   autoComplete="tel"
                   maxLength={30}
-                  style={{ textAlign: "center", fontFamily: "var(--event-font-body)" }}
+                  style={{ textAlign: "center", fontFamily: "var(--event-font-body)", "--phone-example-color": pageConfig.phoneExampleColor || undefined, "--phone-example-opacity": pageConfig.phoneExampleColor ? 1 : 0.6 } as React.CSSProperties}
+                  className="event-input rsvp-phone-input"
                 />
                 <p className="mt-1 text-center text-xs" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...phoneHelperStyle }}>{language === "bm" ? (pageConfig.phoneHelperBm?.trim() || pageConfig.phoneHelper?.trim() || "Untuk pengaturan tempat duduk") : (pageConfig.phoneHelper?.trim() || "For seating arrangements")}</p>
               </div>
@@ -552,7 +556,7 @@ export default function GuestJoin() {
 
             {error && <p className="text-center text-sm" style={{ color: "var(--event-primary)" }}>{error}</p>}
             <div className="text-center pt-2">
-              <button type="submit" disabled={submitting || !status || !name.trim() || (status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne)} className="event-btn-primary" style={{ opacity: submitting || !status || !name.trim() || (status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne) ? 0.8 : 1, ...btnStyle }} onMouseEnter={(e) => { if (!submitting && status && name.trim() && !(status === "attending" && lookup?.link?.allow_plus_one && !bringingPlusOne)) Object.assign(e.currentTarget.style, btnHoverStyle); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, btnStyle)}>
+              <button type="submit" disabled={submitting || !status || !name.trim() || (status === "attending" && !bringingPlusOne)} className="event-btn-primary" style={{ opacity: submitting || !status || !name.trim() || (status === "attending" && !bringingPlusOne) ? 0.8 : 1, ...btnStyle }} onMouseEnter={(e) => { if (!submitting && status && name.trim() && !(status === "attending" && !bringingPlusOne)) Object.assign(e.currentTarget.style, btnHoverStyle); }} onMouseLeave={(e) => Object.assign(e.currentTarget.style, btnStyle)}>
                 <span style={{ fontWeight: submitWeight, color: submitTextColor, ...submitStyle }}>{submitting ? (language === "bm" ? "Menghantar..." : "Submitting...") : submitLabel}</span>
               </button>
             </div>

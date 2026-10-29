@@ -1,0 +1,1 @@
+UPDATE open_rsvp_links SET allow_plus_one = true WHERE allow_plus_one = false;

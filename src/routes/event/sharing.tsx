@@ -49,6 +49,9 @@ interface PageConfig {
   phoneQuestionBm?: string;
   phoneHelper?: string;
   phoneHelperBm?: string;
+  phoneExample?: string;
+  phoneExampleBm?: string;
+  phoneExampleColor?: string;
   plusOneYesLabel?: string;
   plusOneYesLabelBm?: string;
   plusOneNoLabel?: string;
@@ -118,6 +121,8 @@ const DEFAULT_PAGE_CONFIG: PageConfig = {
   phoneQuestionBm: "Nombor telefon (pilihan)",
   phoneHelper: "For seating arrangements",
   phoneHelperBm: "Untuk pengaturan tempat duduk",
+  phoneExample: "+60 12-345 6789",
+  phoneExampleBm: "+60 12-345 6789",
   plusOneYesLabel: "Yes",
   plusOneYesLabelBm: "Ya",
   plusOneNoLabel: "No",
@@ -227,14 +232,12 @@ export function SharingPage() {
         }
       }
       // First link for the event becomes the primary (style source). Extra links
-      // inherit the primary link's page_config + allow_plus_one so all links
-      // share one look.
+      // inherit the primary link's page_config so all links share one look.
       const hasPrimary = (openLinks ?? []).some((l) => l.is_primary);
       const seedConfig = primaryLink ? (primaryLink.page_config ?? DEFAULT_PAGE_CONFIG) : DEFAULT_PAGE_CONFIG;
-      const seedPlusOne = primaryLink ? primaryLink.allow_plus_one : false;
       const { data, error } = await supabase
         .from("open_rsvp_links")
-        .insert({ event_id: eventId, sub_event_id: subEventId, allow_plus_one: seedPlusOne, is_enabled: true, page_config: seedConfig as unknown as Json, group_id: groupId, is_primary: !hasPrimary })
+        .insert({ event_id: eventId, sub_event_id: subEventId, allow_plus_one: true, is_enabled: true, page_config: seedConfig as unknown as Json, group_id: groupId, is_primary: !hasPrimary })
         .select("*")
         .single();
       if (error) throw error;
@@ -379,7 +382,7 @@ export function SharingPage() {
     if (isPrimary) {
       await supabase
         .from("open_rsvp_links")
-        .update({ page_config: editConfig as unknown as Json, allow_plus_one: editConfig.plusOneQuestion !== undefined ? !!editConfig.plusOneQuestion : false })
+        .update({ page_config: editConfig as unknown as Json, allow_plus_one: true })
         .eq("event_id", eventId)
         .neq("id", editingLink.id);
     }
@@ -698,6 +701,9 @@ export function SharingPage() {
               <LabeledInput label="Question (BM)" value={editConfig.phoneQuestionBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneQuestionBm: v }))} />
               <LabeledInput label="Helper text (EN)" value={editConfig.phoneHelper ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneHelper: v }))} />
               <LabeledInput label="Helper text (BM)" value={editConfig.phoneHelperBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneHelperBm: v }))} />
+              <LabeledInput label="Example text (EN)" value={editConfig.phoneExample ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneExample: v }))} />
+              <LabeledInput label="Example text (BM)" value={editConfig.phoneExampleBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneExampleBm: v }))} />
+              <LabeledColor label="Example text colour" value={editConfig.phoneExampleColor} onChange={(v) => setEditConfig((p) => ({ ...p, phoneExampleColor: v }))} />
             </div>
             <CollapsibleGroup title="Phone question typography">
               <TypographyControls label="Phone question typography" value={editConfig.phoneQuestionTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, phoneQuestionTypography: v }))} showText={false} />

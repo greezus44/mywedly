@@ -41,6 +41,7 @@ header.bg-dash-surface, .bg-dash-surface, .bg-dash-bg, .border-dash-border { tra
 .event-themed .event-input { background-color:var(--event-surface);border:1px solid var(--event-border);color:var(--event-text);padding:0.75rem 1rem;border-radius:var(--event-radius);width:100%;outline:none;transition:border-color 0.2s;font-family:var(--event-font-body);font-size:1rem; }
 .event-themed .event-input:focus { border-color:var(--event-primary);box-shadow:0 0 0 3px rgba(0,0,0,0.03); }
 .event-themed .event-input::placeholder { color:var(--event-muted);opacity:0.6;text-align:center; }
+.event-themed .rsvp-phone-input::placeholder { color:var(--phone-example-color, var(--event-muted));opacity:var(--phone-example-opacity, 0.6); }
 .event-themed .event-card { background-color:var(--event-surface);border:1px solid var(--event-border);border-radius:var(--event-radius);padding:2rem; }
 .event-themed .rich-content { font-family:var(--event-font-rich);line-height:1.85;color:var(--event-text);font-size:1.0625rem; }
 .event-themed .rich-content h1 { font-size:calc(2rem * var(--event-font-scale,1));font-weight:700;margin:0.5em 0; }
