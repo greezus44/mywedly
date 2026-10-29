@@ -77,6 +77,8 @@ interface PageConfig {
   attendingTypography?: TypographyStyle;
   declinedTypography?: TypographyStyle;
   plusOneQuestionTypography?: TypographyStyle;
+  phoneQuestionTypography?: TypographyStyle;
+  phoneHelperTypography?: TypographyStyle;
   plusOneYesTypography?: TypographyStyle;
   plusOneNoTypography?: TypographyStyle;
   submitTypography?: TypographyStyle;
@@ -382,6 +384,8 @@ export default function GuestJoin() {
   const plusOneQuestionStyle = getTypographyStyle(pageConfig.plusOneQuestionTypography);
   const plusOneYesStyle = getTypographyStyle(pageConfig.plusOneYesTypography);
   const plusOneNoStyle = getTypographyStyle(pageConfig.plusOneNoTypography);
+  const phoneQuestionStyle = getTypographyStyle(pageConfig.phoneQuestionTypography);
+  const phoneHelperStyle = getTypographyStyle(pageConfig.phoneHelperTypography);
   const submitStyle = getTypographyStyle(pageConfig.submitTypography);
 
   const renderDateColumn = (date: string | null | undefined) => {
@@ -530,7 +534,7 @@ export default function GuestJoin() {
 
             {status === "attending" && pageConfig.phoneEnabled && (
               <div>
-                <label className="mb-1 block text-center text-sm" htmlFor="open-rsvp-phone" style={{ color: plusOneQuestionColor, fontFamily: "var(--event-font-body)", ...plusOneQuestionStyle }}>{language === "bm" ? (pageConfig.phoneQuestionBm?.trim() || pageConfig.phoneQuestion?.trim() || "Nombor telefon (pilihan)") : (pageConfig.phoneQuestion?.trim() || "Your phone number (optional)")}</label>
+                <label className="mb-1 block text-center text-sm" htmlFor="open-rsvp-phone" style={{ color: plusOneQuestionColor, fontFamily: "var(--event-font-body)", ...phoneQuestionStyle }}>{language === "bm" ? (pageConfig.phoneQuestionBm?.trim() || pageConfig.phoneQuestion?.trim() || "Nombor telefon (pilihan)") : (pageConfig.phoneQuestion?.trim() || "Your phone number (optional)")}</label>
                 <input
                   id="open-rsvp-phone"
                   type="tel"
@@ -542,7 +546,7 @@ export default function GuestJoin() {
                   maxLength={30}
                   style={{ textAlign: "center", fontFamily: "var(--event-font-body)" }}
                 />
-                <p className="mt-1 text-center text-xs" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{language === "bm" ? (pageConfig.phoneHelperBm?.trim() || pageConfig.phoneHelper?.trim() || "Untuk pengaturan tempat duduk") : (pageConfig.phoneHelper?.trim() || "For seating arrangements")}</p>
+                <p className="mt-1 text-center text-xs" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...phoneHelperStyle }}>{language === "bm" ? (pageConfig.phoneHelperBm?.trim() || pageConfig.phoneHelper?.trim() || "Untuk pengaturan tempat duduk") : (pageConfig.phoneHelper?.trim() || "For seating arrangements")}</p>
               </div>
             )}
 

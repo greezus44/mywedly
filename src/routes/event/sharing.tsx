@@ -81,6 +81,8 @@ interface PageConfig {
   plusOneQuestionTypography?: TypographyStyle;
   plusOneYesTypography?: TypographyStyle;
   plusOneNoTypography?: TypographyStyle;
+  phoneQuestionTypography?: TypographyStyle;
+  phoneHelperTypography?: TypographyStyle;
   submitTypography?: TypographyStyle;
   logoUrl?: string;
   logoSize?: number;
@@ -660,19 +662,6 @@ export function SharingPage() {
               <LabeledInput label="Declined (BM)" value={editConfig.thankYouDeclinedBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, thankYouDeclinedBm: v }))} />
             </div>
           </div>
-          <SectionLabel>Phone number (optional)</SectionLabel>
-          <div className="flex items-center gap-3">
-            <Toggle checked={!!editConfig.phoneEnabled} onChange={(v) => setEditConfig((p) => ({ ...p, phoneEnabled: v }))} />
-            <span className="text-sm text-dash-muted">Ask attending guests for a phone number</span>
-          </div>
-          {editConfig.phoneEnabled && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <LabeledInput label="Question (EN)" value={editConfig.phoneQuestion ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneQuestion: v }))} />
-              <LabeledInput label="Question (BM)" value={editConfig.phoneQuestionBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneQuestionBm: v }))} />
-              <LabeledInput label="Helper text (EN)" value={editConfig.phoneHelper ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneHelper: v }))} />
-              <LabeledInput label="Helper text (BM)" value={editConfig.phoneHelperBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneHelperBm: v }))} />
-            </div>
-          )}
           <SectionLabel>+1 question and buttons</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
             <LabeledInput label="Question (EN)" value={editConfig.plusOneQuestion ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneQuestion: v }))} />
@@ -698,12 +687,32 @@ export function SharingPage() {
             <TypographyControls label="+1 Yes button typography" value={editConfig.plusOneYesTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneYesTypography: v }))} showText={false} />
             <TypographyControls label="+1 No button typography" value={editConfig.plusOneNoTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneNoTypography: v }))} showText={false} />
           </CollapsibleGroup>
-          <SectionLabel>Selected button colours</SectionLabel>
+          <SectionLabel>Phone number (optional)</SectionLabel>
+          <div className="flex items-center gap-3">
+            <Toggle checked={!!editConfig.phoneEnabled} onChange={(v) => setEditConfig((p) => ({ ...p, phoneEnabled: v }))} />
+            <span className="text-sm text-dash-muted">Ask attending guests for a phone number</span>
+          </div>
+          {editConfig.phoneEnabled && (<>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <LabeledInput label="Question (EN)" value={editConfig.phoneQuestion ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneQuestion: v }))} />
+              <LabeledInput label="Question (BM)" value={editConfig.phoneQuestionBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneQuestionBm: v }))} />
+              <LabeledInput label="Helper text (EN)" value={editConfig.phoneHelper ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneHelper: v }))} />
+              <LabeledInput label="Helper text (BM)" value={editConfig.phoneHelperBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneHelperBm: v }))} />
+            </div>
+            <CollapsibleGroup title="Phone question typography">
+              <TypographyControls label="Phone question typography" value={editConfig.phoneQuestionTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, phoneQuestionTypography: v }))} showText={false} />
+            </CollapsibleGroup>
+            <CollapsibleGroup title="Phone helper text typography">
+              <TypographyControls label="Phone helper text typography" value={editConfig.phoneHelperTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, phoneHelperTypography: v }))} showText={false} />
+            </CollapsibleGroup>
+          </>)}
+          <CollapsibleGroup title="Button colours">
           <ButtonColourEditor label="Attending (selected)" value={editConfig.attendingColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, attendingColors: v }))} />
           <ButtonColourEditor label="Declined (selected)" value={editConfig.declinedColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, declinedColors: v }))} />
           <ButtonColourEditor label="+1 Yes (selected)" value={editConfig.plusOneYesColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneYesColors: v }))} />
           <ButtonColourEditor label="+1 No (selected)" value={editConfig.plusOneNoColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneNoColors: v }))} />
           <ButtonColourEditor label="Base Button Colours (unselected)" value={editConfig.buttonColors ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, buttonColors: v }))} />
+          </CollapsibleGroup>
           </>) : (
             <div className="rounded-md border border-dash-border bg-dash-bg p-3 text-sm text-dash-muted">
               This link uses the shared Open RSVP page style. To change the page appearance, edit the link marked <span className="font-medium text-dash-text">Primary</span>.
