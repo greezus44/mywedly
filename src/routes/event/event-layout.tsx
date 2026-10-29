@@ -5,6 +5,7 @@ import { supabase, type UserEvent } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, Modal } from "../../components/ui";
 import { useDashTheme } from "../../lib/use-dark-mode";
+import { publicSiteUrl } from "../../lib/site-url";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
 export function useEventContext(): EventContextValue { return useOutletContext<EventContextValue>(); }
@@ -66,7 +67,7 @@ export function EventLayout() {
           </div>
           <div className="flex items-center gap-2">
             <button onClick={toggleDashTheme} className="rounded-lg border border-dash-border px-2.5 py-1.5 text-sm text-dash-text transition-colors hover:bg-dash-surface" aria-label="Toggle dark mode">{dashTheme === "dark" ? "☀" : "☾"}</button>
-            {event.is_published && <a href={`${window.location.origin}/e/${event.slug}`} target="_blank" rel="noopener noreferrer" className="text-sm text-dash-primary hover:underline">View Live →</a>}
+            {event.is_published && <a href={publicSiteUrl(`/e/${event.slug}`)} target="_blank" rel="noopener noreferrer" className="text-sm text-dash-primary hover:underline">View Live →</a>}
             <Button size="sm" onClick={() => setShowPublish(true)} disabled={publishMutation.isPending} style={{ backgroundColor: "#50bcf4" }}>{publishMutation.isPending ? "Publishing..." : "Publish"}</Button>
           </div>
         </div>

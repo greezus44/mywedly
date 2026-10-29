@@ -6,6 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { Input, Modal, Card } from "../../components/ui";
 import { isValidSlug, slugify } from "../../lib/utils";
 import { generateQrDataUrl, downloadQrCode, downloadQrSvg } from "../../lib/qr";
+import { PUBLIC_SITE_URL, publicSiteUrl } from "../../lib/site-url";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
 
@@ -26,7 +27,7 @@ export function SettingsPage() {
     setSlug(event.draft_slug ?? event.slug ?? "");
   }, [event]);
 
-  const publicUrl = event.slug ? `${window.location.origin}/e/${event.slug}` : "";
+  const publicUrl = event.slug ? publicSiteUrl(`/e/${event.slug}`) : "";
 
   const { data: shares } = useQuery({
     queryKey: ["sharing-events", eventId],
@@ -102,7 +103,7 @@ export function SettingsPage() {
           <div className="space-y-4 rounded-lg border border-dash-border bg-dash-surface p-4">
             <Input label="Event Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Event name" />
             <Input label="Website Link" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="url-slug" />
-            <p className="text-xs text-dash-muted">This is the web address guests visit: {window.location.origin}/e/{slug || "your-slug"}</p>
+            <p className="text-xs text-dash-muted">This is the web address guests visit: {PUBLIC_SITE_URL}/e/{slug || "your-slug"}</p>
             <div className="pt-2"><Button size="sm" onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>Save</Button></div>
           </div>
           <div className="rounded-lg border border-dash-border border-red-200 bg-dash-surface p-4">

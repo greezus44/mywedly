@@ -7,6 +7,7 @@ import { ImageUpload } from "../../components/ui/ImageUpload";
 import { ButtonColourEditor, type ButtonColors } from "../../components/ui/ButtonColourEditor";
 import { TypographyControls } from "../../components/ui/TypographyControls";
 import { generateQrDataUrl, downloadQrCode, downloadQrSvg } from "../../lib/qr";
+import { publicSiteUrl } from "../../lib/site-url";
 import { useEffect } from "react";
 import type { TypographyStyle } from "../../lib/typography";
 
@@ -128,7 +129,7 @@ export function SharingPage() {
   const [editGroupId, setEditGroupId] = useState<string | null>(null);
   const [editGroupName, setEditGroupName] = useState("");
 
-  const publicUrl = event.slug ? `${window.location.origin}/e/${event.slug}` : "";
+  const publicUrl = event.slug ? publicSiteUrl(`/e/${event.slug}`) : "";
 
   const { data: shares } = useQuery({
     queryKey: ["sharing-events", eventId],
@@ -275,7 +276,7 @@ export function SharingPage() {
     setEditRsvpDeadline(se?.rsvp_deadline ?? "");
   };
 
-  const joinPrefix = `${window.location.origin}/rsvp/`;
+  const joinPrefix = publicSiteUrl("/rsvp/");
 
   const validateToken = async (token: string): Promise<string | null> => {
     const trimmed = token.trim();
@@ -425,7 +426,7 @@ export function SharingPage() {
                   {seLinks.length > 0 && (
                     <div className="space-y-3">
                       {seLinks.map((link) => {
-                        const joinUrl = `${window.location.origin}/rsvp/${link.token}`;
+                        const joinUrl = publicSiteUrl(`/rsvp/${link.token}`);
                         const gName = groupNameFor(link.group_id);
                         return (
                           <div key={link.id} className="rounded-md border border-dash-border bg-dash-surface p-2.5">
