@@ -59,6 +59,11 @@ interface PageConfig {
   plusOneYesTextColor?: string;
   plusOneNoTextColor?: string;
   plusOneQuestionColor?: string;
+  phoneEnabled?: boolean;
+  phoneQuestion?: string;
+  phoneQuestionBm?: string;
+  phoneHelper?: string;
+  phoneHelperBm?: string;
   headingTypography?: TypographyStyle;
   introTypography?: TypographyStyle;
   eventTitleTypography?: TypographyStyle;
@@ -162,6 +167,7 @@ export default function GuestJoin() {
   const [name, setName] = useState("");
   const [status, setStatus] = useState<"attending" | "declined" | "">("");
   const [bringingPlusOne, setBringingPlusOne] = useState<"yes" | "no" | "">("");
+  const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState<Step>("form");
@@ -248,6 +254,7 @@ export default function GuestJoin() {
         p_name: name.trim(),
         p_status: status,
         p_plus_ones: status === "attending" && bringingPlusOne === "yes" ? 1 : 0,
+        p_phone: status === "attending" && pageConfig.phoneEnabled ? phone.trim() || null : null,
       });
       if (rpcError) throw rpcError;
       const result = (data ?? {}) as { error?: string; guest?: EventGuest; event_slug?: string };
@@ -256,6 +263,7 @@ export default function GuestJoin() {
           link_not_found: "This link is no longer available.",
           invalid_name: "Please enter a valid name.",
           invalid_status: "Please choose Attending or Declined.",
+          invalid_phone: language === "bm" ? "Sila masukkan nombor telefon yang sah, atau kosongkan ruang ini." : "Please enter a valid phone number, or leave it blank.",
           closed: language === "bm" ? "Tempoh RSVP untuk acara ini telah tamat." : "RSVP for this event is now closed.",
           already_responded:
             language === "bm"
@@ -517,6 +525,24 @@ export default function GuestJoin() {
                     <span style={{ fontWeight: bringingPlusOne === "no" ? plusOneNoWeight : 700, color: plusOneNoTextColor, ...plusOneNoStyle }}>{language === "bm" ? (pageConfig.plusOneNoLabelBm?.trim() || "Tidak") : (pageConfig.plusOneNoLabel?.trim() || "No")}</span>
                   </button>
                 </div>
+              </div>
+            )}
+
+            {status === "attending" && pageConfig.phoneEnabled && (
+              <div>
+                <label className="mb-1 block text-center text-sm" htmlFor="open-rsvp-phone" style={{ color: plusOneQuestionColor, fontFamily: "var(--event-font-body)", ...plusOneQuestionStyle }}>{language === "bm" ? (pageConfig.phoneQuestionBm?.trim() || pageConfig.phoneQuestion?.trim() || "Nombor telefon (pilihan)") : (pageConfig.phoneQuestion?.trim() || "Your phone number (optional)")}</label>
+                <input
+                  id="open-rsvp-phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="event-input"
+                  placeholder="+60 12-345 6789"
+                  autoComplete="tel"
+                  maxLength={30}
+                  style={{ textAlign: "center", fontFamily: "var(--event-font-body)" }}
+                />
+                <p className="mt-1 text-center text-xs" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{language === "bm" ? (pageConfig.phoneHelperBm?.trim() || pageConfig.phoneHelper?.trim() || "Untuk pengaturan tempat duduk") : (pageConfig.phoneHelper?.trim() || "For seating arrangements")}</p>
               </div>
             )}
 

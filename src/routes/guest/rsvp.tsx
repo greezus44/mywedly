@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useGuestOutletContext } from "./guest-layout";
+import GuestPhoneSettings, { guestPhoneSettingsQueryKey } from "./GuestPhoneSettings";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { supabase, type EventRsvp, type EventSchedule, type SubEvent, type CustomPage, type Json } from "../../lib/supabase";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -225,6 +226,7 @@ export default function GuestRsvp() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guest-rsvps", guest?.id, event.id] });
+      if (guest) queryClient.invalidateQueries({ queryKey: guestPhoneSettingsQueryKey(guest.id, event.id) });
     },
   });
 
@@ -473,6 +475,8 @@ export default function GuestRsvp() {
         ) : (
           renderEventBlock(language === "bm" ? (event.name_bm?.trim() || (event.name ?? "")) : (event.name ?? ""), event.event_date, event.event_time, event.venue, event.address, null)
         )}
+
+        {guest && <GuestPhoneSettings guestId={guest.id} eventId={event.id} isBm={language === "bm"} />}
 
         {contactMessageText && (
           <div className="mt-8 sm:mt-10 text-center">

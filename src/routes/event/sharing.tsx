@@ -43,6 +43,11 @@ interface PageConfig {
   plusOneNoColors?: ButtonColors;
   plusOneQuestion?: string;
   plusOneQuestionBm?: string;
+  phoneEnabled?: boolean;
+  phoneQuestion?: string;
+  phoneQuestionBm?: string;
+  phoneHelper?: string;
+  phoneHelperBm?: string;
   plusOneYesLabel?: string;
   plusOneYesLabelBm?: string;
   plusOneNoLabel?: string;
@@ -105,6 +110,11 @@ const DEFAULT_PAGE_CONFIG: PageConfig = {
   declinedColor: "#dc2626",
   plusOneQuestion: "Bringing a +1?",
   plusOneQuestionBm: "Membawa +1?",
+  phoneEnabled: false,
+  phoneQuestion: "Your phone number (optional)",
+  phoneQuestionBm: "Nombor telefon (pilihan)",
+  phoneHelper: "For seating arrangements",
+  phoneHelperBm: "Untuk pengaturan tempat duduk",
   plusOneYesLabel: "Yes",
   plusOneYesLabelBm: "Ya",
   plusOneNoLabel: "No",
@@ -637,6 +647,19 @@ export function SharingPage() {
               <LabeledInput label="Declined (BM)" value={editConfig.thankYouDeclinedBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, thankYouDeclinedBm: v }))} />
             </div>
           </div>
+          <SectionLabel>Phone number (optional)</SectionLabel>
+          <div className="flex items-center gap-3">
+            <Toggle checked={!!editConfig.phoneEnabled} onChange={(v) => setEditConfig((p) => ({ ...p, phoneEnabled: v }))} />
+            <span className="text-sm text-dash-muted">Ask attending guests for a phone number</span>
+          </div>
+          {editConfig.phoneEnabled && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <LabeledInput label="Question (EN)" value={editConfig.phoneQuestion ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneQuestion: v }))} />
+              <LabeledInput label="Question (BM)" value={editConfig.phoneQuestionBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneQuestionBm: v }))} />
+              <LabeledInput label="Helper text (EN)" value={editConfig.phoneHelper ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneHelper: v }))} />
+              <LabeledInput label="Helper text (BM)" value={editConfig.phoneHelperBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneHelperBm: v }))} />
+            </div>
+          )}
           <SectionLabel>+1 question and buttons</SectionLabel>
           <div className="grid gap-3 sm:grid-cols-2">
             <LabeledInput label="Question (EN)" value={editConfig.plusOneQuestion ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneQuestion: v }))} />

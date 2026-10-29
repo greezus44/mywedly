@@ -12,6 +12,14 @@ interface EventContextValue { event: UserEvent; eventId: string; }
 
 type GuestStatus = "not_invited" | "pending" | "attending" | "declined";
 
+function GuestPhoneNote({ guest }: { guest: EventGuest }) {
+  if (!guest.open_rsvp_link_id) return null;
+  const phone = guest.phone?.trim();
+  if (phone) return <span className="block text-xs text-dash-muted">{phone}</span>;
+  if (guest.rsvp_status !== "attending") return null;
+  return <span className="block text-xs italic text-dash-muted/70">Phone not added</span>;
+}
+
 function StatusIcon({ status, plusOneLabel }: { status: GuestStatus; plusOneLabel?: string | null }) {
   let icon: React.ReactNode;
   if (status === "attending") icon = <span className="text-green-600 font-bold text-base" title="Attending">&#10003;</span>;
@@ -68,10 +76,13 @@ function MobileGuestSection({
         {guests.map((g) => (
           <div key={g.id} className="flex items-center gap-2 px-4 py-2.5">
             <input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary shrink-0" />
-            <span className="min-w-0 flex-1 truncate text-sm text-dash-text">
-              {(mobileShowUsername ? g.username : g.name) ?? "\u2014"}
-              {g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}
-            </span>
+            <div className="min-w-0 flex-1">
+              <span className="block truncate text-sm text-dash-text">
+                {(mobileShowUsername ? g.username : g.name) ?? "\u2014"}
+                {g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}
+              </span>
+              <GuestPhoneNote guest={g} />
+            </div>
             <span className="shrink-0"><StatusIcon status={statusFor(g.id, activeEventKey)} plusOneLabel={plusOneLabelFor(g.id, activeEventKey)} /></span>
             <div className="flex shrink-0 gap-2">
               <button onClick={() => onEdit(g)} className="text-xs text-dash-primary hover:underline">Edit</button>
@@ -649,7 +660,7 @@ export function GuestsPage() {
                       blk.guests.map((g) => (
                         <tr key={g.id}>
                           <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
-                          <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}</td>
+                          <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}<GuestPhoneNote guest={g} /></td>
                           <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
                           <td className="px-4 py-2 text-sm text-dash-muted">{"\u2014"}</td>
                           <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} plusOneLabel={plusOneLabelFor(g.id, "__main__")} /></td>
@@ -692,7 +703,7 @@ export function GuestsPage() {
                         rows.push(
                           <tr key={g.id}>
                             <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
-                            <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}</td>
+                            <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}<GuestPhoneNote guest={g} /></td>
                             <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
                             <td className="px-4 py-2 text-sm text-dash-muted">{groupName(g.group_id) ?? "\u2014"}</td>
                             {eventColumns.length > 0 ? (

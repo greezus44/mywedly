@@ -35,7 +35,7 @@ export interface EventGuest {
   group_name: string | null; side: string | null; token: string; rsvp_status: string;
   rsvp_submitted_at: string | null; plus_ones: number; dietary: string | null; message: string | null;
   created_at: string; table_number: string | null; username: string | null; group_id: string | null;
-  allow_plus_one: boolean;
+  allow_plus_one: boolean; open_rsvp_link_id: string | null;
 }
 
 export interface SubEvent {
