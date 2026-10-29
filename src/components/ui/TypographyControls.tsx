@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { TypographyStyle } from "../../lib/typography";
 import { Input } from "./Input";
 import { Textarea } from "./Input";
@@ -15,6 +16,7 @@ interface TypographyControlsProps {
   showText?: boolean;
   multiline?: boolean;
   showSpacing?: boolean;
+  collapsible?: boolean;
 }
 
 const WEIGHTS = [400, 500, 700];
@@ -24,12 +26,27 @@ const ALIGNS = [
   { value: "right", label: "R" },
 ];
 
-export function TypographyControls({ label, value, onChange, showText, multiline, showSpacing }: TypographyControlsProps) {
+export function TypographyControls({ label, value, onChange, showText, multiline, showSpacing, collapsible }: TypographyControlsProps) {
+  const [open, setOpen] = useState(false);
   const update = (patch: Partial<TypographyStyle>) => onChange({ ...value, ...patch });
+  const showBody = !collapsible || open;
 
   return (
     <div className="space-y-3 rounded-lg border border-dash-border bg-dash-surface p-3">
-      {label && <h4 className="text-xs font-semibold text-dash-text">{label}</h4>}
+      {label && (collapsible ? (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <span className="text-xs font-semibold text-dash-text">{label}</span>
+          <span className="text-xs text-dash-muted" aria-hidden="true">{open ? "\u25BC" : "\u25B6"}</span>
+        </button>
+      ) : (
+        <h4 className="text-xs font-semibold text-dash-text">{label}</h4>
+      ))}
+      {showBody && (<>
       {showText && (
         multiline ? (
           <Textarea
@@ -182,6 +199,7 @@ export function TypographyControls({ label, value, onChange, showText, multiline
           />
         </>
       )}
+      </>)}
     </div>
   );
 }

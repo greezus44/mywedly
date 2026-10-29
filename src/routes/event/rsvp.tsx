@@ -380,19 +380,14 @@ export function RsvpPage() {
           </div>
           <Input label="Page Title" value={rsvpContent.title ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, title: e.target.value }))} />
           <Input label="Page Title (Bahasa Melayu)" value={rsvpBm.title ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, title: e.target.value }))} placeholder="Auto-translate if empty" />
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">Title Typography</label>
-            <TypographyControls value={rsvpContent.titleTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, titleTypography: v }))} showText={false} />
-          </div>
+          <TypographyControls label="Title Typography" collapsible value={rsvpContent.titleTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, titleTypography: v }))} showText={false} />
           <Input label="Subtitle" value={rsvpContent.subtitle ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, subtitle: e.target.value }))} />
           <Input label="Subtitle (Bahasa Melayu)" value={rsvpBm.subtitle ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, subtitle: e.target.value }))} placeholder="Auto-translate if empty" />
+          <TypographyControls label="Subtitle Typography" collapsible value={rsvpContent.subtitleTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, subtitleTypography: v }))} showText={false} />
           <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">Subtitle Typography</label>
-            <TypographyControls value={rsvpContent.subtitleTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, subtitleTypography: v }))} showText={false} />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">Programme Title (English)</label>
             <TypographyControls
+              label="Programme Title (English)"
+              collapsible
               value={getScheduleHeadingTypography(rsvpContent.scheduleHeading, "Program")}
               onChange={(v) => setRsvpContent((p) => ({ ...p, scheduleHeading: v }))}
               showText
@@ -400,6 +395,7 @@ export function RsvpPage() {
             <Input label="Programme Title (Bahasa Melayu)" value={rsvpBm.scheduleHeading ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, scheduleHeading: e.target.value }))} placeholder="Aturcara" />
             <TypographyControls
               label="Programme Title (Malay) Typography"
+              collapsible
               value={getScheduleHeadingTypography(rsvpContent.scheduleHeadingTypographyBm, "")}
               onChange={(v) => setRsvpContent((p) => ({ ...p, scheduleHeadingTypographyBm: v }))}
               showText={false}
@@ -451,26 +447,14 @@ export function RsvpPage() {
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">Guest Name Typography</label>
-            <TypographyControls value={rsvpContent.guestNameTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, guestNameTypography: v }))} />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">Additional Information Heading</label>
-            <TypographyControls value={rsvpContent.additionalInfoHeading ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, additionalInfoHeading: v }))} />
-          </div>
+          <TypographyControls label="Guest Name Typography" collapsible value={rsvpContent.guestNameTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, guestNameTypography: v }))} />
+          <TypographyControls label="Additional Information Heading" collapsible value={rsvpContent.additionalInfoHeading ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, additionalInfoHeading: v }))} />
           <Textarea label="Additional Information Content" value={rsvpContent.additionalInfoBody ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, additionalInfoBody: e.target.value }))} rows={3} />
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">Additional Info Content Typography</label>
-            <TypographyControls value={rsvpContent.additionalInfoBodyTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, additionalInfoBodyTypography: v }))} showText={false} />
-          </div>
+          <TypographyControls label="Additional Info Content Typography" collapsible value={rsvpContent.additionalInfoBodyTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, additionalInfoBodyTypography: v }))} showText={false} />
           <div className="space-y-2 border-t border-dash-border pt-3">
             <label className="block text-xs font-semibold text-dash-text">Event Details Typography</label>
           </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">Event Name Typography</label>
-            <TypographyControls value={rsvpContent.eventNameTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, eventNameTypography: v }))} showText={false} />
-          </div>
+          <TypographyControls label="Event Name Typography" collapsible value={rsvpContent.eventNameTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, eventNameTypography: v }))} showText={false} />
           <div className="space-y-2">
             <label className="block text-xs font-medium text-dash-muted">Event Date Font Family</label>
             <FontSelect
@@ -480,33 +464,18 @@ export function RsvpPage() {
               placeholder="Use date's default font"
             />
           </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">Event Time Typography</label>
-            <TypographyControls value={rsvpContent.eventTimeTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, eventTimeTypography: v }))} showText={false} />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">Event Address Typography</label>
-            <TypographyControls value={rsvpContent.eventAddressTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, eventAddressTypography: v }))} showText={false} />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">Programme Item Typography</label>
-            <TypographyControls value={rsvpContent.programmeItemTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, programmeItemTypography: v }))} showText={false} />
-          </div>
+          <TypographyControls label="Event Time Typography" collapsible value={rsvpContent.eventTimeTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, eventTimeTypography: v }))} showText={false} />
+          <TypographyControls label="Event Address Typography" collapsible value={rsvpContent.eventAddressTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, eventAddressTypography: v }))} showText={false} />
+          <TypographyControls label="Programme Item Typography" collapsible value={rsvpContent.programmeItemTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, programmeItemTypography: v }))} showText={false} />
           <Input label="RSVP Deadline Prefix Text" value={rsvpContent.rsvpDeadlinePrefix ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, rsvpDeadlinePrefix: e.target.value }))} placeholder="e.g. Please RSVP before, Kindly respond before" />
           <Input label="Deadline Prefix (BM)" value={rsvpBm.rsvpDeadlinePrefix ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, rsvpDeadlinePrefix: e.target.value }))} placeholder="Auto-translate if empty" />
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">RSVP Deadline Typography</label>
-            <TypographyControls value={rsvpContent.rsvpDeadlineTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, rsvpDeadlineTypography: v }))} showText={false} />
-          </div>
+          <TypographyControls label="RSVP Deadline Typography" collapsible value={rsvpContent.rsvpDeadlineTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, rsvpDeadlineTypography: v }))} showText={false} />
           <div className="space-y-2 border-t border-dash-border pt-3">
             <label className="block text-xs font-semibold text-dash-text">Contact Information</label>
           </div>
           <Textarea label="Contact Message" value={rsvpContent.contactMessage ?? ""} onChange={(e) => setRsvpContent((p) => ({ ...p, contactMessage: e.target.value }))} rows={2} placeholder="e.g. Please contact Sarah at +673 123 4567 if you have any questions." />
           <Textarea label="Contact Message (BM)" value={rsvpBm.contactMessage ?? ""} onChange={(e) => setRsvpBm((p) => ({ ...p, contactMessage: e.target.value }))} rows={2} placeholder="Auto-translate if empty" />
-          <div className="space-y-2">
-            <label className="block text-xs font-medium text-dash-muted">Contact Message Typography</label>
-            <TypographyControls value={rsvpContent.contactMessageTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, contactMessageTypography: v }))} showText={false} />
-          </div>
+          <TypographyControls label="Contact Message Typography" collapsible value={rsvpContent.contactMessageTypography ?? {}} onChange={(v) => setRsvpContent((p) => ({ ...p, contactMessageTypography: v }))} showText={false} />
         </div>
         }
         preview={<RsvpPreview theme={event.draft_theme ?? event.theme} content={{ ...rsvpContent as unknown as Record<string, unknown>, rsvpDeadline: deadline ?? undefined }} contentBm={rsvpBm as Record<string, unknown>} eventDate={event.draft_event_date ?? event.event_date} eventTime={event.draft_event_time ?? event.event_time} venue={event.draft_venue ?? event.venue} address={event.draft_address ?? event.address} eventName={event.draft_name ?? event.name ?? undefined} subEvents={sortedSubEvents.map((se) => ({ name: se.name, nameBm: se.name_bm, date: se.date, time: se.time ?? se.start_time, venue: se.venue, address: se.address }))} schedule={(schedule ?? []).map((s) => ({ title: s.title, titleBm: s.title_bm, start_time: s.start_time, end_time: s.end_time, sub_event_id: s.sub_event_id }))} />}
