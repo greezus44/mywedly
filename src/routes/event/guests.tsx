@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, type UserEvent, type EventGuest, type SubEvent, type EventRsvp, type GuestGroup, type GroupEventInvite } from "../../lib/supabase";
+import { supabase, type UserEvent, type EventGuest, type SubEvent, type EventRsvp, type GuestGroup, type GroupEventInvite, type OpenRsvpLink } from "../../lib/supabase";
 import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
 import { GuestForm, type GuestFormValues } from "./guest-form";
@@ -12,12 +12,12 @@ interface EventContextValue { event: UserEvent; eventId: string; }
 
 type GuestStatus = "not_invited" | "pending" | "attending" | "declined";
 
-function GuestPhoneNote({ guest }: { guest: EventGuest }) {
+function GuestPhoneNote({ guest, phoneEnabledLinkIds }: { guest: EventGuest; phoneEnabledLinkIds: Set<string> }) {
   if (!guest.open_rsvp_link_id) return null;
   const phone = guest.phone?.trim();
   if (phone) return <span className="block text-xs text-dash-muted">{phone}</span>;
-  if (guest.rsvp_status !== "attending") return null;
-  return <span className="block text-xs italic text-dash-muted/70">Phone not added</span>;
+  if (!phoneEnabledLinkIds.has(guest.open_rsvp_link_id) || guest.rsvp_status !== "attending") return null;
+  return <span className="block text-xs text-dash-muted">-</span>;
 }
 
 function StatusIcon({ status, plusOneLabel }: { status: GuestStatus; plusOneLabel?: string | null }) {
@@ -52,6 +52,7 @@ function MobileGuestSection({
   onEdit,
   onDelete,
   embedded,
+  phoneEnabledLinkIds,
 }: {
   status: GuestStatus;
   label: string;
@@ -65,6 +66,7 @@ function MobileGuestSection({
   plusOneLabelFor: (guestId: string, tabKey: string) => string | null;
   onEdit: (g: EventGuest) => void;
   onDelete: (g: EventGuest) => void;
+  phoneEnabledLinkIds: Set<string>;
   embedded?: boolean;
 }) {
   return (
@@ -81,7 +83,7 @@ function MobileGuestSection({
                 {(mobileShowUsername ? g.username : g.name) ?? "\u2014"}
                 {g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}
               </span>
-              <GuestPhoneNote guest={g} />
+              <GuestPhoneNote guest={g} phoneEnabledLinkIds={phoneEnabledLinkIds} />
             </div>
             <span className="shrink-0"><StatusIcon status={statusFor(g.id, activeEventKey)} plusOneLabel={plusOneLabelFor(g.id, activeEventKey)} /></span>
             <div className="flex shrink-0 gap-2">
@@ -151,6 +153,12 @@ export function GuestsPage() {
     queryKey: ["group-event-invites", eventId],
     queryFn: async () => { const { data, error } = await supabase.from("group_event_invites").select("*").eq("event_id", eventId); if (error) throw error; return (data ?? []) as GroupEventInvite[]; },
   });
+
+  const { data: openLinks } = useQuery({
+    queryKey: ["open-rsvp-links", eventId],
+    queryFn: async () => { const { data, error } = await supabase.from("open_rsvp_links").select("*").eq("event_id", eventId); if (error) throw error; return (data ?? []) as OpenRsvpLink[]; },
+  });
+  const phoneEnabledLinkIds = new Set((openLinks ?? []).filter((l) => (l.page_config as { phoneEnabled?: boolean } | null)?.phoneEnabled).map((l) => l.id));
 
   const { data: allRsvps } = useQuery({
     queryKey: ["event-rsvps-full", eventId],
@@ -577,7 +585,7 @@ export function GuestsPage() {
                 }
                 if (blocks.length === 0) return <p className="text-sm text-dash-muted py-4 text-center">No guests found.</p>;
                 return blocks.map((blk, bi) => (
-                  <MobileGuestSection key={`mblk-${bi}`} status={blk.status} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} selectedGuestIds={selectedGuestIds} toggleGuestSelection={toggleGuestSelection} mobileShowUsername={mobileShowUsername} activeEventKey={mobileActiveEvent} statusFor={statusFor} plusOneLabelFor={plusOneLabelFor} onEdit={(g) => { setEditGuest(g); setShowForm(true); }} onDelete={(g) => setGuestToDelete(g)} />
+                  <MobileGuestSection key={`mblk-${bi}`} status={blk.status} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} selectedGuestIds={selectedGuestIds} toggleGuestSelection={toggleGuestSelection} mobileShowUsername={mobileShowUsername} activeEventKey={mobileActiveEvent} statusFor={statusFor} plusOneLabelFor={plusOneLabelFor} phoneEnabledLinkIds={phoneEnabledLinkIds} onEdit={(g) => { setEditGuest(g); setShowForm(true); }} onDelete={(g) => setGuestToDelete(g)} />
                 ));
               })()
             ) : (
@@ -599,7 +607,7 @@ export function GuestsPage() {
                         }
                         if (blocks.length === 0) return <p className="px-4 py-3 text-sm text-dash-muted">No guests.</p>;
                         return blocks.map((blk, bi) => (
-                          <MobileGuestSection key={`mblk-${section.key}-${bi}`} status={blk.status} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} selectedGuestIds={selectedGuestIds} toggleGuestSelection={toggleGuestSelection} mobileShowUsername={mobileShowUsername} activeEventKey={mobileActiveEvent} statusFor={statusFor} plusOneLabelFor={plusOneLabelFor} onEdit={(g) => { setEditGuest(g); setShowForm(true); }} onDelete={(g) => setGuestToDelete(g)} embedded />
+                          <MobileGuestSection key={`mblk-${section.key}-${bi}`} status={blk.status} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} selectedGuestIds={selectedGuestIds} toggleGuestSelection={toggleGuestSelection} mobileShowUsername={mobileShowUsername} activeEventKey={mobileActiveEvent} statusFor={statusFor} plusOneLabelFor={plusOneLabelFor} phoneEnabledLinkIds={phoneEnabledLinkIds} onEdit={(g) => { setEditGuest(g); setShowForm(true); }} onDelete={(g) => setGuestToDelete(g)} embedded />
                         ));
                       })()}
                     </div>
@@ -661,7 +669,7 @@ export function GuestsPage() {
                       blk.guests.map((g) => (
                         <tr key={g.id}>
                           <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
-                          <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}<GuestPhoneNote guest={g} /></td>
+                          <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}<GuestPhoneNote guest={g} phoneEnabledLinkIds={phoneEnabledLinkIds} /></td>
                           <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
                           <td className="px-4 py-2 text-sm text-dash-muted">{"\u2014"}</td>
                           <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} plusOneLabel={plusOneLabelFor(g.id, "__main__")} /></td>
@@ -704,7 +712,7 @@ export function GuestsPage() {
                         rows.push(
                           <tr key={g.id}>
                             <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
-                            <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}<GuestPhoneNote guest={g} /></td>
+                            <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}<GuestPhoneNote guest={g} phoneEnabledLinkIds={phoneEnabledLinkIds} /></td>
                             <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
                             <td className="px-4 py-2 text-sm text-dash-muted">{groupName(g.group_id) ?? "\u2014"}</td>
                             {eventColumns.length > 0 ? (
