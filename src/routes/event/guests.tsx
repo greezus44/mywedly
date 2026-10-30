@@ -510,6 +510,8 @@ export function GuestsPage() {
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
   if (isError) return <ErrorState title="Failed to load guests" message={error instanceof Error ? error.message : "Unknown error"} />;
 
+  const invitedKeysForTargetGroup = inviteTargetGroup ? (groupInvitesByGroup.get(inviteTargetGroup) ?? new Set<string>()) : new Set<string>();
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -773,7 +775,7 @@ export function GuestsPage() {
                           {eventColumns.map((col) => {
                             const isInvited = invitedKeys.has(col.key);
                             return (
-                              <span key={col.key} className={`rounded px-1.5 py-0.5 text-xs ${isInvited ? "bg-green-100 text-green-700" : "bg-dash-surface text-dash-muted"}`}>
+                              <span key={col.key} className={`rounded px-1.5 py-0.5 text-xs ${isInvited ? "bg-green-100 font-medium text-green-800" : "bg-dash-surface text-dash-muted"}`}>
                                 {col.label}
                               </span>
                             );
@@ -783,8 +785,8 @@ export function GuestsPage() {
                       {inviteTargetGroup === gr.id && (
                         <div className="mt-3 flex items-center gap-2 border-t border-dash-border pt-3">
                           <select value={inviteSubEventId} onChange={(e) => setInviteSubEventId(e.target.value)} className="flex-1 rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text">
-                            <option value="">Main Event</option>
-                            {sortedSubEvents.map((se) => <option key={se.id} value={se.id}>{se.name}</option>)}
+                            <option value="">{`Main Event${invitedKeysForTargetGroup.has("__main__") ? " (invited)" : ""}`}</option>
+                            {sortedSubEvents.map((se) => <option key={se.id} value={se.id}>{`${se.name}${invitedKeysForTargetGroup.has(se.id) ? " (invited)" : ""}`}</option>)}
                           </select>
                           <Button size="sm" onClick={() => groupInviteMutation.mutate({ groupId: gr.id, subEventId: inviteSubEventId || null })} loading={groupInviteMutation.isPending}>Invite Group</Button>
                           <Button size="sm" variant="secondary" onClick={() => groupRemoveInviteMutation.mutate({ groupId: gr.id, subEventId: inviteSubEventId || null })} loading={groupRemoveInviteMutation.isPending}>Remove Group</Button>
