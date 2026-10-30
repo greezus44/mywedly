@@ -52,6 +52,7 @@ interface PageConfig {
   phoneExample?: string;
   phoneExampleBm?: string;
   phoneExampleColor?: string;
+  phoneExampleTypography?: TypographyStyle;
   plusOneYesLabel?: string;
   plusOneYesLabelBm?: string;
   plusOneNoLabel?: string;
@@ -706,6 +707,7 @@ export function SharingPage() {
               <LabeledInput label="Example text (EN)" value={editConfig.phoneExample ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneExample: v }))} />
               <LabeledInput label="Example text (BM)" value={editConfig.phoneExampleBm ?? ""} onChange={(v) => setEditConfig((p) => ({ ...p, phoneExampleBm: v }))} />
               <LabeledColor label="Example text colour" value={editConfig.phoneExampleColor} onChange={(v) => setEditConfig((p) => ({ ...p, phoneExampleColor: v }))} />
+              <TypographyControls label="Example text typography (EN and BM)" value={editConfig.phoneExampleTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, phoneExampleTypography: v }))} showText={false} />
             </div>
             <CollapsibleGroup title="Phone question typography">
               <TypographyControls label="Phone question typography" value={editConfig.phoneQuestionTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, phoneQuestionTypography: v }))} showText={false} />

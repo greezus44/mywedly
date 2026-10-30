@@ -67,6 +67,7 @@ interface PageConfig {
   phoneExample?: string;
   phoneExampleBm?: string;
   phoneExampleColor?: string;
+  phoneExampleTypography?: TypographyStyle;
   headingTypography?: TypographyStyle;
   introTypography?: TypographyStyle;
   eventTitleTypography?: TypographyStyle;
@@ -392,6 +393,7 @@ export default function GuestJoin() {
   const selectedAnswerStyle = getTypographyStyle(pageConfig.selectedAnswerTypography);
   const phoneQuestionStyle = getTypographyStyle(pageConfig.phoneQuestionTypography);
   const phoneHelperStyle = getTypographyStyle(pageConfig.phoneHelperTypography);
+  const phoneExampleStyle = getTypographyStyle(pageConfig.phoneExampleTypography);
   const submitStyle = getTypographyStyle(pageConfig.submitTypography);
 
   const renderDateColumn = (date: string | null | undefined) => {
@@ -549,7 +551,7 @@ export default function GuestJoin() {
                   placeholder={language === "bm" ? (pageConfig.phoneExampleBm?.trim() || DEFAULT_PHONE_EXAMPLE) : (pageConfig.phoneExample?.trim() || DEFAULT_PHONE_EXAMPLE)}
                   autoComplete="tel"
                   maxLength={30}
-                  style={{ textAlign: "center", fontFamily: "var(--event-font-body)", "--phone-example-color": pageConfig.phoneExampleColor || undefined, "--phone-example-opacity": pageConfig.phoneExampleColor ? 1 : 0.6 } as React.CSSProperties}
+                  style={{ textAlign: "center", fontFamily: "var(--event-font-body)", "--phone-example-color": pageConfig.phoneExampleColor || undefined, "--phone-example-opacity": pageConfig.phoneExampleColor ? 1 : 0.6, "--phone-example-size": phoneExampleStyle.fontSize, "--phone-example-weight": phoneExampleStyle.fontWeight, "--phone-example-style": phoneExampleStyle.fontStyle, "--phone-example-family": phoneExampleStyle.fontFamily, "--phone-example-spacing": phoneExampleStyle.letterSpacing } as React.CSSProperties}
                   className="event-input rsvp-phone-input"
                 />
                 <p className="mt-1 text-center text-xs" style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)", ...phoneHelperStyle }}>{language === "bm" ? (pageConfig.phoneHelperBm?.trim() || pageConfig.phoneHelper?.trim() || "Untuk pengaturan tempat duduk") : (pageConfig.phoneHelper?.trim() || "For seating arrangements")}</p>
