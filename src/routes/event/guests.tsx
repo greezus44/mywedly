@@ -473,12 +473,13 @@ export function GuestsPage() {
   };
 
   const exportGuestCsv = (guestList: EventGuest[], filename: string) => {
-    const headers = ["Name", "Username", "Group"];
+    const headers = ["Name", "Username", "Phone", "Group"];
     for (const col of eventColumns) headers.push(col.label);
     headers.push("Plus-one");
     const rows: string[][] = [];
     for (const g of guestList) {
-      const row = [g.name ?? "", g.username ?? "", groupName(g.group_id) ?? "Ungrouped"];
+      const phone = g.open_rsvp_link_id ? (g.phone?.trim() ?? "") : "";
+      const row = [g.name ?? "", g.username ?? "", phone, groupName(g.group_id) ?? "Ungrouped"];
       for (const col of eventColumns) {
         const s = statusFor(g.id, col.key);
         row.push(s === "attending" ? "Attending" : s === "declined" ? "Declined" : s === "pending" ? "Pending" : "Not invited");
