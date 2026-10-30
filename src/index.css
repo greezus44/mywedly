@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --dash-bg:#f8fafc;--dash-surface:#ffffff;--dash-border:#e2e8f0;--dash-text:#0f172a;--dash-muted:#64748b;
+  --dash-bg:#f8fafc;--dash-surface:#ffffff;--dash-field:#ffffff;--dash-border:#e2e8f0;--dash-text:#0f172a;--dash-muted:#64748b;
   --dash-primary:#0ea5e9;--dash-primary-hover:#0284c7;--dash-primary-fg:#ffffff;
   --dash-danger:#ef4444;--dash-danger-hover:#dc2626;--dash-danger-fg:#ffffff;
   --dash-header-bg:#f8ecd5;--dash-accent:#d2ae4b;--dash-accent-hover:#c19e3a;--dash-accent-fg:#030712;
@@ -18,7 +18,7 @@
 }
 
 .dash-dark {
-  --dash-bg:#18181b;--dash-surface:#27272a;--dash-border:#3f3f46;--dash-text:#e4e4e7;--dash-muted:#a1a1aa;
+  --dash-bg:#18181b;--dash-surface:#27272a;--dash-field:#3f3f46;--dash-border:#3f3f46;--dash-text:#e4e4e7;--dash-muted:#a1a1aa;
   --dash-primary:#a1a1aa;--dash-primary-hover:#71717a;--dash-primary-fg:#18181b;
   --dash-danger:#f87171;--dash-danger-hover:#ef4444;--dash-danger-fg:#18181b;
   --dash-header-bg:#27272a;--dash-accent:#d2ae4b;--dash-accent-hover:#c19e3a;--dash-accent-fg:#18181b;

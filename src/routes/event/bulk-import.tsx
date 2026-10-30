@@ -170,11 +170,11 @@ export function BulkImportModal({ open, onClose, onImport, existingUsernames, gr
                 <select
                   value={selectedGroupId}
                   onChange={(e) => setSelectedGroupId(e.target.value)}
-                  className="w-full rounded-lg border border-dash-border bg-white px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+                  className="w-full rounded-lg border border-dash-border bg-[var(--dash-field)] px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
                 >
-                  <option value="">No group</option>
+                  <option value="" className="bg-[var(--dash-field)] text-dash-text">No group</option>
                   {groups.map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
+                    <option key={g.id} value={g.id} className="bg-[var(--dash-field)] text-dash-text">{g.name}</option>
                   ))}
                 </select>
               </div>
@@ -217,7 +217,7 @@ export function BulkImportModal({ open, onClose, onImport, existingUsernames, gr
                           type="text"
                           value={r.username}
                           onChange={(e) => updateUsername(r.id, e.target.value)}
-                          className="w-full rounded border border-dash-border bg-white px-2 py-1 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+                          className="w-full rounded border border-dash-border bg-[var(--dash-field)] px-2 py-1 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
                         />
                       </td>
                       <td className="px-3 py-2 text-xs">
