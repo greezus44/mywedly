@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../../lib/supabase";
+import { buttonColorsToStyle, buttonColorsToHoverStyle, type ButtonColors } from "../../components/ui/ButtonColourEditor";
+import { getTypographyStyle, type TypographyStyle } from "../../lib/typography";
 
 interface PhoneSettings {
   registered: boolean;
@@ -17,12 +19,14 @@ interface GuestPhoneSettingsProps {
   guestId: string;
   eventId: string;
   isBm: boolean;
+  buttonColors?: ButtonColors;
+  buttonTypography?: TypographyStyle;
 }
 
 export const guestPhoneSettingsQueryKey = (guestId: string, eventId: string) =>
   ["guest-phone-settings", guestId, eventId] as const;
 
-export default function GuestPhoneSettings({ guestId, eventId, isBm }: GuestPhoneSettingsProps) {
+export default function GuestPhoneSettings({ guestId, eventId, isBm, buttonColors, buttonTypography }: GuestPhoneSettingsProps) {
   const queryClient = useQueryClient();
 
   const { data: settings } = useQuery({
@@ -77,7 +81,7 @@ export default function GuestPhoneSettings({ guestId, eventId, isBm }: GuestPhon
           setDraft(e.target.value);
           saveMutation.reset();
         }}
-        className="mt-3 w-full rounded-md border px-3 py-2 text-sm"
+        className="mt-3 w-full rounded-md border px-3 py-2 text-center text-sm"
         style={{ borderColor: "var(--event-border)", color: "var(--event-text)", background: "transparent" }}
       />
       {errorMessage && <p role="alert" className="mt-2 text-sm" style={{ color: "#b91c1c" }}>{errorMessage}</p>}
@@ -86,7 +90,10 @@ export default function GuestPhoneSettings({ guestId, eventId, isBm }: GuestPhon
           type="button"
           onClick={() => saveMutation.mutate(trimmedDraft || null)}
           disabled={isUnchanged || saveMutation.isPending}
-          className="event-btn-primary rounded-md px-4 py-2 text-sm transition-opacity disabled:opacity-50"
+          className="event-btn-primary transition-opacity disabled:opacity-50"
+          style={{ ...buttonColorsToStyle(buttonColors), ...getTypographyStyle(buttonTypography) }}
+          onMouseEnter={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(buttonColors), ...getTypographyStyle(buttonTypography), ...buttonColorsToHoverStyle(buttonColors) })}
+          onMouseLeave={(e) => Object.assign(e.currentTarget.style, { ...buttonColorsToStyle(buttonColors), ...getTypographyStyle(buttonTypography) })}
         >
           {saveMutation.isPending ? (isBm ? "Menyimpan..." : "Saving...") : (isBm ? "Simpan" : "Save")}
         </button>

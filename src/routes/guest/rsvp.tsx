@@ -121,6 +121,29 @@ export default function GuestRsvp() {
     return auto ?? en;
   };
 
+  const { data: plusOneCopy } = useQuery({
+    queryKey: ["guest-plus-one-copy", guest?.id, event.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("guest_plus_one_copy", { p_guest_id: guest!.id, p_event_id: event.id });
+      if (error) throw error;
+      if (!data || typeof data !== "object") throw new Error("Unexpected plus-one copy response");
+      return data as unknown as {
+        question?: string | null;
+        questionBm?: string | null;
+        yesLabel?: string | null;
+        yesLabelBm?: string | null;
+        noLabel?: string | null;
+        noLabelBm?: string | null;
+      };
+    },
+    enabled: !!guest,
+  });
+  const pickCopy = (en: string | null | undefined, bm: string | null | undefined, fallback: string) =>
+    (language === "bm" ? bm : en)?.trim() || fallback;
+  const plusOneQuestionText = pickCopy(plusOneCopy?.question, plusOneCopy?.questionBm, tr("Bringing a +1?"));
+  const plusOneYesText = pickCopy(plusOneCopy?.yesLabel, plusOneCopy?.yesLabelBm, tr("Yes"));
+  const plusOneNoText = pickCopy(plusOneCopy?.noLabel, plusOneCopy?.noLabelBm, tr("No"));
+
   const { data: schedule } = useQuery({
     queryKey: ["event-schedule-public", event.id],
     queryFn: async () => {
@@ -388,7 +411,7 @@ export default function GuestRsvp() {
         )}
         {isAttending && guest?.allow_plus_one && (
           <div className="mt-4">
-            <p className="mb-2 text-center text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{tr("Bringing a +1?")}</p>
+            <p className="mb-2 text-center text-sm" style={{ color: "var(--event-text)", fontFamily: "var(--event-font-body)" }}>{plusOneQuestionText}</p>
             <div className="flex gap-2 sm:gap-3">
               <button
                 type="button"
@@ -398,7 +421,7 @@ export default function GuestRsvp() {
                 onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: current.plus_ones > 0 ? 1 : 0.6, ...attendingSelectedStyle(current.plus_ones > 0), ...attendingHoverStyle(current.plus_ones > 0), ...attendingButtonFontStyle })}
                 onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: current.plus_ones > 0 ? 1 : 0.6, ...attendingSelectedStyle(current.plus_ones > 0), ...attendingButtonFontStyle })}
               >
-                {tr("Yes")}
+                {plusOneYesText}
               </button>
               <button
                 type="button"
@@ -408,7 +431,7 @@ export default function GuestRsvp() {
                 onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: current.plus_ones === 0 ? 1 : 0.6, ...declinedSelectedStyle(current.plus_ones === 0), ...declinedHoverStyle(current.plus_ones === 0), ...declinedButtonFontStyle })}
                 onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, opacity: current.plus_ones === 0 ? 1 : 0.6, ...declinedSelectedStyle(current.plus_ones === 0), ...declinedButtonFontStyle })}
               >
-                {tr("No")}
+                {plusOneNoText}
               </button>
             </div>
           </div>
@@ -476,7 +499,15 @@ export default function GuestRsvp() {
           renderEventBlock(language === "bm" ? (event.name_bm?.trim() || (event.name ?? "")) : (event.name ?? ""), event.event_date, event.event_time, event.venue, event.address, null)
         )}
 
-        {guest && <GuestPhoneSettings guestId={guest.id} eventId={event.id} isBm={language === "bm"} />}
+        {guest && (
+          <GuestPhoneSettings
+            guestId={guest.id}
+            eventId={event.id}
+            isBm={language === "bm"}
+            buttonColors={content.rsvpButtonColors}
+            buttonTypography={content.rsvpButtonTypography}
+          />
+        )}
 
         {contactMessageText && (
           <div className="mt-8 sm:mt-10 text-center">
