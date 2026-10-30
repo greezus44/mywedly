@@ -21,11 +21,20 @@ interface EventContextValue { event: UserEvent; eventId: string; }
 
 type GuestStatus = "not_invited" | "pending" | "attending" | "declined";
 
-function StatusIcon({ status }: { status: GuestStatus }) {
-  if (status === "attending") return <span className="text-green-600 font-bold text-base" title="Attending">&#10003;</span>;
-  if (status === "declined") return <span className="text-red-500 font-bold text-base" title="Declined">&#10007;</span>;
-  if (status === "pending") return <span className="text-dash-muted font-bold text-base" title="Pending">=</span>;
-  return <span className="text-dash-muted text-base" title="Not invited">&mdash;</span>;
+function StatusIcon({ status, plusOneLabel }: { status: GuestStatus; plusOneLabel?: string | null }) {
+  let icon: ReactNode;
+  if (status === "attending") icon = <span className="text-green-600 font-bold text-base" title="Attending">&#10003;</span>;
+  else if (status === "declined") icon = <span className="text-red-500 font-bold text-base" title="Declined">&#10007;</span>;
+  else if (status === "pending") icon = <span className="text-dash-muted font-bold text-base" title="Pending">=</span>;
+  else icon = <span className="text-dash-muted text-base" title="Not invited">&mdash;</span>;
+  if (!plusOneLabel) return icon;
+  const isPlusOne = plusOneLabel === "+1";
+  return (
+    <span className="inline-flex items-center gap-1">
+      {icon}
+      <span className={`text-xs font-semibold ${isPlusOne ? "text-green-600" : "text-dash-muted"}`} title={isPlusOne ? "Bringing +1" : "No +1"}>{plusOneLabel}</span>
+    </span>
+  );
 }
 
 function MobileRsvpSection({
@@ -34,6 +43,7 @@ function MobileRsvpSection({
   guests,
   mobileActiveEvent,
   statusFor,
+  plusOneLabelFor,
   onEdit,
   embedded,
 }: {
@@ -42,6 +52,7 @@ function MobileRsvpSection({
   guests: EventGuest[];
   mobileActiveEvent: string;
   statusFor: (guestId: string, eventKey: string) => GuestStatus;
+  plusOneLabelFor: (guestId: string, eventKey: string) => string | null;
   onEdit: (g: EventGuest) => void;
   embedded?: boolean;
 }) {
@@ -54,7 +65,7 @@ function MobileRsvpSection({
         {guests.map((g) => (
           <div key={g.id} className="flex items-center gap-2 px-4 py-2.5">
             <span className="min-w-0 flex-1 truncate text-sm text-dash-text">{g.name}</span>
-            <span className="shrink-0"><StatusIcon status={statusFor(g.id, mobileActiveEvent)} /></span>
+            <span className="shrink-0"><StatusIcon status={statusFor(g.id, mobileActiveEvent)} plusOneLabel={plusOneLabelFor(g.id, mobileActiveEvent)} /></span>
             <button onClick={() => onEdit(g)} className="shrink-0 text-xs text-dash-primary hover:underline">Change</button>
           </div>
         ))}
@@ -244,11 +255,15 @@ export function RsvpPage() {
   }
 
   const rsvpStatusByGuest = new Map<string, Map<string, string>>();
+  const rsvpPlusOnesByGuest = new Map<string, Map<string, number>>();
   for (const r of (rsvps ?? [])) {
+    const key = r.sub_event_id ?? "__main__";
     let inner = rsvpStatusByGuest.get(r.guest_id);
     if (!inner) { inner = new Map(); rsvpStatusByGuest.set(r.guest_id, inner); }
-    const key = r.sub_event_id ?? "__main__";
     inner.set(key, r.status);
+    let plusInner = rsvpPlusOnesByGuest.get(r.guest_id);
+    if (!plusInner) { plusInner = new Map(); rsvpPlusOnesByGuest.set(r.guest_id, plusInner); }
+    plusInner.set(key, r.plus_ones);
   }
 
   const statusFor = (guestId: string, eventKey: string): GuestStatus => {
@@ -267,6 +282,15 @@ export function RsvpPage() {
     if (status === "attending") return "attending";
     if (status === "declined") return "declined";
     return "pending";
+  };
+
+  const plusOneLabelFor = (guestId: string, eventKey: string): string | null => {
+    const g = guests?.find((gg) => gg.id === guestId);
+    if (!g || !g.allow_plus_one) return null;
+    const status = statusFor(guestId, eventKey);
+    if (status !== "attending" && status !== "declined") return null;
+    const plusOnes = eventKey === "__main__" ? g.plus_ones : (rsvpPlusOnesByGuest.get(guestId)?.get(eventKey) ?? 0);
+    return plusOnes > 0 ? "+1" : "0";
   };
 
   const tabLabel = (se: SubEvent) => se.tab_name?.trim() || (se.name ?? "Untitled");
@@ -501,6 +525,7 @@ export function RsvpPage() {
           <span className="inline-flex items-center gap-1"><span className="text-red-500 font-bold">&#10007;</span> Declined</span>
           <span className="inline-flex items-center gap-1"><span className="font-bold">=</span> Pending</span>
           <span className="inline-flex items-center gap-1"><span>&mdash;</span> Not invited</span>
+          <span className="inline-flex items-center gap-1"><span className="text-green-600 font-semibold">+1</span>/<span className="text-dash-muted font-semibold">0</span> Plus-one</span>
         </div>
         {/* Mobile-only: event selector dropdown */}
         <select value={mobileActiveEvent} onChange={(e) => setMobileActiveEvent(e.target.value)} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text sm:hidden">
@@ -521,7 +546,7 @@ export function RsvpPage() {
               }
               if (blocks.length === 0) return <p className="py-4 text-center text-sm text-dash-muted">No guests found.</p>;
               return blocks.map((blk, bi) => (
-                <MobileRsvpSection key={`mblk-${bi}`} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} mobileActiveEvent={mobileActiveEvent} statusFor={statusFor} onEdit={(g) => { const drafts: Record<string,string> = {}; if (eventColumns.length > 0) { for (const col of eventColumns) { const s = statusFor(g.id, col.key); drafts[col.key] = s === "not_invited" ? "not_invited" : s; } } else { drafts["__main__"] = g.rsvp_status ?? "pending"; } setStatusDrafts(drafts); setStatusEditGuest(g); }} />
+                <MobileRsvpSection key={`mblk-${bi}`} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} mobileActiveEvent={mobileActiveEvent} statusFor={statusFor} plusOneLabelFor={plusOneLabelFor} onEdit={(g) => { const drafts: Record<string,string> = {}; if (eventColumns.length > 0) { for (const col of eventColumns) { const s = statusFor(g.id, col.key); drafts[col.key] = s === "not_invited" ? "not_invited" : s; } } else { drafts["__main__"] = g.rsvp_status ?? "pending"; } setStatusDrafts(drafts); setStatusEditGuest(g); }} />
               ));
             })()
           ) : (
@@ -543,7 +568,7 @@ export function RsvpPage() {
                       }
                       if (blocks.length === 0) return <p className="px-4 py-3 text-sm text-dash-muted">No guests.</p>;
                       return blocks.map((blk, bi) => (
-                        <MobileRsvpSection key={`mblk-${section.key}-${bi}`} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} mobileActiveEvent={mobileActiveEvent} statusFor={statusFor} onEdit={(g) => { const drafts: Record<string,string> = {}; if (eventColumns.length > 0) { for (const col of eventColumns) { const s = statusFor(g.id, col.key); drafts[col.key] = s === "not_invited" ? "not_invited" : s; } } else { drafts["__main__"] = g.rsvp_status ?? "pending"; } setStatusDrafts(drafts); setStatusEditGuest(g); }} embedded />
+                        <MobileRsvpSection key={`mblk-${section.key}-${bi}`} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} mobileActiveEvent={mobileActiveEvent} statusFor={statusFor} plusOneLabelFor={plusOneLabelFor} onEdit={(g) => { const drafts: Record<string,string> = {}; if (eventColumns.length > 0) { for (const col of eventColumns) { const s = statusFor(g.id, col.key); drafts[col.key] = s === "not_invited" ? "not_invited" : s; } } else { drafts["__main__"] = g.rsvp_status ?? "pending"; } setStatusDrafts(drafts); setStatusEditGuest(g); }} embedded />
                       ));
                     })()}
                   </div>
@@ -602,10 +627,10 @@ export function RsvpPage() {
                           <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
                           {eventColumns.length > 0 ? (
                             eventColumns.map((col) => (
-                              <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
+                              <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} plusOneLabel={plusOneLabelFor(g.id, col.key)} /></td>
                             ))
                           ) : (
-                            <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
+                            <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} plusOneLabel={plusOneLabelFor(g.id, "__main__")} /></td>
                           )}
                           <td className="px-4 py-2 text-right">
                             <button
@@ -662,10 +687,10 @@ export function RsvpPage() {
                           <td className="px-4 py-2 text-sm text-dash-text">{g.name}</td>
                           {eventColumns.length > 0 ? (
                             eventColumns.map((col) => (
-                              <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} /></td>
+                              <td key={col.key} className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, col.key)} plusOneLabel={plusOneLabelFor(g.id, col.key)} /></td>
                             ))
                           ) : (
-                            <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} /></td>
+                            <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} plusOneLabel={plusOneLabelFor(g.id, "__main__")} /></td>
                           )}
                           <td className="px-4 py-2 text-right">
                             <button
