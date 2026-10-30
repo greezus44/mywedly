@@ -84,6 +84,7 @@ interface PageConfig {
   phoneHelperTypography?: TypographyStyle;
   plusOneYesTypography?: TypographyStyle;
   plusOneNoTypography?: TypographyStyle;
+  selectedAnswerTypography?: TypographyStyle;
   submitTypography?: TypographyStyle;
   logoUrl?: string;
   logoSize?: number;
@@ -360,11 +361,11 @@ export default function GuestJoin() {
     ? (pageConfig.scheduleHeadingBm?.trim() || "Aturcara")
     : (pageConfig.scheduleHeading?.trim() || "Program");
   const nameWeight = pageConfig.nameWeight ?? 600;
-  const attendingWeight = pageConfig.attendingWeight ?? 600;
-  const decliningWeight = pageConfig.decliningWeight ?? 600;
+  const attendingWeight = pageConfig.attendingWeight ?? 700;
+  const decliningWeight = pageConfig.decliningWeight ?? 700;
   const submitWeight = pageConfig.submitWeight ?? 600;
-  const plusOneYesWeight = pageConfig.plusOneYesWeight ?? 600;
-  const plusOneNoWeight = pageConfig.plusOneNoWeight ?? 600;
+  const plusOneYesWeight = pageConfig.plusOneYesWeight ?? 700;
+  const plusOneNoWeight = pageConfig.plusOneNoWeight ?? 700;
   const nameColor = pageConfig.nameColor || "var(--event-text)";
   const attendingTextColor = pageConfig.attendingTextColor || undefined;
   const decliningTextColor = pageConfig.decliningTextColor || undefined;
@@ -388,6 +389,7 @@ export default function GuestJoin() {
   const plusOneQuestionStyle = getTypographyStyle(pageConfig.plusOneQuestionTypography);
   const plusOneYesStyle = getTypographyStyle(pageConfig.plusOneYesTypography);
   const plusOneNoStyle = getTypographyStyle(pageConfig.plusOneNoTypography);
+  const selectedAnswerStyle = getTypographyStyle(pageConfig.selectedAnswerTypography);
   const phoneQuestionStyle = getTypographyStyle(pageConfig.phoneQuestionTypography);
   const phoneHelperStyle = getTypographyStyle(pageConfig.phoneHelperTypography);
   const submitStyle = getTypographyStyle(pageConfig.submitTypography);
@@ -493,7 +495,7 @@ export default function GuestJoin() {
                   onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...attendingBtnStyle(status === "attending"), ...attendingBtnHover(status === "attending") })}
                   onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...attendingBtnStyle(status === "attending") })}
                 >
-                  <span style={{ fontWeight: status === "attending" ? attendingWeight : 700, color: attendingTextColor, ...attendingStyle }}>{attendingLabel}</span>
+                  <span style={{ fontWeight: attendingWeight, color: attendingTextColor, ...attendingStyle, ...(status === "attending" ? selectedAnswerStyle : {}) }}>{attendingLabel}</span>
                 </button>
                 <button
                   type="button"
@@ -503,7 +505,7 @@ export default function GuestJoin() {
                   onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...declinedBtnStyle(status === "declined"), ...declinedBtnHover(status === "declined") })}
                   onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...declinedBtnStyle(status === "declined") })}
                 >
-                  <span style={{ fontWeight: status === "declined" ? decliningWeight : 700, color: decliningTextColor, ...declinedStyle }}>{decliningLabel}</span>
+                  <span style={{ fontWeight: decliningWeight, color: decliningTextColor, ...declinedStyle, ...(status === "declined" ? selectedAnswerStyle : {}) }}>{decliningLabel}</span>
                 </button>
               </div>
             </div>
@@ -520,7 +522,7 @@ export default function GuestJoin() {
                     onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...plusOneYesBtnStyle(bringingPlusOne === "yes"), ...plusOneYesBtnHover(bringingPlusOne === "yes") })}
                     onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...plusOneYesBtnStyle(bringingPlusOne === "yes") })}
                   >
-                    <span style={{ fontWeight: bringingPlusOne === "yes" ? plusOneYesWeight : 700, color: plusOneYesTextColor, ...plusOneYesStyle }}>{language === "bm" ? (pageConfig.plusOneYesLabelBm?.trim() || "Ya") : (pageConfig.plusOneYesLabel?.trim() || "Yes")}</span>
+                    <span style={{ fontWeight: plusOneYesWeight, color: plusOneYesTextColor, ...plusOneYesStyle, ...(bringingPlusOne === "yes" ? selectedAnswerStyle : {}) }}>{language === "bm" ? (pageConfig.plusOneYesLabelBm?.trim() || "Ya") : (pageConfig.plusOneYesLabel?.trim() || "Yes")}</span>
                   </button>
                   <button
                     type="button"
@@ -530,7 +532,7 @@ export default function GuestJoin() {
                     onMouseEnter={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...plusOneNoBtnStyle(bringingPlusOne === "no"), ...plusOneNoBtnHover(bringingPlusOne === "no") })}
                     onMouseLeave={(e) => Object.assign(e.currentTarget.style, { flex: 1, ...plusOneNoBtnStyle(bringingPlusOne === "no") })}
                   >
-                    <span style={{ fontWeight: bringingPlusOne === "no" ? plusOneNoWeight : 700, color: plusOneNoTextColor, ...plusOneNoStyle }}>{language === "bm" ? (pageConfig.plusOneNoLabelBm?.trim() || "Tidak") : (pageConfig.plusOneNoLabel?.trim() || "No")}</span>
+                    <span style={{ fontWeight: plusOneNoWeight, color: plusOneNoTextColor, ...plusOneNoStyle, ...(bringingPlusOne === "no" ? selectedAnswerStyle : {}) }}>{language === "bm" ? (pageConfig.plusOneNoLabelBm?.trim() || "Tidak") : (pageConfig.plusOneNoLabel?.trim() || "No")}</span>
                   </button>
                 </div>
               </div>

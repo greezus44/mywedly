@@ -84,6 +84,7 @@ interface PageConfig {
   plusOneQuestionTypography?: TypographyStyle;
   plusOneYesTypography?: TypographyStyle;
   plusOneNoTypography?: TypographyStyle;
+  selectedAnswerTypography?: TypographyStyle;
   phoneQuestionTypography?: TypographyStyle;
   phoneHelperTypography?: TypographyStyle;
   submitTypography?: TypographyStyle;
@@ -689,6 +690,7 @@ export function SharingPage() {
             <TypographyControls label="+1 question typography" value={editConfig.plusOneQuestionTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneQuestionTypography: v }))} showText={false} />
             <TypographyControls label="+1 Yes button typography" value={editConfig.plusOneYesTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneYesTypography: v }))} showText={false} />
             <TypographyControls label="+1 No button typography" value={editConfig.plusOneNoTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, plusOneNoTypography: v }))} showText={false} />
+            <TypographyControls label="Selected answer typography (Attending, Declined, +1 Yes, +1 No)" value={editConfig.selectedAnswerTypography ?? {}} onChange={(v) => setEditConfig((p) => ({ ...p, selectedAnswerTypography: v }))} showText={false} />
           </CollapsibleGroup>
           <SectionLabel>Phone number (optional)</SectionLabel>
           <div className="flex items-center gap-3">
