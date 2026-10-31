@@ -327,16 +327,6 @@ export function GuestsPage() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] }); setSelectedGuestIds(new Set()); },
   });
 
-  const removeInviteMutation = useMutation({
-    mutationFn: async ({ guestId, subEventId }: { guestId: string; subEventId: string | null }) => {
-      let query = supabase.from("guest_event_invites").delete().eq("guest_id", guestId).eq("event_id", eventId);
-      if (subEventId) query = query.eq("sub_event_id", subEventId); else query = query.is("sub_event_id", null);
-      const { error } = await query;
-      if (error) throw error;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] }),
-  });
-
   const bulkRemoveInviteMutation = useMutation({
     mutationFn: async ({ guestIds, subEventId }: { guestIds: string[]; subEventId: string | null }) => {
       if (guestIds.length === 0) return;
@@ -756,108 +746,94 @@ export function GuestsPage() {
       </Modal>
 
       <Modal open={showInvites} onClose={() => setShowInvites(false)} title="Manage Invitations">
-        <div className="space-y-4">
+        <div className="space-y-6">
           {sortedGroups.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold text-dash-text">Group invitations</h4>
-              <p className="text-xs text-dash-muted">Invite or remove an entire group from an event. All members inherit the group's invitation.</p>
-              <div className="space-y-2">
+            <section className="space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold text-dash-text">Group invitations</h4>
+                <p className="mt-0.5 text-xs text-dash-muted">Invite a whole group to an event. Every member inherits the invitation.</p>
+              </div>
+              <ul className="space-y-2">
                 {sortedGroups.map((gr) => {
                   const memberCount = (guests ?? []).filter((g) => g.group_id === gr.id).length;
                   const invitedKeys = groupInvitesByGroup.get(gr.id) ?? new Set<string>();
+                  const isOpen = inviteTargetGroup === gr.id;
                   return (
-                    <div key={gr.id} className={`rounded-lg border p-3 ${inviteTargetGroup === gr.id ? "border-dash-primary bg-dash-bg" : "border-dash-border bg-dash-bg"}`}>
-                      <div className="flex items-center justify-between">
-                        <button onClick={() => setInviteTargetGroup(inviteTargetGroup === gr.id ? null : gr.id)} className="text-sm font-medium text-dash-text">
-                          {gr.name} <span className="text-dash-muted">({memberCount} guests)</span>
-                        </button>
-                        <div className="flex flex-wrap gap-1">
-                          {eventColumns.map((col) => {
-                            const isInvited = invitedKeys.has(col.key);
-                            return (
-                              <span key={col.key} className={`rounded px-1.5 py-0.5 text-xs ${isInvited ? "bg-green-100 font-medium text-green-800" : "bg-dash-surface text-dash-muted"}`}>
-                                {col.label}
-                              </span>
-                            );
-                          })}
+                    <li key={gr.id} className={`overflow-hidden rounded-lg border ${isOpen ? "border-dash-primary" : "border-dash-border"}`}>
+                      <button type="button" onClick={() => setInviteTargetGroup(isOpen ? null : gr.id)} aria-expanded={isOpen} className="flex w-full items-center justify-between gap-3 bg-dash-bg px-3 py-2.5 text-left transition-colors hover:bg-dash-surface">
+                        <div className="min-w-0">
+                          <span className="block truncate text-sm font-medium text-dash-text">{gr.name}</span>
+                          <span className="text-xs text-dash-muted">{memberCount} {memberCount === 1 ? "guest" : "guests"}</span>
                         </div>
-                      </div>
-                      {inviteTargetGroup === gr.id && (
-                        <div className="mt-3 flex items-center gap-2 border-t border-dash-border pt-3">
-                          <select value={inviteSubEventId} onChange={(e) => setInviteSubEventId(e.target.value)} className="flex-1 rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text">
+                        <div className="flex shrink-0 items-center gap-2">
+                          <div className="flex flex-wrap justify-end gap-1">
+                            {eventColumns.filter((col) => invitedKeys.has(col.key)).map((col) => (
+                              <span key={col.key} className="rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-800">{col.label}</span>
+                            ))}
+                          </div>
+                          <svg className={`h-4 w-4 text-dash-muted transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                        </div>
+                      </button>
+                      {isOpen && (
+                        <div className="flex flex-wrap items-center gap-2 border-t border-dash-border bg-dash-surface px-3 py-3">
+                          <select value={inviteSubEventId} onChange={(e) => setInviteSubEventId(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text">
                             <option value="">{`Main Event${invitedKeysForTargetGroup.has("__main__") ? " (invited)" : ""}`}</option>
                             {sortedSubEvents.map((se) => <option key={se.id} value={se.id}>{`${se.name}${invitedKeysForTargetGroup.has(se.id) ? " (invited)" : ""}`}</option>)}
                           </select>
-                          <Button size="sm" onClick={() => groupInviteMutation.mutate({ groupId: gr.id, subEventId: inviteSubEventId || null })} loading={groupInviteMutation.isPending}>Invite Group</Button>
-                          <Button size="sm" variant="secondary" onClick={() => groupRemoveInviteMutation.mutate({ groupId: gr.id, subEventId: inviteSubEventId || null })} loading={groupRemoveInviteMutation.isPending}>Remove Group</Button>
+                          <Button size="sm" onClick={() => groupInviteMutation.mutate({ groupId: gr.id, subEventId: inviteSubEventId || null })} loading={groupInviteMutation.isPending}>Invite group</Button>
+                          <Button size="sm" variant="secondary" onClick={() => groupRemoveInviteMutation.mutate({ groupId: gr.id, subEventId: inviteSubEventId || null })} loading={groupRemoveInviteMutation.isPending}>Remove group</Button>
                         </div>
                       )}
-                    </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              {groupInviteMutation.isError && <p className="text-xs text-dash-danger">{groupInviteMutation.error instanceof Error ? groupInviteMutation.error.message : "Failed to invite group"}</p>}
+              {groupInviteMutation.isSuccess && <p className="text-xs text-green-600">Group invited.</p>}
+              {groupRemoveInviteMutation.isError && <p className="text-xs text-dash-danger">{groupRemoveInviteMutation.error instanceof Error ? groupRemoveInviteMutation.error.message : "Failed to remove group"}</p>}
+              {groupRemoveInviteMutation.isSuccess && <p className="text-xs text-green-600">Group invitation removed.</p>}
+            </section>
+          )}
+
+          <section className={`space-y-3 ${sortedGroups.length > 0 ? "border-t border-dash-border pt-6" : ""}`}>
+            <div>
+              <h4 className="text-sm font-semibold text-dash-text">Individual invitations</h4>
+              <p className="mt-0.5 text-xs text-dash-muted">Select guests in the guest list or by group, choose an event, then invite or remove them.</p>
+            </div>
+            {sortedGroups.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {sortedGroups.map((gr) => {
+                  const state = groupSelectionState(gr.id);
+                  const count = (guests ?? []).filter((g) => g.group_id === gr.id).length;
+                  return (
+                    <label key={gr.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${state === "none" ? "border-dash-border hover:bg-dash-bg" : "border-dash-primary bg-dash-bg"}`}>
+                      <input
+                        type="checkbox"
+                        checked={state === "all"}
+                        ref={(el) => { if (el) el.indeterminate = state === "some"; }}
+                        onChange={() => toggleGroupSelection(gr.id)}
+                        className="accent-dash-primary"
+                      />
+                      <span className="min-w-0 truncate text-dash-text">{gr.name} <span className="text-dash-muted">({count})</span></span>
+                    </label>
                   );
                 })}
               </div>
-              {groupInviteMutation.isError && <p className="text-sm text-dash-danger">{groupInviteMutation.error instanceof Error ? groupInviteMutation.error.message : "Failed to invite group"}</p>}
-              {groupInviteMutation.isSuccess && <p className="text-sm text-green-600">Group invited.</p>}
-              {groupRemoveInviteMutation.isError && <p className="text-sm text-dash-danger">{groupRemoveInviteMutation.error instanceof Error ? groupRemoveInviteMutation.error.message : "Failed to remove group"}</p>}
-              {groupRemoveInviteMutation.isSuccess && <p className="text-sm text-green-600">Group invitation removed.</p>}
-            </div>
-          )}
-
-          <div className="space-y-2 border-t border-dash-border pt-3">
-            <h4 className="text-xs font-semibold text-dash-text">Individual invitations</h4>
-            {sortedGroups.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs text-dash-muted">Select guests from a group to invite or remove individually.</p>
-                <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-                  {sortedGroups.map((gr) => {
-                    const state = groupSelectionState(gr.id);
-                    const count = (guests ?? []).filter((g) => g.group_id === gr.id).length;
-                    return (
-                      <label key={gr.id} className="flex items-center gap-1.5 text-sm text-dash-text">
-                        <input
-                          type="checkbox"
-                          checked={state === "all"}
-                          ref={(el) => { if (el) el.indeterminate = state === "some"; }}
-                          onChange={() => toggleGroupSelection(gr.id)}
-                          className="accent-dash-primary"
-                        />
-                        {gr.name} <span className="text-dash-muted">({count})</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
             )}
-            <p className="text-sm text-dash-muted">Select guests above, then invite or remove them from an event.</p>
-            <div className="flex items-center gap-2">
-              <select value={inviteSubEventId} onChange={(e) => setInviteSubEventId(e.target.value)} className="flex-1 rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text">
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={inviteSubEventId} onChange={(e) => setInviteSubEventId(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-sm text-dash-text">
                 <option value="">Main Event</option>
                 {sortedSubEvents.map((se) => <option key={se.id} value={se.id}>{se.name}</option>)}
               </select>
               <Button size="sm" onClick={() => inviteMutation.mutate({ guestIds: [...selectedGuestIds], subEventId: inviteSubEventId || null })} disabled={selectedGuestIds.size === 0} loading={inviteMutation.isPending}>Invite</Button>
               <Button size="sm" variant="secondary" onClick={() => bulkRemoveInviteMutation.mutate({ guestIds: [...selectedGuestIds], subEventId: inviteSubEventId || null })} disabled={selectedGuestIds.size === 0} loading={bulkRemoveInviteMutation.isPending}>Remove</Button>
             </div>
-            {selectedGuestIds.size > 0 && (
-              <p className="text-sm text-dash-muted">{selectedGuestIds.size} guest(s) selected for {selectedSubEventLabel}</p>
-            )}
-            {inviteMutation.isError && <p className="text-sm text-dash-danger">{inviteMutation.error instanceof Error ? inviteMutation.error.message : "Failed to invite"}</p>}
-            {inviteMutation.isSuccess && <p className="text-sm text-green-600">Invitations sent.</p>}
-            {bulkRemoveInviteMutation.isError && <p className="text-sm text-dash-danger">{bulkRemoveInviteMutation.error instanceof Error ? bulkRemoveInviteMutation.error.message : "Failed to remove"}</p>}
-            {bulkRemoveInviteMutation.isSuccess && <p className="text-sm text-green-600">Invitations removed.</p>}
-          </div>
-
-          {existingInvites && existingInvites.length > 0 && (
-            <div className="space-y-2 border-t border-dash-border pt-3">
-              <h4 className="text-xs font-semibold text-dash-text">Existing Direct Invitations</h4>
-              <div className="max-h-40 overflow-y-auto space-y-1">
-                {existingInvites.map((inv, i) => {
-                  const g = guests?.find((gg) => gg.id === inv.guest_id);
-                  const se = subEvents?.find((s) => s.id === inv.sub_event_id);
-                  return <div key={i} className="flex items-center justify-between text-xs"><span className="text-dash-text">{g?.name ?? "Unknown"} \u2192 {se?.name ?? "Main Event"}</span><button onClick={() => removeInviteMutation.mutate({ guestId: inv.guest_id, subEventId: inv.sub_event_id ?? null })} className="text-dash-danger hover:underline">Remove</button></div>;
-                })}
-              </div>
-            </div>
-          )}
+            <p className="text-xs text-dash-muted">{selectedGuestIds.size > 0 ? `${selectedGuestIds.size} guest(s) selected for ${selectedSubEventLabel}` : "No guests selected"}</p>
+            {inviteMutation.isError && <p className="text-xs text-dash-danger">{inviteMutation.error instanceof Error ? inviteMutation.error.message : "Failed to invite"}</p>}
+            {inviteMutation.isSuccess && <p className="text-xs text-green-600">Invitations sent.</p>}
+            {bulkRemoveInviteMutation.isError && <p className="text-xs text-dash-danger">{bulkRemoveInviteMutation.error instanceof Error ? bulkRemoveInviteMutation.error.message : "Failed to remove"}</p>}
+            {bulkRemoveInviteMutation.isSuccess && <p className="text-xs text-green-600">Invitations removed.</p>}
+          </section>
         </div>
       </Modal>
 
