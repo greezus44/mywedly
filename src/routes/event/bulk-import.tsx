@@ -173,7 +173,7 @@ export function BulkImportModal({ open, onClose, onImport, existingUsernames, gr
                   className="w-full rounded-lg border border-dash-border bg-[var(--dash-field)] px-3 py-2 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
                 >
                   <option value="" className="bg-[var(--dash-field)] text-dash-text">No group</option>
-                  {groups.map((g) => (
+                  {[...groups].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })).map((g) => (
                     <option key={g.id} value={g.id} className="bg-[var(--dash-field)] text-dash-text">{g.name}</option>
                   ))}
                 </select>
