@@ -899,7 +899,7 @@ export function GuestsPage() {
       <BulkImportModal
         open={showBulkImport}
         onClose={() => setShowBulkImport(false)}
-        existingUsernames={new Set((guests ?? []).map((g) => (g.username ?? "").toLowerCase()).filter(Boolean))}
+        existingGuests={(guests ?? []).map((g) => ({ name: g.name, username: g.username, groupName: groupName(g.group_id) }))}
         groups={(groups ?? []).map((g) => ({ id: g.id, name: g.name }))}
         onImport={async (importGuests) => {
           let imported = 0;

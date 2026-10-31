@@ -1,22 +1,39 @@
-import { useState, useRef, useCallback } from "react";
+import { Fragment, useState, useRef, useCallback } from "react";
 import { Modal } from "../../components/ui";
 import { Button } from "../../components/ui/Button";
+
+export interface ExistingGuestSummary {
+  name: string | null;
+  username: string | null;
+  groupName: string | null;
+}
+
+type Decision = "pending" | "same" | "different";
+
+interface RepeatInfo {
+  title: string;
+  details: string[];
+}
 
 interface ParsedGuest {
   id: string;
   fullName: string;
   username: string;
-  edited: boolean;
-  error?: string;
+  repeat: RepeatInfo | null;
+  decision: Decision;
 }
+
+type AnnotatedGuest = ParsedGuest & { error?: string };
 
 interface BulkImportModalProps {
   open: boolean;
   onClose: () => void;
   onImport: (guests: { name: string; username: string; groupId: string | null }[]) => Promise<{ imported: number; failed: number; errors: string[] }>;
-  existingUsernames: Set<string>;
+  existingGuests: ExistingGuestSummary[];
   groups: { id: string; name: string }[];
 }
+
+const normalise = (s: string) => s.trim().toLowerCase();
 
 function splitCsvLine(line: string): string[] {
   const fields: string[] = [];
@@ -53,14 +70,75 @@ function parseCsv(text: string): string[] {
   }).filter((l) => l);
 }
 
-export function BulkImportModal({ open, onClose, onImport, existingUsernames, groups }: BulkImportModalProps) {
+function buildRows(names: string[], existing: ExistingGuestSummary[]): ParsedGuest[] {
+  const existingByName = new Map<string, ExistingGuestSummary>();
+  for (const g of existing) if (g.name) existingByName.set(normalise(g.name), g);
+  const firstEntryByName = new Map<string, ParsedGuest>();
+  return names.map((name, i) => {
+    const key = normalise(name);
+    const row: ParsedGuest = { id: `row-${i}`, fullName: name, username: name, repeat: null, decision: "pending" };
+    if (key) {
+      const guest = existingByName.get(key);
+      const first = firstEntryByName.get(key);
+      if (guest) {
+        row.repeat = {
+          title: "Already in your guest list",
+          details: [`Name: ${guest.name ?? "-"}`, `Login name: ${guest.username ?? "-"}`, `Group: ${guest.groupName ?? "Ungrouped"}`],
+        };
+      } else if (first) {
+        row.repeat = { title: "Appears earlier in your list", details: [`Entry ${first.id.replace("row-", "")}: ${first.fullName}`] };
+      } else {
+        firstEntryByName.set(key, row);
+      }
+    }
+    return row;
+  });
+}
+
+function willImport(r: ParsedGuest): boolean {
+  return r.fullName.trim() !== "" && (!r.repeat || r.decision === "different");
+}
+
+function annotateRows(rows: ParsedGuest[], existingUsernames: Set<string>): AnnotatedGuest[] {
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    if (!willImport(r)) continue;
+    const k = normalise(r.username);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return rows.map((r) => {
+    let error: string | undefined;
+    if (!r.fullName.trim()) error = "Empty name";
+    else if (willImport(r)) {
+      const k = normalise(r.username);
+      if (!k) error = "Login name is required";
+      else if (existingUsernames.has(k)) error = "Login name already exists";
+      else if ((counts.get(k) ?? 0) > 1) error = "Login name used more than once";
+    }
+    return { ...r, error };
+  });
+}
+
+function suggestLoginName(base: string, taken: Set<string>): string {
+  const root = base.trim() || "guest";
+  if (!taken.has(normalise(root))) return root;
+  for (let n = 2; ; n++) {
+    const candidate = `${root}${n}`;
+    if (!taken.has(normalise(candidate))) return candidate;
+  }
+}
+
+export function BulkImportModal({ open, onClose, onImport, existingGuests, groups }: BulkImportModalProps) {
   const [parsed, setParsed] = useState<ParsedGuest[]>([]);
   const [fileName, setFileName] = useState("");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
+  const [openRepeatId, setOpenRepeatId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const existingUsernames = new Set(existingGuests.map((g) => normalise(g.username ?? "")).filter(Boolean));
 
   const reset = useCallback(() => {
     setParsed([]);
@@ -68,6 +146,7 @@ export function BulkImportModal({ open, onClose, onImport, existingUsernames, gr
     setImportError(null);
     setImportSummary(null);
     setSelectedGroupId("");
+    setOpenRepeatId(null);
     if (fileRef.current) fileRef.current.value = "";
   }, []);
 
@@ -77,65 +156,46 @@ export function BulkImportModal({ open, onClose, onImport, existingUsernames, gr
     setFileName(file.name);
     setImportError(null);
     setImportSummary(null);
+    setOpenRepeatId(null);
     const reader = new FileReader();
     reader.onload = () => {
       const text = String(reader.result ?? "");
-      const names = parseCsv(text);
-      const seen = new Map<string, number>();
-      const rows: ParsedGuest[] = names.map((name, i) => {
-        const id = `row-${i}`;
-        const username = name;
-        let error: string | undefined;
-        if (!name.trim()) error = "Empty name";
-        else {
-          const count = seen.get(name.toLowerCase()) ?? 0;
-          seen.set(name.toLowerCase(), count + 1);
-          if (count > 0) error = "Duplicate in file";
-          else if (existingUsernames.has(name.toLowerCase())) error = "Username already exists";
-        }
-        return { id, fullName: name, username, edited: false, error };
-      });
-      setParsed(rows);
+      setParsed(buildRows(parseCsv(text), existingGuests));
     };
     reader.readAsText(file);
   };
 
   const updateUsername = (id: string, username: string) => {
+    setParsed((prev) => prev.map((r) => (r.id === id ? { ...r, username } : r)));
+  };
+
+  const chooseDecision = (id: string, decision: Decision) => {
     setParsed((prev) => {
-      const next = prev.map((r) => {
-        if (r.id === id) return { ...r, username, edited: true };
-        return r;
+      const taken = new Set(existingUsernames);
+      for (const r of prev) if (r.id !== id && willImport(r)) taken.add(normalise(r.username));
+      return prev.map((r) => {
+        if (r.id !== id) return r;
+        if (decision !== "different") return { ...r, decision };
+        const username = taken.has(normalise(r.username)) ? suggestLoginName(r.username, taken) : r.username;
+        return { ...r, decision, username };
       });
-      return revalidate(next);
     });
   };
 
-  const revalidate = (rows: ParsedGuest[]): ParsedGuest[] => {
-    const userSeen = new Map<string, number>();
-    return rows.map((r) => {
-      let error: string | undefined;
-      if (!r.fullName.trim()) error = "Empty name";
-      else {
-        const count = userSeen.get(r.username.toLowerCase()) ?? 0;
-        userSeen.set(r.username.toLowerCase(), count + 1);
-        if (count > 0) error = "Duplicate username in import";
-        else if (existingUsernames.has(r.username.toLowerCase())) error = "Username already exists";
-      }
-      return { ...r, error };
-    });
-  };
-
-  const validGuests = parsed.filter((r) => !r.error);
-  const invalidCount = parsed.length - validGuests.length;
+  const annotated = annotateRows(parsed, existingUsernames);
+  const importRows = annotated.filter((r) => willImport(r) && !r.error);
+  const repeatCount = parsed.filter((r) => r.repeat).length;
+  const pendingCount = parsed.filter((r) => r.repeat && r.decision === "pending").length;
+  const errorCount = annotated.filter((r) => r.error).length;
 
   const handleImport = async () => {
-    if (validGuests.length === 0) return;
+    if (importRows.length === 0) return;
     setImporting(true);
     setImportError(null);
     setImportSummary(null);
     try {
       const groupId = selectedGroupId || null;
-      const result = await onImport(validGuests.map((r) => ({ name: r.fullName, username: r.username, groupId })));
+      const result = await onImport(importRows.map((r) => ({ name: r.fullName, username: r.username, groupId })));
       if (result.failed > 0) {
         setImportError(`${result.imported} imported, ${result.failed} failed: ${result.errors.join(", ")}`);
       } else {
@@ -150,6 +210,14 @@ export function BulkImportModal({ open, onClose, onImport, existingUsernames, gr
     } finally {
       setImporting(false);
     }
+  };
+
+  const statusCell = (r: AnnotatedGuest) => {
+    if (r.error) return <span className="text-dash-danger">{r.error}</span>;
+    if (r.repeat && r.decision === "pending") return <span className="text-amber-700">Repeat: choose below</span>;
+    if (r.repeat && r.decision === "same") return <span className="text-dash-muted">Same person: skipped</span>;
+    if (r.repeat && r.decision === "different") return <span className="text-green-600">Different person: will import</span>;
+    return <span className="text-green-600">OK</span>;
   };
 
   return (
@@ -195,7 +263,8 @@ export function BulkImportModal({ open, onClose, onImport, existingUsernames, gr
             <div className="flex items-center justify-between">
               <p className="text-sm text-dash-muted">
                 {fileName} — {parsed.length} guest(s)
-                {invalidCount > 0 && <span className="text-dash-danger"> ({invalidCount} with errors)</span>}
+                {repeatCount > 0 && <span className="text-amber-700"> ({repeatCount} repeated)</span>}
+                {errorCount > 0 && <span className="text-dash-danger"> ({errorCount} with errors)</span>}
               </p>
               <button onClick={() => reset()} className="text-xs text-dash-primary hover:underline">Choose different file</button>
             </div>
@@ -204,34 +273,66 @@ export function BulkImportModal({ open, onClose, onImport, existingUsernames, gr
                 <thead className="bg-dash-bg sticky top-0">
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-medium text-dash-muted">Full Name</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-dash-muted">Username</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-dash-muted">Login name</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-dash-muted">Status</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-dash-muted"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dash-border bg-dash-surface">
-                  {parsed.map((r) => (
-                    <tr key={r.id} className={r.error ? "bg-red-50" : ""}>
-                      <td className="px-3 py-2 text-sm text-dash-text">{r.fullName}</td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="text"
-                          value={r.username}
-                          onChange={(e) => updateUsername(r.id, e.target.value)}
-                          className="w-full rounded border border-dash-border bg-[var(--dash-field)] px-2 py-1 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-xs">
-                        {r.error ? <span className="text-dash-danger">{r.error}</span> : <span className="text-green-600">OK</span>}
-                      </td>
-                    </tr>
+                  {annotated.map((r) => (
+                    <Fragment key={r.id}>
+                      <tr className={r.error ? "bg-red-50" : r.repeat ? "bg-amber-50" : ""}>
+                        <td className="px-3 py-2 text-sm text-dash-text">{r.fullName}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="text"
+                            value={r.username}
+                            onChange={(e) => updateUsername(r.id, e.target.value)}
+                            className="w-full rounded border border-dash-border bg-[var(--dash-field)] px-2 py-1 text-sm text-dash-text focus:border-dash-primary focus:outline-none"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-xs">{statusCell(r)}</td>
+                        <td className="px-3 py-2 text-right">
+                          {r.repeat && (
+                            <button
+                              onClick={() => setOpenRepeatId(openRepeatId === r.id ? null : r.id)}
+                              className="text-xs text-dash-primary hover:underline"
+                            >
+                              {openRepeatId === r.id ? "Hide" : "Check"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                      {r.repeat && openRepeatId === r.id && (
+                        <tr className="bg-dash-bg">
+                          <td colSpan={4} className="px-3 py-3">
+                            <p className="text-xs font-semibold text-dash-text">{r.repeat.title}</p>
+                            <ul className="mt-1 space-y-0.5 text-xs text-dash-muted">
+                              {r.repeat.details.map((d) => <li key={d}>{d}</li>)}
+                            </ul>
+                            <p className="mt-3 text-xs text-dash-text">Is this the same person?</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Button size="sm" variant={r.decision === "same" ? undefined : "secondary"} onClick={() => chooseDecision(r.id, "same")}>Same person: skip</Button>
+                              <Button size="sm" variant={r.decision === "different" ? undefined : "secondary"} onClick={() => chooseDecision(r.id, "different")}>Different person: import</Button>
+                            </div>
+                            {r.decision === "different" && (
+                              <p className="mt-2 text-xs text-dash-muted">Edit the login name in the table above if you want a different one.</p>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
             </div>
+            {pendingCount > 0 && (
+              <p className="text-xs text-amber-700">{pendingCount} repeated name(s) still need a decision and will be skipped.</p>
+            )}
             <div className="flex items-center justify-end gap-3 pt-2">
               <Button variant="secondary" size="sm" onClick={() => { reset(); onClose(); }}>Cancel</Button>
-              <Button size="sm" onClick={handleImport} loading={importing} disabled={validGuests.length === 0}>
-                Import {validGuests.length} guest(s)
+              <Button size="sm" onClick={handleImport} loading={importing} disabled={importRows.length === 0}>
+                Import {importRows.length} guest(s)
               </Button>
             </div>
           </div>
