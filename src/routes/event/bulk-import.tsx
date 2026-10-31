@@ -21,6 +21,7 @@ interface ParsedGuest {
   username: string;
   repeat: RepeatInfo | null;
   decision: Decision;
+  marked: boolean;
 }
 
 type AnnotatedGuest = ParsedGuest & { error?: string };
@@ -76,7 +77,7 @@ function buildRows(names: string[], existing: ExistingGuestSummary[]): ParsedGue
   const firstEntryByName = new Map<string, ParsedGuest>();
   return names.map((name, i) => {
     const key = normalise(name);
-    const row: ParsedGuest = { id: `row-${i}`, fullName: name, username: name, repeat: null, decision: "pending" };
+    const row: ParsedGuest = { id: `row-${i}`, fullName: name, username: name, repeat: null, decision: "pending", marked: false };
     if (key) {
       const guest = existingByName.get(key);
       const first = firstEntryByName.get(key);
@@ -96,7 +97,7 @@ function buildRows(names: string[], existing: ExistingGuestSummary[]): ParsedGue
 }
 
 function willImport(r: ParsedGuest): boolean {
-  return r.fullName.trim() !== "" && (!r.repeat || r.decision === "different");
+  return !r.marked && r.fullName.trim() !== "" && (!r.repeat || r.decision === "different");
 }
 
 function annotateRows(rows: ParsedGuest[], existingUsernames: Set<string>): AnnotatedGuest[] {
@@ -136,6 +137,8 @@ export function BulkImportModal({ open, onClose, onImport, existingGuests, group
   const [importSummary, setImportSummary] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string>("");
   const [openRepeatId, setOpenRepeatId] = useState<string | null>(null);
+  const [removedCount, setRemovedCount] = useState(0);
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const existingUsernames = new Set(existingGuests.map((g) => normalise(g.username ?? "")).filter(Boolean));
@@ -147,6 +150,8 @@ export function BulkImportModal({ open, onClose, onImport, existingGuests, group
     setImportSummary(null);
     setSelectedGroupId("");
     setOpenRepeatId(null);
+    setRemovedCount(0);
+    setConfirmingRemoval(false);
     if (fileRef.current) fileRef.current.value = "";
   }, []);
 
@@ -157,6 +162,8 @@ export function BulkImportModal({ open, onClose, onImport, existingGuests, group
     setImportError(null);
     setImportSummary(null);
     setOpenRepeatId(null);
+    setRemovedCount(0);
+    setConfirmingRemoval(false);
     const reader = new FileReader();
     reader.onload = () => {
       const text = String(reader.result ?? "");
@@ -167,6 +174,18 @@ export function BulkImportModal({ open, onClose, onImport, existingGuests, group
 
   const updateUsername = (id: string, username: string) => {
     setParsed((prev) => prev.map((r) => (r.id === id ? { ...r, username } : r)));
+  };
+
+  const toggleMark = (id: string) => {
+    setParsed((prev) => prev.map((r) => (r.id === id ? { ...r, marked: !r.marked } : r)));
+  };
+
+  const removeMarked = () => {
+    const count = parsed.filter((r) => r.marked).length;
+    setParsed((prev) => prev.filter((r) => !r.marked));
+    setRemovedCount((c) => c + count);
+    setConfirmingRemoval(false);
+    setOpenRepeatId(null);
   };
 
   const chooseDecision = (id: string, decision: Decision) => {
@@ -185,7 +204,9 @@ export function BulkImportModal({ open, onClose, onImport, existingGuests, group
   const annotated = annotateRows(parsed, existingUsernames);
   const importRows = annotated.filter((r) => willImport(r) && !r.error);
   const repeatCount = parsed.filter((r) => r.repeat).length;
-  const pendingCount = parsed.filter((r) => r.repeat && r.decision === "pending").length;
+  const markedCount = parsed.filter((r) => r.marked).length;
+  const pendingCount = parsed.filter((r) => r.repeat && r.decision === "pending" && !r.marked).length;
+  const skippedCount = parsed.filter((r) => r.repeat && r.decision === "same" && !r.marked).length;
   const errorCount = annotated.filter((r) => r.error).length;
 
   const handleImport = async () => {
@@ -213,6 +234,7 @@ export function BulkImportModal({ open, onClose, onImport, existingGuests, group
   };
 
   const statusCell = (r: AnnotatedGuest) => {
+    if (r.marked) return <span className="text-dash-danger">Marked for removal</span>;
     if (r.error) return <span className="text-dash-danger">{r.error}</span>;
     if (r.repeat && r.decision === "pending") return <span className="text-amber-700">Repeat: choose below</span>;
     if (r.repeat && r.decision === "same") return <span className="text-dash-muted">Same person: skipped</span>;
@@ -268,6 +290,21 @@ export function BulkImportModal({ open, onClose, onImport, existingGuests, group
               </p>
               <button onClick={() => reset()} className="text-xs text-dash-primary hover:underline">Choose different file</button>
             </div>
+            {markedCount > 0 && !confirmingRemoval && (
+              <div className="flex items-center justify-between rounded-lg bg-dash-bg px-3 py-2">
+                <p className="text-xs text-dash-muted">{markedCount} entr{markedCount === 1 ? "y is" : "ies are"} marked for removal.</p>
+                <Button variant="danger" size="sm" onClick={() => setConfirmingRemoval(true)}>Remove marked ({markedCount})</Button>
+              </div>
+            )}
+            {confirmingRemoval && (
+              <div className="space-y-2 rounded-lg border border-dash-border bg-dash-bg px-3 py-3">
+                <p className="text-sm text-dash-text">Remove {markedCount} marked entr{markedCount === 1 ? "y" : "ies"} from this import? They will not be added. Your guest list is not changed.</p>
+                <div className="flex justify-end gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setConfirmingRemoval(false)}>Keep them</Button>
+                  <Button variant="danger" size="sm" onClick={removeMarked}>Yes, remove</Button>
+                </div>
+              </div>
+            )}
             <div className="max-h-64 overflow-y-auto rounded-lg border border-dash-border">
               <table className="w-full">
                 <thead className="bg-dash-bg sticky top-0">
@@ -281,7 +318,7 @@ export function BulkImportModal({ open, onClose, onImport, existingGuests, group
                 <tbody className="divide-y divide-dash-border bg-dash-surface">
                   {annotated.map((r) => (
                     <Fragment key={r.id}>
-                      <tr className={r.error ? "bg-red-50" : r.repeat ? "bg-amber-50" : ""}>
+                      <tr className={r.marked ? "bg-dash-bg opacity-70" : r.error ? "bg-red-50" : r.repeat ? "bg-amber-50" : ""}>
                         <td className="px-3 py-2 text-sm text-dash-text">{r.fullName}</td>
                         <td className="px-3 py-2">
                           <input
@@ -294,12 +331,20 @@ export function BulkImportModal({ open, onClose, onImport, existingGuests, group
                         <td className="px-3 py-2 text-xs">{statusCell(r)}</td>
                         <td className="px-3 py-2 text-right">
                           {r.repeat && (
-                            <button
-                              onClick={() => setOpenRepeatId(openRepeatId === r.id ? null : r.id)}
-                              className="text-xs text-dash-primary hover:underline"
-                            >
-                              {openRepeatId === r.id ? "Hide" : "Check"}
-                            </button>
+                            <div className="flex justify-end gap-3">
+                              <button
+                                onClick={() => setOpenRepeatId(openRepeatId === r.id ? null : r.id)}
+                                className="text-xs text-dash-primary hover:underline"
+                              >
+                                {openRepeatId === r.id ? "Hide" : "Check"}
+                              </button>
+                              <button
+                                onClick={() => toggleMark(r.id)}
+                                className={r.marked ? "text-xs text-dash-text hover:underline" : "text-xs text-dash-danger hover:underline"}
+                              >
+                                {r.marked ? "Unmark" : "Remove"}
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -329,6 +374,11 @@ export function BulkImportModal({ open, onClose, onImport, existingGuests, group
             {pendingCount > 0 && (
               <p className="text-xs text-amber-700">{pendingCount} repeated name(s) still need a decision and will be skipped.</p>
             )}
+            <p className="text-xs text-dash-muted">
+              {importRows.length} will be added
+              {removedCount > 0 && `, ${removedCount} removed`}
+              {skippedCount > 0 && `, ${skippedCount} skipped as the same person`}
+            </p>
             <div className="flex items-center justify-end gap-3 pt-2">
               <Button variant="secondary" size="sm" onClick={() => { reset(); onClose(); }}>Cancel</Button>
               <Button size="sm" onClick={handleImport} loading={importing} disabled={importRows.length === 0}>
