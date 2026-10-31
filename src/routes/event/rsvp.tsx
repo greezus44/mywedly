@@ -12,6 +12,7 @@ import { FontSelect } from "../../components/ui/FontSelect";
 import { HEADING_FONT_OPTIONS } from "../../lib/theme";
 import type { TypographyStyle } from "../../lib/typography";
 import { formatDate, isRsvpClosed } from "../../lib/utils";
+import { fetchAllRows } from "../../lib/fetch-all";
 import { DateTimePicker } from "../../components/ui";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { PreviewLanguageProvider } from "../../components/preview/preview-language";
@@ -185,11 +186,7 @@ export function RsvpPage() {
 
   const { data: rsvps, isLoading, isError, error } = useQuery({
     queryKey: ["event-rsvps-admin", eventId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("event_rsvps").select("*").eq("event_id", eventId).order("responded_at", { ascending: false });
-      if (error) throw error;
-      return data as EventRsvp[];
-    },
+    queryFn: () => fetchAllRows<EventRsvp>((from, to) => supabase.from("event_rsvps").select("*").eq("event_id", eventId).order("id").range(from, to)),
   });
 
   const { data: subEvents } = useQuery({
@@ -204,7 +201,7 @@ export function RsvpPage() {
 
   const { data: guests } = useQuery({
     queryKey: ["event-guests-rsvp", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId).order("name", { ascending: true }); if (error) throw error; return data as EventGuest[]; },
+    queryFn: () => fetchAllRows<EventGuest>((from, to) => supabase.from("event_guests").select("*").eq("event_id", eventId).order("id").range(from, to)),
   });
   const { data: groups } = useQuery({
     queryKey: ["guest-groups-rsvp", eventId],
@@ -212,7 +209,7 @@ export function RsvpPage() {
   });
   const { data: existingInvites } = useQuery({
     queryKey: ["guest-event-invites-rsvp", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("guest_event_invites").select("guest_id, sub_event_id, invite_type").eq("event_id", eventId); if (error) throw error; return data ?? []; },
+    queryFn: () => fetchAllRows<{ guest_id: string; sub_event_id: string | null; invite_type: string }>((from, to) => supabase.from("guest_event_invites").select("guest_id, sub_event_id, invite_type").eq("event_id", eventId).order("guest_id").order("sub_event_id", { nullsFirst: true }).range(from, to)),
   });
   const { data: groupAssignments } = useQuery({
     queryKey: ["group-assignments-rsvp", eventId],

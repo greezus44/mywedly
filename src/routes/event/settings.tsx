@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useOutletContext, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase, type UserEvent, type SharingEvent, type EventMessage } from "../../lib/supabase";
+import { fetchAllRows } from "../../lib/fetch-all";
 import { Button } from "../../components/ui/Button";
 import { Input, Modal, Card } from "../../components/ui";
 import { isValidSlug, slugify } from "../../lib/utils";
@@ -40,7 +41,7 @@ export function SettingsPage() {
 
   const { data: guests } = useQuery({
     queryKey: ["event-guests-settings", eventId],
-    queryFn: async () => { const { data, error } = await supabase.from("event_guests").select("*").eq("event_id", eventId); if (error) throw error; return data ?? []; },
+    queryFn: () => fetchAllRows<{ id: string }>((from, to) => supabase.from("event_guests").select("id").eq("event_id", eventId).order("id").range(from, to)),
   });
   const { data: messages } = useQuery({
     queryKey: ["event-messages-settings", eventId],

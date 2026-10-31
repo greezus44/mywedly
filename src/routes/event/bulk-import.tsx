@@ -29,7 +29,7 @@ type AnnotatedGuest = ParsedGuest & { error?: string };
 interface BulkImportModalProps {
   open: boolean;
   onClose: () => void;
-  onImport: (guests: { name: string; username: string; groupId: string | null }[]) => Promise<{ imported: number; failed: number; errors: string[] }>;
+  onImport: (guests: { name: string; username: string; groupId: string | null }[]) => Promise<{ imported: number; invited: number; failed: number; errors: string[] }>;
   existingGuests: ExistingGuestSummary[];
   groups: { id: string; name: string }[];
 }
@@ -220,7 +220,7 @@ export function BulkImportModal({ open, onClose, onImport, existingGuests, group
       if (result.failed > 0) {
         setImportError(`${result.imported} imported, ${result.failed} failed: ${result.errors.join(", ")}`);
       } else {
-        setImportSummary(`${result.imported} guest(s) imported successfully.`);
+        setImportSummary(`${result.imported} guest(s) imported and ${result.invited} invited to the Main Event.`);
       }
       if (result.imported > 0 && result.failed === 0) {
         reset();
