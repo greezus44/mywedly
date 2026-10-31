@@ -10,7 +10,7 @@ import { setCurrentLanguage } from "../../lib/translations";
 import { LoadingSpinner } from "../../components/ui";
 import { LanguageToggle } from "../../components/site/LanguageToggle";
 
-export interface GuestOutletContext { event: UserEvent; slug: string; theme: unknown; invitedSubEventIds: string[]; }
+export interface GuestOutletContext { event: UserEvent; slug: string; theme: unknown; invitedSubEventIds: string[]; invitations: ResolveResult | undefined; }
 export function useGuestOutletContext(): GuestOutletContext { return useOutletContext<GuestOutletContext>(); }
 
 export default function GuestLayout() {
@@ -141,7 +141,7 @@ export default function GuestLayout() {
           </div>
         </div>
       )}
-      <Outlet context={{ event, slug: slug!, theme: event.theme, invitedSubEventIds } satisfies GuestOutletContext} />
+      <Outlet context={{ event, slug: slug!, theme: event.theme, invitedSubEventIds, invitations } satisfies GuestOutletContext} />
     </EventThemeProvider>
   );
 }

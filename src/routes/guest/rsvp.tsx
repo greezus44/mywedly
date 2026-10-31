@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useGuestOutletContext } from "./guest-layout";
+import { hasRsvpAccess } from "../../lib/invitations";
+import { LoadingSpinner } from "../../components/ui";
 import GuestPhoneSettings, { guestPhoneSettingsQueryKey } from "./GuestPhoneSettings";
 import { useGuestAuth } from "../../lib/guest-auth";
 import { supabase, type EventRsvp, type EventSchedule, type SubEvent, type CustomPage, type Json } from "../../lib/supabase";
@@ -94,7 +96,7 @@ function formatScheduleTimeRange(startTime: string | null | undefined, endTime: 
 }
 
 export default function GuestRsvp() {
-  const { event, slug, invitedSubEventIds } = useGuestOutletContext();
+  const { event, slug, invitedSubEventIds, invitations } = useGuestOutletContext();
   const { guest } = useGuestAuth();
   const { language } = useLanguage();
   const location = useLocation();
@@ -157,7 +159,7 @@ export default function GuestRsvp() {
     },
   });
 
-  const { data: subEvents } = useQuery({
+  const { data: subEvents, isPending: subEventsPending, isError: subEventsError } = useQuery({
     queryKey: ["invited-sub-events", invitedSubEventIds],
     queryFn: async () => {
       if (invitedSubEventIds.length === 0) return [];
@@ -469,6 +471,29 @@ export default function GuestRsvp() {
     return aDate.localeCompare(bDate);
   });
   const hasSubEvents = sortedSubEvents.length > 0;
+
+  const invitationsLoading = invitations === undefined;
+  const subEventsLoading = invitedSubEventIds.length > 0 && subEventsPending;
+  if (invitationsLoading || subEventsLoading) {
+    return <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: "var(--event-bg)" }}><LoadingSpinner className="border-[var(--event-primary)]" /></div>;
+  }
+  if (invitations.error || subEventsError) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <h1 className="text-2xl font-semibold" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{language === "bm" ? "Sesuatu tidak kena" : "Something went wrong"}</h1>
+        <p style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{language === "bm" ? "Tidak dapat memuat jemputan anda. Sila cuba lagi." : "Unable to load your invitation. Please try again."}</p>
+      </div>
+    );
+  }
+  if (!hasRsvpAccess(invitations)) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <h1 className="text-2xl font-semibold" style={{ color: "var(--event-heading)", fontFamily: "var(--event-font-heading)" }}>{language === "bm" ? "Jemputan tidak ditemui" : "No invitation found"}</h1>
+        <p style={{ color: "var(--event-muted)", fontFamily: "var(--event-font-body)" }}>{language === "bm" ? "Anda tidak mempunyai jemputan untuk majlis ini." : "You don't have an invitation for this event."}</p>
+        <Link to={`${prefix}/home`} className="underline" style={{ color: "var(--event-primary)" }}>{language === "bm" ? "Kembali ke laman utama" : "Return to the home page"}</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="guest-section guest-rsvp-page">
