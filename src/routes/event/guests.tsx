@@ -55,15 +55,6 @@ function GroupTick({ checked, label, onToggle }: { checked: boolean; label: stri
   );
 }
 
-function GroupInviteStatus({ invited }: { invited: boolean }) {
-  if (!invited) return null;
-  return (
-    <span className="ml-2 rounded-full border border-green-600/40 bg-green-600/10 px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal text-green-700">
-      Invited
-    </span>
-  );
-}
-
 function MobileGuestSection({
   status,
   label,
@@ -550,8 +541,11 @@ export function GuestsPage() {
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
   if (isError) return <ErrorState title="Failed to load guests" message={error instanceof Error ? error.message : "Unknown error"} />;
 
-  const inviteTargetKey = inviteSubEventId || "__main__";
-  const isGroupInvited = (groupId: string) => groupInvitesByGroup.get(groupId)?.has(inviteTargetKey) ?? false;
+  const groupFullyInvitedColumns = (groupId: string) => {
+    const members = (guests ?? []).filter((g) => g.group_id === groupId);
+    if (members.length === 0) return [];
+    return eventColumns.filter((col) => members.every((g) => invitedEventsByGuest.get(g.id)?.has(col.key)));
+  };
   const invitedKeysForTargetGroup = inviteTargetGroup ? (groupInvitesByGroup.get(inviteTargetGroup) ?? new Set<string>()) : new Set<string>();
 
   return (
@@ -677,7 +671,11 @@ export function GuestsPage() {
                       <span className="text-xs font-semibold uppercase tracking-wide text-dash-text">
                         <span className="mr-1.5 inline-block w-3 text-dash-muted">{collapsedGroups.has(section.key) ? "\u25B6" : "\u25BC"}</span>
                         {section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span>
-                              {section.key !== UNGROUPED_KEY && <GroupInviteStatus invited={isGroupInvited(section.key)} />}
+                        {section.key !== UNGROUPED_KEY && groupFullyInvitedColumns(section.key).map((col) => (
+                          <span key={col.key} className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold normal-case tracking-normal text-green-600" title={`Whole group invited to ${col.label}`}>
+                            <span className="text-xs">&#10003;</span>{col.label}
+                          </span>
+                        ))}
                       </span>
                     </button>
                   </div>
@@ -770,9 +768,10 @@ export function GuestsPage() {
                 ) : (
                   pageSections.flatMap((section) => {
                     const rows: React.ReactNode[] = [];
+                    const fullyInvited = groupFullyInvitedColumns(section.key);
                     rows.push(
                       <tr key={`sep-${section.key}`} onClick={() => toggleGroupCollapse(section.key)} className="cursor-pointer hover:bg-dash-surface/60">
-                        <td colSpan={eventColumns.length > 0 ? eventColumns.length + 5 : 6} className="bg-dash-bg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-dash-text">
+                        <td colSpan={4} className="bg-dash-bg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-dash-text">
                           <div className="flex items-center gap-3">
                             {section.key !== UNGROUPED_KEY && (
                               <GroupTick checked={selectedGroupIds.has(section.key)} label={section.label} onToggle={() => toggleGroupTick(section.key)} />
@@ -780,10 +779,17 @@ export function GuestsPage() {
                             <span>
                               <span className="mr-1.5 inline-block w-3 text-dash-muted">{collapsedGroups.has(section.key) ? "\u25B6" : "\u25BC"}</span>
                               {section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span>
-                              {section.key !== UNGROUPED_KEY && <GroupInviteStatus invited={isGroupInvited(section.key)} />}
                             </span>
                           </div>
                         </td>
+                        {eventColumns.map((col) => (
+                          <td key={col.key} className="bg-dash-bg px-4 py-2 text-center">
+                            {col.key !== "__main__" && fullyInvited.some((c) => c.key === col.key) && (
+                              <span className="text-green-600 font-bold text-base" title={`Whole group invited to ${col.label}`}>&#10003;</span>
+                            )}
+                          </td>
+                        ))}
+                        <td className="bg-dash-bg" />
                       </tr>,
                     );
                     if (collapsedGroups.has(section.key)) return rows;
