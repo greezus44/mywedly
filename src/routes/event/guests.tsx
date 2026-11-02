@@ -55,6 +55,14 @@ function GroupTick({ checked, label, onToggle }: { checked: boolean; label: stri
   );
 }
 
+function GroupInviteStatus({ invited }: { invited: boolean }) {
+  return (
+    <span className={`ml-2 rounded-full border px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal ${invited ? "border-green-600/40 bg-green-600/10 text-green-700" : "border-dash-border text-dash-muted"}`}>
+      {invited ? "Invited" : "Not invited"}
+    </span>
+  );
+}
+
 function MobileGuestSection({
   status,
   label,
@@ -354,7 +362,7 @@ export function GuestsPage() {
   const bulkInviteMutation = useMutation({
     mutationFn: async ({ guestIds, groupIds, subEventId }: { guestIds: string[]; groupIds: string[]; subEventId: string | null }) => {
       if (guestIds.length > 0) {
-        const rows = guestIds.map((gid) => ({ guest_id: gid, event_id: eventId, sub_event_id: subEventId, invite_type: "include" as const }));
+        const rows = guestIds.map((gid) => ({ guest_id: gid, event_id: eventId, sub_event_id: subEventId, invite_type: "include" as const, source_group_id: null }));
         const { error } = await supabase.from("guest_event_invites").upsert(rows, { onConflict: "guest_id,event_id,sub_event_id" });
         if (error) throw error;
       }
@@ -367,6 +375,8 @@ export function GuestsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] });
       queryClient.invalidateQueries({ queryKey: ["group-event-invites", eventId] });
+      setSelectedGuestIds(new Set());
+      setSelectedGroupIds(new Set());
     },
   });
 
@@ -388,6 +398,8 @@ export function GuestsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] });
       queryClient.invalidateQueries({ queryKey: ["group-event-invites", eventId] });
+      setSelectedGuestIds(new Set());
+      setSelectedGroupIds(new Set());
     },
   });
 
@@ -537,6 +549,8 @@ export function GuestsPage() {
   if (isLoading) return <div className="flex justify-center py-12"><LoadingSpinner /></div>;
   if (isError) return <ErrorState title="Failed to load guests" message={error instanceof Error ? error.message : "Unknown error"} />;
 
+  const inviteTargetKey = inviteSubEventId || "__main__";
+  const isGroupInvited = (groupId: string) => groupInvitesByGroup.get(groupId)?.has(inviteTargetKey) ?? false;
   const invitedKeysForTargetGroup = inviteTargetGroup ? (groupInvitesByGroup.get(inviteTargetGroup) ?? new Set<string>()) : new Set<string>();
 
   return (
@@ -654,6 +668,7 @@ export function GuestsPage() {
                       <span className="text-xs font-semibold uppercase tracking-wide text-dash-text">
                         <span className="mr-1.5 inline-block w-3 text-dash-muted">{collapsedGroups.has(section.key) ? "\u25B6" : "\u25BC"}</span>
                         {section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span>
+                              {section.key !== UNGROUPED_KEY && <GroupInviteStatus invited={isGroupInvited(section.key)} />}
                       </span>
                     </button>
                   </div>
@@ -756,6 +771,7 @@ export function GuestsPage() {
                             <span>
                               <span className="mr-1.5 inline-block w-3 text-dash-muted">{collapsedGroups.has(section.key) ? "\u25B6" : "\u25BC"}</span>
                               {section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span>
+                              {section.key !== UNGROUPED_KEY && <GroupInviteStatus invited={isGroupInvited(section.key)} />}
                             </span>
                           </div>
                         </td>
