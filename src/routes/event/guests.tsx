@@ -56,9 +56,10 @@ function GroupTick({ checked, label, onToggle }: { checked: boolean; label: stri
 }
 
 function GroupInviteStatus({ invited }: { invited: boolean }) {
+  if (!invited) return null;
   return (
-    <span className={`ml-2 rounded-full border px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal ${invited ? "border-green-600/40 bg-green-600/10 text-green-700" : "border-dash-border text-dash-muted"}`}>
-      {invited ? "Invited" : "Not invited"}
+    <span className="ml-2 rounded-full border border-green-600/40 bg-green-600/10 px-2 py-0.5 text-[10px] font-medium normal-case tracking-normal text-green-700">
+      Invited
     </span>
   );
 }
@@ -606,6 +607,14 @@ export function GuestsPage() {
             </select>
           </div>
 
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-dash-border bg-dash-surface px-3 py-2 text-xs text-dash-muted">
+              <button type="button" onClick={() => setPageIndex(safePageIndex - 1)} disabled={safePageIndex === 0} className="rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text transition-colors hover:bg-dash-bg disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
+              <span className="text-center">Page {safePageIndex + 1} of {totalPages} &middot; {visibleGuests.length} of {(guests ?? []).length} guests</span>
+              <button type="button" onClick={() => setPageIndex(safePageIndex + 1)} disabled={safePageIndex >= totalPages - 1} className="rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text transition-colors hover:bg-dash-bg disabled:cursor-not-allowed disabled:opacity-40">Next</button>
+            </div>
+          )}
+
           {selectionCount > 0 && (
             <div className="flex flex-col gap-2 rounded-lg border border-dash-border bg-dash-bg px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
@@ -821,13 +830,6 @@ export function GuestsPage() {
             </table>
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between gap-3 text-xs text-dash-muted">
-              <button type="button" onClick={() => setPageIndex(safePageIndex - 1)} disabled={safePageIndex === 0} className="rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text transition-colors hover:bg-dash-bg disabled:cursor-not-allowed disabled:opacity-40">Previous</button>
-              <span className="text-center">Page {safePageIndex + 1} of {totalPages} &middot; {visibleGuests.length} of {(guests ?? []).length} guests</span>
-              <button type="button" onClick={() => setPageIndex(safePageIndex + 1)} disabled={safePageIndex >= totalPages - 1} className="rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text transition-colors hover:bg-dash-bg disabled:cursor-not-allowed disabled:opacity-40">Next</button>
-            </div>
-          )}
         </>
       )}
 
