@@ -60,7 +60,7 @@ export default function GuestCustomPage() {
           page.body ? <div className="rich-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(page.body) }} /> : <p className="text-center text-dash-muted">{t("No content yet.", "Tiada kandungan lagi.")}</p>
         )}
         <div className="mt-12 flex justify-center">
-          <button type="button" onClick={() => { signOut(); navigate(`/e/${slug}`, { replace: true }); }} className="event-btn-secondary" style={{ fontFamily: "var(--event-font-heading)" }}>{t("Sign Out", "Log Keluar")}</button>
+          <button type="button" onClick={() => { signOut(); navigate(`/e/${slug}`, { replace: true }); }} className="event-btn-secondary" style={{ fontFamily: "Tahoma, sans-serif" }}>{t("Sign Out", "Log Keluar")}</button>
         </div>
       </div>
     </div>
