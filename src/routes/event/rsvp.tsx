@@ -13,6 +13,7 @@ import { HEADING_FONT_OPTIONS } from "../../lib/theme";
 import type { TypographyStyle } from "../../lib/typography";
 import { formatDate, isRsvpClosed } from "../../lib/utils";
 import { fetchAllRows } from "../../lib/fetch-all";
+import { useEventLiveUpdates } from "../../lib/use-event-live-updates";
 import { DateTimePicker } from "../../components/ui";
 import { SplitEditor } from "../../components/preview/SplitEditor";
 import { PreviewLanguageProvider } from "../../components/preview/preview-language";
@@ -203,6 +204,8 @@ export function RsvpPage() {
     queryKey: ["event-guests-rsvp", eventId],
     queryFn: () => fetchAllRows<EventGuest>((from, to) => supabase.from("event_guests").select("*").eq("event_id", eventId).order("id").range(from, to)),
   });
+  useEventLiveUpdates(eventId, ["event-rsvps-admin", "event-guests-rsvp"]);
+
   const { data: groups } = useQuery({
     queryKey: ["guest-groups-rsvp", eventId],
     queryFn: async () => { const { data, error } = await supabase.from("guest_groups").select("*").eq("event_id", eventId).order("sort_order", { ascending: true }); if (error) throw error; return data as GuestGroup[]; },

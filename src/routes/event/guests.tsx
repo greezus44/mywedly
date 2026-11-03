@@ -8,6 +8,7 @@ import { GuestForm, type GuestFormValues } from "./guest-form";
 import { BulkImportModal } from "./bulk-import";
 import { generateUsername, slugify } from "../../lib/utils";
 import { fetchAllRows } from "../../lib/fetch-all";
+import { useEventLiveUpdates } from "../../lib/use-event-live-updates";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
 
@@ -162,6 +163,8 @@ export function GuestsPage() {
     queryKey: ["guest-event-invites", eventId],
     queryFn: () => fetchAllRows<{ guest_id: string; sub_event_id: string | null; invite_type: string }>((from, to) => supabase.from("guest_event_invites").select("guest_id, sub_event_id, invite_type").eq("event_id", eventId).order("guest_id").order("sub_event_id", { nullsFirst: true }).range(from, to)),
   });
+
+  useEventLiveUpdates(eventId, ["event-guests", "event-rsvps-full"]);
 
   const { data: groups } = useQuery({
     queryKey: ["guest-groups", eventId],
