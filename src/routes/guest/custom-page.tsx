@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type CustomPage } from "../../lib/supabase";
 import { useGuestOutletContext } from "./guest-layout";
@@ -9,11 +9,14 @@ import { useLanguage } from "../../lib/language";
 import { setCurrentLanguage } from "../../lib/translations";
 import { sanitizeHtml } from "../../lib/sanitize";
 import { getTypographyStyle, type TypographyStyle } from "../../lib/typography";
+import { useGuestAuth } from "../../lib/guest-auth";
 
 export default function GuestCustomPage() {
   const { slug, pageSlug } = useParams<{ slug: string; pageSlug: string }>();
   const { event } = useGuestOutletContext();
   const { t, language } = useLanguage();
+  const { signOut } = useGuestAuth();
+  const navigate = useNavigate();
   setCurrentLanguage(language);
 
   const { data: page, isLoading } = useQuery({
@@ -56,6 +59,9 @@ export default function GuestCustomPage() {
         ) : (
           page.body ? <div className="rich-content" dangerouslySetInnerHTML={{ __html: sanitizeHtml(page.body) }} /> : <p className="text-center text-dash-muted">{t("No content yet.", "Tiada kandungan lagi.")}</p>
         )}
+        <div className="mt-12 flex justify-center">
+          <button type="button" onClick={() => { signOut(); navigate(`/e/${slug}`, { replace: true }); }} className="event-btn-primary">{t("Sign Out", "Log Keluar")}</button>
+        </div>
       </div>
     </div>
   );
