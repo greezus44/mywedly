@@ -237,7 +237,7 @@ export function GuestsPage() {
     }
     invitedEventsByGuest.set(g.id, invited);
   }
-  const mainInvitedCount = (guests ?? []).filter((g) => invitedEventsByGuest.get(g.id)?.has("__main__")).length;
+  const totalGuestCount = (guests ?? []).length;
 
   const rsvpStatusByGuest = new Map<string, Map<string, string>>();
   const rsvpPlusOnesByGuest = new Map<string, Map<string, number>>();
@@ -555,7 +555,7 @@ export function GuestsPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold text-dash-text">
-          Guests <span className="text-sm font-normal text-dash-muted">- {mainInvitedCount.toLocaleString()} invited</span>
+          Guests <span className="text-sm font-normal text-dash-muted">- {totalGuestCount.toLocaleString()} guests</span>
         </h2>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => setShowBulkImport(true)}>Bulk Import</Button>
