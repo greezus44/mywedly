@@ -122,6 +122,12 @@ export function generateUsername(name: string): string {
   return name.trim();
 }
 
+export function describeError(e: unknown, fallback: string): string {
+  if (e instanceof Error && e.message) return e.message;
+  if (e && typeof e === "object" && "message" in e && typeof e.message === "string" && e.message) return e.message;
+  return fallback;
+}
+
 export function toCapitalCase(name: string): string {
   return name.trim().split(/\s+/).map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(" ");
 }

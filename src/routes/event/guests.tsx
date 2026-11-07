@@ -6,7 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
 import { GuestForm, type GuestFormValues } from "./guest-form";
 import { BulkImportModal } from "./bulk-import";
-import { generateUsername, slugify } from "../../lib/utils";
+import { describeError, generateUsername, slugify } from "../../lib/utils";
 import { fetchAllRows } from "../../lib/fetch-all";
 import { useEventLiveUpdates } from "../../lib/use-event-live-updates";
 
@@ -468,6 +468,7 @@ export function GuestsPage() {
 
   const handleAddOrUpdate = async (values: GuestFormValues) => {
     setSubmitting(true); setFormError(null);
+    let createdGuestId: string | null = null;
     try {
       let guestId: string;
       if (editGuest) {
@@ -478,27 +479,24 @@ export function GuestsPage() {
         const { data: newGuest, error } = await supabase.from("event_guests").insert({ event_id: eventId, name: values.name, username: values.username || generateUsername(values.name), token: crypto.randomUUID(), rsvp_status: "pending", plus_ones: 0, group_id: values.groupId || null }).select("id").single();
         if (error) throw error;
         guestId = newGuest.id;
+        createdGuestId = guestId;
       }
+      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
 
-      // Ensure the guest has a Main Event invitation
       const { error: mainInviteError } = await supabase.from("guest_event_invites").upsert(
         { guest_id: guestId, event_id: eventId, sub_event_id: null, invite_type: "include" },
         { onConflict: "guest_id,event_id,sub_event_id" },
       );
       if (mainInviteError) throw mainInviteError;
 
-      // Sync sub-event invitations via guest_event_invites.
-      // Ticked sub-events get a direct invite; unticked ones have their
-      // direct invite removed. Group-level invites are managed via
-      // Manage Invitations and are not affected here.
+      // Group-level invites are managed via Manage Invitations and are not touched here.
       if (subEvents && subEvents.length > 0) {
         const invitedSubEventIds = subEvents.filter((se) => values.eventInvitations[se.id] ?? false).map((se) => se.id);
-        // Remove direct invites for unticked sub-events
         const untickedIds = subEvents.filter((se) => !(values.eventInvitations[se.id] ?? false)).map((se) => se.id);
         if (untickedIds.length > 0) {
-          await supabase.from("guest_event_invites").delete().eq("guest_id", guestId).eq("event_id", eventId).in("sub_event_id", untickedIds);
+          const { error: removeError } = await supabase.from("guest_event_invites").delete().eq("guest_id", guestId).eq("event_id", eventId).in("sub_event_id", untickedIds);
+          if (removeError) throw removeError;
         }
-        // Add direct invites for ticked sub-events
         if (invitedSubEventIds.length > 0) {
           const rows = invitedSubEventIds.map((sid) => ({ guest_id: guestId, event_id: eventId, sub_event_id: sid, invite_type: "include" as const }));
           const { error: inviteError } = await supabase.from("guest_event_invites").upsert(rows, { onConflict: "guest_id,event_id,sub_event_id" });
@@ -506,11 +504,16 @@ export function GuestsPage() {
         }
       }
 
-      queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
       queryClient.invalidateQueries({ queryKey: ["guest-event-invites", eventId] });
       queryClient.invalidateQueries({ queryKey: ["group-event-invites", eventId] });
       setShowForm(false); setEditGuest(null);
-    } catch (e) { setFormError(e instanceof Error ? e.message : "Failed to save guest"); }
+    } catch (e) {
+      if (createdGuestId) {
+        await supabase.from("event_guests").delete().eq("id", createdGuestId);
+        queryClient.invalidateQueries({ queryKey: ["event-guests", eventId] });
+      }
+      setFormError(describeError(e, "Failed to save guest"));
+    }
     finally { setSubmitting(false); }
   };
 
