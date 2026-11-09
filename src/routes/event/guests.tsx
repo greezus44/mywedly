@@ -289,6 +289,20 @@ export function GuestsPage() {
     return plusOnes > 0 ? "+1" : "0";
   };
 
+  const groupHasPlusOnes = (groupId: string) => (guests ?? []).some((g) => g.group_id === groupId && g.allow_plus_one);
+
+  const groupAttendance = (groupId: string, tabKey: string) => {
+    let attending = 0;
+    let plusOnes = 0;
+    for (const g of (guests ?? [])) {
+      if (g.group_id !== groupId || statusFor(g.id, tabKey) !== "attending") continue;
+      attending++;
+      const bringing = tabKey === "__main__" ? g.plus_ones : (rsvpPlusOnesByGuest.get(g.id)?.get(tabKey) ?? 0);
+      if (g.allow_plus_one && bringing > 0) plusOnes++;
+    }
+    return { attending, plusOnes, total: attending + plusOnes };
+  };
+
   const tabLabel = (se: SubEvent) => se.tab_name?.trim() || (se.name ?? "Untitled");
 
   const sortedSubEvents = [...(subEvents ?? [])].sort((a, b) => {
@@ -677,6 +691,7 @@ export function GuestsPage() {
                       <span className="text-xs font-semibold uppercase tracking-wide text-dash-text">
                         <span className="mr-1.5 inline-block w-3 text-dash-muted">{collapsedGroups.has(section.key) ? "\u25B6" : "\u25BC"}</span>
                         {section.label} <span className="ml-1 text-dash-muted">({section.guests.length})</span>
+                        {section.key !== UNGROUPED_KEY && groupHasPlusOnes(section.key) && (() => { const a = groupAttendance(section.key, mobileActiveEvent); return <span className="ml-2 text-[10px] font-semibold normal-case tracking-normal text-green-600" title="Attending guests plus their +1s for the selected event">{a.total} attending incl. {a.plusOnes} +1</span>; })()}
                         {section.key !== UNGROUPED_KEY && groupFullyInvitedColumns(section.key).map((col) => (
                           <span key={col.key} className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold normal-case tracking-normal text-green-600" title={`Whole group invited to ${col.label}`}>
                             <span className="text-xs">&#10003;</span>{col.label}
@@ -793,6 +808,7 @@ export function GuestsPage() {
                             {col.key !== "__main__" && fullyInvited.some((c) => c.key === col.key) && (
                               <span className="text-green-600 font-bold text-base" title={`Whole group invited to ${col.label}`}>&#10003;</span>
                             )}
+                            {groupHasPlusOnes(section.key) && (() => { const a = groupAttendance(section.key, col.key); return <span className="ml-2 text-xs font-semibold text-dash-text" title="Attending guests with their +1s for this event">{a.total}<span className="ml-1 font-normal text-green-600">(+{a.plusOnes})</span></span>; })()}
                           </td>
                         ))}
                         <td className="bg-dash-bg" />
