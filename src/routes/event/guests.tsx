@@ -63,7 +63,7 @@ function MobileGuestSection({
   guests,
   selectedGuestIds,
   toggleGuestSelection,
-  mobileShowUsername,
+  showUsernames,
   activeEventKey,
   statusFor,
   plusOneLabelFor,
@@ -78,7 +78,7 @@ function MobileGuestSection({
   guests: EventGuest[];
   selectedGuestIds: Set<string>;
   toggleGuestSelection: (id: string) => void;
-  mobileShowUsername: boolean;
+  showUsernames: boolean;
   activeEventKey: string;
   statusFor: (guestId: string, tabKey: string) => GuestStatus;
   plusOneLabelFor: (guestId: string, tabKey: string) => string | null;
@@ -97,8 +97,8 @@ function MobileGuestSection({
           <div key={g.id} className="flex items-center gap-2 px-4 py-2.5">
             <input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary shrink-0" />
             <div className="min-w-0 flex-1">
-              <span className="block truncate text-sm text-dash-text">
-                {(mobileShowUsername ? g.username : g.name) ?? "\u2014"}
+              <span className="line-clamp-2 break-words text-sm text-dash-text">
+                {(showUsernames ? g.username : g.name) ?? "\u2014"}
                 {g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}
               </span>
               <GuestPhoneNote guest={g} phoneEnabledLinkIds={phoneEnabledLinkIds} />
@@ -138,7 +138,8 @@ export function GuestsPage() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [sortByEvent, setSortByEvent] = useState<string | null>(null);
   const exportRef = useRef<HTMLDivElement>(null);
-  const [mobileShowUsername, setMobileShowUsername] = useState(false);
+  const [showUsernames, setShowUsernames] = useState(() => window.localStorage.getItem("guests-show-usernames") === "true");
+  useEffect(() => { window.localStorage.setItem("guests-show-usernames", String(showUsernames)); }, [showUsernames]);
   const [mobileActiveEvent, setMobileActiveEvent] = useState<string>("__main__");
   const [pageIndex, setPageIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
@@ -572,6 +573,7 @@ export function GuestsPage() {
     return eventColumns.filter((col) => members.every((g) => invitedEventsByGuest.get(g.id)?.has(col.key)));
   };
   const invitedKeysForTargetGroup = inviteTargetGroup ? (groupInvitesByGroup.get(inviteTargetGroup) ?? new Set<string>()) : new Set<string>();
+  const desktopColumnSpan = (eventColumns.length > 0 ? eventColumns.length + 5 : 6) - (showUsernames ? 0 : 1);
 
   return (
     <div className="space-y-4">
@@ -620,13 +622,13 @@ export function GuestsPage() {
             <span className="inline-flex items-center gap-1"><span className="text-green-600 font-semibold">+1</span>/<span className="text-dash-muted font-semibold">0</span> Plus-one</span>
           </div>
 
-          {/* Mobile-only controls: Name/Username toggle + active event selector */}
-          <div className="flex flex-col gap-2 sm:hidden">
-            <div className="flex rounded-lg border border-dash-border bg-dash-bg p-0.5">
-              <button onClick={() => setMobileShowUsername(false)} className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${!mobileShowUsername ? "bg-dash-surface text-dash-text shadow-sm" : "text-dash-muted"}`}>Name</button>
-              <button onClick={() => setMobileShowUsername(true)} className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${mobileShowUsername ? "bg-dash-surface text-dash-text shadow-sm" : "text-dash-muted"}`}>Username</button>
+          {/* Name/Username toggle (both layouts) + active event selector (phones only) */}
+          <div className="flex flex-col gap-2">
+            <div className="flex w-full rounded-lg border border-dash-border bg-dash-bg p-0.5 sm:w-64">
+              <button onClick={() => setShowUsernames(false)} className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${!showUsernames ? "bg-dash-surface text-dash-text shadow-sm" : "text-dash-muted"}`}>Name</button>
+              <button onClick={() => setShowUsernames(true)} className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${showUsernames ? "bg-dash-surface text-dash-text shadow-sm" : "text-dash-muted"}`}>Username</button>
             </div>
-            <select value={mobileActiveEvent} onChange={(e) => setMobileActiveEvent(e.target.value)} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text">
+            <select value={mobileActiveEvent} onChange={(e) => setMobileActiveEvent(e.target.value)} className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-1.5 text-sm text-dash-text sm:hidden">
               {eventColumns.map((col) => (
                 <option key={col.key} value={col.key}>{col.label}</option>
               ))}
@@ -692,7 +694,7 @@ export function GuestsPage() {
                 }
                 if (blocks.length === 0) return <p className="text-sm text-dash-muted py-4 text-center">No guests found.</p>;
                 return blocks.map((blk, bi) => (
-                  <MobileGuestSection key={`mblk-${bi}`} status={blk.status} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} selectedGuestIds={selectedGuestIds} toggleGuestSelection={toggleGuestSelection} mobileShowUsername={mobileShowUsername} activeEventKey={mobileActiveEvent} statusFor={statusFor} plusOneLabelFor={plusOneLabelFor} phoneEnabledLinkIds={phoneEnabledLinkIds} onEdit={(g) => { setEditGuest(g); setShowForm(true); }} onDelete={(g) => setGuestToDelete(g)} />
+                  <MobileGuestSection key={`mblk-${bi}`} status={blk.status} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} selectedGuestIds={selectedGuestIds} toggleGuestSelection={toggleGuestSelection} showUsernames={showUsernames} activeEventKey={mobileActiveEvent} statusFor={statusFor} plusOneLabelFor={plusOneLabelFor} phoneEnabledLinkIds={phoneEnabledLinkIds} onEdit={(g) => { setEditGuest(g); setShowForm(true); }} onDelete={(g) => setGuestToDelete(g)} />
                 ));
               })()
             ) : (
@@ -726,7 +728,7 @@ export function GuestsPage() {
                         }
                         if (blocks.length === 0) return <p className="px-4 py-3 text-sm text-dash-muted">No guests.</p>;
                         return blocks.map((blk, bi) => (
-                          <MobileGuestSection key={`mblk-${section.key}-${bi}`} status={blk.status} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} selectedGuestIds={selectedGuestIds} toggleGuestSelection={toggleGuestSelection} mobileShowUsername={mobileShowUsername} activeEventKey={mobileActiveEvent} statusFor={statusFor} plusOneLabelFor={plusOneLabelFor} phoneEnabledLinkIds={phoneEnabledLinkIds} onEdit={(g) => { setEditGuest(g); setShowForm(true); }} onDelete={(g) => setGuestToDelete(g)} embedded />
+                          <MobileGuestSection key={`mblk-${section.key}-${bi}`} status={blk.status} label={statusLabel(blk.status)} colour={statusColour(blk.status)} guests={blk.guests} selectedGuestIds={selectedGuestIds} toggleGuestSelection={toggleGuestSelection} showUsernames={showUsernames} activeEventKey={mobileActiveEvent} statusFor={statusFor} plusOneLabelFor={plusOneLabelFor} phoneEnabledLinkIds={phoneEnabledLinkIds} onEdit={(g) => { setEditGuest(g); setShowForm(true); }} onDelete={(g) => setGuestToDelete(g)} embedded />
                         ));
                       })()}
                     </div>
@@ -745,7 +747,7 @@ export function GuestsPage() {
                     <input type="checkbox" checked={selectedGuestIds.size === visibleGuests.length && visibleGuests.length > 0} onChange={(e) => setSelectedGuestIds(e.target.checked ? new Set(visibleGuests.map((g) => g.id)) : new Set())} className="accent-dash-primary" />
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Name</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th>
+                  {showUsernames && <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Username</th>}
                   <th className="px-4 py-2 text-left text-xs font-medium text-dash-muted">Group</th>
                   {eventColumns.length > 0 ? (
                     eventColumns.map((col) => (
@@ -780,7 +782,7 @@ export function GuestsPage() {
                     blocks.forEach((blk, bi) => {
                       rows.push(
                         <tr key={`sub-${bi}`} className="bg-dash-surface/40">
-                          <td colSpan={eventColumns.length > 0 ? eventColumns.length + 5 : 6} className="px-4 py-1 text-[10px] font-semibold uppercase tracking-wider text-dash-muted/70">
+                          <td colSpan={desktopColumnSpan} className="px-4 py-1 text-[10px] font-semibold uppercase tracking-wider text-dash-muted/70">
                             <span className={statusColour(blk.status)}>{statusLabel(blk.status)}</span> <span className="text-dash-muted/50">({blk.guests.length})</span>
                           </td>
                         </tr>,
@@ -788,8 +790,8 @@ export function GuestsPage() {
                       blk.guests.map((g) => (
                         <tr key={g.id}>
                           <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
-                          <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}<GuestPhoneNote guest={g} phoneEnabledLinkIds={phoneEnabledLinkIds} /></td>
-                          <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
+                          <td className="max-w-xs break-words px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}<GuestPhoneNote guest={g} phoneEnabledLinkIds={phoneEnabledLinkIds} /></td>
+                          {showUsernames && <td className="max-w-xs break-words px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>}
                           <td className="px-4 py-2 text-sm text-dash-muted">{"\u2014"}</td>
                           <td className="px-4 py-2 text-center"><StatusIcon status={statusFor(g.id, "__main__")} plusOneLabel={plusOneLabelFor(g.id, "__main__")} /></td>
                           <td className="px-4 py-2 text-right">
@@ -807,7 +809,7 @@ export function GuestsPage() {
                     const fullyInvited = groupFullyInvitedColumns(section.key);
                     rows.push(
                       <tr key={`sep-${section.key}`} onClick={() => toggleGroupCollapse(section.key)} className="cursor-pointer hover:bg-dash-surface/60">
-                        <td colSpan={4} className="bg-dash-bg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-dash-text">
+                        <td colSpan={showUsernames ? 4 : 3} className="bg-dash-bg px-4 py-2 text-xs font-semibold uppercase tracking-wide text-dash-text">
                           <div className="flex items-center gap-3">
                             {section.key !== UNGROUPED_KEY && (
                               <GroupTick checked={selectedGroupIds.has(section.key)} label={section.label} onToggle={() => toggleGroupTick(section.key)} />
@@ -839,7 +841,7 @@ export function GuestsPage() {
                     blocks.forEach((blk, bi) => {
                       rows.push(
                         <tr key={`sub-${section.key}-${bi}`} className="bg-dash-surface/40">
-                          <td colSpan={eventColumns.length > 0 ? eventColumns.length + 5 : 6} className="px-4 py-1 text-[10px] font-semibold uppercase tracking-wider text-dash-muted/70">
+                          <td colSpan={desktopColumnSpan} className="px-4 py-1 text-[10px] font-semibold uppercase tracking-wider text-dash-muted/70">
                             <span className={statusColour(blk.status)}>{statusLabel(blk.status)}</span> <span className="text-dash-muted/50">({blk.guests.length})</span>
                           </td>
                         </tr>,
@@ -848,8 +850,8 @@ export function GuestsPage() {
                         rows.push(
                           <tr key={g.id}>
                             <td className="px-4 py-2"><input type="checkbox" checked={selectedGuestIds.has(g.id)} onChange={() => toggleGuestSelection(g.id)} className="accent-dash-primary" /></td>
-                            <td className="px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}<GuestPhoneNote guest={g} phoneEnabledLinkIds={phoneEnabledLinkIds} /></td>
-                            <td className="px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>
+                            <td className="max-w-xs break-words px-4 py-2 text-sm text-dash-text">{g.name}{g.plus_ones > 0 && <span className="ml-1.5 text-xs text-dash-muted">(+1)</span>}<GuestPhoneNote guest={g} phoneEnabledLinkIds={phoneEnabledLinkIds} /></td>
+                            {showUsernames && <td className="max-w-xs break-words px-4 py-2 text-sm text-dash-muted">{g.username ?? "\u2014"}</td>}
                             <td className="px-4 py-2 text-sm text-dash-muted">{groupName(g.group_id) ?? "\u2014"}</td>
                             {eventColumns.length > 0 ? (
                               eventColumns.map((col) => (
