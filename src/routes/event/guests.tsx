@@ -6,7 +6,7 @@ import { Button } from "../../components/ui/Button";
 import { LoadingSpinner, ErrorState, EmptyState, Modal } from "../../components/ui";
 import { GuestForm, type GuestFormValues } from "./guest-form";
 import { BulkImportModal } from "./bulk-import";
-import { describeError, generateUsername, slugify } from "../../lib/utils";
+import { describeError, generateUsername, normaliseSearchText, slugify } from "../../lib/utils";
 import { fetchAllRows } from "../../lib/fetch-all";
 import { useEventLiveUpdates } from "../../lib/use-event-live-updates";
 
@@ -141,6 +141,7 @@ export function GuestsPage() {
   const [mobileShowUsername, setMobileShowUsername] = useState(false);
   const [mobileActiveEvent, setMobileActiveEvent] = useState<string>("__main__");
   const [pageIndex, setPageIndex] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const toggleGroupCollapse = (key: string) => {
     setCollapsedGroups((prev) => {
@@ -253,6 +254,10 @@ export function GuestsPage() {
 
   const guestById = new Map((guests ?? []).map((g) => [g.id, g]));
 
+  const normalisedSearch = normaliseSearchText(searchQuery);
+  const searchedGuests = normalisedSearch ? (guests ?? []).filter((g) => normaliseSearchText(g.name ?? "").includes(normalisedSearch)) : (guests ?? []);
+  const noSearchMatches = normalisedSearch !== "" && searchedGuests.length === 0;
+
   const statusFor = (guestId: string, tabKey: string): GuestStatus => {
     const invited = invitedEventsByGuest.get(guestId);
     if (!invited || !invited.has(tabKey)) return "not_invited";
@@ -294,7 +299,7 @@ export function GuestsPage() {
   const groupAttendance = (groupId: string, tabKey: string) => {
     let attending = 0;
     let plusOnes = 0;
-    for (const g of (guests ?? [])) {
+    for (const g of searchedGuests) {
       if (g.group_id !== groupId || statusFor(g.id, tabKey) !== "attending") continue;
       attending++;
       const bringing = tabKey === "__main__" ? g.plus_ones : (rsvpPlusOnesByGuest.get(g.id)?.get(tabKey) ?? 0);
@@ -353,8 +358,8 @@ export function GuestsPage() {
     currentPageSections.push(section);
     currentPageCount += section.guests.length;
   };
-  for (const gr of sortedGroups) addSection({ key: gr.id, label: gr.name, guests: sortGuests((guests ?? []).filter((g) => g.group_id === gr.id)) });
-  const ungroupedSorted = sortGuests((guests ?? []).filter((g) => !g.group_id));
+  for (const gr of sortedGroups) addSection({ key: gr.id, label: gr.name, guests: sortGuests(searchedGuests.filter((g) => g.group_id === gr.id)) });
+  const ungroupedSorted = sortGuests(searchedGuests.filter((g) => !g.group_id));
   for (let i = 0; i < ungroupedSorted.length; i += GUESTS_PER_PAGE) addSection({ key: UNGROUPED_KEY, label: "Ungrouped", guests: ungroupedSorted.slice(i, i + GUESTS_PER_PAGE) });
   if (currentPageSections.length > 0) sectionPages.push(currentPageSections);
 
@@ -572,7 +577,7 @@ export function GuestsPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-lg font-semibold text-dash-text">
-          Guests <span className="text-sm font-normal text-dash-muted">- {totalGuestCount.toLocaleString()} guests</span>
+          Guests <span className="text-sm font-normal text-dash-muted">- {normalisedSearch ? `${searchedGuests.length} of ${totalGuestCount.toLocaleString()}` : totalGuestCount.toLocaleString()} guests</span>
         </h2>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={() => setShowBulkImport(true)}>Bulk Import</Button>
@@ -600,6 +605,13 @@ export function GuestsPage() {
         <EmptyState title="No guests yet" description="Add guests to invite them to your event." action={<Button size="sm" onClick={() => { setEditGuest(null); setShowForm(true); }}>Add Guest</Button>} />
       ) : (
         <>
+          <div className="relative">
+            <input type="search" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setPageIndex(0); }} placeholder="Search guests by name" aria-label="Search guests by name" className="w-full rounded-lg border border-dash-border bg-dash-surface px-3 py-2 pr-16 text-sm text-dash-text placeholder:text-dash-muted focus:border-dash-primary focus:outline-none" />
+            {searchQuery && (
+              <button type="button" onClick={() => { setSearchQuery(""); setPageIndex(0); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-dash-primary hover:underline">Clear</button>
+            )}
+          </div>
+
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-dash-muted">
             <span className="inline-flex items-center gap-1"><span className="text-green-600 font-bold">&#10003;</span> Attending</span>
             <span className="inline-flex items-center gap-1"><span className="text-red-500 font-bold">&#10007;</span> Declined</span>
@@ -665,11 +677,14 @@ export function GuestsPage() {
             </div>
           )}
 
+          {noSearchMatches ? (
+            <p className="py-6 text-center text-sm text-dash-muted">No guests match your search.</p>
+          ) : (<>
           {/* Mobile: compact two-column list (checkbox, name/username, status, actions) */}
           <div className="space-y-2 sm:hidden">
             {pageSections.length === 0 ? (
               (() => {
-                const allSorted = sortGuests(guests ?? []);
+                const allSorted = sortGuests(searchedGuests);
                 const blocks: Array<{ status: GuestStatus; guests: EventGuest[] }> = [];
                 for (const st of statusOrder) {
                   const bucket = allSorted.filter((g) => statusFor(g.id, mobileActiveEvent) === st);
@@ -755,7 +770,7 @@ export function GuestsPage() {
               <tbody className="divide-y divide-dash-border bg-dash-surface">
                 {pageSections.length === 0 ? (
                   (() => {
-                    const allSorted = sortGuests(guests ?? []);
+                    const allSorted = sortGuests(searchedGuests);
                     const rows: React.ReactNode[] = [];
                     const blocks: Array<{ status: GuestStatus; guests: EventGuest[] }> = [];
                     for (const st of statusOrder) {
@@ -857,6 +872,7 @@ export function GuestsPage() {
               </tbody>
             </table>
           </div>
+          </>)}
 
         </>
       )}

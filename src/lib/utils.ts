@@ -122,6 +122,10 @@ export function generateUsername(name: string): string {
   return name.trim();
 }
 
+export function normaliseSearchText(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
 export function describeError(e: unknown, fallback: string): string {
   if (e instanceof Error && e.message) return e.message;
   if (e && typeof e === "object" && "message" in e && typeof e.message === "string" && e.message) return e.message;
