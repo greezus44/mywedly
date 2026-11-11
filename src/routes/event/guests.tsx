@@ -621,6 +621,7 @@ export function GuestsPage() {
             guests={guests ?? []}
             visibleGuestIds={new Set(searchedGuests.map((g) => g.id))}
             subEvents={subEvents}
+            groups={groups}
             onEdit={(g) => { setEditGuest(g); setShowForm(true); }}
           />
 

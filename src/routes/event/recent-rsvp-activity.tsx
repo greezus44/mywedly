@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase, type EventGuest, type SubEvent, type EventRsvp } from "../../lib/supabase";
+import { supabase, type EventGuest, type GuestGroup, type SubEvent, type EventRsvp } from "../../lib/supabase";
 
 const MAIN_KEY = "__main__";
 const PREVIEW_COUNT = 10;
@@ -22,6 +22,7 @@ interface RecentRsvpActivityProps {
   guests: EventGuest[];
   visibleGuestIds: Set<string>;
   subEvents: SubEvent[] | undefined;
+  groups: GuestGroup[] | undefined;
   onEdit: (guest: EventGuest) => void;
 }
 
@@ -35,7 +36,7 @@ function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-export function RecentRsvpActivity({ eventId, eventName, guests, visibleGuestIds, subEvents, onEdit }: RecentRsvpActivityProps) {
+export function RecentRsvpActivity({ eventId, eventName, guests, visibleGuestIds, subEvents, groups, onEdit }: RecentRsvpActivityProps) {
   const [open, setOpen] = useState(() => {
     const saved = window.localStorage.getItem(OPEN_KEY);
     return saved === null ? window.matchMedia("(min-width: 640px)").matches : saved === "true";
@@ -63,6 +64,7 @@ export function RecentRsvpActivity({ eventId, eventName, guests, visibleGuestIds
 
   const guestById = new Map(guests.map((g) => [g.id, g]));
   const repliedGuestIds = new Set((rows ?? []).map((r) => r.guest_id));
+  const groupNameById = new Map((groups ?? []).map((gr) => [gr.id, gr.name]));
 
   const replyEntries: ActivityEntry[] = (rows ?? []).flatMap((r) => {
     const guest = guestById.get(r.guest_id);
@@ -120,7 +122,10 @@ export function RecentRsvpActivity({ eventId, eventName, guests, visibleGuestIds
                             {e.guest.name}
                             {e.isNew && <span className="ml-1.5 text-xs font-semibold text-dash-primary">New</span>}
                           </span>
-                          <span className="block text-xs text-dash-muted">{eventLabel(e.eventKey)}</span>
+                          <span className="block break-words text-xs text-dash-muted">
+                            {eventLabel(e.eventKey)}
+                            {e.guest.group_id && groupNameById.get(e.guest.group_id) ? ` (${groupNameById.get(e.guest.group_id)})` : ""}
+                          </span>
                         </span>
                         <span className="shrink-0 text-right">
                           <span className={`block text-xs font-semibold ${st.className}`}>{st.label}</span>
