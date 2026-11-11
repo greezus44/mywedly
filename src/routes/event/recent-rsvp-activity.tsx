@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase, type EventGuest, type GuestGroup, type SubEvent, type EventRsvp } from "../../lib/supabase";
 
 const MAIN_KEY = "__main__";
-const PREVIEW_COUNT = 10;
-const OPEN_KEY = "guests-activity-open";
+const ACTIVITY_LIMIT = 50;
 
 type ActivityRow = Pick<EventRsvp, "guest_id" | "sub_event_id" | "status" | "responded_at">;
 
@@ -37,18 +36,11 @@ function formatWhen(iso: string): string {
 }
 
 export function RecentRsvpActivity({ eventId, eventName, guests, visibleGuestIds, subEvents, groups, onEdit }: RecentRsvpActivityProps) {
-  const [open, setOpen] = useState(() => {
-    const saved = window.localStorage.getItem(OPEN_KEY);
-    return saved === null ? window.matchMedia("(min-width: 640px)").matches : saved === "true";
-  });
-  const [showAll, setShowAll] = useState(false);
-
-  useEffect(() => {
-    window.localStorage.setItem(OPEN_KEY, String(open));
-  }, [open]);
+  const [open, setOpen] = useState(false);
 
   const { data: rows, isLoading, isError } = useQuery({
     queryKey: ["recent-rsvp-activity", eventId],
+    enabled: open,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("event_rsvps")
@@ -56,7 +48,7 @@ export function RecentRsvpActivity({ eventId, eventName, guests, visibleGuestIds
         .eq("event_id", eventId)
         .not("responded_at", "is", null)
         .order("responded_at", { ascending: false })
-        .limit(200);
+        .limit(ACTIVITY_LIMIT);
       if (error) throw error;
       return (data ?? []) as ActivityRow[];
     },
@@ -83,7 +75,7 @@ export function RecentRsvpActivity({ eventId, eventName, guests, visibleGuestIds
     .sort((a, b) => b.at.localeCompare(a.at));
 
   const eventLabel = (key: string) => (key === MAIN_KEY ? eventName : (subEvents?.find((s) => s.id === key)?.name ?? "Sub-event"));
-  const shown = showAll ? entries : entries.slice(0, PREVIEW_COUNT);
+  const shown = entries.slice(0, ACTIVITY_LIMIT);
 
   return (
     <section className="rounded-lg border border-dash-border bg-dash-surface">
@@ -136,13 +128,6 @@ export function RecentRsvpActivity({ eventId, eventName, guests, visibleGuestIds
                   );
                 })}
               </ul>
-              {entries.length > PREVIEW_COUNT && (
-                <div className="border-t border-dash-border px-4 py-2 text-center">
-                  <button type="button" onClick={() => setShowAll((prev) => !prev)} className="text-xs font-medium text-dash-primary hover:underline">
-                    {showAll ? "Show fewer" : `Show all (${entries.length})`}
-                  </button>
-                </div>
-              )}
             </>
           )}
         </div>
