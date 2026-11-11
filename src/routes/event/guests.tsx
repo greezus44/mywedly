@@ -137,6 +137,7 @@ export function GuestsPage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const didInitCollapse = useRef(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [statusKeyOpen, setStatusKeyOpen] = useState(false);
   const [sortByEvent, setSortByEvent] = useState<string | null>(null);
   const exportRef = useRef<HTMLDivElement>(null);
   const [showUsernames, setShowUsernames] = useState(() => window.localStorage.getItem("guests-show-usernames") === "true");
@@ -625,12 +626,15 @@ export function GuestsPage() {
             onEdit={(g) => { setEditGuest(g); setShowForm(true); }}
           />
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-dash-muted">
-            <span className="inline-flex items-center gap-1"><span className="text-green-600 font-bold">&#10003;</span> Attending</span>
-            <span className="inline-flex items-center gap-1"><span className="text-red-500 font-bold">&#10007;</span> Declined</span>
-            <span className="inline-flex items-center gap-1"><span className="font-bold">=</span> Pending</span>
-            <span className="inline-flex items-center gap-1"><span>&mdash;</span> Not invited</span>
-            <span className="inline-flex items-center gap-1"><span className="text-green-600 font-semibold">+1</span>/<span className="text-dash-muted font-semibold">0</span> Plus-one</span>
+          <button type="button" onClick={() => setStatusKeyOpen((prev) => !prev)} aria-expanded={statusKeyOpen} className="self-start text-xs font-medium text-dash-primary sm:hidden">
+            {statusKeyOpen ? "Hide key" : "Key"}
+          </button>
+          <div className={`${statusKeyOpen ? "flex" : "hidden"} flex-nowrap items-center gap-x-2.5 overflow-hidden text-[10px] text-dash-muted sm:flex sm:flex-wrap sm:gap-x-4 sm:gap-y-1 sm:text-xs`}>
+            <span className="inline-flex shrink-0 items-center gap-1"><span className="text-green-600 font-bold">&#10003;</span><span className="sm:hidden">Yes</span><span className="hidden sm:inline">Attending</span></span>
+            <span className="inline-flex shrink-0 items-center gap-1"><span className="text-red-500 font-bold">&#10007;</span><span className="sm:hidden">No</span><span className="hidden sm:inline">Declined</span></span>
+            <span className="inline-flex shrink-0 items-center gap-1"><span className="font-bold">=</span>Pending</span>
+            <span className="inline-flex shrink-0 items-center gap-1"><span>&mdash;</span><span className="sm:hidden">Not inv.</span><span className="hidden sm:inline">Not invited</span></span>
+            <span className="inline-flex shrink-0 items-center gap-1"><span className="text-green-600 font-semibold">+1</span>/<span className="text-dash-muted font-semibold">0</span><span className="sm:hidden">+1</span><span className="hidden sm:inline">Plus-one</span></span>
           </div>
 
           {/* Name/Username toggle (both layouts) + active event selector (phones only) */}
