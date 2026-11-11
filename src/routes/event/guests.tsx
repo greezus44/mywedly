@@ -541,8 +541,7 @@ export function GuestsPage() {
 
   const exportGuestCsv = (guestList: EventGuest[], filename: string) => {
     const headers = ["Name", "Username", "Phone", "Group"];
-    for (const col of eventColumns) headers.push(col.label);
-    headers.push("Plus-one");
+    for (const col of eventColumns) headers.push(col.label, `${col.label} +1`);
     const rows: string[][] = [];
     for (const g of guestList) {
       const phone = g.open_rsvp_link_id ? (g.phone?.trim() ?? "") : "";
@@ -550,8 +549,9 @@ export function GuestsPage() {
       for (const col of eventColumns) {
         const s = statusFor(g.id, col.key);
         row.push(s === "attending" ? "Attending" : s === "declined" ? "Declined" : s === "pending" ? "Pending" : "Not invited");
+        const plusOne = plusOneLabelFor(g.id, col.key);
+        row.push(plusOne === "+1" ? "Yes" : plusOne === "0" ? "No" : "");
       }
-      row.push(plusOneLabelFor(g.id, "__main__") ?? "");
       rows.push(row);
     }
     const escapeCell = (s: string) => (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
