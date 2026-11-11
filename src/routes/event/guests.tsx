@@ -9,6 +9,7 @@ import { BulkImportModal } from "./bulk-import";
 import { describeError, generateUsername, normaliseSearchText, slugify } from "../../lib/utils";
 import { fetchAllRows } from "../../lib/fetch-all";
 import { useEventLiveUpdates } from "../../lib/use-event-live-updates";
+import { RecentRsvpActivity } from "./recent-rsvp-activity";
 
 interface EventContextValue { event: UserEvent; eventId: string; }
 
@@ -116,7 +117,7 @@ function MobileGuestSection({
 }
 
 export function GuestsPage() {
-  const { eventId } = useOutletContext<EventContextValue>();
+  const { event, eventId } = useOutletContext<EventContextValue>();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editGuest, setEditGuest] = useState<EventGuest | null>(null);
@@ -166,7 +167,7 @@ export function GuestsPage() {
     queryFn: () => fetchAllRows<{ guest_id: string; sub_event_id: string | null; invite_type: string }>((from, to) => supabase.from("guest_event_invites").select("guest_id, sub_event_id, invite_type").eq("event_id", eventId).order("guest_id").order("sub_event_id", { nullsFirst: true }).range(from, to)),
   });
 
-  useEventLiveUpdates(eventId, ["event-guests", "event-rsvps-full"]);
+  useEventLiveUpdates(eventId, ["event-guests", "event-rsvps-full", "recent-rsvp-activity"]);
 
   const { data: groups } = useQuery({
     queryKey: ["guest-groups", eventId],
@@ -613,6 +614,15 @@ export function GuestsPage() {
               <button type="button" onClick={() => { setSearchQuery(""); setPageIndex(0); }} className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-2 py-1 text-xs text-dash-primary hover:underline">Clear</button>
             )}
           </div>
+
+          <RecentRsvpActivity
+            eventId={eventId}
+            eventName={event.name ?? "Main Event"}
+            guests={guests ?? []}
+            visibleGuestIds={new Set(searchedGuests.map((g) => g.id))}
+            subEvents={subEvents}
+            onEdit={(g) => { setEditGuest(g); setShowForm(true); }}
+          />
 
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-dash-muted">
             <span className="inline-flex items-center gap-1"><span className="text-green-600 font-bold">&#10003;</span> Attending</span>
