@@ -550,7 +550,7 @@ export function GuestsPage() {
         const s = statusFor(g.id, col.key);
         row.push(s === "attending" ? "Attending" : s === "declined" ? "Declined" : s === "pending" ? "Pending" : "Not invited");
         const plusOne = plusOneLabelFor(g.id, col.key);
-        row.push(plusOne === "+1" ? "Yes" : plusOne === "0" ? "No" : "");
+        row.push(plusOne === "+1" ? "1" : plusOne === "0" ? "0" : "");
       }
       rows.push(row);
     }
